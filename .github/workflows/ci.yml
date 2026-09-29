@@ -1,0 +1,47 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+env:
+  CARGO_TERM_COLOR: always
+  PROPTEST_CASES: "64"
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      # rust-toolchain.toml pins the toolchain and its components
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.91.1"
+          components: clippy, rustfmt
+      - uses: Swatinem/rust-cache@v2
+      - name: Format
+        run: cargo fmt --check
+      - name: Clippy
+        run: cargo clippy --all-targets -- -D warnings
+      - name: Tests
+        run: cargo test --workspace
+      - name: Benchmarks compile
+        run: cargo bench --no-run
+      - name: Never-forget source audit
+        # engine code never deletes or rewrites triples, terms or transactions
+        # (spec never-forget "Source audit"; also tests/never_forget.rs)
+        run: |
+          if grep -rniE 'DELETE FROM (triple|term|tx)\b|UPDATE (term|tx)\b' crates/*/src; then
+            echo "engine source issues a forbidden DELETE/UPDATE" >&2
+            exit 1
+          fi
+      - name: tm-core has no SQLite binding
+        run: |
+          if cargo tree -p tm-core -e normal | grep -E 'rusqlite|libsqlite3-sys'; then
+            echo "tm-core depends on a SQLite binding" >&2
+            exit 1
+          fi

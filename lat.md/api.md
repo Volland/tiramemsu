@@ -30,8 +30,18 @@ impl View {
     pub fn cypher(&self, q: &str, params: &Params) -> Result<QueryResult>;
     pub fn path(&self, start: ObjectId, path: &str, mode: PathMode, max_hops: u32) -> Result<Vec<PathRow>>;
     pub fn triples(&self, s: Option<ObjectId>, p: Option<ObjectId>, o: Option<ObjectId>) -> Result<Vec<Triple>>;
+    pub fn values(&self, s: ObjectId, key: ObjectId) -> Result<Vec<ObjectId>>; // statements, else volatile (Now only)
+    pub fn encode(&self, v: &Value) -> Result<Option<ObjectId>>;              // lookup only, never inserts
+    pub fn decode(&self, id: ObjectId) -> Result<Value>;
+    pub fn events_since(&self, t: u64) -> Result<Vec<Event>>;
 }
 ```
+
+`Tx` is the core write handle, re-exported by the facade. Besides the operations of [[time-model#Operations]] it offers `assert_with` (with `OnExisting::Confirm`), `new_bnode`, `clear_volatile`, `encode`, `lookup`, `decode`, `schema`, `t` and `instant`. Positions take any `IntoObject`: an `ObjectId`, `Eid`, `TxId` or `Value`.
+
+- A `View` is a pure value: creating or deriving one does no I/O. Rows from an as-of view report `t_ret` and `ret_kind` as absent, so each row shows what was believed then; `history()` gives real lifetimes.
+- `values(s, key)` is how M0 exposes volatile state before a query language exists. See [[storage#Volatile Table]].
+- `Patch::from_fields` builds a patch from named fields for bindings and rejects `s` and `p` with `InvalidPatch`.
 
 `Tx` operations are specified in [[time-model#Operations]]. Values cross the API as `Value` (IRI, node, literal, statement, tx), which the ObjectId codec encodes. See [[data-model#ObjectId]].
 
@@ -44,10 +54,10 @@ Every failure is a typed error, and a failed transaction leaves no trace: no tx 
 | `UniqueViolation { p, o, existing }` | Asserting a second live subject for a `sys:unique` predicate |
 | `ValueTypeMismatch { p, expected, got }` | The object violates `sys:valueType` |
 | `CascadeLimitExceeded { root, limit }` | The cascade set is larger than `max_cascade` |
-| `NotLive(eid)` | `supersede` or `confirm` on a retracted eid |
-| `InvalidPatch` | A patch tries to change `s` or `p`, or gives an empty interval (`v_from ≥ v_to`) |
+| `NotLive(eid)` | `supersede` or `confirm` on a retracted or unknown eid |
+| `InvalidPatch` | A patch tries to change `s` or `p`, gives an empty interval (`v_from ≥ v_to`), or changes nothing |
 | `SelfReference(eid)` | A statement would use its own eid as `s` or `o` |
-| `ReservedNamespace(iri)` | User data asserts a `sys:` predicate that is not a schema, vocab or prefix flag |
+| `ReservedNamespace(iri)` | User data writes a `sys:` predicate that is not a schema, vocab or prefix flag (or tx metadata on a tx), any `tm:` predicate, a schema flag on a `sys:` subject, or supersedes an engine statement (`sys:confirmedBy`, `sys:supersedes`) |
 | `SchemaConflict { violating }` | A schema change is violated by existing live data |
 | `Parse { dialect, span, msg }` / `Unsupported { feature }` | A query is outside the v1 subset. `dialect` is SPARQL, Cypher or Path (the `tm_path` expression text). `Unsupported` also rejects what format 1 reserves for later milestones: tag 15 `SEALED` and the `sys:sensitive` flag (M6) |
 | `MissingCapability { capability }` | `Db::open` with the query engine on a host that lacks `functions` or `vtab`. See [[architecture#Executor]] |
@@ -55,13 +65,13 @@ Every failure is a typed error, and a failed transaction leaves no trace: no tx 
 | `PathLimitExceeded { limit }` | A path search exceeds `OpenOptions.path_max_states` (default 1 000 000). Results are never silently truncated |
 | `FormatVersion { found, supported }` | The file was written by a newer format |
 | `ForeignFile` | The file is a SQLite database with user tables but no `meta` table |
-| `InvalidTerm` | A value of the wrong kind in a position (e.g. a literal as predicate) |
+| `InvalidTerm { position, reason }` | A value of the wrong kind in a position (e.g. a literal as predicate, a non-IRI volatile key), or an unknown dictionary id |
 | `InvalidInterval` | `assert`/`create` with an empty valid interval (`v_from ≥ v_to`); `InvalidPatch` covers supersede |
 | `NotUniquePredicate(p)` | `upsert` on a predicate without `sys:unique` |
 | `Reentrant` | A write is started from inside a running transaction on the same `Db` |
 | `DeleteConnectedNode(node)` | Cypher `DELETE n` while `n` still has relationships (use `DETACH DELETE`) |
 | `Eval { msg }` | A runtime expression error during query evaluation |
-| `Sqlite(e)` / `Custom(msg)` | An underlying SQLite error, or the caller aborting the transaction body |
+| `Sqlite(e)` / `Custom(msg)` | A host-neutral SQLite error carrying the result code (busy, I/O, corruption), or the caller aborting the transaction body |
 
 The error enum is `#[non_exhaustive]`. Each OpenSpec change adds the variants it owns.
 
@@ -75,6 +85,7 @@ The error enum is `#[non_exhaustive]`. Each OpenSpec change adds the variants it
 | `clock` | system clock (injectable for tests) | `add-core-store` |
 | `busy_timeout` | 5 s | `add-core-store` |
 | `term_cache_capacity` | 16 384 | `add-core-store` / `add-query-ir-and-sql-planner` |
+| `optimize_every` | 1000 commits (also after a commit inserting that many statements) | `add-core-store` |
 | `planner` | default routing (LFTJ off) | `add-query-ir-and-sql-planner` |
 | `path_max_hops` | 15 | `add-path-engine` |
 | `path_max_states` | 1 000 000 | `add-path-engine` |

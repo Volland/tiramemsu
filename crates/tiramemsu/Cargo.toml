@@ -1,0 +1,25 @@
+[package]
+name = "tiramemsu"
+description = "Tiramemsu: a bitemporal, never-forget triple store on SQLite"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+tm-core = { workspace = true }
+tm-rusqlite = { workspace = true }
+lru = "0.18"
+
+[dev-dependencies]
+proptest = "1"
+tempfile = "3"
+rusqlite = { version = "0.40", features = ["bundled"] }
+criterion = { version = "0.8", default-features = false, features = ["cargo_bench_support"] }
+
+[[bench]]
+name = "core"
+harness = false
+
+[lints]
+workspace = true

@@ -63,6 +63,8 @@ class Tx {
   new_node() : NodeId
   meta(p, o)
   set_volatile(s, key, value)
+  clear_volatile(s, key)
+  new_bnode() : BNodeId
 }
 class TxOptions {
   dry_run : bool

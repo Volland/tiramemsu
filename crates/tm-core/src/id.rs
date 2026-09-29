@@ -1,0 +1,332 @@
+//! ObjectIds: 64-bit values with a 4-bit low tag and a 60-bit payload.
+//!
+//! `id = (payload << 4) | tag`. `INT`, `DATE` and `DATETIME` use a signed payload
+//! (arithmetic shift), every other tag an unsigned one (logical shift).
+
+// @lat: [[data-model#ObjectId]]
+
+use std::fmt;
+
+use crate::error::{Error, Result};
+
+/// The feature name reported when the reserved tag 15 is met.
+pub const SEALED_FEATURE: &str = "SEALED (M6)";
+
+/// The kind of value an ObjectId holds. Tag 15 (`SEALED`) is reserved for M6.
+#[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[repr(u8)]
+pub enum Tag {
+    /// IRI, through the term dictionary.
+    Iri = 0,
+    /// Anonymous LPG node (inline counter).
+    Node = 1,
+    /// RDF blank node (inline counter).
+    BNode = 2,
+    /// Statement eid (inline counter).
+    Stmt = 3,
+    /// Transaction number `t` (inline).
+    Tx = 4,
+    /// Signed 60-bit integer (inline).
+    Int = 5,
+    /// Boolean (inline, 0 or 1).
+    Bool = 6,
+    /// `xsd:dateTime`: `(epoch_ms << 11) | tz` (inline).
+    DateTime = 7,
+    /// `xsd:date`: signed days since 1970-01-01 (inline).
+    Date = 8,
+    /// UTF-8 string of at most 7 bytes (inline).
+    ShortStr = 9,
+    /// Plain string longer than 7 bytes (dictionary).
+    Str = 10,
+    /// Language-tagged string (dictionary).
+    LangStr = 11,
+    /// Any other datatype, or an out-of-range value (dictionary).
+    Typed = 12,
+    /// `xsd:double` (dictionary, `num` set).
+    Double = 13,
+    /// `xsd:decimal` (dictionary, `num` set).
+    Decimal = 14,
+}
+
+impl Tag {
+    /// Every non-reserved tag, in numeric order.
+    pub const ALL: [Tag; 15] = [
+        Tag::Iri,
+        Tag::Node,
+        Tag::BNode,
+        Tag::Stmt,
+        Tag::Tx,
+        Tag::Int,
+        Tag::Bool,
+        Tag::DateTime,
+        Tag::Date,
+        Tag::ShortStr,
+        Tag::Str,
+        Tag::LangStr,
+        Tag::Typed,
+        Tag::Double,
+        Tag::Decimal,
+    ];
+
+    /// True when the payload is a term-dictionary id.
+    pub fn is_dictionary(self) -> bool {
+        matches!(
+            self,
+            Tag::Iri | Tag::Str | Tag::LangStr | Tag::Typed | Tag::Double | Tag::Decimal
+        )
+    }
+
+    /// True when the payload is signed (arithmetic shift).
+    pub fn is_signed(self) -> bool {
+        matches!(self, Tag::Int | Tag::Date | Tag::DateTime)
+    }
+
+    /// True for the kinds allowed in subject position.
+    pub fn is_subject(self) -> bool {
+        matches!(
+            self,
+            Tag::Iri | Tag::Node | Tag::BNode | Tag::Stmt | Tag::Tx
+        )
+    }
+
+    /// Upper-case tag name used in tag IRIs (`sys:INT`, `sys:STMT`, ...).
+    pub fn name(self) -> &'static str {
+        match self {
+            Tag::Iri => "IRI",
+            Tag::Node => "NODE",
+            Tag::BNode => "BNODE",
+            Tag::Stmt => "STMT",
+            Tag::Tx => "TX",
+            Tag::Int => "INT",
+            Tag::Bool => "BOOL",
+            Tag::DateTime => "DATETIME",
+            Tag::Date => "DATE",
+            Tag::ShortStr => "SHORT_STR",
+            Tag::Str => "STR",
+            Tag::LangStr => "LANG_STR",
+            Tag::Typed => "TYPED",
+            Tag::Double => "DOUBLE",
+            Tag::Decimal => "DECIMAL",
+        }
+    }
+
+    /// Inverse of [`Tag::name`].
+    pub fn from_name(name: &str) -> Option<Tag> {
+        Tag::ALL.into_iter().find(|t| t.name() == name)
+    }
+}
+
+impl TryFrom<u8> for Tag {
+    type Error = Error;
+
+    /// Tags 0–14 map to their variant; 15 (`SEALED`) fails with `Unsupported`.
+    fn try_from(v: u8) -> Result<Tag> {
+        match v {
+            0..=14 => Ok(Tag::ALL[v as usize]),
+            15 => Err(Error::Unsupported {
+                feature: SEALED_FEATURE.to_string(),
+            }),
+            _ => Err(Error::InvalidTerm {
+                position: crate::error::Position::Value,
+                reason: format!("tag {v} out of range"),
+            }),
+        }
+    }
+}
+
+/// A signed 64-bit value identifier: `(payload << 4) | tag`.
+#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct ObjectId(i64);
+
+impl ObjectId {
+    /// Wraps a raw stored integer without checking it.
+    pub const fn from_raw(raw: i64) -> ObjectId {
+        ObjectId(raw)
+    }
+
+    /// The raw integer as stored in SQLite.
+    pub const fn raw(self) -> i64 {
+        self.0
+    }
+
+    /// The low 4 bits.
+    pub const fn tag_bits(self) -> u8 {
+        (self.0 & 15) as u8
+    }
+
+    /// The tag; `Unsupported` for the reserved tag 15.
+    pub fn tag(self) -> Result<Tag> {
+        Tag::try_from(self.tag_bits())
+    }
+
+    /// Payload read with an arithmetic shift (for `INT`, `DATE`, `DATETIME`).
+    pub const fn signed_payload(self) -> i64 {
+        self.0 >> 4
+    }
+
+    /// Payload read with a logical shift (for every other tag).
+    pub const fn unsigned_payload(self) -> u64 {
+        (self.0 as u64) >> 4
+    }
+
+    /// Builds an id from a signed payload. The payload must fit in 60 bits.
+    pub fn from_signed(tag: Tag, payload: i64) -> ObjectId {
+        debug_assert!((-(1i64 << 59)..(1i64 << 59)).contains(&payload));
+        ObjectId((payload << 4) | tag as i64)
+    }
+
+    /// Builds an id from an unsigned payload. The payload must fit in 60 bits.
+    pub fn from_unsigned(tag: Tag, payload: u64) -> ObjectId {
+        debug_assert!(payload < (1u64 << 60));
+        ObjectId(((payload << 4) | tag as u64) as i64)
+    }
+
+    /// The instant of a `DATETIME` id in epoch milliseconds: `id >> 15`.
+    pub const fn instant(self) -> i64 {
+        self.0 >> 15
+    }
+}
+
+impl fmt::Debug for ObjectId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self.tag() {
+            Ok(t) if t.is_signed() => write!(f, "{}:{}", t.name(), self.signed_payload()),
+            Ok(t) => write!(f, "{}:{}", t.name(), self.unsigned_payload()),
+            Err(_) => write!(f, "SEALED:{}", self.unsigned_payload()),
+        }
+    }
+}
+
+impl fmt::Display for ObjectId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt::Debug::fmt(self, f)
+    }
+}
+
+/// A statement id: an ObjectId whose tag is `STMT`.
+#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct Eid(ObjectId);
+
+impl Eid {
+    /// The eid with statement number `n`.
+    pub fn new(n: u64) -> Eid {
+        Eid(ObjectId::from_unsigned(Tag::Stmt, n))
+    }
+
+    /// Wraps an ObjectId if its tag is `STMT`.
+    pub fn from_oid(id: ObjectId) -> Option<Eid> {
+        (id.tag_bits() == Tag::Stmt as u8).then_some(Eid(id))
+    }
+
+    /// The ObjectId of this eid.
+    pub const fn oid(self) -> ObjectId {
+        self.0
+    }
+
+    /// The statement number (payload).
+    pub const fn n(self) -> u64 {
+        self.0.unsigned_payload()
+    }
+}
+
+impl fmt::Debug for Eid {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "e{}", self.n())
+    }
+}
+
+impl fmt::Display for Eid {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "e{}", self.n())
+    }
+}
+
+impl From<Eid> for ObjectId {
+    fn from(e: Eid) -> ObjectId {
+        e.0
+    }
+}
+
+/// A transaction number `t`.
+#[derive(Copy, Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct TxId(pub u64);
+
+impl TxId {
+    /// The `TX` ObjectId of this transaction.
+    pub fn oid(self) -> ObjectId {
+        ObjectId::from_unsigned(Tag::Tx, self.0)
+    }
+
+    /// The transaction number.
+    pub const fn t(self) -> u64 {
+        self.0
+    }
+}
+
+impl fmt::Display for TxId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "tx{}", self.0)
+    }
+}
+
+impl From<TxId> for ObjectId {
+    fn from(t: TxId) -> ObjectId {
+        t.oid()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn tag_and_payload_extraction() {
+        let id = ObjectId::from_signed(Tag::Int, 5);
+        assert_eq!(id.raw(), 85);
+        assert_eq!(id.raw() & 15, 5);
+        assert_eq!(id.tag().unwrap(), Tag::Int);
+        assert_eq!(id.signed_payload(), 5);
+    }
+
+    #[test]
+    fn statement_and_transaction_ids_are_inline() {
+        assert_eq!(Eid::new(42).oid().raw(), (42 << 4) | 3);
+        assert_eq!(TxId(7).oid().raw(), (7 << 4) | 4);
+        assert!(!Tag::Stmt.is_dictionary());
+        assert!(!Tag::Tx.is_dictionary());
+    }
+
+    #[test]
+    fn signed_and_unsigned_payloads() {
+        let neg = ObjectId::from_signed(Tag::Int, -1);
+        assert_eq!(neg.signed_payload(), -1);
+        assert_eq!(neg.tag().unwrap(), Tag::Int);
+        let big = ObjectId::from_unsigned(Tag::ShortStr, (1u64 << 60) - 1);
+        assert_eq!(big.unsigned_payload(), (1u64 << 60) - 1);
+        assert!(big.raw() < 0);
+        assert_eq!(big.tag().unwrap(), Tag::ShortStr);
+    }
+
+    #[test]
+    fn tags_map_to_numbers() {
+        for (i, t) in Tag::ALL.iter().enumerate() {
+            assert_eq!(*t as u8, i as u8);
+            assert_eq!(Tag::try_from(i as u8).unwrap(), *t);
+            assert_eq!(Tag::from_name(t.name()), Some(*t));
+        }
+    }
+
+    #[test]
+    fn sealed_tag_is_unsupported() {
+        match Tag::try_from(15) {
+            Err(Error::Unsupported { feature }) => {
+                assert!(feature.contains("SEALED") && feature.contains("M6"))
+            }
+            other => panic!("unexpected {other:?}"),
+        }
+        match ObjectId::from_raw((3 << 4) | 15).tag() {
+            Err(Error::Unsupported { .. }) => {}
+            other => panic!("unexpected {other:?}"),
+        }
+    }
+}

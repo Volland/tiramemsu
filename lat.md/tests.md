@@ -2,7 +2,7 @@
 
 Test specifications for the invariants the design depends on. Each leaf is one test or one property test, and implementation code references it with an `@lat:` comment.
 
-No code exists yet. When the first tests land, add the `require-code-mention: true` frontmatter to this file, so `lat check` enforces that every spec is covered.
+Every leaf except the Query ones is referenced from the `tm-core` tests. The Query leaves belong to M1–M3, so the `require-code-mention: true` frontmatter is added once the last of those changes lands.
 
 ## Time Travel
 
@@ -91,6 +91,18 @@ DELETE on `triple`, `term` or `tx`, a second retraction, and any change to state
 ### Speculation Leaves No Trace
 
 After `db.with`, the triple, term and tx tables are unchanged. The `meta` id counters have advanced past every id allocated during speculation, so those ids are never reissued.
+
+### Failed Transactions Leave No Trace
+
+A transaction body that writes statements, terms and volatile values and then fails leaves `meta`, `term`, `tx`, `triple` and `volatile` unchanged on every host, and the next commit gets the next gap-free `t`.
+
+### Engine Never Fires A Trigger
+
+Random sequences of every write operation never make an invariant trigger abort, and the dictionary never holds two terms with the same `(tag, lex, dt, lang)`.
+
+### Core Runs On A Minimal Host
+
+The whole `tm-core` suite also runs on a host that declares no capability, and no SQL the core issues calls a user function, a virtual table or FTS5. See [[architecture#Executor]].
 
 ## ObjectId
 

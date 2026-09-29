@@ -1,2 +1,6 @@
 .claude
 .mcp.json
+target/
+*.db
+*.db-wal
+*.db-shm

@@ -109,11 +109,11 @@ The writer SHALL add a predicate to `pred_multi`, within the same transaction, w
 - **THEN** `pred_multi` contains `v:likes`
 
 ### Requirement: Engine metadata counters
-The `meta` table SHALL hold exactly the integer keys `format_version`, `next_term`, `next_node`, `next_bnode`, `next_stmt`, `last_t` and `last_instant`. A fresh database SHALL start with `format_version = 1`, `last_t = 0`, `last_instant = 0`, and every `next_*` counter at 1. Every id the engine allocates SHALL come from the corresponding counter and never from the maximum existing rowid, and each counter SHALL only ever increase.
+The `meta` table SHALL hold exactly the integer keys `format_version`, `next_term`, `next_node`, `next_bnode`, `next_stmt`, `last_t`, `last_instant` and `multi_version`. A fresh database SHALL start with `format_version = 1`, `last_t = 0`, `last_instant = 0`, `multi_version = 0`, and every `next_*` counter at 1. Every id the engine allocates SHALL come from the corresponding counter and never from the maximum existing rowid, and each counter SHALL only ever increase.
 
 #### Scenario: Fresh counters
 - **WHEN** a database is freshly created
-- **THEN** `meta` contains `format_version = 1`, `next_term = 1`, `next_node = 1`, `next_bnode = 1`, `next_stmt = 1`, `last_t = 0` and `last_instant = 0`
+- **THEN** `meta` contains `format_version = 1`, `next_term = 1`, `next_node = 1`, `next_bnode = 1`, `next_stmt = 1`, `last_t = 0`, `last_instant = 0` and `multi_version = 0`
 
 #### Scenario: Counters advance with allocation
 - **WHEN** a committed transaction creates 3 statements and 1 new node

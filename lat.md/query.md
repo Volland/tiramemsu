@@ -119,7 +119,9 @@ A view is a pair: a transaction-time selector and a valid-time selector. One fun
 | `tx = History` | none | `hist_*` |
 | `valid = At(d)` | `(v_from IS NULL OR v_from <= d) AND (v_to IS NULL OR v_to > d)` | `valid_p`, or filtered from the above |
 
-The exact shapes and verified plans are in [[storage#Query Shapes]].
+The exact shapes and verified plans are in [[storage#Query Shapes]]. The function is [[crates/tm-core/src/view.rs#scan_predicates]].
+
+- `asOf(instant)` resolves `t` inside the read's own statement, as `(SELECT coalesce(max(t), 0) FROM tx WHERE instant <= ?)` bound to one shared parameter, so it sees the read's snapshot. A future `t` is taken literally.
 
 ### Virtual Predicates
 

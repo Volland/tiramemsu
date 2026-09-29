@@ -1,0 +1,20 @@
+[package]
+name = "tm-core"
+description = "Tiramemsu core: ObjectId codec, term dictionary, storage format, transaction engine and temporal views"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+thiserror = "2"
+lru = "0.18"
+
+[dev-dependencies]
+proptest = "1"
+tempfile = "3"
+tm-rusqlite = { workspace = true }
+rusqlite = { version = "0.40", features = ["bundled"] }
+
+[lints]
+workspace = true

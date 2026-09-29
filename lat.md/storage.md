@@ -200,6 +200,8 @@ High-churn state (`lastSeen`, counters, per-turn scores) lives in `volatile(s, k
 - Queries see volatile values as virtual properties, e.g. Cypher `n.lastSeen`. A key present in both places resolves to the triple.
 - The rule of thumb: if you would ever ask "why" or "as of when" about a value, it is a triple. Otherwise it is volatile.
 - Volatile values do not time-travel. Under `asOf` or `history` views, volatile properties are absent rather than wrong.
+- Writes are part of their transaction: `set_volatile` upserts with `updated_at` = the tx instant, `clear_volatile` deletes the row. A failed transaction, a dry run or a speculation discards them.
+- Before a query language exists, `View::values(s, key)` resolves a key: statement objects first, else the volatile value under `Now` only.
 
 ## Format Versioning
 
