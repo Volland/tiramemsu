@@ -234,6 +234,7 @@ SPARQL is parsed by `spargebra` (Oxigraph's parser and algebra) and lowered to t
 - **Updates:** `View::sparql` accepts queries and updates. Updates run only on the current view, and a whole update request is one transaction.
 - **Predeclared prefixes:** `rdf`, `rdfs`, `xsd`, `sys`, `tm`, `v` (the database `@vocab`) and the database prefix table. A `PREFIX` in the query overrides them.
 - **Semantics:** `graph_set = SetOfTriples`. Several live eids with the same `(s, p, o)` show as one triple unless the eid is bound. `match_mode = Homomorphism`, `missing = Unbound`.
+- **Duplicate removal only where needed:** removing duplicate `(s, p, o)` costs one covering seek per row, which doubled a 2-hop join in a benchmark. It is skipped for predicates that have never held two eids with the same `(s, p, o)`, which [[storage#Multi-Eid Predicates]] records. Idempotent assert never creates such pairs; only `create` and repeated episodes do.
 
 ### Cypher
 

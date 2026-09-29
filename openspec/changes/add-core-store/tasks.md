@@ -41,6 +41,8 @@
 - [ ] 4.7 Implement `storage/stats.rs` per design D-18: commit counter, `PRAGMA optimize` after every `optimize_every`-th commit and after a commit that inserted at least `optimize_every` statements (after `COMMIT`, errors ignored, dry runs and speculation not counted), and `analyze()` running a full `ANALYZE`; add `// @lat: [[query#Physical Planning#Join Ordering]]` on the upkeep function
 - [ ] 4.8 Tests for `storage-format` "Planner statistics are part of the store" (statistics after open + load without `optimize()`, periodic optimize with `optimize_every = 10`, stale statistics never change results, full analysis), "Format 1 reserves names for later milestones" and the "Live indexes keep t_ret in their key" scenario
 
+- [ ] 4.9 Maintain `pred_multi` and `meta.multi_version` in the insert path (D27, `lat.md/storage#Multi-Eid Predicates`): an insert that finds another `(s, p, o)` row via `hist_spo` records `p`; tests for storage-format "Multi-eid predicates are recorded"
+
 ## 5. Term dictionary
 
 - [ ] 5.1 Implement `term.rs` `TermDict` writer: `lookup_or_insert(tag, lex, dt, lang, num)` with the `IS`-based lookup of design D-5, allocation from `next_term`, committed cache + per-transaction overlay with `commit()` / `rollback()`

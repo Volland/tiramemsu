@@ -50,6 +50,27 @@ It has a core with no I/O of its own over rusqlite, dlopen, Turso, Cloudflare D1
 - **Changed:** statement identity instead of quads with optional reifiers ([[data-model#Statements]]); lifetime columns and covering history indexes instead of a change log, so the past is one index range and not a log probe ([[storage#Triple Table]]); valid time, which oxilite lacks ([[time-model#Valid Time]]); dictionary counters instead of hashes, because the single embedded writer can afford a lookup and small ids keep varints short; one IR with semantic flags instead of lowering Cypher to SPARQL.
 - **Not taken:** D1 as a target (no interactive transactions), and oxilite's purge, which rewrites history. Tiramemsu erases by crypto-shredding ([[time-model#Erasure]]).
 
+## DuckDB
+
+An embedded columnar SQL engine, evaluated as an alternative storage and execution engine and rejected. It wins at whole-store analytics and loses at every per-request operation an agent-memory store runs.
+
+Measured on 2026-09-29 with DuckDB 1.5.6 against SQLite on the same 11 million statements (`bench/engine-comparison/`, Apple M2 Max, Python bindings):
+
+| Workload | SQLite | DuckDB |
+|---|---|---|
+| Point lookup, now / as-of | 4.2 / 5.6 µs | 414 / 563 µs |
+| 2-hop from a bound node | 7.5 µs | 1 057 µs |
+| Skewed 4-pattern BGP | 4.5 ms | 31 ms |
+| One BFS layer, 256 nodes | 0.68 ms | 8.4 ms |
+| Assert / retract transaction | 206 / 121 µs | 1 043 / 573 µs |
+| Live count per predicate, whole store | 2 968 ms | 36 ms |
+| As-of aggregate, whole history | 579 ms | 23 ms |
+| File size / growth after 3 000 small transactions | 1 760 MB / +20 MB | 883 MB / +157 MB |
+
+- **Blockers in 1.5.6** (checked against its docs and source): no partial indexes; an ART index is used only when a scan has exactly one filter on a single-column index, so `s = ? AND p = ?` always scans; no `SAVEPOINT` ([[time-model#Speculative Transactions]]); no triggers ([[storage#Invariant Triggers]]); no Rust-to-WASM build; full-text indexes are not updated on write. DuckDB 2.0 (due 2026-10-21) adds only partial trigger support.
+- **Why it is slow per request:** a fixed cost per query (`SELECT 1` takes 66 µs, against 0.9 µs for SQLite, through the bindings), no multi-column index lookups, and compressed column storage that turns single-row writes into block rewrites. Its docs say that many small concurrent queries are not a design goal.
+- **Taken:** read-only analytics. DuckDB's `sqlite` extension can attach the tiramemsu file (`ATTACH '…' (TYPE sqlite, READ_ONLY)`), and it ran the whole-store aggregates in 207 ms and 167 ms, 3.5–14× faster than SQLite itself, with no change to storage. It runs as a separate tool, never inside the library, because DuckDB warns against linking two SQLite copies into one process.
+
 ## Others
 
 Other systems were studied and informed smaller choices or gave warnings about what to avoid.

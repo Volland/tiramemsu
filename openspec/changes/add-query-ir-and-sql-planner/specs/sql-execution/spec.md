@@ -337,3 +337,18 @@ Execution failures SHALL be reported as typed errors: `InvalidQuery` for structu
 #### Scenario: Error returns the connection
 - **WHEN** a query fails with `Unsupported` on a pool with one reader
 - **THEN** a following valid query succeeds on that same pool
+
+### Requirement: Duplicate removal only for multi-eid predicates
+Under `graph_set = SetOfTriples`, the executor SHALL skip duplicate removal for a TriplePattern whose predicate is a constant absent from `pred_multi`. It SHALL keep duplicate removal for every other pattern that does not bind an eid. Results SHALL be the same as with duplicate removal applied everywhere, in every view.
+
+#### Scenario: Predicate without duplicates skips removal
+- **WHEN** `v:name` has never held two eids with the same `(s, p, o)` and a SetOfTriples query matches `?x v:name ?n`
+- **THEN** the generated SQL for that pattern contains no canonical-eid subquery
+
+#### Scenario: A parallel edge turns removal on
+- **WHEN** `create` adds a second `(v:alice v:called v:bob)` and the same SetOfTriples query ran before and runs again after
+- **THEN** after the write, `v:called` is in `pred_multi`, the SQL contains the canonical-eid subquery, and the query still returns one row
+
+#### Scenario: Re-assert after retract under History
+- **WHEN** `(v:alice v:worksAt v:acme)` is asserted, retracted and asserted again, and a SetOfTriples pattern on `v:worksAt` runs under History
+- **THEN** it returns one row for that triple

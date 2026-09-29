@@ -16,7 +16,7 @@ CREATE TABLE meta (
   key   TEXT PRIMARY KEY,
   value INTEGER NOT NULL
 ) STRICT;
--- keys: format_version, next_term, next_node, next_bnode, next_stmt, last_t, last_instant
+-- keys: format_version, next_term, next_node, next_bnode, next_stmt, last_t, last_instant, multi_version
 
 CREATE TABLE term (
   id   INTEGER PRIMARY KEY,   -- payload; ObjectId = id << 4 | tag
@@ -70,6 +70,11 @@ CREATE TABLE volatile (
   PRIMARY KEY (s, key)
 ) WITHOUT ROWID, STRICT;
 
+-- predicates that ever held two eids with the same (s, p, o); only grows
+CREATE TABLE pred_multi (
+  p INTEGER PRIMARY KEY          -- predicate ObjectId
+) STRICT;
+
 -- planner statistics: SQLite's own sqlite_stat1 / sqlite_stat4, created by
 -- PRAGMA optimize at open (see query.md#Join Ordering)
 PRAGMA optimize = 0x10002;
@@ -85,6 +90,15 @@ One row per statement occurrence. The row is its own lifetime: `t_add` is the as
 - **Burned ids:** after a speculative `with` or a `dry_run` rolls back, the writer re-applies the advanced `meta` counters in a small commit. An id that was ever shown to a caller is then never issued again, even though its triple never existed. See [[time-model#Speculative Transactions]].
 - The valid-time columns are in every index key so that views combining time filters stay covering.
 - A row is only ever updated from `t_ret IS NULL` to a value. See [[storage#Invariant Triggers]].
+
+## Multi-Eid Predicates
+
+`pred_multi` lists every predicate that has ever held two eids with the same `(s, p, o)`, live or retracted. SPARQL removes duplicates only for those predicates. See [[query#Front Ends#SPARQL]].
+
+- The writer adds `p` when an insert finds another row with the same `(s, p, o)` in `hist_spo`, which is the lookup assert already makes. That happens through `create`, through a second valid-time episode, or through re-asserting after a retract, which the History view shows twice.
+- A predicate is never removed from the list. That keeps the list safe for every view, including `asOf` and History. It is bookkeeping, not graph data, so [[time-model#Never Forget]] does not cover it.
+- `meta.multi_version` increases whenever a predicate is added. Cached SQL for SPARQL queries is keyed by it, so no cached plan skips duplicate removal for a predicate that now needs it.
+- Measured on 750 000 triples, a set-semantics 2-hop join took 10.3 µs with duplicate removal and 5.0 µs without it.
 
 ## Term Dictionary
 

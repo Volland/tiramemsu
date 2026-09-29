@@ -28,7 +28,7 @@ These are explicitly out of scope, so the design can stay small and exact.
 
 Every row is a decision taken in the design interview of 2026-09-29, with the section that specifies it.
 
-Rows D19–D25 were added the same day, after a comparison with oxilite ([[prior-art#oxilite]]) and after measuring SQLite 3.53 plans on the schema ([[query#Physical Planning#Join Ordering]], [[storage#Measured Footprint]]).
+Rows D19–D25 were added the same day, after a comparison with oxilite ([[prior-art#oxilite]]) and after measuring SQLite 3.53 plans on the schema ([[query#Physical Planning#Join Ordering]], [[storage#Measured Footprint]]). D26 follows a SQLite versus DuckDB benchmark on the same workload ([[prior-art#DuckDB]]).
 
 | ID | Decision | Specified in |
 |---|---|---|
@@ -60,6 +60,8 @@ Rows D19–D25 were added the same day, after a comparison with oxilite ([[prior
 | D23 | Reuse from oxilite: its Cypher parser as the fallback, its allow-list test harnesses, and its write-cost and as-of benchmarks | [[prior-art#oxilite]] |
 | D24 | Crypto-shredding is scheduled (M6); format 1 reserves tag 15 and `sys:sensitive` for it | [[time-model#Erasure]] |
 | D25 | Retrieval (FTS5 over the term dictionary, vectors on hosts that have them) is a planned milestone | [[roadmap#Milestones]] |
+| D27 | SPARQL removes duplicate `(s, p, o)` only for predicates recorded in `pred_multi`; the eid stays as the statement identity | [[storage#Multi-Eid Predicates]] |
+| D26 | SQLite stays the engine. DuckDB was benchmarked on the workload and is only an optional read-only analytics tool over the SQLite file | [[prior-art#DuckDB]] |
 
 ## Open Inputs
 

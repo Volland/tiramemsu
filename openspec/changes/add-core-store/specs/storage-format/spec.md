@@ -93,6 +93,21 @@ Planner statistics SHALL be kept current by the engine, not left to the caller. 
 - **WHEN** `Db::optimize()` is called
 - **THEN** it runs `ANALYZE` and `sqlite_stat1` holds a row for every index of `triple`
 
+### Requirement: Multi-eid predicates are recorded
+The writer SHALL add a predicate to `pred_multi`, within the same transaction, whenever it inserts a statement while another row (live or retracted) with the same `(s, p, o)` exists. It SHALL never remove a predicate from `pred_multi`, and SHALL increase `meta.multi_version` whenever it adds one. A rolled-back transaction, a speculation or a dry run SHALL leave `pred_multi` unchanged.
+
+#### Scenario: Idempotent assert records nothing
+- **WHEN** `(v:alice v:name "Alice")` is asserted twice with overlapping valid time
+- **THEN** `pred_multi` does not contain `v:name`
+
+#### Scenario: Parallel edge and episode record the predicate
+- **WHEN** `create` makes a second `(v:alice v:called v:bob)`, and `(v:alice v:worksAt v:acme)` is asserted again for a non-overlapping valid interval
+- **THEN** `pred_multi` contains `v:called` and `v:worksAt`, and `meta.multi_version` has increased by 2
+
+#### Scenario: Re-assert after retract records the predicate
+- **WHEN** `(v:alice v:likes v:tea)` is asserted, retracted, and asserted again
+- **THEN** `pred_multi` contains `v:likes`
+
 ### Requirement: Engine metadata counters
 The `meta` table SHALL hold exactly the integer keys `format_version`, `next_term`, `next_node`, `next_bnode`, `next_stmt`, `last_t` and `last_instant`. A fresh database SHALL start with `format_version = 1`, `last_t = 0`, `last_instant = 0`, and every `next_*` counter at 1. Every id the engine allocates SHALL come from the corresponding counter and never from the maximum existing rowid, and each counter SHALL only ever increase.
 

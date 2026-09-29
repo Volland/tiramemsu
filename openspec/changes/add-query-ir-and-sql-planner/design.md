@@ -486,6 +486,7 @@ Comparison codegen, with three-valued logic mapped onto SQL NULL:
 Under `SetOfTriples`, a TriplePattern with `eid = None` that is not virtual and not volatile gets `tN.eid = (SELECT min(xN.eid) FROM triple AS xN WHERE xN.s = tN.s AND xN.p = tN.p AND xN.o = tN.o AND <view_predicates(xN)>)`. Each visible distinct `(s, p, o)` then matches exactly once, and a BGP of such patterns yields a set, as SPARQL requires (`lat.md/query#Front Ends#SPARQL`).
 
 - *Elision:* the predicate is dropped when the root is `Project{distinct}` over only Join, Filter and TriplePattern operators, because the outer DISTINCT already removes the duplicates.
+- *Elision by predicate (D27, `lat.md/storage#Multi-Eid Predicates`):* the predicate is also dropped for a pattern whose `p` is a constant absent from `pred_multi`, since no two eids share an `(s, p, o)` there in any view. A pattern with a variable predicate keeps it. The planner reads `pred_multi` in the query's read transaction, and the SQL cache key includes `meta.multi_version`. On 750 000 triples this halves a 2-hop join (10.3 µs → 5.0 µs).
 - *Alternative A:* `SELECT DISTINCT` per BGP as a derived table. It was rejected because it materialises and loses index seeks inside `LEFT JOIN`s and correlated positions.
 - *Alternative B:* GROUP BY `s, p, o`. It was rejected for the same reason.
 - The chosen form keeps plans flat and costs one covering-index seek per candidate row (verified `COVERING INDEX live_osp (o=? AND s=? AND p=? AND t_ret=?)`).

@@ -1,0 +1,54 @@
+{
+ "N": 100000,
+ "sqlite_NORMAL": {
+  "load_s": 0.2995131250063423,
+  "index_s": 3.492812916985713,
+  "size_mb": 168.558592,
+  "rows": 1100050,
+  "point_now_us": 3.703416499774903,
+  "point_asof_us": 5.937208508839831,
+  "two_hop_us": 6.752166023943573,
+  "bgp4_ms": 0.24542500032112005,
+  "bgp4_rows": 250,
+  "bfs_layer_256_ms": 0.7136541506042704,
+  "reach3_ms": 0.11629179934971035,
+  "reach3_rows": 156,
+  "agg_live_ms": 150.06515267305076,
+  "agg_hist_ms": 61.85304166865535,
+  "assert_tx_us": 165.52729200338945,
+  "retract_tx_us": 109.99562501092441,
+  "savepoint": "yes",
+  "size_after_tx_mb": 180.285352
+ },
+ "sqlite_FULL": {
+  "assert_tx_us": 182.5138540007174,
+  "retract_tx_us": 120.60558400116861
+ },
+ "duckdb": {
+  "load_s": 0.4665975000243634,
+  "index_s": 0.7707804579986259,
+  "size_mb": 88.61696,
+  "rows": 1100050,
+  "point_now_us": 425.3287915053079,
+  "point_asof_us": 566.6394164873054,
+  "two_hop_us": 1053.6843339796178,
+  "bgp4_ms": 7.384050003020093,
+  "bgp4_rows": 250,
+  "bfs_layer_256_ms": 2.7767333507654257,
+  "reach3_ms": 2.4977916036732495,
+  "reach3_rows": 156,
+  "agg_live_ms": 5.822180673324813,
+  "agg_hist_ms": 4.159694333793595,
+  "point_plan_uses_index": false,
+  "assert_tx_us": 960.171854501823,
+  "retract_tx_us": 550.041542010149,
+  "savepoint": "no: Parser Error: syntax error at or near \"SAVEPOINT\"",
+  "size_after_tx_mb": 107.229184,
+  "triggers": "no: Parser Error: syntax error at or near \"TRIGGER\"",
+  "partial_index": "no: Not implemented Error: Creating partial indexes is not supported currently"
+ },
+ "versions": {
+  "sqlite": "3.45.3",
+  "duckdb": "1.5.6"
+ }
+}
