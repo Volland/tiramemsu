@@ -1,0 +1,12 @@
+This directory defines the high-level concepts, business logic, and architecture of this project using markdown. It is managed by [lat.md](https://www.npmjs.com/package/lat.md) — a tool that anchors source code to these definitions. Install the `lat` command with `npm i -g lat.md` and run `lat --help`.
+
+- [[overview]] — What Tiramemsu is, its goals and non-goals, and the record of every design decision
+- [[architecture]] — Layers, crates, connections and concurrency, and deployment
+- [[data-model]] — Statements with eids, layers, the ObjectId encoding, nodes, vocabulary mapping, and the predicate schema
+- [[time-model]] — Transaction time, valid time, operations, cascade, the event log, never-forget, and speculation
+- [[storage]] — The SQLite schema, indexes, query shapes, event view, invariant triggers, and the volatile table
+- [[query]] — The IR, views and scans, physical planning, the path engine, the SPARQL and Cypher front ends, and temporal syntax
+- [[api]] — The Rust facade, errors, bindings, and MCP tools
+- [[prior-art]] — Systems studied, and what was taken from or avoided in each
+- [[tests]] — Test specifications for the core invariants
+- [[roadmap]] — Milestones mapped to OpenSpec changes, and benchmarks

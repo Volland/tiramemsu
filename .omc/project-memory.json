@@ -1,0 +1,68 @@
+{
+  "version": "1.0.0",
+  "lastScanned": 1790693813242,
+  "projectRoot": "/Users/volodymyrpavlyshyn/Documents/work/tiramemsu",
+  "techStack": {
+    "languages": [],
+    "frameworks": [],
+    "packageManager": null,
+    "runtime": null
+  },
+  "build": {
+    "buildCommand": null,
+    "testCommand": null,
+    "lintCommand": null,
+    "devCommand": null,
+    "scripts": {}
+  },
+  "conventions": {
+    "namingStyle": null,
+    "importStyle": null,
+    "testPattern": null,
+    "fileOrganization": null
+  },
+  "structure": {
+    "isMonorepo": false,
+    "workspaces": [],
+    "mainDirectories": [
+      "docs"
+    ],
+    "gitBranches": null
+  },
+  "customNotes": [],
+  "directoryMap": {
+    "docs": {
+      "path": "docs",
+      "purpose": "Documentation",
+      "fileCount": 1,
+      "lastAccessed": 1790693813211,
+      "keyFiles": [
+        "design-options.md"
+      ]
+    },
+    "lat.md": {
+      "path": "lat.md",
+      "purpose": null,
+      "fileCount": 11,
+      "lastAccessed": 1790693813212,
+      "keyFiles": [
+        "api.md",
+        "architecture.md",
+        "data-model.md",
+        "lat.md",
+        "overview.md"
+      ]
+    },
+    "openspec": {
+      "path": "openspec",
+      "purpose": null,
+      "fileCount": 1,
+      "lastAccessed": 1790693813212,
+      "keyFiles": [
+        "config.yaml"
+      ]
+    }
+  },
+  "hotPaths": [],
+  "userDirectives": []
+}
