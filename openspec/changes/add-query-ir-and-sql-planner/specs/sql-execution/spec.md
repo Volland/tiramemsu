@@ -131,7 +131,7 @@ Filter and LeftJoin conditions SHALL use three-valued logic in which errors and 
 - **THEN** exactly the rows where `?e` is missing are kept
 
 ### Requirement: Value equality and comparison
-Equality between two terms SHALL be true when they are the same term. Numeric terms (integer, double, decimal) SHALL compare by numeric value across their kinds. Terms of different non-numeric kinds SHALL be unequal (false, not unknown). Ordering comparisons SHALL compare numbers numerically, strings by Unicode code point, and dates and datetimes chronologically. A constant compared by value SHALL work even when it is missing from the term dictionary.
+Equality between two terms SHALL be true when they are the same term. Numeric terms (integer, double, decimal) SHALL compare by numeric value across their kinds. Terms of different non-numeric kinds SHALL be unequal (false, not unknown). Ordering comparisons SHALL compare numbers numerically, strings by Unicode code point, and dates and datetimes chronologically. Datetimes SHALL compare by instant: two datetimes that denote the same instant with different timezone offsets SHALL be equal by value, while remaining distinct terms under `sameTerm`, in shared-variable joins and in `distinct`. A datetime without a timezone SHALL compare as if it were UTC. A constant compared by value SHALL work even when it is missing from the term dictionary.
 
 #### Scenario: Integer equals decimal
 - **WHEN** a Filter `?x = 1.0` (decimal) is applied to a row where `?x` is the integer `1`
@@ -148,6 +148,16 @@ Equality between two terms SHALL be true when they are the same term. Numeric te
 #### Scenario: Double range
 - **WHEN** a Filter `?score >= 0.5` is applied to doubles 0.25, 0.5 and 2.0
 - **THEN** 0.5 and 2.0 are kept
+
+#### Scenario: Same instant, different offsets
+- **WHEN** `?a` is the datetime `"2026-03-01T12:00:00+02:00"` and `?b` is `"2026-03-01T10:00:00Z"`
+- **THEN** a Filter `?a = ?b` keeps the row, and `?a < ?b` and `?a > ?b` remove it
+- **AND** a Filter `sameTerm(?a, ?b)` removes the row
+- **AND** `Project{distinct}` over rows binding each of them returns two rows, each decoding to its own lexical offset
+
+#### Scenario: Datetime constant matches any offset
+- **WHEN** a Filter `?t = "2026-03-01T12:00:00+02:00"^^xsd:dateTime` is applied to `TriplePattern(?e, v:at, ?t)` and one stored object is `"2026-03-01T10:00:00Z"`
+- **THEN** that row is kept, and the explained plan still seeks an index on the object instead of scanning
 
 ### Requirement: Ordering by decoded value
 OrderLimit SHALL sort by the decoded values of its keys, never by raw ObjectId. Within a kind: numbers (integer, double and decimal together) numerically; strings by Unicode code point, then language tag; booleans false before true; dates and datetimes chronologically. Across kinds, the order SHALL be fixed: blank and anonymous nodes, IRIs, statements, transactions, then literals (numbers, booleans, datetimes, dates, strings, language strings, other typed literals). Missing values SHALL sort first in ascending order under `missing = Unbound`, and last in ascending order under `missing = Null3VL`. Descending order SHALL reverse the value order. Ties SHALL keep a deterministic order for a given database state. Result rows SHALL follow the order of an OrderLimit at the root, or directly under a root Project or Extend.
@@ -204,7 +214,7 @@ Every result cell SHALL be decoded to a typed value: IRIs to IRI values; anonymo
 
 #### Scenario: Every ObjectId kind decodes
 - **WHEN** a query returns one value of each ObjectId tag
-- **THEN** each cell holds the value that was stored, of the matching kind, and datetimes come back as UTC epoch milliseconds
+- **THEN** each cell holds the value that was stored, of the matching kind, and datetimes come back as their epoch-millisecond instant together with their original timezone offset, or no offset when none was given
 
 #### Scenario: Typed literal with its datatype
 - **WHEN** a query returns a `TYPED` literal `"P3D"^^xsd:duration`
@@ -271,18 +281,58 @@ The planner SHALL split the IR into regions and route each PathPattern to a regi
 - **THEN** the explain output reports the region as cyclic and routed to SQL, and the result equals a brute-force enumeration
 
 ### Requirement: Explain
-The facade SHALL provide an explain operation for an IR and its parameters that returns, without running the query: the region routing, whether the query short-circuited, the SQL text, the ordered list of bound parameter values, and SQLite's `EXPLAIN QUERY PLAN` rows. Explaining a short-circuited query SHALL return no SQL.
+The facade SHALL provide an explain operation for an IR and its parameters that returns, without running the query: the region routing, whether the query short-circuited, the SQL text, the ordered list of bound parameter values, and SQLite's `EXPLAIN QUERY PLAN` rows, both for the whole statement and for each SQL region. The plan SHALL be taken with the actual parameter values bound. Explaining a short-circuited query SHALL return no SQL.
 
 #### Scenario: Explain a normal query
-- **WHEN** a single-pattern Now query is explained
+- **WHEN** a single-pattern Now query on a churned predicate is explained
 - **THEN** the output has one SQL region, the SQL text, its parameters, and a query plan naming a `live_*` index
+
+#### Scenario: Plan per region
+- **WHEN** a query that joins a two-pattern BGP with a path pattern is explained with a test path operator registered
+- **THEN** the SQL region carries its own `EXPLAIN QUERY PLAN` rows, which name the scans of its own `triple` aliases in plan order
 
 #### Scenario: Explain a short-circuited query
 - **WHEN** a query whose constant is missing from the dictionary is explained
 - **THEN** the output reports a short-circuit and has no SQL text
 
+### Requirement: Join order from statistics
+The executor SHALL leave the join order of a SQL region to SQLite's planner, and plan quality SHALL NOT depend on the textual order of the patterns in the IR, given the planner statistics that the store keeps current. The executor SHALL NOT require an explicit `optimize()` call for good plans. Stale or missing statistics SHALL only change a plan's speed, never its results. An engine-forced join order is not part of this requirement.
+
+The skewed fixture used below is loaded through the ordinary API with bound parameters: one class holds 90 % of the nodes, one predicate has 50 rows, and some properties are churned (asserted, retracted and asserted again).
+
+#### Scenario: Selective pattern first
+- **WHEN** a four-pattern BGP on the skewed fixture joins the 90 % class, a high-fanout predicate and the 50-row predicate, and is explained without an explicit `optimize()` call
+- **THEN** the region's query plan starts from the 50-row predicate's pattern
+
+#### Scenario: Textual order does not matter
+- **WHEN** the same BGP is explained with its patterns permuted in the IR
+- **THEN** every permutation's plan starts from the same most selective pattern, and all permutations return the same result multiset
+
+#### Scenario: Predicate-only patterns
+- **WHEN** a BGP whose patterns bind only their predicates, one of them the 50-row predicate, is explained on the skewed fixture
+- **THEN** the plan starts from the 50-row predicate's pattern
+
+#### Scenario: Stale statistics keep results
+- **WHEN** a large batch of statements is committed after the statistics were gathered, and a golden BGP runs before any further `PRAGMA optimize`
+- **THEN** its result equals the result of the same BGP after `Db::optimize()`
+
+### Requirement: Host capabilities
+The query engine SHALL reach SQLite only through the store's executor boundary, and SHALL require the host capabilities `functions` (its SQL helper functions) and `vtab` (the `tm_path` and `rarray` virtual tables). Opening a database with the query engine on a host that lacks either capability SHALL fail with a clear typed error that names the missing capability, and SHALL NOT fall back to a degraded mode. With both capabilities present, the helper functions and native operators SHALL be registered through the host on the writer and on every pooled reader.
+
+#### Scenario: Host without virtual tables
+- **WHEN** a database is opened with the query engine on a test host that declares `functions` but not `vtab`
+- **THEN** opening fails with an error naming the `vtab` capability, and no query is ever planned
+
+#### Scenario: Host without functions
+- **WHEN** a database is opened with the query engine on a test host that declares `vtab` but not `functions`
+- **THEN** opening fails with an error naming the `functions` capability
+
+#### Scenario: First host has both
+- **WHEN** a database is opened on the `rusqlite` host and a query using a value comparison runs on a pooled reader and inside `db.with`
+- **THEN** both succeed, because the helper functions are registered on every connection
+
 ### Requirement: Typed errors
-Execution failures SHALL be reported as typed errors: `InvalidQuery` for structurally invalid IR and missing parameters, `Unsupported` for features not available in this build (path patterns without an operator, a path with no bound endpoint), and a storage error that carries SQLite's message for failures inside SQLite. A failed query SHALL leave no state behind: the connection goes back to the pool and the shared cache holds only correct entries.
+Execution failures SHALL be reported as typed errors: `InvalidQuery` for structurally invalid IR and missing parameters, `Unsupported` for features not available in this build (path patterns without an operator, a path with no bound endpoint), a storage error that carries SQLite's message for failures inside SQLite, and, at open time, an error naming a missing host capability (see Host capabilities). A failed query SHALL leave no state behind: the connection goes back to the pool and the shared cache holds only correct entries.
 
 #### Scenario: Error returns the connection
 - **WHEN** a query fails with `Unsupported` on a pool with one reader

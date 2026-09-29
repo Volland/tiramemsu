@@ -31,9 +31,9 @@ Tiramemsu promises that SPARQL and Cypher query one store with the same results 
 
 ## Impact
 
-- **New crate:** `crates/tm-cypher` (depends on `tm-ir`, `tm-core` ids and values, and the chosen parser crate `open-cypher`, pinned; see design.md).
+- **New crate:** `crates/tm-cypher` (depends on `tm-ir`, `tm-core` ids and values, and the chosen parser crate `open-cypher`, pinned; the fallback is oxilite's hand-written parser, vendored (D23); see design.md).
 - **Facade (`tiramemsu`):** adds `View::cypher`, `Tx::cypher` and `Db::cypher_write`, the Cypher variant of `QueryResult` with its JSON encoding, the `Params` type, the error variants `DeleteConnectedNode` and `Eval`, and a Cypher program executor that interleaves `tm-exec` read plans with `Tx` operations.
 - **IR (`tm-ir`, owned by M1):** consumed as is. The lowering relies on correlated scalar lookups, `Exists`/`NotExists`, and null-safe joins. Any gap is added in coordination with `add-query-ir-and-sql-planner`, not forked. See design.md, Risks.
-- **Tests:** an openCypher TCK subset runner, unit and integration tests per capability, and the differential corpus in the facade crate. The differential suite requires `add-sparql-frontend`.
+- **Tests:** an openCypher TCK runner with an allow-list of expected failures in oxilite's style (an unexpected failure or an unexpected pass fails the build), unit and integration tests per capability, and the differential corpus in the facade crate. The differential suite requires `add-sparql-frontend`.
 - **Docs:** `lat.md/query.md`, `lat.md/data-model.md` and `lat.md/api.md` get `@lat` code references and record the decisions made while writing this spec.
 - **Dependencies:** requires M0 (`add-core-store`) and M1 (`add-query-ir-and-sql-planner`). Runs in parallel with M2a (`add-sparql-frontend`). M3 (`add-path-engine`) will later modify `cypher-read` to evaluate path patterns.

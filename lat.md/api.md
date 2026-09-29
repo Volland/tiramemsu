@@ -10,7 +10,10 @@ The signatures below are the contract that bindings wrap. Names are fixed; detai
 pub struct Db { /* writer + reader pool */ }
 
 impl Db {
-    pub fn open(path: impl AsRef<Path>, opts: OpenOptions) -> Result<Db>;
+    pub fn open(path: impl AsRef<Path>, opts: OpenOptions) -> Result<Db>;   // tm-rusqlite host
+    pub fn open_with_host(host: impl Host, path: impl AsRef<Path>, opts: OpenOptions) -> Result<Db>;
+    pub fn capabilities(&self) -> Capabilities;                             // declared by the host
+    pub fn optimize(&self) -> Result<()>;                                   // full ANALYZE
     pub fn transact<F>(&self, opts: TxOptions, f: F) -> Result<TxReport>
         where F: FnOnce(&mut Tx) -> Result<()>;
     pub fn with<F, G, R>(&self, ops: F, query: G) -> Result<R>      // speculative
@@ -46,8 +49,35 @@ Every failure is a typed error, and a failed transaction leaves no trace: no tx 
 | `SelfReference(eid)` | A statement would use its own eid as `s` or `o` |
 | `ReservedNamespace(iri)` | User data asserts a `sys:` predicate that is not a schema, vocab or prefix flag |
 | `SchemaConflict { violating }` | A schema change is violated by existing live data |
-| `Parse { dialect, span, msg }` / `Unsupported { feature }` | A query is outside the v1 subset |
+| `Parse { dialect, span, msg }` / `Unsupported { feature }` | A query is outside the v1 subset. `dialect` is SPARQL, Cypher or Path (the `tm_path` expression text). `Unsupported` also rejects what format 1 reserves for later milestones: tag 15 `SEALED` and the `sys:sensitive` flag (M6) |
+| `MissingCapability { capability }` | `Db::open` with the query engine on a host that lacks `functions` or `vtab`. See [[architecture#Executor]] |
+| `InvalidQuery { msg }` | A structurally invalid IR or query plan (e.g. an unbound variable in a projection) that is not a parse error |
+| `PathLimitExceeded { limit }` | A path search exceeds `OpenOptions.path_max_states` (default 1 000 000). Results are never silently truncated |
 | `FormatVersion { found, supported }` | The file was written by a newer format |
+| `ForeignFile` | The file is a SQLite database with user tables but no `meta` table |
+| `InvalidTerm` | A value of the wrong kind in a position (e.g. a literal as predicate) |
+| `InvalidInterval` | `assert`/`create` with an empty valid interval (`v_from ≥ v_to`); `InvalidPatch` covers supersede |
+| `NotUniquePredicate(p)` | `upsert` on a predicate without `sys:unique` |
+| `Reentrant` | A write is started from inside a running transaction on the same `Db` |
+| `DeleteConnectedNode(node)` | Cypher `DELETE n` while `n` still has relationships (use `DETACH DELETE`) |
+| `Eval { msg }` | A runtime expression error during query evaluation |
+| `Sqlite(e)` / `Custom(msg)` | An underlying SQLite error, or the caller aborting the transaction body |
+
+The error enum is `#[non_exhaustive]`. Each OpenSpec change adds the variants it owns.
+
+## Open Options
+
+`OpenOptions` gathers the per-database tuning knobs. They are defined across the OpenSpec changes and listed here so bindings expose one consistent set.
+
+| Option | Default | Owner |
+|---|---|---|
+| `readers` | 4 | `add-core-store` |
+| `clock` | system clock (injectable for tests) | `add-core-store` |
+| `busy_timeout` | 5 s | `add-core-store` |
+| `term_cache_capacity` | 16 384 | `add-core-store` / `add-query-ir-and-sql-planner` |
+| `planner` | default routing (LFTJ off) | `add-query-ir-and-sql-planner` |
+| `path_max_hops` | 15 | `add-path-engine` |
+| `path_max_states` | 1 000 000 | `add-path-engine` |
 
 ## Bindings
 

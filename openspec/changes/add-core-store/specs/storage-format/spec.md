@@ -1,6 +1,6 @@
 ## Purpose
 
-Defines how a Tiramemsu database is laid out in a single SQLite file: creation, opening, journal mode, the STRICT format-version-1 schema, the engine metadata counters, and how format versions are checked and migrated forward.
+Defines how a Tiramemsu database is laid out in a single SQLite file: creation, opening, journal mode, the STRICT format-version-1 schema and the names it reserves, the engine metadata counters, the planner statistics kept with the store, and how format versions are checked and migrated forward.
 
 ## ADDED Requirements
 
@@ -46,13 +46,18 @@ Every tiramemsu table SHALL be declared STRICT, and every connection the engine 
 - **THEN** SQLite rejects the insert with a datatype error
 
 ### Requirement: Schema matches format version 1 exactly
-The tables, columns, column types, nullability, primary keys, indexes (including their column order, sort direction and partial `WHERE` clauses), the `event` view and the triggers created for format version 1 SHALL be exactly those of the documented format-1 DDL, so that files are interchangeable between builds.
+The tables, columns, column types, nullability, primary keys, indexes (including their column order, sort direction and partial `WHERE` clauses), the `event` view and the triggers created for format version 1 SHALL be exactly those of the documented format-1 DDL, so that files are interchangeable between builds. SQLite's own statistics tables (`sqlite_stat1`, `sqlite_stat4`) are not part of the format. The `live_*` indexes SHALL keep `t_ret` in their key although it is always NULL there, because without it SQLite 3.53 no longer treats them as covering for `t_ret IS NULL` and picks a `hist_*` index instead.
 
 #### Scenario: Partial live indexes
 - **WHEN** the schema of a fresh database is inspected
 - **THEN** `live_spo`, `live_pos`, `live_osp` and `valid_p` are partial indexes with the condition `t_ret IS NULL`
 - **AND** `log_ret` is a partial index with the condition `t_ret IS NOT NULL`
 - **AND** `term_num` is a partial index with the condition `num IS NOT NULL`
+
+#### Scenario: Live indexes keep t_ret in their key
+- **WHEN** the columns of `live_spo`, `live_pos` and `live_osp` are inspected
+- **THEN** each has its three position columns followed by `t_ret`, `v_from` and `v_to`
+- **AND** `EXPLAIN QUERY PLAN` for the "now" shape `s=? AND p=? AND t_ret IS NULL` names `COVERING INDEX live_spo`
 
 #### Scenario: History indexes order newest first
 - **WHEN** the schema of a fresh database is inspected
@@ -61,6 +66,32 @@ The tables, columns, column types, nullability, primary keys, indexes (including
 #### Scenario: Volatile table has a composite key without rowid
 - **WHEN** the schema of a fresh database is inspected
 - **THEN** `volatile` is a WITHOUT ROWID STRICT table whose primary key is `(s, key)`
+
+### Requirement: Format 1 reserves names for later milestones
+Format 1 SHALL reserve, and SHALL NOT create, the table `seal_key` (crypto-shredding, milestone M6), the table `term_fts` and every name starting with `vec_` (retrieval, milestone M7), alongside ObjectId tag 15 `SEALED` and the schema flag `sys:sensitive`. Only the migrations of those milestones MAY create objects with these names.
+
+#### Scenario: Reserved names are absent
+- **WHEN** the schema of a fresh or reopened format-1 database is inspected
+- **THEN** it contains no table, index, view or trigger named `seal_key` or `term_fts`, and none whose name starts with `vec_`
+
+### Requirement: Planner statistics are part of the store
+Planner statistics SHALL be kept current by the engine, not left to the caller. Every open SHALL run `PRAGMA optimize=0x10002` after initialisation or migration, which analyses tables that were never analysed. The writer SHALL run `PRAGMA optimize` after a bulk load and at most once every `OpenOptions.optimize_every` commits (default 1000). `Db::optimize()` SHALL run a full `ANALYZE`. Statistics SHALL live only in SQLite's own `sqlite_stat1` (and `sqlite_stat4` when the host declares `stat4`), outside the graph and outside never-forget, and SHALL only ever change a plan's speed, never a result.
+
+#### Scenario: Statistics exist without an explicit optimize
+- **WHEN** a database is opened, loaded with a skewed data set through the ordinary write API, closed and reopened, without any call to `Db::optimize()`
+- **THEN** `sqlite_stat1` holds rows for the `triple` indexes
+
+#### Scenario: Periodic optimize
+- **WHEN** a database is opened with `optimize_every = 10` and 25 small transactions commit
+- **THEN** the writer has run `PRAGMA optimize` exactly twice after opening
+
+#### Scenario: Stale statistics never change results
+- **WHEN** heavy churn is committed without re-analysis, a set of lookups over every view runs, then `Db::optimize()` runs and the same lookups run again
+- **THEN** both runs return identical results
+
+#### Scenario: Full analysis on request
+- **WHEN** `Db::optimize()` is called
+- **THEN** it runs `ANALYZE` and `sqlite_stat1` holds a row for every index of `triple`
 
 ### Requirement: Engine metadata counters
 The `meta` table SHALL hold exactly the integer keys `format_version`, `next_term`, `next_node`, `next_bnode`, `next_stmt`, `last_t` and `last_instant`. A fresh database SHALL start with `format_version = 1`, `last_t = 0`, `last_instant = 0`, and every `next_*` counter at 1. Every id the engine allocates SHALL come from the corresponding counter and never from the maximum existing rowid, and each counter SHALL only ever increase.

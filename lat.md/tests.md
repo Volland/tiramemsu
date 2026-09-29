@@ -102,7 +102,15 @@ For every tag, encode then decode returns the value. A value that can be inlined
 
 ### Order Within Tag
 
-For INT, DATE and DATETIME, integer order of the ObjectIds equals value order, negative values included, under SQLite's signed comparison.
+For INT, DATE and DATETIME, integer order of the ObjectIds equals value order, negative values included, under SQLite's signed comparison. For DATETIME, value order is the order of `id >> 15`.
+
+### DateTime Keeps Its Offset
+
+`"2026-03-01T12:00:00+02:00"` and `"2026-03-01T10:00:00Z"` get two ObjectIds that decode to their own lexical offsets. SPARQL `=` and Cypher `=` on them are true, and `sameTerm` is false.
+
+### Reserved Tag Is Rejected
+
+Format 1 rejects tag 15 `SEALED` in stored values and the `sys:sensitive` schema flag, until M6. See [[time-model#Erasure]].
 
 ## Query
 
@@ -118,7 +126,13 @@ A Cypher relationship variable used in node position and a SPARQL `~ ?r` reifier
 
 ### Per Pattern Time Scopes
 
-A query that mixes an `asOf(t)` pattern and a now pattern returns the before and after values of a superseded fact.
+A query that mixes an `asOf(t)` pattern and a now pattern returns the before and after values of a superseded fact. In SPARQL, the `asOf` pattern sits in `SERVICE <tm:asOf/t>`, and a `tm:` IRI in `GRAPH` fails with a `Parse` error.
+
+### Skewed Joins Start Selective
+
+With bound parameters on a skewed fixture, every golden BGP's plan starts from its most selective pattern, without an explicit `optimize()` call.
+
+The fixture has one class holding 90 % of the nodes, a 50-row predicate and churned properties. It is loaded through the ordinary API, so the test also checks that statistics appear automatically. See [[query#Physical Planning#Join Ordering]].
 
 ### Paths Cross Layers
 

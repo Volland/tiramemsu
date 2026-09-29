@@ -1,12 +1,12 @@
 ## Purpose
 
-Lets SPARQL queries choose transaction time and valid time for a whole query or per pattern, through `tm:` time IRIs in the standard `FROM` and `GRAPH` clauses. It also lets queries read statement-time metadata through `tm:` virtual predicates, so "what did we know, and when" is plain SPARQL.
+Lets SPARQL queries choose transaction time and valid time for a whole query or per pattern, through `tm:` time IRIs in the standard `FROM` and `SERVICE` clauses. `GRAPH` is left free for named graphs, so that a time scope and a graph can later be combined. It also lets queries read statement-time metadata through `tm:` virtual predicates, so "what did we know, and when" is plain SPARQL.
 
 ## ADDED Requirements
 
 ### Requirement: Time IRI grammar
 
-The system SHALL recognise these time IRIs in `FROM`, `FROM NAMED`, `GRAPH`, `USING` and `USING NAMED`, where `urn:tiramemsu:tm:` is the `tm:` namespace:
+The system SHALL recognise these time IRIs in `FROM`, `FROM NAMED`, `USING`, `USING NAMED` and as the endpoint IRI of `SERVICE` (and `SERVICE SILENT`), where `urn:tiramemsu:tm:` is the `tm:` namespace:
 - `urn:tiramemsu:tm:asOf/<t>`, where `<t>` is an unsigned decimal transaction number: the transaction-time view as of transaction `t`.
 - `urn:tiramemsu:tm:asOf/<instant>`, where `<instant>` is an `xsd:dateTime` or `xsd:date` lexical form: the view as of the largest transaction whose instant is at or before that time. It is the empty view if no transaction is that old.
 - `urn:tiramemsu:tm:validAt/<instant>`, with the same lexical forms: only statements whose valid-time interval `[v_from, v_to)` contains that time.
@@ -26,7 +26,7 @@ A date SHALL mean 00:00:00 UTC of that day. A date-time without a timezone SHALL
 - **WHEN** `SELECT * FROM <urn:tiramemsu:tm:asOf/1970-01-02> WHERE { ?s ?p ?o }` is run on a database whose first transaction is later
 - **THEN** zero rows are returned and no error is raised
 
-#### Scenario: Timezone offset normalised
+#### Scenario: Time IRI offset resolves to an instant
 - **WHEN** `FROM <urn:tiramemsu:tm:asOf/2026-09-01T14:00:00+02:00>` is used
 - **THEN** it selects the same transaction as `FROM <urn:tiramemsu:tm:asOf/2026-09-01T12:00:00Z>`
 
@@ -62,25 +62,57 @@ Time IRIs in `FROM` SHALL set the default view of every pattern in the query, in
 - **WHEN** `SELECT ?p FROM <urn:tiramemsu:tm:asOf/5> WHERE { ?p a v:Person FILTER EXISTS { ?p v:worksAt v:acme } }` is run
 - **THEN** both the outer pattern and the `EXISTS` pattern read as of tx 5
 
-### Requirement: GRAPH scopes patterns in time
+### Requirement: SERVICE scopes a group in time
 
-`GRAPH <time IRI> { … }` SHALL evaluate every pattern inside the block in a view derived from the enclosing scope. The part named by the IRI SHALL be replaced, and the other part SHALL be inherited. `GRAPH` blocks SHALL nest, and the innermost block SHALL win for the part it names. Patterns outside any `GRAPH` block SHALL use the query default. A `GRAPH` time IRI SHALL NOT need to be declared with `FROM NAMED`. A `FROM NAMED` or `USING NAMED` time IRI SHALL be accepted and SHALL have no effect.
+`SERVICE <time IRI> { … }` SHALL evaluate every pattern inside the group in a view derived from the enclosing scope, locally and without any federation. The part named by the IRI (transaction-time part or valid-time part) SHALL be replaced, and the other part SHALL be inherited. `SERVICE` groups SHALL nest, and the innermost group SHALL win for the part it names. Patterns outside any time `SERVICE` group SHALL use the query default. `SERVICE SILENT <time IRI>` SHALL behave exactly like `SERVICE <time IRI>`, and SHALL NOT hide errors raised inside the group. A `SERVICE` time IRI SHALL NOT need to be declared with `FROM NAMED`. A `FROM NAMED` or `USING NAMED` time IRI SHALL be accepted and SHALL have no effect.
 
 #### Scenario: Before and after values of a changed fact
-- **WHEN** `(v:alice v:worksAt v:acme)` was live as of tx 150 and was later superseded by `(v:alice v:worksAt v:initech)`, and the query `SELECT ?before ?after WHERE { GRAPH <urn:tiramemsu:tm:asOf/150> { v:alice v:worksAt ?before } v:alice v:worksAt ?after . FILTER(?before != ?after) }` is run on the current view
+- **WHEN** `(v:alice v:worksAt v:acme)` was live as of tx 150 and was later superseded by `(v:alice v:worksAt v:initech)`, and the query `SELECT ?before ?after WHERE { SERVICE <urn:tiramemsu:tm:asOf/150> { v:alice v:worksAt ?before } v:alice v:worksAt ?after . FILTER(?before != ?after) }` is run on the current view
 - **THEN** one row with `before = v:acme` and `after = v:initech` is returned
 
 #### Scenario: Nested scopes combine parts
-- **WHEN** `SELECT ?c WHERE { GRAPH <urn:tiramemsu:tm:asOf/150> { GRAPH <urn:tiramemsu:tm:validAt/2021-06-01> { v:alice v:worksAt ?c } } }` is run
+- **WHEN** `SELECT ?c WHERE { SERVICE <urn:tiramemsu:tm:asOf/150> { SERVICE <urn:tiramemsu:tm:validAt/2021-06-01> { v:alice v:worksAt ?c } } }` is run
 - **THEN** the pattern reads statements live as of tx 150 and valid on 2021-06-01
 
+#### Scenario: Inner scope overrides outer scope for the same part
+- **WHEN** `SELECT ?c WHERE { SERVICE <urn:tiramemsu:tm:asOf/150> { SERVICE <urn:tiramemsu:tm:asOf/90> { v:alice v:worksAt ?c } } }` is run
+- **THEN** the pattern reads the state as of tx 90
+
 #### Scenario: Inner scope overrides FROM
-- **WHEN** `SELECT ?c FROM <urn:tiramemsu:tm:asOf/10> WHERE { GRAPH <urn:tiramemsu:tm:history> { v:alice v:worksAt ?c } }` is run
+- **WHEN** `SELECT ?c FROM <urn:tiramemsu:tm:asOf/10> WHERE { SERVICE <urn:tiramemsu:tm:history> { v:alice v:worksAt ?c } }` is run
 - **THEN** the pattern reads every statement ever stored, not the state as of tx 10
 
 #### Scenario: History scope for one pattern
-- **WHEN** `SELECT ?old WHERE { v:alice v:worksAt ?now . GRAPH <urn:tiramemsu:tm:history> { v:alice v:worksAt ?old } FILTER(?old != ?now) }` is run
+- **WHEN** `SELECT ?old WHERE { v:alice v:worksAt ?now . SERVICE <urn:tiramemsu:tm:history> { v:alice v:worksAt ?old } FILTER(?old != ?now) }` is run
 - **THEN** every past employer that differs from the current one is returned
+
+#### Scenario: SERVICE SILENT is the same scope
+- **WHEN** `SELECT ?c WHERE { SERVICE SILENT <urn:tiramemsu:tm:asOf/150> { v:alice v:worksAt ?c } }` is run
+- **THEN** it returns the same rows as the same query without `SILENT`
+
+#### Scenario: Malformed time IRI in SERVICE
+- **WHEN** `SELECT * WHERE { SERVICE SILENT <urn:tiramemsu:tm:asOf/yesterday> { ?s ?p ?o } }` is submitted
+- **THEN** the request fails with a `Parse` error of dialect SPARQL naming `urn:tiramemsu:tm:asOf/yesterday`, and `SILENT` does not turn it into an empty result
+
+### Requirement: GRAPH does not carry time
+
+`GRAPH` SHALL NOT select time. `GRAPH` with an IRI in the `tm:` namespace SHALL fail with a `Parse` error of dialect SPARQL whose message says that time IRIs are not allowed in `GRAPH` and names `SERVICE` as the form to use. This SHALL happen before execution, and SHALL keep `GRAPH` free for future named graphs, so that a time scope can wrap a graph (`SERVICE <urn:tiramemsu:tm:asOf/150> { GRAPH <g> { … } }`).
+
+#### Scenario: Time IRI in GRAPH is rejected
+- **WHEN** `SELECT ?c WHERE { GRAPH <urn:tiramemsu:tm:asOf/150> { v:alice v:worksAt ?c } }` is submitted
+- **THEN** the request fails with a `Parse` error of dialect SPARQL whose message names `SERVICE`, and nothing is read
+
+### Requirement: Non-time SERVICE is unsupported
+
+The store does not federate. `SERVICE` with an IRI outside the `tm:` namespace SHALL fail with `Unsupported { feature: "SERVICE" }`, and `SERVICE ?var` SHALL fail with `Unsupported { feature: "SERVICE" }`, before execution. `SILENT` SHALL NOT turn these failures into an empty result.
+
+#### Scenario: Federated SERVICE rejected
+- **WHEN** `SELECT * WHERE { SERVICE <http://dbpedia.org/sparql> { ?s ?p ?o } }` is submitted
+- **THEN** the request fails with `Unsupported { feature: "SERVICE" }`
+
+#### Scenario: SERVICE variable rejected
+- **WHEN** `SELECT * WHERE { SERVICE ?ep { ?s ?p ?o } }` is submitted
+- **THEN** the request fails with `Unsupported { feature: "SERVICE" }`
 
 ### Requirement: Valid-time filtering
 
@@ -96,7 +128,7 @@ A `validAt` selector SHALL keep a statement only when `(v_from is unbounded or v
 
 ### Requirement: Time IRIs are plain IRIs elsewhere
 
-Outside `FROM`, `FROM NAMED`, `GRAPH`, `USING` and `USING NAMED`, a `tm:` time IRI SHALL be an ordinary IRI with no time meaning. This applies in triple patterns, `FILTER` expressions, `BIND`, `VALUES` and templates.
+Outside `FROM`, `FROM NAMED`, `USING`, `USING NAMED` and the endpoint IRI of `SERVICE`, a `tm:` time IRI SHALL be an ordinary IRI with no time meaning. This applies in triple patterns, `FILTER` expressions, `BIND`, `VALUES` and templates. The one exception is the name of a `GRAPH` block, where a `tm:` IRI is rejected as the "GRAPH does not carry time" requirement says.
 
 #### Scenario: Time IRI as data
 - **WHEN** `(v:doc v:ref <urn:tiramemsu:tm:asOf/150>)` is inserted and `SELECT ?x WHERE { v:doc v:ref ?x FILTER(?x = <urn:tiramemsu:tm:asOf/150>) }` is run
@@ -104,10 +136,14 @@ Outside `FROM`, `FROM NAMED`, `GRAPH`, `USING` and `USING NAMED`, a `tm:` time I
 
 ### Requirement: Non-time graphs are unsupported
 
-The store has no named graphs. A `FROM`, `FROM NAMED` or `GRAPH` IRI that is not in the `tm:` namespace SHALL fail with `Unsupported { feature: "named graph" }`, and `GRAPH ?g` SHALL fail with `Unsupported { feature: "GRAPH variable" }`, before execution.
+The store has no named graphs in v1. A `FROM`, `FROM NAMED` or `GRAPH` IRI that is not in the `tm:` namespace SHALL fail with `Unsupported { feature: "named graph" }`, and `GRAPH ?g` SHALL fail with `Unsupported { feature: "GRAPH variable" }`, before execution. A `GRAPH` block nested inside a time `SERVICE` group SHALL be rejected in the same way.
 
 #### Scenario: Ordinary named graph rejected
 - **WHEN** `SELECT * FROM <http://example.org/graph1> WHERE { ?s ?p ?o }` is submitted
+- **THEN** the request fails with `Unsupported { feature: "named graph" }`
+
+#### Scenario: GRAPH inside a time scope is still a named graph
+- **WHEN** `SELECT * WHERE { SERVICE <urn:tiramemsu:tm:asOf/150> { GRAPH <http://example.org/g> { ?s ?p ?o } } }` is submitted
 - **THEN** the request fails with `Unsupported { feature: "named graph" }`
 
 ### Requirement: Statement-time virtual predicates

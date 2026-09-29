@@ -5,7 +5,7 @@ Defines the logical query representation that SPARQL, Cypher and the programmati
 ## ADDED Requirements
 
 ### Requirement: Logical operator set
-The query IR SHALL represent every query as a tree built from exactly these operators: TriplePattern, PathPattern, Values, Join, LeftJoin, Filter, Union, Extend, Aggregate, Project and OrderLimit. The executor SHALL accept any structurally valid tree of these operators, nested to any depth, and SHALL return a result whose columns are the variables the root operator exposes.
+The query IR SHALL represent every query as a tree built from exactly these operators: TriplePattern, PathPattern, Values, Unnest, Join, LeftJoin, Filter, Union, Extend, Aggregate, Project and OrderLimit. The executor SHALL accept any structurally valid tree of these operators, nested to any depth, and SHALL return a result whose columns are the variables the root operator exposes.
 
 #### Scenario: Basic graph pattern as a join of triple patterns
 - **WHEN** an IR `Join[TriplePattern(?a, v:worksAt, ?c), TriplePattern(?c, v:name, ?n)]` is executed on a store that holds `(alice worksAt acme)` and `(acme name "Acme Corp")`
@@ -26,6 +26,61 @@ The query IR SHALL represent every query as a tree built from exactly these oper
 #### Scenario: Values with an undefined cell
 - **WHEN** a Values row leaves variable `?y` undefined
 - **THEN** that row leaves `?y` missing in its solution, and does not bind it to any term
+
+### Requirement: List unnesting
+The IR SHALL provide an Unnest operator that, for each input row, evaluates a list expression and yields one row per list element with the element bound to a new variable. An empty list or a missing value SHALL yield no rows for that input row. Element order SHALL be preserved.
+
+#### Scenario: Unwind a constant list
+- **WHEN** an IR `Unnest([1, 2, 3] AS ?x, Join[])` is executed
+- **THEN** the result has three rows with `?x` = 1, 2, 3 in that order
+
+#### Scenario: Unwind a computed list per row
+- **WHEN** an input row has `?l = [a, b]` and another has `?l = []`
+- **THEN** the first row yields two rows, `?x = a` and `?x = b`, and the second yields none
+
+### Requirement: Correlated property lookup
+The expression language SHALL include a lookup of the objects of a predicate for a subject under a given view, evaluated per row. Zero matches SHALL give a missing value; exactly one distinct value SHALL give that value; more than one SHALL give either the smallest-eid value or a list of the distinct values in eid order, as chosen by the lookup's multiplicity mode. A lookup SHALL never multiply rows.
+
+#### Scenario: Single-valued lookup
+- **WHEN** `Lookup(?p, v:name, Now, single)` is evaluated for a row where `?p = alice` and alice has one live name "Alice"
+- **THEN** the value is "Alice"
+
+#### Scenario: Missing and multi-valued lookup
+- **WHEN** the same lookup runs for bob with no name, and for carol with two names under mode `list`
+- **THEN** bob gets a missing value, and carol gets a two-element list in eid order, still one row each
+
+### Requirement: Null-safe join keys
+A Join SHALL support marking a shared variable as null-safe, so that two missing values on that variable are treated as equal. Joins that do not mark a variable SHALL keep standard semantics, in which missing values never join.
+
+#### Scenario: Null-safe decorrelation join
+- **WHEN** two inputs are joined on `?a` marked null-safe, and both contain a row with `?a` missing
+- **THEN** those rows join
+
+### Requirement: Row numbering within groups
+The IR SHALL provide a row-number extension that numbers the rows within each partition of given variables, in a given order, starting at 1. It SHALL allow per-partition limits (keep rows whose number ≤ n).
+
+#### Scenario: Top-1 per group
+- **WHEN** rows for alice (ages 30, 40) and bob (age 20) are numbered per person, ordered by age descending, and filtered to number ≤ 1
+- **THEN** exactly two rows remain: alice with 40 and bob with 20
+
+### Requirement: Existence tests
+The expression language SHALL include an existence test over a nested operator tree, with a negated form. The nested tree SHALL be evaluated once per outer row, with the outer row's values for the variables it shares with that row. The test SHALL be true when at least one nested solution exists (or none, when negated), and SHALL never be unknown. Variables bound only inside the nested tree SHALL NOT appear in the outer result, and an existence test SHALL never multiply outer rows.
+
+#### Scenario: Semi-join
+- **WHEN** an IR `Filter(Exists(TriplePattern(?p, v:email, ?e)), TriplePattern(?p, v:name, ?n))` is executed and alice has two emails while bob has none
+- **THEN** exactly one row is returned, for alice, and it has no `?e` column
+
+#### Scenario: Anti-join
+- **WHEN** the same IR is executed with the negated existence test
+- **THEN** exactly one row is returned, for bob
+
+#### Scenario: Correlation through shared variables only
+- **WHEN** the nested tree of an existence test shares no variable with the outer row
+- **THEN** the test has the same value for every outer row: true if the nested tree has any solution, otherwise false
+
+#### Scenario: Nested tree with a constant missing from the dictionary
+- **WHEN** the nested tree of a non-negated existence test contains an unknown IRI constant
+- **THEN** the test is false for every row, and the negated test is true for every row
 
 ### Requirement: Result column order
 The result columns SHALL be the root `Project`'s variables in their declared order. When the root is not a `Project`, the columns SHALL be every variable the root exposes, in order of first binding in a left-to-right depth-first walk of the tree. Column order SHALL be deterministic for a given IR.
@@ -99,7 +154,7 @@ A TriplePattern SHALL optionally bind the statement's eid to a variable. An eid 
 - **THEN** the result has exactly one row, with the parts of e1, if e1 is visible in the pattern's view
 
 ### Requirement: Constants encoded at plan time
-Constants in patterns, Values and expressions SHALL be encoded to ObjectIds before any SQL is executed. Inline-encodable values (integers in the 60-bit range, booleans, dates, datetimes, strings of at most 7 UTF-8 bytes, statement, transaction and node ids) SHALL be encoded without consulting the term dictionary. All other values SHALL be looked up in the term dictionary, read-only. Planning SHALL never insert terms.
+Constants in patterns, Values and expressions SHALL be encoded to ObjectIds before any SQL is executed. Inline-encodable values (integers in the 60-bit range, booleans, dates, datetimes within ±2⁴⁸ ms of the epoch together with their timezone offset, strings of at most 7 UTF-8 bytes, statement, transaction and node ids) SHALL be encoded without consulting the term dictionary. All other values SHALL be looked up in the term dictionary, read-only. Planning SHALL never insert terms.
 
 #### Scenario: Inline constant needs no dictionary
 - **WHEN** a pattern has the constant object `42` (integer)

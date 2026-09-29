@@ -42,10 +42,11 @@ Agent memory is navigated by paths. Typical questions are "who is reachable from
 
   The negated property set `!` stays `Unsupported` (see `path-lowering`).
 - **Code:**
-  - `tm-exec`: new `path` module (expression parser, NFA compiler, search modes, neighbour fetcher, result encoding), the `tm_path` virtual table, and the planner routing of `PathPattern` regions.
+  - `tm-exec`: new `path` module (expression parser, NFA compiler, search modes, neighbour fetcher, result encoding), the `tm_path` virtual table's behaviour, and the planner routing of `PathPattern` regions.
+  - `tm-rusqlite` (the first executor host): registration of `tm_path` and `rarray` on every connection, and the re-entrant connection handle used inside the virtual table.
   - `tm-ir`: `PathExpr` / `PathMode` completed, if M1 left them as placeholders.
   - `tm-sparql`, `tm-cypher`: lowering of path syntax.
   - `tiramemsu`: `View::path`, `PathRow`, `PathMode`, and the `OpenOptions.path_max_hops` default cap.
-- **Crates:** reuses the `rusqlite` `vtab` feature that M1 enables (for the eponymous virtual table), and adds the `array` feature (`rarray`, for batched neighbour fetches). No new external crates.
+- **Crates:** paths need the executor host capability `vtab` (`lat.md/architecture#Executor`); `tm-exec` refuses to open on a host without it. In `tm-rusqlite`, this reuses the `rusqlite` `vtab` feature that M1 enables (for the eponymous virtual table), and adds the `array` feature (`rarray`, for batched neighbour fetches). No new external crates.
 - **Errors:** `lat.md/api#Errors` gains `PathLimitExceeded`, and the `Parse` dialect gains `Path`.
 - **Docs and tests:** `lat.md/query.md` (Path Engine) gains `@lat` code references. The specs `tests#Query#Paths Cross Layers` and `tests#Query#Unbounded Paths Are Capped` get implementations. Path benchmarks are added for `lat.md/roadmap#Benchmarks`.

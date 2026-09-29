@@ -601,6 +601,31 @@ Benchmarks to track from M0: a churn test (N updates per key; as-of throughput v
 
 ---
 
+## 6. Addendum (2026-09-29): comparison with oxilite and SQLite plan measurements
+
+The design was compared with [oxilite](https://github.com/Volland/oxilite), a shipped SQLite-backed RDF/SPARQL/Cypher/Datalog database by the same author. The schema's query plans were also measured on SQLite 3.53. Four questions went back to the user, and all four recommendations were accepted. The resulting decisions are D19–D25 in `lat.md/overview.md`.
+
+### What the measurements showed
+
+- **Join order.** With bound parameters and no statistics, a 4-pattern BGP over 1.1 M statements started from a 500 k-row pattern and took 272 ms. With `ANALYZE` (STAT4, which rusqlite's bundled build enables) it took 1 ms and started from the 50-row pattern. SQLite with statistics chose well on every skewed shape tried. → **D19**: statistics are mandatory and automatic. An engine-forced order (oxilite's D4) is only a benchmark-gated fallback.
+- **Footprint.** The full schema needs about 153 bytes per statement, with indexes at 5.3× the table and `hist_*` at 44 % of the file. Partial history indexes are a benchmark-gated candidate.
+- **Index choice.** `t_ret` must stay in the `live_*` keys, or SQLite stops using them as covering.
+
+### Questions and answers
+
+| Question | Options | Chosen |
+|---|---|---|
+| Named graphs (D3) | keep D3 and move time syntax to `SERVICE` / add a `g` column / no change | **Keep D3, fix syntax** → D21 |
+| Erasure (D17) | schedule crypto-shredding / add an excise op / no change | **Schedule crypto-shred** → D24 |
+| Reuse of oxilite | reuse parts / ideas only / build on oxilite | **Reuse parts** → D23 |
+| Executor abstraction | sync executor trait / rusqlite only | **Executor trait** → D22 |
+
+**Also decided:** D20 keeps the `xsd:dateTime` offset inline, since agent memory needs local times and SPARQL `TZ` needs the offset. D25 plans a retrieval milestone (FTS5 and vectors).
+
+**Where tiramemsu keeps its own path**, and why: statement identity (oxilite needs reifiers for edge properties); bitemporal time, which oxilite lacks; covering history indexes rather than a change log (to be verified with oxilite's `as-of-latency` benchmark); and dictionary ids rather than hashes (one embedded writer, small varints).
+
+---
+
 ## Appendix: sources
 
 - MillenniumDB: [arXiv 2111.01540](https://arxiv.org/abs/2111.01540) · [Data Intelligence 2023](https://direct.mit.edu/dint/article/5/3/560/117375/MillenniumDB-An-Open-Source-Graph-Database-System) · [SIGMOD'24 demo](https://aidanhogan.com/docs/millenniumdb-demo.pdf) · [repo](https://github.com/MillenniumDB/MillenniumDB) ([object_id.h](https://github.com/MillenniumDB/MillenniumDB/blob/dev/src/graph_models/object_id.h), [quad_model.h](https://github.com/MillenniumDB/MillenniumDB/blob/dev/src/graph_models/quad_model/quad_model.h)) · paths: [2204.11137](https://arxiv.org/abs/2204.11137), [2306.02194](https://arxiv.org/pdf/2306.02194)

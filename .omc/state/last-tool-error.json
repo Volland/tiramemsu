@@ -1,0 +1,7 @@
+{
+  "tool_name": "Bash",
+  "tool_input_preview": "{\"command\":\"sed -n 27,140p lat.md/overview.md; echo ======; sed -n 150,230p lat.md/query.md; echo ====; sed -n 279,330p lat.md/query.md\",\"description\":\"Read decision record and query sections\"}",
+  "error": "Exit code 1\n## Decision Record\n\nEvery row is a decision taken in the design interview of 2026-09-29, with the section that specifies it.\n\nRows D19–D25 were added the same day, after a comparison with oxilite ([[prior-art#oxilite]]) and after measuring SQLite 3.53 plans on the schema ([[query#Physical Planning#Join Ordering]], [[storage#Measured Footprint]]).\n\n| ID | Decision | Specified in |\n|---|---|---|\n| D1 | Scope: embedded agent / personal memory (10⁴–10⁷ triples) | [[overview#Goals]] |\n| D...",
+  "timestamp": "2026-09-29T15:20:41.373Z",
+  "retry_count": 2
+}

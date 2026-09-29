@@ -218,7 +218,20 @@ No code path deletes a statement, a term or a transaction. The only mutation of 
 - SQLite triggers enforce this in the database itself. See [[storage#Invariant Triggers]].
 - `asOf(t)` is exact for every `t`, forever.
 - High-churn state that does not deserve history goes in the `volatile` table, which is not part of the graph. See [[storage#Volatile Table]].
-- If legal erasure is ever required, the planned escape hatch is crypto-shredding: sensitive literals are encrypted with a per-subject key, and the key is destroyed. The invariant stays intact. This is not scheduled.
+- Legal erasure does not break this invariant: it destroys a key, not a row. See [[time-model#Erasure]].
+
+## Erasure
+
+Erasure is crypto-shredding: literals of `sys:sensitive` predicates are sealed with their data subject's key, and erasing destroys the key. No row is deleted, so [[time-model#Never Forget]] still holds.
+
+Scheduled as milestone M6 (`add-crypto-shredding`). Format 1 reserves tag 15 `SEALED`, the schema flag `sys:sensitive` and the table `seal_key`, and rejects all three until M6. See [[data-model#ObjectId]].
+
+- **Sealing:** the object of a statement whose predicate is `sys:sensitive` is stored as a `SEALED` dictionary term whose `lex` is ciphertext. A sealed value is never inlined, since an `INT` or `SHORT_STR` id would carry the plaintext.
+- **Idempotence:** encryption is deterministic per key (AES-SIV), so one value under one key always gives the same term, and assert still matches by id. Equality works within one data subject. Range filters on sealed values run in Rust after decryption and use no index.
+- **Data subject:** the node the statement is ultimately about, found by following `STMT` subjects down to a node. Annotations of a sensitive fact share its key.
+- **Keys:** `seal_key(subject, key, destroyed_t)` is the one table where a value is erased. Erasing is an ordinary transaction, so its tx metadata records who erased and why. It overwrites the key and sets `destroyed_t`. `PRAGMA secure_delete` and a WAL checkpoint keep the old key bytes out of the file. A host may supply keys through a `KeyProvider` (OS keychain, KMS) instead.
+- **After erasure:** statements, eids, times, provenance and history stay queryable. A sealed value decodes as the literal `sys:Erased`. Backups taken before erasure still hold the key, which is documented rather than solved.
+- **Limit:** IRIs are never sealed. Personal data that must be erasable is modelled as literals of sensitive predicates, not as node IRIs.
 
 ## Speculative Transactions
 

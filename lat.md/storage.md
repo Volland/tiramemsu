@@ -26,7 +26,8 @@ CREATE TABLE term (
   lang TEXT,                  -- LANG_STR only, lower-cased
   num  REAL                   -- DOUBLE / DECIMAL numeric value
 ) STRICT;
-CREATE UNIQUE INDEX term_key ON term(tag, lex, dt, lang);
+-- NULL-safe: SQLite UNIQUE treats NULLs as distinct, so dt/lang are coalesced
+CREATE UNIQUE INDEX term_key ON term(tag, lex, ifnull(dt, 0), ifnull(lang, ''));
 CREATE INDEX term_num ON term(num) WHERE num IS NOT NULL;
 
 CREATE TABLE tx (
@@ -68,7 +69,13 @@ CREATE TABLE volatile (
   updated_at INTEGER NOT NULL,
   PRIMARY KEY (s, key)
 ) WITHOUT ROWID, STRICT;
+
+-- planner statistics: SQLite's own sqlite_stat1 / sqlite_stat4, created by
+-- PRAGMA optimize at open (see query.md#Join Ordering)
+PRAGMA optimize = 0x10002;
 ```
+
+Format 1 reserves names for later milestones, so that no user migration clashes with them: tag 15 `SEALED` and the table `seal_key` (M6, [[time-model#Erasure]]), and the tables `term_fts` and `vec_*` (M7, [[roadmap#Milestones]]).
 
 ## Triple Table
 
@@ -83,7 +90,8 @@ One row per statement occurrence. The row is its own lifetime: `t_add` is the as
 
 Values that do not fit inline (IRIs, long strings, language strings, other datatypes, doubles, decimals) live in `term`, keyed by `(tag, lex, dt, lang)`. Terms are never deleted.
 
-- Lookup and insert happen in the writer transaction: `SELECT id … WHERE tag=? AND lex=? …`, and if it is missing, insert with `meta.next_term`.
+- Lookup and insert happen in the writer transaction: `SELECT id FROM term WHERE tag=? AND lex=? AND ifnull(dt,0)=ifnull(?,0) AND ifnull(lang,'')=ifnull(?,'')` (this uses `term_key`), and if it is missing, insert with `meta.next_term`.
+- `term_key` is an expression index, because a plain UNIQUE index treats NULL `dt`/`lang` as distinct and would let duplicate IRIs and strings through.
 - `num` carries the numeric value of `DOUBLE` and `DECIMAL`, and `term_num` serves range filters on them. See [[data-model#ObjectId#Range Scans]].
 - The reader side keeps an LRU cache of `id → term`, since result decoding is the hot path.
 
@@ -103,6 +111,19 @@ SELECT o, eid FROM triple WHERE s=:s AND p=:p
 ```
 
 Verified plans (SQLite 3.53): "now" uses `COVERING INDEX live_spo`, "asOf" uses `COVERING INDEX hist_spo`, and "valid on date" over current beliefs uses `valid_p`. See [[query#Views and Scans]].
+
+- `t_ret` stays in the `live_*` keys even though it is always NULL there. Without it, SQLite 3.53 no longer treats the live index as covering for `t_ret IS NULL`, and picks `hist_*` instead.
+- In multi-pattern joins, SQLite may still pick `hist_*` for a `Now` pattern whose predicate has no retracted rows, because the cost is equal. See [[query#Physical Planning#Join Ordering]].
+
+## Measured Footprint
+
+With every index in the schema, 1.1 million statements (700 000 live, 400 000 retracted) take 168.6 MB after `VACUUM`: about 153 bytes per statement, with the indexes at 5.3× the table.
+
+Measured on SQLite 3.53 with small ids, so varints stay 1–3 bytes. By B-tree: `triple` 26.6 MB, each `hist_*` 25.0 MB, each `live_*` 14.6 MB, `log_add` 9.9 MB, `valid_p` 8.4 MB, `log_ret` 4.8 MB.
+
+- The three `hist_*` indexes are 44 % of the file, and they repeat every live row that `live_*` already holds.
+- **Candidate, benchmark-gated:** make `hist_*` partial on `t_ret IS NOT NULL` and read as-of as a live branch `UNION ALL` a dead branch. On this data that saves about 30 %. The cost is that SQLite does not flatten a compound subquery into a join, so every as-of pattern would become a subquery. It is adopted only if the as-of benchmarks show no regression. See [[roadmap#Benchmarks]].
+- oxilite writes about 4.8 rows per triple (index entries included) without history and 8.8 with its as-of index ([[prior-art#oxilite]]). The comparable figure here is 9 B-tree entries per assert. A retract moves the row out of the live indexes, rewrites its three `hist_*` entries and adds a `log_ret` entry.
 
 ## Event View
 
@@ -132,6 +153,18 @@ WHEN OLD.t_ret IS NOT NULL
   OR NEW.v_from IS NOT OLD.v_from OR NEW.v_to IS NOT OLD.v_to
   OR NEW.t_ret IS NULL
 BEGIN SELECT RAISE(ABORT, 'tiramemsu: only a single retraction is allowed'); END;
+
+-- INSERT OR REPLACE deletes the old row without firing DELETE triggers
+-- (unless recursive_triggers is on), so re-inserting an existing key is blocked explicitly.
+CREATE TRIGGER triple_no_replace BEFORE INSERT ON triple
+WHEN EXISTS (SELECT 1 FROM triple WHERE eid = NEW.eid)
+BEGIN SELECT RAISE(ABORT, 'tiramemsu: eids are never reused'); END;
+CREATE TRIGGER term_no_replace BEFORE INSERT ON term
+WHEN EXISTS (SELECT 1 FROM term WHERE id = NEW.id)
+BEGIN SELECT RAISE(ABORT, 'tiramemsu: term ids are never reused'); END;
+CREATE TRIGGER tx_no_replace BEFORE INSERT ON tx
+WHEN EXISTS (SELECT 1 FROM tx WHERE t = NEW.t)
+BEGIN SELECT RAISE(ABORT, 'tiramemsu: transaction numbers are never reused'); END;
 
 CREATE TRIGGER term_no_delete BEFORE DELETE ON term
 BEGIN SELECT RAISE(ABORT, 'tiramemsu: terms are never deleted'); END;

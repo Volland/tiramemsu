@@ -86,7 +86,7 @@ A triple term `<<( s p o )>>` in the object of a pattern whose predicate is not 
 
 ### Requirement: Reifiers follow the pattern's view
 
-A reifier SHALL bind eids visible in the view of the pattern it belongs to. Under the history view, retracted eids SHALL also bind. Under an as-of view, only the eids live at that transaction SHALL bind. Annotation triples SHALL be read in the same view as their base triple unless a `GRAPH` scope says otherwise.
+A reifier SHALL bind eids visible in the view of the pattern it belongs to. Under the history view, retracted eids SHALL also bind. Under an as-of view, only the eids live at that transaction SHALL bind. Annotation triples SHALL be read in the same view as their base triple unless a time `SERVICE` scope says otherwise.
 
 #### Scenario: History shows a superseded fact and its replacement
 - **WHEN** e1 = `(v:alice v:worksAt v:acme)` was superseded by e10 with a new valid start, and `SELECT ?r WHERE { v:alice v:worksAt v:acme ~ ?r }` is run with `FROM <urn:tiramemsu:tm:history>`

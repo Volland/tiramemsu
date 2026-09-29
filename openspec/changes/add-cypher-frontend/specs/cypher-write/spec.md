@@ -34,7 +34,7 @@ The system SHALL execute Cypher queries that contain write clauses through a tra
 - **AND** three statements with that subject are live: `rdf:type v:Person`, `v:name "Bob"` and `v:age 30`
 
 #### Scenario: Node with an explicit IRI
-- **WHEN** `CREATE (n:Person {`@id`: 'v:carol', name: 'Carol'})` runs
+- **WHEN** `` CREATE (n:Person {`@id`: 'v:carol', name: 'Carol'}) `` runs
 - **THEN** `(v:carol rdf:type v:Person)` and `(v:carol v:name "Carol")` are live
 - **AND** no statement with predicate `@id` exists
 
@@ -64,7 +64,7 @@ The system SHALL execute Cypher queries that contain write clauses through a tra
 - **THEN** two new nodes and two `knows` relationships between them, in opposite directions, are live
 
 ### Requirement: Property value encoding on write
-The system SHALL encode written Cypher values canonically: an Integer within the 60-bit range as an inline integer (and otherwise as an `xsd:integer` typed literal), Float as a double, String as a string, Boolean as a boolean, Date as a date, and DateTime (zoned or local) as a UTC datetime. A list value SHALL be written as one statement per distinct element. An empty list or `null` SHALL write nothing, and in `SET` it SHALL remove the property. A map value, a node, relationship or path value, or a list containing `null` or a nested list, MUST fail with an `Eval` error.
+The system SHALL encode written Cypher values canonically: an Integer within the 60-bit range as an inline integer (and otherwise as an `xsd:integer` typed literal), Float as a double, String as a string, Boolean as a boolean, Date as a date, DateTime as an `xsd:dateTime` that keeps its timezone offset, and LocalDateTime as an `xsd:dateTime` without a timezone. A DateTime with a named zone (for example `Europe/Kyiv`) SHALL be stored with the offset that zone has at that instant; the zone name SHALL NOT be kept, so it reads back as a DateTime with that offset. Timezones SHALL never be normalised to UTC. A list value SHALL be written as one statement per distinct element. An empty list or `null` SHALL write nothing, and in `SET` it SHALL remove the property. A map value, a node, relationship or path value, or a list containing `null` or a nested list, MUST fail with an `Eval` error.
 
 #### Scenario: List property becomes several statements
 - **WHEN** `CREATE (n:Doc {tags: ['a', 'b']}) RETURN n.tags AS t` runs
@@ -74,9 +74,25 @@ The system SHALL encode written Cypher values canonically: an Integer within the
 - **WHEN** `CREATE (n {meta: {x: 1}})` runs
 - **THEN** it fails with an `Eval` error and nothing is written
 
-#### Scenario: Zoned datetime normalised
+#### Scenario: DateTime keeps its offset
 - **WHEN** `CREATE (n {at: datetime('2025-03-01T10:00:00+02:00')}) RETURN n.at AS at` runs
-- **THEN** `at` is DateTime 2025-03-01T08:00:00.000Z
+- **THEN** `at` is DateTime 2025-03-01T10:00:00.000+02:00
+- **AND** the stored object is `"2025-03-01T10:00:00+02:00"^^xsd:dateTime`, whose inline payload holds the instant 2025-03-01T08:00:00Z and the offset +02:00
+
+#### Scenario: LocalDateTime is a date-time without timezone
+- **WHEN** `CREATE (n {at: localdatetime('2025-03-01T10:00:00')}) RETURN n.at AS at` runs
+- **THEN** `at` is LocalDateTime 2025-03-01T10:00:00.000
+- **AND** the stored object is `"2025-03-01T10:00:00"^^xsd:dateTime` with no timezone, and SPARQL returns it without a timezone suffix
+
+#### Scenario: Named zone stored as its offset
+- **WHEN** `CREATE (n {at: datetime('2025-07-01T09:00:00[Europe/Kyiv]')}) RETURN n.at AS at` runs
+- **THEN** `at` is DateTime 2025-07-01T09:00:00.000+03:00, and the zone name `Europe/Kyiv` is not returned
+- **AND** the stored object is `"2025-07-01T09:00:00+03:00"^^xsd:dateTime`
+
+#### Scenario: Same instant with another offset is a different value
+- **WHEN** `(v:m v:at "2026-03-01T12:00:00+02:00"^^xsd:dateTime)` is live and `` MATCH (n {`@id`: 'v:m'}) SET n.at = datetime('2026-03-01T10:00:00Z') `` runs
+- **THEN** the statement is superseded (rule 6 of `SET`, not the no-op of rule 4), because the two date-times are different terms although they denote the same instant
+- **AND** `n.at` reads back as DateTime 2026-03-01T10:00:00.000Z
 
 ### Requirement: MERGE with a unique key
 When a `MERGE` node pattern's property map contains a key whose resolved predicate is flagged `sys:unique true`, the system SHALL look up the node by that key and value inside the writer transaction, as an upsert. If a live subject exists it SHALL bind to it, and otherwise it SHALL create a new anonymous node and assert the key statement. It SHALL then assert the pattern's labels and remaining properties idempotently on the bound node. If several unique keys appear, the first in map order SHALL be used for the lookup. `ON CREATE SET` SHALL apply only when the node was created, and `ON MATCH SET` only when it already existed.
@@ -225,7 +241,7 @@ Every statement written by a Cypher clause SHALL pass through the same schema ch
 - **THEN** the query fails with `ValueTypeMismatch`
 
 #### Scenario: Writing a reserved predicate
-- **WHEN** `MATCH (n {name:'Alice'}) SET n.`sys:reason` = 'x'` runs
+- **WHEN** `` MATCH (n {name:'Alice'}) SET n.`sys:reason` = 'x' `` runs
 - **THEN** the query fails with `ReservedNamespace`
 
 #### Scenario: Cascade limit
@@ -240,7 +256,7 @@ Writes SHALL always apply to the current state. A query that contains a write cl
 - **THEN** it fails with `Unsupported`
 
 #### Scenario: Restore a past value from a historical scope
-- **WHEN** alice's `v:title` was "Dr" as of tx 5 and is "Prof" now, and `CALL { USE AS OF 5 MATCH (a {`@id`: 'v:alice'}) RETURN a.title AS old } MATCH (n {`@id`: 'v:alice'}) SET n.title = old` runs
+- **WHEN** alice's `v:title` was "Dr" as of tx 5 and is "Prof" now, and `` CALL { USE AS OF 5 MATCH (a {`@id`: 'v:alice'}) RETURN a.title AS old } MATCH (n {`@id`: 'v:alice'}) SET n.title = old `` runs
 - **THEN** alice's live title is "Dr"
 
 ### Requirement: Unsupported write features

@@ -5,7 +5,7 @@ Defines how every value stored in a statement's `eid`, `s`, `p` and `o` is repre
 ## ADDED Requirements
 
 ### Requirement: ObjectId layout
-Every ObjectId SHALL be a signed 64-bit integer equal to `(payload << 4) | tag`, where `tag` is the low 4 bits and `payload` is the remaining 60 bits. The tag values SHALL be: 0 `IRI`, 1 `NODE`, 2 `BNODE`, 3 `STMT`, 4 `TX`, 5 `INT`, 6 `BOOL`, 7 `DATETIME`, 8 `DATE`, 9 `SHORT_STR`, 10 `STR`, 11 `LANG_STR`, 12 `TYPED`, 13 `DOUBLE`, 14 `DECIMAL`; tag 15 is reserved. Tags `IRI`, `STR`, `LANG_STR`, `TYPED`, `DOUBLE` and `DECIMAL` SHALL carry a term-dictionary id as payload; all other tags SHALL be inline.
+Every ObjectId SHALL be a signed 64-bit integer equal to `(payload << 4) | tag`, where `tag` is the low 4 bits and `payload` is the remaining 60 bits. The tag values SHALL be: 0 `IRI`, 1 `NODE`, 2 `BNODE`, 3 `STMT`, 4 `TX`, 5 `INT`, 6 `BOOL`, 7 `DATETIME`, 8 `DATE`, 9 `SHORT_STR`, 10 `STR`, 11 `LANG_STR`, 12 `TYPED`, 13 `DOUBLE`, 14 `DECIMAL`. Tag 15 is reserved as `SEALED` (a crypto-shredded literal, milestone M6); format 1 SHALL reject it with `Unsupported { feature }` naming M6, both when it is decoded and when it is passed to any write operation. Tags `IRI`, `STR`, `LANG_STR`, `TYPED`, `DOUBLE` and `DECIMAL` SHALL carry a term-dictionary id as payload; all other tags SHALL be inline.
 
 #### Scenario: Tag and payload extraction
 - **WHEN** the integer 5 is encoded
@@ -17,9 +17,10 @@ Every ObjectId SHALL be a signed 64-bit integer equal to `(payload << 4) | tag`,
 - **THEN** their ObjectIds are `(42 << 4) | 3` and `(7 << 4) | 4`
 - **AND** no term-dictionary row is created
 
-#### Scenario: Reserved tag is rejected
+#### Scenario: Reserved SEALED tag is rejected
 - **WHEN** an ObjectId whose low 4 bits equal 15 is decoded or passed to any write operation
-- **THEN** the operation fails with an invalid-term error
+- **THEN** the operation fails with `Unsupported { feature }` naming `SEALED` and milestone M6
+- **AND** a failed write leaves no trace
 
 ### Requirement: Canonical encoding of integers
 An `xsd:integer` value (or an integer given directly through the API) within the signed 60-bit range `[-2^59, 2^59 - 1]` SHALL always be encoded inline as `INT` with the value as payload, and SHALL never create a dictionary entry. An `xsd:integer` outside that range SHALL be encoded as `TYPED` with datatype `xsd:integer` and its canonical decimal lexical form (no `+` sign, no leading zeros). Different lexical forms of the same integer SHALL produce the same ObjectId.
@@ -38,12 +39,25 @@ An `xsd:integer` value (or an integer given directly through the API) within the
 - **THEN** it is a `TYPED` ObjectId with datatype `xsd:int`, distinct from the `INT` ObjectId of `5`
 
 ### Requirement: Canonical encoding of booleans, dates and date-times
-`xsd:boolean` values SHALL be encoded as `BOOL` with payload 1 for true (`"true"`, `"1"`) and 0 for false (`"false"`, `"0"`). `xsd:dateTime` values SHALL be normalised to UTC and encoded as `DATETIME` with signed epoch milliseconds as payload; a value without a timezone SHALL be read as UTC, digits below one millisecond SHALL be truncated, and the original lexical form and timezone SHALL NOT be kept. `xsd:date` values SHALL be encoded as `DATE` with signed days since 1970-01-01 as payload; a timezone suffix on a date SHALL be ignored. A date-time or date outside the signed 60-bit payload range SHALL be encoded as `TYPED`.
+`xsd:boolean` values SHALL be encoded as `BOOL` with payload 1 for true (`"true"`, `"1"`) and 0 for false (`"false"`, `"0"`). `xsd:dateTime` values SHALL be encoded as `DATETIME` with the payload `(epoch_ms << 11) | tz`, where `epoch_ms` is the signed instant in epoch milliseconds and `tz` is 0 for a value without a timezone, or the offset in minutes plus 841 (1 to 1681, covering −14:00 to +14:00). Digits below one millisecond SHALL be truncated; `Z` and `+00:00` are the same offset. A date-time whose instant lies outside ±2^48 ms SHALL be encoded as `TYPED`. Two date-times SHALL be the same term only if both the instant and the offset match. Value comparison of date-times (equality and order) SHALL use the instant `id >> 15` (an arithmetic shift, as SQLite's `>>` is), and a value without a timezone SHALL compare as if it were UTC. `xsd:date` values SHALL be encoded as `DATE` with signed days since 1970-01-01 as payload; a timezone suffix on a date SHALL be ignored. A date outside the signed 60-bit payload range SHALL be encoded as `TYPED`.
 
-#### Scenario: Timezones normalise to one id
+#### Scenario: Offsets are kept as two terms
 - **WHEN** `"2026-03-01T12:00:00+02:00"^^xsd:dateTime` and `"2026-03-01T10:00:00Z"^^xsd:dateTime` are encoded
-- **THEN** both produce the same `DATETIME` ObjectId
-- **AND** decoding it yields the instant `2026-03-01T10:00:00.000Z`
+- **THEN** they produce two different `DATETIME` ObjectIds
+- **AND** decoding them yields `2026-03-01T12:00:00.000+02:00` and `2026-03-01T10:00:00.000Z`, each with its own offset
+
+#### Scenario: Same instant compares equal
+- **WHEN** the two ObjectIds of the previous scenario are compared by value
+- **THEN** `id >> 15` is equal for both, computed in Rust and in SQLite
+
+#### Scenario: Date-time without a timezone
+- **WHEN** `"2026-03-01T10:00:00"^^xsd:dateTime` is encoded and decoded
+- **THEN** its timezone code is 0 and it decodes to `2026-03-01T10:00:00.000` without a timezone
+- **AND** its `id >> 15` equals that of `"2026-03-01T10:00:00Z"^^xsd:dateTime`
+
+#### Scenario: Out-of-range date-time
+- **WHEN** a date-time whose instant is more than 2^48 ms from the epoch (for example the year 12000) is encoded
+- **THEN** it is a `TYPED` ObjectId with datatype `xsd:dateTime` and its lexical form kept verbatim
 
 #### Scenario: Dates before the epoch
 - **WHEN** `"1969-12-31"^^xsd:date` is encoded
@@ -111,7 +125,7 @@ For every tag, decoding the ObjectId produced by encoding a value SHALL return a
 - **THEN** every round trip is exact, and no inlineable value appears in the `term` table
 
 ### Requirement: Order within a tag
-For the `INT`, `DATE` and `DATETIME` tags, the signed integer order of ObjectIds SHALL equal the order of the values they encode, including negative values, so that SQLite's signed integer comparison orders them correctly.
+For the `INT` and `DATE` tags, the signed integer order of ObjectIds SHALL equal the order of the values they encode, including negative values, so that SQLite's signed integer comparison orders them correctly. For `DATETIME`, the signed integer order SHALL be the order of the instant, then of the timezone code, so that `id >> 15` gives value order and a range over instants is one contiguous id range.
 
 #### Scenario: Negative and positive integers
 - **WHEN** the integers −1000, −1, 0, 1 and 2^59 − 1 are encoded as `INT`
@@ -119,7 +133,8 @@ For the `INT`, `DATE` and `DATETIME` tags, the signed integer order of ObjectIds
 
 #### Scenario: Property test on order
 - **WHEN** random pairs of values of the same tag among `INT`, `DATE` and `DATETIME` are encoded
-- **THEN** `a < b` if and only if `oid(a) < oid(b)` under signed 64-bit comparison
+- **THEN** for `INT` and `DATE`, `a < b` if and only if `oid(a) < oid(b)` under signed 64-bit comparison
+- **AND** for `DATETIME`, the instant of `a` is before that of `b` if and only if `oid(a) >> 15 < oid(b) >> 15`, and `oid(a) < oid(b)` whenever the instant of `a` is earlier
 
 ### Requirement: Term dictionary deduplication and immutability
 Each value that needs the dictionary SHALL be stored at most once, identified by `(tag, lex, dt, lang)` where absent `dt` and `lang` compare equal to each other. The dictionary SHALL only grow: a term's id and content never change, and term ids SHALL be allocated from the `next_term` counter.

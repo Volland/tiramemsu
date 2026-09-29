@@ -213,7 +213,7 @@ Within one `MATCH` or `OPTIONAL MATCH` clause, including all its comma-separated
 - **THEN** the columns are `a`, `b`, `r`, in that order
 
 ### Requirement: ORDER BY, SKIP and LIMIT
-`ORDER BY` SHALL sort by Cypher's value ordering, not by storage identifiers. Numbers of all types SHALL compare numerically, strings by Unicode code point, and dates and datetimes chronologically. Across types the ascending order SHALL be map, node, relationship, list, path, datetime, date, string, boolean, number, with `null` last when ascending and first when descending. `SKIP` and `LIMIT` SHALL accept non-negative integer literals or parameters, and a negative or non-integer value MUST fail the query.
+`ORDER BY` SHALL sort by Cypher's value ordering, not by storage identifiers. Numbers of all types SHALL compare numerically, strings by Unicode code point, dates chronologically, and datetimes by their instant, whatever their timezone offsets. Across types the ascending order SHALL be map, node, relationship, list, path, datetime, date, string, boolean, number, with `null` last when ascending and first when descending. `SKIP` and `LIMIT` SHALL accept non-negative integer literals or parameters, and a negative or non-integer value MUST fail the query.
 
 #### Scenario: Numeric ordering across integer and float
 - **WHEN** scores 10, 9.5 and 100 are stored as integer, double and integer and `MATCH (n) WHERE n.score IS NOT NULL RETURN n.score ORDER BY n.score` runs
@@ -308,7 +308,7 @@ The system SHALL support `count(*)`, `count(expr)`, `sum`, `avg`, `min`, `max` a
 - **THEN** `v:alice` appears exactly once
 
 ### Requirement: Expressions and built-in functions
-The system SHALL evaluate literals (integer, float, string, boolean, `null`, list, map), parameters, arithmetic, string concatenation with `+`, comparison, `=~` regular expressions, list indexing and slicing, map projection (`n {.name, k: expr}`), simple and searched `CASE`, and list comprehension over list values (`[x IN list WHERE p | e]`). It SHALL provide these functions with openCypher semantics: `id`, `elementId`, `labels`, `type`, `keys`, `properties`, `startNode`, `endNode`, `coalesce`, `size`, `head`, `last`, `range`, `toString`, `toInteger`, `toFloat`, `toBoolean`, `toLower`, `toUpper`, `trim`, `ltrim`, `rtrim`, `substring`, `replace`, `split`, `left`, `right`, `reverse`, `abs`, `ceil`, `floor`, `round`, `sign`, `sqrt`, `date`, `datetime`, `timestamp`, `nodes`, `relationships` and `length`. Calling any other function, or using a pattern comprehension, MUST fail with `Unsupported` naming it.
+The system SHALL evaluate literals (integer, float, string, boolean, `null`, list, map), parameters, arithmetic, string concatenation with `+`, comparison, `=~` regular expressions, list indexing and slicing, map projection (`n {.name, k: expr}`), simple and searched `CASE`, and list comprehension over list values (`[x IN list WHERE p | e]`). It SHALL provide these functions with openCypher semantics: `id`, `elementId`, `labels`, `type`, `keys`, `properties`, `startNode`, `endNode`, `coalesce`, `size`, `head`, `last`, `range`, `toString`, `toInteger`, `toFloat`, `toBoolean`, `toLower`, `toUpper`, `trim`, `ltrim`, `rtrim`, `substring`, `replace`, `split`, `left`, `right`, `reverse`, `abs`, `ceil`, `floor`, `round`, `sign`, `sqrt`, `date`, `datetime`, `localdatetime`, `timestamp`, `nodes`, `relationships` and `length`. Calling any other function, or using a pattern comprehension, MUST fail with `Unsupported` naming it.
 
 #### Scenario: CASE and coalesce
 - **WHEN** `MATCH (n:Person) RETURN n.name, CASE WHEN n.age >= 18 THEN 'adult' ELSE 'minor' END AS k, coalesce(n.nick, n.name) AS shown` runs
@@ -338,11 +338,20 @@ The system SHALL evaluate literals (integer, float, string, boolean, `null`, lis
 - **THEN** it fails with a `Parse` error naming `who`, and nothing is executed
 
 ### Requirement: Result value model
-Stored values SHALL be returned as Cypher values: integers as Integer; booleans as Boolean; doubles and decimals as Float; plain and language-tagged strings as String (the language tag is dropped); dates as Date; datetimes as UTC DateTime with millisecond precision; and other datatypes as a String holding the lexical form. A node SHALL be returned as a Node value carrying its element id, its labels and its properties. A relationship SHALL be returned as a Relationship value carrying its element id, type, start and end element ids and properties. Lists, maps and paths SHALL be returned structurally. Every value SHALL have a JSON encoding.
+Stored values SHALL be returned as Cypher values: integers as Integer; booleans as Boolean; doubles and decimals as Float; plain and language-tagged strings as String (the language tag is dropped); dates as Date; datetimes that carry a timezone as DateTime with their stored offset, and datetimes without a timezone as LocalDateTime, both with millisecond precision (offsets are never normalised to UTC); and other datatypes as a String holding the lexical form. A node SHALL be returned as a Node value carrying its element id, its labels and its properties. A relationship SHALL be returned as a Relationship value carrying its element id, type, start and end element ids and properties. Lists, maps and paths SHALL be returned structurally. Every value SHALL have a JSON encoding.
 
 #### Scenario: Scalar round trip of types
 - **WHEN** the store holds `v:x` with `v:i 7`, `v:f 1.5`, `v:b true`, `v:d "2025-03-01"^^xsd:date`, `v:t "2025-03-01T10:00:00+02:00"^^xsd:dateTime` and `v:s "hé"@fr`, and `MATCH (n) WHERE n = $x RETURN n.i, n.f, n.b, n.d, n.t, n.s` runs
-- **THEN** the values are Integer 7, Float 1.5, Boolean true, Date 2025-03-01, DateTime 2025-03-01T08:00:00.000Z and String "hé"
+- **THEN** the values are Integer 7, Float 1.5, Boolean true, Date 2025-03-01, DateTime 2025-03-01T10:00:00.000+02:00 and String "hé"
+
+#### Scenario: DateTime equality compares instants
+- **WHEN** `v:x` has `v:a "2026-03-01T12:00:00+02:00"^^xsd:dateTime` and `v:b "2026-03-01T10:00:00Z"^^xsd:dateTime`, and `MATCH (n) WHERE n = $x RETURN n.a = n.b AS eq, n.a AS a, n.b AS b` runs
+- **THEN** `eq` is true, `a` is DateTime 2026-03-01T12:00:00.000+02:00 and `b` is DateTime 2026-03-01T10:00:00.000Z
+- **AND** `MATCH (n {a: datetime('2026-03-01T10:00:00Z')}) RETURN n` returns `v:x`
+
+#### Scenario: Date-time without timezone reads as LocalDateTime
+- **WHEN** `v:x` has `v:l "2026-03-01T09:00:00"^^xsd:dateTime` and `MATCH (n) WHERE n = $x RETURN n.l AS l` runs
+- **THEN** `l` is LocalDateTime 2026-03-01T09:00:00.000
 
 #### Scenario: Node and relationship values
 - **WHEN** `MATCH (a:Person)-[r:worksAt]->(c) RETURN a, r` runs for `(v:alice v:worksAt v:acme)` with eid e1

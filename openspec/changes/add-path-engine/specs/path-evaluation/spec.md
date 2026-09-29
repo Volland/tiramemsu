@@ -271,12 +271,12 @@ Nodes SHALL be reported as the same values that triple-pattern queries return fo
 
 ### Requirement: Deterministic result ordering
 For a given database state, view, start, expression, mode and bound, the rows SHALL be produced in the same order every time. Rows SHALL be produced in non-decreasing hop count. Within one hop count:
-- `REACH` rows SHALL be ordered by end value.
+- `REACH` rows SHALL be ordered by the end's raw ObjectId. This order exists only for determinism and is not a value order (for example, it is not dictionary lexical order for IRIs).
 - Rows of the path-returning modes SHALL be ordered by their hop-key sequence, compared lexicographically. A hop key is ordered by eid, then by hop kind (stored statement before virtual hop), then by direction (forward before inverse).
 
 #### Scenario: Reachability order
 - **WHEN** the store holds `(a p c)`, `(a p b)` and `(b p d)`, and `p+` is evaluated from `a` in `REACH` mode
-- **THEN** the rows come in the order `b`, `c` (both 1 hop, ordered by end), then `d` (2 hops)
+- **THEN** the rows for `b` and `c` (both 1 hop) come first, ordered by their ObjectIds, then `d` (2 hops)
 
 #### Scenario: Trail order
 - **WHEN** the store holds `(a p b)` with eid `e7` and `(a p c)` with eid `e4`, and `p` is evaluated from `a` in `TRAIL` mode

@@ -136,6 +136,14 @@ For a predicate with a live `sys:valueType`, an assert, create or supersede whos
 - **WHEN** `(:nickname sys:isEdge true)` is live and `(alice :nickname "Al")` is asserted
 - **THEN** the statement is inserted and the flag is visible in the now view
 
+### Requirement: Sensitive flag is reserved
+The schema flag `sys:sensitive` is reserved for crypto-shredding (milestone M6). In format 1, asserting or creating a statement whose predicate is `sys:sensitive` SHALL fail with `Unsupported { feature }` naming `sys:sensitive` and milestone M6, whatever its subject and object, and the transaction SHALL leave no trace.
+
+#### Scenario: Marking a predicate sensitive
+- **WHEN** `(:email sys:sensitive true)` is asserted
+- **THEN** the transaction fails with `Unsupported` naming `sys:sensitive` and M6
+- **AND** no `tx` row, statement or term from that transaction exists
+
 ### Requirement: Schema changes violated by live data are rejected
 Asserting a schema flag that live data already violates SHALL fail with `SchemaConflict { violating }` listing, in ascending order, the eids of every live statement involved in a violation, and the transaction SHALL leave no trace. For `sys:cardinality sys:one`, the violating eids are all live statements of the predicate that share a subject with another live statement of a different object and overlapping valid time. For `sys:unique true`, they are all live statements whose object is held by more than one subject. For `sys:valueType`, they are all live statements whose object does not match. Asserting `sys:cardinality sys:many`, `sys:unique false` or `sys:isEdge`, or retracting any flag, SHALL never conflict. The check SHALL see earlier writes of the same transaction.
 

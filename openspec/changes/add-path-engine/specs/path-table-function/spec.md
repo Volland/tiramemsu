@@ -51,7 +51,11 @@ The `path` argument, and the path text of `View::path`, SHALL use SPARQL 1.1 pro
 - a CURIE whose prefix is in the database prefix table or is a reserved prefix (`sys:`, `tm:`);
 - a bare name, resolved through the database `@vocab` base exactly as Cypher names are resolved.
 
-Whitespace between tokens SHALL be ignored.
+The reserved atom `sys:anyRelationship` SHALL denote the relationship-view wildcard step. Whitespace between tokens SHALL be ignored.
+
+#### Scenario: Wildcard atom
+- **WHEN** the store holds `(a knows b)`, `(a name "Ann")` and `(a rdf:type Person)`, and the path text `sys:anyRelationship` is evaluated from `a`
+- **THEN** the only end is `b`
 
 #### Scenario: Bare names resolve through vocab
 - **WHEN** the default `@vocab` is in effect and the path text `SUPPORTED_BY/sys:subject` is used

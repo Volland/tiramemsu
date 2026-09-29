@@ -188,7 +188,7 @@ A statement SHALL NOT use its own eid as its subject or object. A write that wou
 - **THEN** both are inserted, because neither references itself
 
 ### Requirement: Reserved sys namespace
-User writes SHALL NOT use a predicate in the `urn:tiramemsu:sys:` namespace, except: the schema flags `sys:cardinality`, `sys:unique`, `sys:valueType` and `sys:isEdge`; the vocabulary settings `sys:vocab`, `sys:prefix`, `sys:prefixName` and `sys:prefixIri`; and the transaction-metadata predicates `sys:author`, `sys:source` and `sys:reason` when the subject is a transaction. Any other `sys:` predicate, including `sys:confirmedBy`, `sys:supersedes`, `sys:subject`, `sys:object` and `sys:predicate`, SHALL be rejected with `ReservedNamespace(iri)`. The engine itself SHALL write `sys:confirmedBy` and `sys:supersedes`. `sys:` IRIs in subject or object position and retraction of `sys:` statements SHALL be allowed.
+User writes SHALL NOT use any predicate in the `urn:tiramemsu:tm:` namespace, and SHALL NOT use a predicate in the `urn:tiramemsu:sys:` namespace, except: the schema flags `sys:cardinality`, `sys:unique`, `sys:valueType` and `sys:isEdge`; the vocabulary settings `sys:vocab`, `sys:prefix`, `sys:prefixName` and `sys:prefixIri`; and the transaction-metadata predicates `sys:author`, `sys:source` and `sys:reason` when the subject is a transaction. Any other `sys:` predicate, including `sys:confirmedBy`, `sys:supersedes`, `sys:subject`, `sys:object` and `sys:predicate`, SHALL be rejected with `ReservedNamespace(iri)`. The engine itself SHALL write `sys:confirmedBy` and `sys:supersedes`. `sys:` IRIs in subject or object position and retraction of `sys:` statements SHALL be allowed.
 
 #### Scenario: Forging a confirmation
 - **WHEN** a transaction asserts `(e1 sys:confirmedBy tx3)` directly
@@ -206,8 +206,12 @@ User writes SHALL NOT use a predicate in the `urn:tiramemsu:sys:` namespace, exc
 - **WHEN** a transaction asserts `(alice sys:reason "x")`
 - **THEN** the transaction fails with `ReservedNamespace(urn:tiramemsu:sys:reason)`
 
-#### Scenario: Other namespaces are not reserved by writes
-- **WHEN** a transaction asserts a statement whose predicate is in `urn:tiramemsu:tm:`
+#### Scenario: Time predicates are reserved
+- **WHEN** a transaction asserts `(e1 tm:txAdded 5)`
+- **THEN** the transaction fails with `ReservedNamespace(urn:tiramemsu:tm:txAdded)`
+
+#### Scenario: User vocabulary is not reserved
+- **WHEN** a transaction asserts a statement whose predicate is in `urn:tiramemsu:v:`
 - **THEN** the statement is inserted
 
 ### Requirement: Eids are never reused

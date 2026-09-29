@@ -62,6 +62,17 @@ class PathPattern {
   bind_path : Var?
   view : View
 }
+class Unnest {
+  input : Op
+  list : Expr
+  var : Var
+}
+class RowNumber {
+  input : Op
+  partition : Var[]
+  order : Key[]
+  var : Var
+}
 class Values {
   rows : Row[]
 }
@@ -85,6 +96,8 @@ Op <|-- Project
 Op <|-- OrderLimit
 Op <|-- PathPattern
 Op <|-- Values
+Op <|-- Unnest
+Op <|-- RowNumber
 TriplePattern --> View
 PathPattern --> View
 @enduml
@@ -92,6 +105,7 @@ PathPattern --> View
 
 - Every `TriplePattern` and `PathPattern` has its own `View`. A query-level time clause sets the default, and a per-pattern clause overrides it. See [[query#Temporal Syntax]].
 - `eid` binds the statement id. SPARQL binds it with `~ ?r` or `<<( )>>` reifier syntax, Cypher with a relationship variable. See [[query#Front Ends#Cypher Dual View]].
+- Expressions include `Exists`/`NotExists` (SPARQL `EXISTS`/`MINUS`, Cypher pattern predicates) and `Lookup` (Cypher `x.k`: a per-row property lookup that never multiplies rows). Joins can mark variables null-safe.
 - Constants are encoded to ObjectIds at plan time. A constant IRI or string missing from the dictionary makes its pattern empty, so the plan short-circuits.
 
 ## Views and Scans
@@ -148,7 +162,7 @@ stop
 
 ### SQL Codegen
 
-Acyclic patterns, filters, optionals, unions, aggregates and ordering become one SQL statement, with one `triple` alias per triple pattern. SQLite's planner picks the indexes.
+Acyclic patterns, filters, optionals, unions, aggregates and ordering become one SQL statement, with one `triple` alias per triple pattern. SQLite's planner orders the joins and picks the indexes, from statistics the engine keeps current.
 
 - A pattern becomes `triple AS tN` plus equality constraints for constants and shared variables, plus its view predicates.
 - `LeftJoin` → `LEFT JOIN … ON`, `Union` → `UNION ALL`, `Aggregate` → `GROUP BY`, `Project{distinct}` → `DISTINCT`, `OrderLimit` → `ORDER BY/LIMIT/OFFSET`.
@@ -156,16 +170,29 @@ Acyclic patterns, filters, optionals, unions, aggregates and ordering become one
 - Order by value decodes first: string and double ordering is not id ordering. See [[data-model#ObjectId#Range Scans]].
 - All values are bound as parameters; the generated SQL text never contains data.
 
+### Join Ordering
+
+Constants are bound parameters, so SQLite cannot see which predicate is rare. It orders joins well only with statistics, which the engine therefore treats as part of the schema, not as tuning.
+
+Measured on SQLite 3.53 with 1.1 million statements and a four-pattern BGP with bound parameters: without statistics the planner starts from the 500 000-row `knows` pattern and takes 272 ms. With `ANALYZE` it starts from the 50-row pattern and takes 1 ms. With statistics, it also chose the best order for every skewed shape tried, including predicate-only patterns. The bundled SQLite of `rusqlite` enables `STAT4`.
+
+- **Always present:** `Db::open` runs `PRAGMA optimize=0x10002`, which analyses tables that were never analysed. The writer runs `PRAGMA optimize` after bulk loads and at most once every `OpenOptions.optimize_every` commits (default 1000). `Db::optimize()` runs a full `ANALYZE`.
+- **Only plans degrade:** stale statistics change a plan's speed, never its results. `sqlite_stat1` and `sqlite_stat4` are SQLite's own tables, outside the graph and outside [[time-model#Never Forget]].
+- **Index family:** with statistics, SQLite may use a `hist_*` index for a `Now` pattern whose predicate has no retracted rows, because the cost is the same. Once a predicate has churn, the statistics steer it to `live_*`. Plan tests assert the family on a churned fixture.
+- **Explain:** `explain()` returns SQLite's `EXPLAIN QUERY PLAN` for every SQL region. Golden plan tests run the skewed fixture with bound parameters.
+- **Fallback (benchmark-gated):** an engine-forced order, where patterns are sorted by the engine's own per-predicate counts and the order is fixed with `CROSS JOIN`, as oxilite does ([[prior-art#oxilite]]). It is built only if a benchmark shape runs more than 10× slower under SQLite's order with fresh statistics than under the best forced order. See [[roadmap#Benchmarks]].
+
 ### Path Engine
 
 Paths run as a native breadth-first search over the product of a path automaton and the graph. It is never a recursive CTE. It serves SPARQL property paths, Cypher variable-length patterns and shortest paths.
 
 - **Automaton:** the path expression (`/ | * + ? ^`, Cypher `-[:T*min..max]->`, alternations) compiles to an NFA over predicates and directions.
-- **Neighbours:** prepared statements over `live_spo`/`live_osp`, or `hist_*` plus view predicates when not `Now`. The virtual hops `sys:subject` and `sys:object` step from a statement to its parts, and their inverses step back, so a path can cross layers.
+- **Neighbours:** one layer (hop count) at a time. For each automaton symbol, the layer's distinct frontier nodes go to one prepared statement per chunk of 256 ids (`rarray`), over the `live_*` permutation that fits the hop's direction (`live_spo` out, `live_pos` or `live_osp` in), or `hist_*` plus view predicates when not `Now`. Batching per layer avoids one statement per node, which dominates on wide frontiers. The virtual hops `sys:subject` and `sys:object` step from a statement to its parts, and their inverses step back, so a path can cross layers.
 - **Modes (v1):** SPARQL reachability (endpoints only, set semantics); Cypher `TRAIL` (no repeated relationship eid); `ANY SHORTEST`; `ALL SHORTEST`.
-- **Limits:** at least one endpoint must be bound. An unbounded Cypher pattern gets a cap of 15 hops, set by `max_hops`.
+- **Limits:** a recursive path (`* + ?`, variable length) needs at least one bound endpoint. An unbounded Cypher pattern, including `shortestPath`, is capped at `OpenOptions.path_max_hops` (default 15); an explicit Cypher upper bound is honoured. SPARQL paths are uncapped. The search-state memory guard `path_max_states` fails with `PathLimitExceeded`.
+- **Mode names:** `REACH`, `TRAIL`, `ANY_SHORTEST`, `ALL_SHORTEST`. Expressions compile to a DFA, so no path is returned twice. Ties are broken deterministically.
 - **Later:** `SIMPLE`, `ACYCLIC`, `SHORTEST k`, and time-respecting paths.
-- **SQL surface:** the eponymous virtual table `tm_path(start, path, mode, max_hops, view)` returns `(start, end, hops, path_json)`, so paths compose with SQL regions.
+- **SQL surface:** the eponymous virtual table `tm_path(start, path, mode, max_hops, view)` returns `(start, end, hops, path_json)`, so paths compose with SQL regions. `path` uses SPARQL 1.1 property-path text plus `{m,n}`, and `view` is text such as `asOf/150;validAt/2025-03-01`. The `add-path-engine` change owns these formats.
 
 ```plantuml
 @startuml path-bfs
@@ -177,9 +204,9 @@ database "live_spo / live_osp" as IDX
 Planner -> P : tm_path(:alice, "SUPPORTED_BY/sys:subject*", ANY_SHORTEST)
 P -> A : compile(path)
 loop frontier not empty and hops ≤ max_hops
-  P -> A : transitions(state)
-  P -> IDX : neighbours(node, pred, dir, view)
-  IDX --> P : (next, eid)*
+  P -> A : transitions(states of the layer)
+  P -> IDX : neighbours(frontier chunk, pred, dir, view)
+  IDX --> P : (from, eid, next)*
   P -> P : skip visited (node,state) / trail eids
 end
 P --> Planner : rows (start, end, hops, path_json)
@@ -198,24 +225,29 @@ Both dialects are built in parallel against the IR. A differential test suite ru
 
 ### SPARQL
 
-SPARQL is parsed by `spargebra` (Oxigraph's parser and algebra) and lowered to the IR. The time IRIs use standard `FROM` and `GRAPH`, so the grammar is not modified.
+SPARQL is parsed by `spargebra` (Oxigraph's parser and algebra) and lowered to the IR. The time IRIs use standard `FROM` and `SERVICE`, so the grammar is not modified.
 
 - **v1 query forms:** `SELECT`, `ASK`, `CONSTRUCT`. BGP, `OPTIONAL`, `FILTER`, `UNION`, `MINUS`, `BIND`, `VALUES`, property paths, aggregates, subqueries, `ORDER BY/LIMIT/OFFSET`.
 - **v1 update:** `INSERT DATA`, `DELETE DATA`, `DELETE/INSERT … WHERE`. Insert maps to assert, delete to retract (with cascade). See [[time-model#Operations]].
 - **SPARQL 1.2:** triple terms, reifiers (`~ ?r`) and annotations (`{| … |}`) bind directly to eids. Annotation triples are layer triples whose subject is the eid.
+- **Deviation from RDF 1.2:** the store cannot hold an *unasserted* triple term, because every eid is a stored statement. A triple term or reified triple in inserted data is therefore asserted, and its eid is used. `rdf:reifies` is never stored; it is resolved to the eid.
+- **Updates:** `View::sparql` accepts queries and updates. Updates run only on the current view, and a whole update request is one transaction.
+- **Predeclared prefixes:** `rdf`, `rdfs`, `xsd`, `sys`, `tm`, `v` (the database `@vocab`) and the database prefix table. A `PREFIX` in the query overrides them.
 - **Semantics:** `graph_set = SetOfTriples`. Several live eids with the same `(s, p, o)` show as one triple unless the eid is bound. `match_mode = Homomorphism`, `missing = Unbound`.
 
 ### Cypher
 
-Cypher parses an openCypher subset plus a few documented extensions. The parser crate is chosen by evaluation, with a hand-written `chumsky` parser for the subset as the fallback.
-
-Parser candidates: `opencypher`, `decypher`, `open-cypher`, `cypher_parser`.
+Cypher parses an openCypher subset plus a few documented extensions. The parser is `open-cypher`, chosen by evaluation against `opencypher`, `decypher` and `cypher_parser`.
 
 - **v1 read:** `MATCH`, `OPTIONAL MATCH`, `WHERE`, `WITH`, `RETURN`, `ORDER BY/SKIP/LIMIT`, `UNWIND`, aggregates, `CALL { … }` subqueries (uncorrelated, or importing `WITH`), variable-length relationships, `shortestPath`, `allShortestPaths`.
 - **v1 write:** `CREATE` → create; `MERGE` → upsert or an atomic pattern match; `SET` → assert or supersede; `REMOVE` and `DELETE` → retract; `DETACH DELETE` → retract every statement mentioning the node.
 - **Not in v1:** `FOREACH`, `LOAD CSV`, procedures other than built-ins, full list comprehension.
 - **Semantics:** `graph_set = BagOfEids`, `match_mode = RelIsomorphism` (Cypher 25 default; `REPEATABLE ELEMENTS` opts out), `missing = Null3VL`.
 - **Names:** labels, types and keys map to IRIs through [[data-model#Vocabulary Mapping]].
+- **Parser:** `open-cypher` (pinned, behind an adapter). If it has to be replaced, the fallback is to vendor oxilite's hand-written Cypher lexer and parser (MIT/Apache, about 1 900 lines, used for 96 % of the openCypher TCK), then `decypher`. This replaces the earlier plan of writing a `chumsky` parser. See [[prior-art#oxilite]]. The time clauses and `REPEATABLE ELEMENTS` are stripped by a span-preserving token pass before parsing.
+- **Node identity:** the reserved map key `` `@id` `` sets or matches a node's IRI. `elementId()` returns the IRI or skolem IRI, and `id()` returns the raw ObjectId.
+- **`SET x.k = v`:** no value → assert; same value → no-op; `sys:one` → cardinality replacement (annotations dropped); one different value → supersede (annotations kept); several values → retract all, then assert. A list writes one statement per element, and a multi-valued property reads back as a list.
+- **Deletes:** `DELETE n` retracts the node's properties and labels, and fails with `DeleteConnectedNode` if relationships remain at the end of the query. `CREATE (n)` with nothing attached writes nothing, because nodes exist only through statements.
 
 ### Cypher Dual View
 
@@ -254,17 +286,18 @@ Time can be chosen from the API or inside queries in both dialects, either for t
 | As of wall clock | `db.as_of(Instant(ms))` | `FROM <urn:tiramemsu:tm:asOf/2026-09-01T12:00:00Z>` | `USE AS OF datetime('2026-09-01T12:00:00Z')` |
 | Valid at | `.valid_at(ms)` | `FROM <urn:tiramemsu:tm:validAt/2025-03-01>` | `USE VALID AT date('2025-03-01')` |
 | History | `.history()` | `FROM <urn:tiramemsu:tm:history>` | `USE HISTORY` |
-| Per pattern | view per call | `GRAPH <urn:tiramemsu:tm:asOf/150> { … }` | `CALL { USE AS OF 150 MATCH … RETURN … }` |
+| Per pattern | view per call | `SERVICE <urn:tiramemsu:tm:asOf/150> { … }` | `CALL { USE AS OF 150 MATCH … RETURN … }` |
 | Statement time | — | `?r tm:txAdded ?t` | `r.txAdded` |
 
 - The default, with no clause, is tx `Now` and valid time unfiltered. Valid-time filtering is always opt-in, because an implicit "valid now" would silently hide past facts.
-- The `tm:` IRIs are recognised only in `FROM` and `GRAPH`. Anywhere else they are ordinary IRIs.
+- The `tm:` IRIs are recognised only in `FROM` (whole query) and `SERVICE` (one group). Anywhere else they are ordinary IRIs. Nested `SERVICE` groups override per part, innermost first.
+- `SERVICE` is used instead of `GRAPH` so that time and a named graph can be combined later (`SERVICE <tm:asOf/150> { GRAPH <g> { … } }`). v1 has no named graphs: `GRAPH` fails with `Unsupported("named graph")`, and a `tm:` IRI inside `GRAPH` fails with a `Parse` error that names `SERVICE`. oxilite takes the same route for version scoping ([[prior-art#oxilite]]).
 - In Cypher, `USE` takes only time clauses in v1. There is one graph per database file.
 
 ```sparql
 # what changed about alice's employer between tx 150 and now
 SELECT ?before ?after WHERE {
-  GRAPH <urn:tiramemsu:tm:asOf/150> { v:alice v:worksAt ?before }
+  SERVICE <urn:tiramemsu:tm:asOf/150> { v:alice v:worksAt ?before }
   v:alice v:worksAt ?after .
   FILTER (?before != ?after)
 }

@@ -94,15 +94,19 @@ For `DELETE { … } INSERT { … } WHERE { … }`, `INSERT { … } WHERE { … }
 
 ### Requirement: Time-scoped WHERE in updates
 
-The `WHERE` pattern of an update SHALL accept the time IRIs of the temporal dataset capability: in `GRAPH` blocks as per-pattern scopes, and in `USING` as the default for the `WHERE` pattern, with the same meaning that `FROM` has in queries. Templates and data blocks SHALL always write to the current state. A `GRAPH` block in `INSERT DATA`, `DELETE DATA` or a template, and `WITH`, `USING` or `USING NAMED` with a non-time IRI, SHALL fail with `Unsupported { feature: "named graph" }`.
+The `WHERE` pattern of an update SHALL accept the time IRIs of the temporal dataset capability: in `SERVICE` groups as per-group scopes, and in `USING` as the default for the `WHERE` pattern, with the same meaning that `FROM` has in queries. Inside the `WHERE` pattern, `GRAPH` with a time IRI, `GRAPH` with any other IRI or a variable, and `SERVICE` with a non-time IRI or a variable SHALL fail exactly as they do in queries. Templates and data blocks SHALL always write to the current state, so a time IRI has no meaning there. A `GRAPH` block in `INSERT DATA`, `DELETE DATA` or a template, whatever its IRI (a time IRI included), and `WITH`, `USING` or `USING NAMED` with a non-time IRI, SHALL fail with `Unsupported { feature: "named graph" }`.
 
 #### Scenario: Restore a past value
-- **WHEN** `(v:alice v:worksAt v:acme)` was live as of tx 150 and has since been retracted, and `INSERT { v:alice v:worksAt ?c } WHERE { GRAPH <urn:tiramemsu:tm:asOf/150> { v:alice v:worksAt ?c } }` is submitted
+- **WHEN** `(v:alice v:worksAt v:acme)` was live as of tx 150 and has since been retracted, and `INSERT { v:alice v:worksAt ?c } WHERE { SERVICE <urn:tiramemsu:tm:asOf/150> { v:alice v:worksAt ?c } }` is submitted
 - **THEN** a new live statement `(v:alice v:worksAt v:acme)` with a new eid is asserted, and the old eid stays retracted
+
+#### Scenario: Time IRI in GRAPH of a WHERE pattern is rejected
+- **WHEN** `INSERT { v:alice v:worksAt ?c } WHERE { GRAPH <urn:tiramemsu:tm:asOf/150> { v:alice v:worksAt ?c } }` is submitted
+- **THEN** the request fails with a `Parse` error of dialect SPARQL whose message names `SERVICE`, and nothing is written
 
 #### Scenario: GRAPH in INSERT DATA is rejected
 - **WHEN** `INSERT DATA { GRAPH <urn:tiramemsu:tm:asOf/150> { v:a v:b v:c } }` is submitted
-- **THEN** the request fails with `Unsupported { feature: "named graph" }` and nothing is written
+- **THEN** the request fails with `Unsupported { feature: "named graph" }` and nothing is written, because data is always written to the current state and v1 has no named graphs
 
 #### Scenario: WITH is rejected
 - **WHEN** `WITH <http://example.org/g> DELETE { ?s ?p ?o } WHERE { ?s ?p ?o }` is submitted

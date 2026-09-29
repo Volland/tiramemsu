@@ -71,15 +71,19 @@ When neither endpoint is bound, the query SHALL fail with an `Unsupported` error
 - **THEN** the query fails with an `Unsupported` error that names the bound-endpoint requirement
 
 ### Requirement: SPARQL paths honour temporal scope
-A SPARQL property path SHALL be evaluated under the view of its scope: the query-level `FROM <urn:tiramemsu:tm:…>` default, or the enclosing `GRAPH <urn:tiramemsu:tm:…>` block, with the same meaning as for triple patterns.
+A SPARQL property path SHALL be evaluated under the view of its scope: the query-level `FROM <urn:tiramemsu:tm:…>` default, or the innermost enclosing `SERVICE <urn:tiramemsu:tm:…>` group, with the same meaning as for triple patterns. A `tm:` IRI inside `GRAPH` is not a time scope: it fails with a `Parse` error that names `SERVICE`.
 
-#### Scenario: Path inside an asOf graph block
-- **WHEN** `(:a :knows :b)` was asserted in tx 10 and `(:b :knows :c)` in tx 20, and `SELECT ?x WHERE { GRAPH <urn:tiramemsu:tm:asOf/15> { :a :knows+ ?x } }` is run
+#### Scenario: Path inside an asOf service group
+- **WHEN** `(:a :knows :b)` was asserted in tx 10 and `(:b :knows :c)` in tx 20, and `SELECT ?x WHERE { SERVICE <urn:tiramemsu:tm:asOf/15> { :a :knows+ ?x } }` is run
 - **THEN** the only solution is `?x = :b`
 
 #### Scenario: Before and after in one query
-- **WHEN** the same store is queried with `SELECT ?x WHERE { :a :knows+ ?x FILTER NOT EXISTS { GRAPH <urn:tiramemsu:tm:asOf/15> { :a :knows+ ?x } } }`
+- **WHEN** the same store is queried with `SELECT ?x WHERE { :a :knows+ ?x FILTER NOT EXISTS { SERVICE <urn:tiramemsu:tm:asOf/15> { :a :knows+ ?x } } }`
 - **THEN** the only solution is `?x = :c`
+
+#### Scenario: GRAPH is not a time scope for paths
+- **WHEN** `SELECT ?x WHERE { GRAPH <urn:tiramemsu:tm:asOf/15> { :a :knows+ ?x } }` is run
+- **THEN** the query fails with a `Parse` error that names `SERVICE`
 
 #### Scenario: Valid-time default applies to paths
 - **WHEN** a query with `FROM <urn:tiramemsu:tm:validAt/2023-06-01>` evaluates `:a :worksAt/:locatedIn* ?x`, and `(:a :worksAt :acme)` is valid only `[2020-01-01, 2022-01-01)`

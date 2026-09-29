@@ -12,14 +12,14 @@ The database targets agent and personal memory: facts with provenance, beliefs a
 - Every change is kept forever with its transaction time and operation. See [[time-model]].
 - A fact carries the valid-time interval of when it was true in the world. See [[time-model#Valid Time]].
 - SPARQL and Cypher both query the same store with the same results. See [[query#Front Ends]].
-- It runs in-process on SQLite, with a Rust core. See [[architecture]].
+- It runs in-process on SQLite, with a Rust core that reaches SQLite through a small executor trait. See [[architecture]] and [[architecture#Executor]].
 
 ## Non-Goals
 
 These are explicitly out of scope, so the design can stay small and exact.
 
 - Server-grade analytics at 10⁹+ triples, where custom storage (MillenniumDB, Kùzu) wins.
-- Physical deletion or excision of facts. See [[time-model#Never Forget]].
+- Physical deletion or excision of facts. See [[time-model#Never Forget]]. Legal erasure is served by crypto-shredding instead, which deletes no row. See [[time-model#Erasure]].
 - Persistent git-style branches. Only short speculative transactions exist. See [[time-model#Speculative Transactions]].
 - Multi-writer replication in v1. The event log is kept ready for it. See [[time-model#Event Log]].
 - Datalog as a query language in v1.
@@ -28,10 +28,12 @@ These are explicitly out of scope, so the design can stay small and exact.
 
 Every row is a decision taken in the design interview of 2026-09-29, with the section that specifies it.
 
+Rows D19–D25 were added the same day, after a comparison with oxilite ([[prior-art#oxilite]]) and after measuring SQLite 3.53 plans on the schema ([[query#Physical Planning#Join Ordering]], [[storage#Measured Footprint]]).
+
 | ID | Decision | Specified in |
 |---|---|---|
 | D1 | Scope: embedded agent / personal memory (10⁴–10⁷ triples) | [[overview#Goals]] |
-| D2 | Rust core on `rusqlite` with bundled SQLite; M0 built directly in Rust | [[architecture#Crates]] |
+| D2 | Rust core with bundled SQLite via `rusqlite`, the first executor host (D22); M0 built directly in Rust | [[architecture#Crates]] |
 | D3 | "Layered" means layers built on triple ids (metagraph); no named-graph key column | [[data-model#Layers]] |
 | D4 | Uniform statements: properties are triples with eids too | [[data-model#Statements]] |
 | D5 | `assert` is idempotent; `create` always mints a new eid | [[time-model#Operations#Assert]] |
@@ -51,6 +53,13 @@ Every row is a decision taken in the design interview of 2026-09-29, with the se
 | D17 | Never forget: no DELETE on triples or terms | [[time-model#Never Forget]] |
 | Q20 | High-churn state goes in a `volatile` side table, not the graph | [[storage#Volatile Table]] |
 | D18 | Speculative `with` via SQLite SAVEPOINT; no branches | [[time-model#Speculative Transactions]] |
+| D19 | Planner statistics are mandatory and kept current automatically; an engine-forced join order is a benchmark-gated fallback | [[query#Physical Planning#Join Ordering]] |
+| D20 | `DATETIME` keeps its timezone offset inside the inline payload; numbers still collapse to their value | [[data-model#ObjectId#Canonical Encoding]] |
+| D21 | SPARQL scopes time per group with `SERVICE <tm:…>`, not `GRAPH`, so `GRAPH` stays free for named graphs | [[query#Temporal Syntax]] |
+| D22 | The core reaches SQLite through a synchronous executor trait with declared capabilities | [[architecture#Executor]] |
+| D23 | Reuse from oxilite: its Cypher parser as the fallback, its allow-list test harnesses, and its write-cost and as-of benchmarks | [[prior-art#oxilite]] |
+| D24 | Crypto-shredding is scheduled (M6); format 1 reserves tag 15 and `sys:sensitive` for it | [[time-model#Erasure]] |
+| D25 | Retrieval (FTS5 over the term dictionary, vectors on hosts that have them) is a planned milestone | [[roadmap#Milestones]] |
 
 ## Open Inputs
 

@@ -40,6 +40,16 @@ Amazon's 1G model makes every statement first-class with an id, so RDF triples, 
 
 **Taken:** the uniform statement model and the RDF/LPG mapping ([[data-model#Vocabulary Mapping]]). Its hard problem, global IRIs versus local LPG ids, is solved here by skolem IRIs ([[data-model#Nodes and Identity]]).
 
+## oxilite
+
+An Oxigraph-compatible RDF database by the same author (MIT/Apache-2.0) that runs SPARQL, Cypher and Datalog on SQLite. It is a shipped system that has already solved much of what tiramemsu needs.
+
+It has a core with no I/O of its own over rusqlite, dlopen, Turso, Cloudflare D1 and wasm. Other features: hashed tagged term ids, `quads` with three covering permutations, an own statistics-driven join order, Cypher lowered to SPARQL algebra, and optional versioning by an append-only change log beside the present table. It passes the W3C suites and 96 % of the openCypher TCK.
+
+- **Taken:** statistics as a precondition for SQLite join ordering ([[query#Physical Planning#Join Ordering]]); a declared-capability executor boundary ([[architecture#Executor]]); its hand-written Cypher parser as the fallback ([[query#Front Ends#Cypher]]); allow-list test harnesses in which every expected deviation is listed with a reason and any unexpected pass fails; the `write-cost` and `as-of-latency` benchmarks ([[roadmap#Benchmarks]]); `SERVICE` rather than `GRAPH` for version scoping ([[query#Temporal Syntax]]); the retrieval design ([[roadmap#Milestones]]).
+- **Changed:** statement identity instead of quads with optional reifiers ([[data-model#Statements]]); lifetime columns and covering history indexes instead of a change log, so the past is one index range and not a log probe ([[storage#Triple Table]]); valid time, which oxilite lacks ([[time-model#Valid Time]]); dictionary counters instead of hashes, because the single embedded writer can afford a lookup and small ids keep varints short; one IR with semantic flags instead of lowering Cypher to SPARQL.
+- **Not taken:** D1 as a target (no interactive transactions), and oxilite's purge, which rewrites history. Tiramemsu erases by crypto-shredding ([[time-model#Erasure]]).
+
 ## Others
 
 Other systems were studied and informed smaller choices or gave warnings about what to avoid.

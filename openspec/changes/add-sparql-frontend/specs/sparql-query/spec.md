@@ -218,7 +218,7 @@ The system SHALL apply `ORDER BY` (with `ASC`/`DESC` and expression keys), `LIMI
 
 ### Requirement: Built-in functions
 
-The system SHALL support these SPARQL 1.1 operators and functions: logical, comparison and arithmetic operators, `IN`/`NOT IN`, `BOUND`, `IF`, `COALESCE`, `sameTerm`, `isIRI`/`isURI`, `isBlank`, `isLiteral`, `isNumeric`, `STR`, `LANG`, `LANGMATCHES`, `DATATYPE`, `IRI`/`URI`, `STRDT`, `STRLANG`, `STRLEN`, `SUBSTR`, `UCASE`, `LCASE`, `STRSTARTS`, `STRENDS`, `CONTAINS`, `STRBEFORE`, `STRAFTER`, `CONCAT`, `ENCODE_FOR_URI`, `REGEX`, `REPLACE`, `ABS`, `CEIL`, `FLOOR`, `ROUND`, `YEAR`, `MONTH`, `DAY`, `HOURS`, `MINUTES`, `SECONDS`, `TIMEZONE`, `TZ`, `NOW`, and XSD constructor casts to `xsd:string`, `xsd:integer`, `xsd:decimal`, `xsd:double`, `xsd:boolean`, `xsd:date` and `xsd:dateTime`. Any other function, including `RAND`, `BNODE`, `UUID`, `STRUUID`, `MD5`, `SHA1`, `SHA256`, `SHA384`, `SHA512`, the SPARQL 1.2 language-direction functions and any custom function IRI, SHALL fail with `Unsupported { feature }`, where `feature` names the function.
+The system SHALL support these SPARQL 1.1 operators and functions: logical, comparison and arithmetic operators, `IN`/`NOT IN`, `BOUND`, `IF`, `COALESCE`, `sameTerm`, `isIRI`/`isURI`, `isBlank`, `isLiteral`, `isNumeric`, `STR`, `LANG`, `LANGMATCHES`, `DATATYPE`, `IRI`/`URI`, `STRDT`, `STRLANG`, `STRLEN`, `SUBSTR`, `UCASE`, `LCASE`, `STRSTARTS`, `STRENDS`, `CONTAINS`, `STRBEFORE`, `STRAFTER`, `CONCAT`, `ENCODE_FOR_URI`, `REGEX`, `REPLACE`, `ABS`, `CEIL`, `FLOOR`, `ROUND`, `YEAR`, `MONTH`, `DAY`, `HOURS`, `MINUTES`, `SECONDS`, `TIMEZONE`, `TZ`, `NOW`, and XSD constructor casts to `xsd:string`, `xsd:integer`, `xsd:decimal`, `xsd:double`, `xsd:boolean`, `xsd:date` and `xsd:dateTime`. Any other function, including `RAND`, `BNODE`, `UUID`, `STRUUID`, `MD5`, `SHA1`, `SHA256`, `SHA384`, `SHA512`, the SPARQL 1.2 language-direction functions and any custom function IRI, SHALL fail with `Unsupported { feature }`, where `feature` names the function. `YEAR` to `SECONDS` SHALL read the local time in the date-time's stored offset. `TZ` SHALL return the stored offset as a plain string (`"Z"` for a zero offset, `""` without a timezone). `TIMEZONE` SHALL return it as an `xsd:dayTimeDuration` and SHALL raise an error for a date-time without a timezone, as SPARQL 1.1 requires.
 
 #### Scenario: String functions
 - **WHEN** `(v:alice v:name "Alice Smith")` is live and `SELECT (UCASE(STRBEFORE(?n, " ")) AS ?f) WHERE { v:alice v:name ?n }` is run
@@ -234,7 +234,7 @@ The system SHALL support these SPARQL 1.1 operators and functions: logical, comp
 
 ### Requirement: Literal canonicalisation is visible in queries
 
-Query constants SHALL be encoded with the store's canonical value encoding, so query equality follows it and not RDF term identity. An `xsd:integer` SHALL match by value whatever its lexical form. An `xsd:dateTime` SHALL be compared as a UTC instant with millisecond precision, whatever timezone was written. Language tags SHALL match case-insensitively and be returned in lower case. Values SHALL be returned in canonical lexical form. `sameTerm` SHALL follow the same encoding, which is a deliberate deviation from RDF 1.1 term identity.
+Query constants SHALL be encoded with the store's canonical value encoding, so matching and joins compare encoded terms. Numbers and booleans SHALL collapse to their value: an `xsd:integer` SHALL match by value whatever its lexical form, and `sameTerm` SHALL follow the same encoding, which is a deliberate deviation from RDF 1.1 term identity. An `xsd:dateTime` SHALL keep its timezone offset, or the absence of one, as part of the term, with millisecond precision. Two date-times SHALL be the same term, for `sameTerm`, for constants in triple patterns and for joins on a shared variable, only when both the instant and the offset match, as in RDF. The comparison operators (`=`, `!=`, `<`, `>`, `<=`, `>=`) and `ORDER BY` SHALL compare date-times by instant, and a date-time without a timezone SHALL be compared as if it were UTC. Language tags SHALL match case-insensitively and be returned in lower case. Values SHALL be returned in canonical lexical form, except that a date-time SHALL be returned with the offset it was stored with.
 
 #### Scenario: Integer lexical forms are equal
 - **WHEN** `(v:alice v:age 1)` is live and `ASK { v:alice v:age "01"^^xsd:integer }` is run
@@ -244,9 +244,25 @@ Query constants SHALL be encoded with the store's canonical value encoding, so q
 - **WHEN** `ASK { FILTER(sameTerm("01"^^xsd:integer, 1)) }` is run
 - **THEN** the answer is `true`
 
-#### Scenario: Date-time timezone normalised
-- **WHEN** `(v:e v:at "2026-09-01T12:00:00Z"^^xsd:dateTime)` is live and `SELECT ?t WHERE { v:e v:at "2026-09-01T14:00:00+02:00"^^xsd:dateTime . v:e v:at ?t }` is run
-- **THEN** one row is returned whose `t` is `"2026-09-01T12:00:00Z"^^xsd:dateTime`
+#### Scenario: Date-time offsets are distinct terms
+- **WHEN** `ASK { FILTER(sameTerm("2026-03-01T12:00:00+02:00"^^xsd:dateTime, "2026-03-01T10:00:00Z"^^xsd:dateTime)) }` is run, and then the same query with `=` in place of `sameTerm`
+- **THEN** the first answer is `false` and the second is `true`
+
+#### Scenario: Pattern constant matches by term, FILTER by instant
+- **WHEN** `(v:e v:at "2026-09-01T12:00:00Z"^^xsd:dateTime)` is live, and `ASK { v:e v:at "2026-09-01T14:00:00+02:00"^^xsd:dateTime }` and `ASK { v:e v:at ?t FILTER(?t = "2026-09-01T14:00:00+02:00"^^xsd:dateTime) }` are run
+- **THEN** the first answer is `false` and the second is `true`
+
+#### Scenario: Date-time keeps its offset in results
+- **WHEN** `(v:meeting v:at "2026-09-01T09:00:00+03:00"^^xsd:dateTime)` is inserted and `SELECT ?t WHERE { v:meeting v:at ?t }` is run
+- **THEN** one row is returned whose `t` is `"2026-09-01T09:00:00+03:00"^^xsd:dateTime`
+
+#### Scenario: Ordering compares instants across offsets
+- **WHEN** `(v:a v:at "2026-09-01T12:00:00+02:00"^^xsd:dateTime)` and `(v:b v:at "2026-09-01T11:00:00Z"^^xsd:dateTime)` are live and `SELECT ?s WHERE { ?s v:at ?t } ORDER BY ?t` is run
+- **THEN** the rows are `v:a` (10:00 UTC) then `v:b` (11:00 UTC)
+
+#### Scenario: TIMEZONE and TZ read the stored offset
+- **WHEN** `(v:a v:at "2026-09-01T12:00:00+02:00"^^xsd:dateTime)` and `(v:b v:at "2026-09-01T12:00:00"^^xsd:dateTime)` are live, and `SELECT ?s (TZ(?t) AS ?z) (TIMEZONE(?t) AS ?d) WHERE { ?s v:at ?t }` is run
+- **THEN** the row for `v:a` has `z = "+02:00"` and `d = "PT2H"^^xsd:dayTimeDuration`, and the row for `v:b` has `z = ""` and `d` unbound, because `TIMEZONE` raises an error for a date-time without a timezone
 
 #### Scenario: Language tag case
 - **WHEN** `(v:alice v:greeting "Hallo"@DE)` was inserted and `SELECT (LANG(?g) AS ?l) WHERE { v:alice v:greeting ?g FILTER(?g = "Hallo"@de) }` is run
@@ -282,9 +298,9 @@ The system SHALL parse every SPARQL 1.1 property path. A path that is a single I
 
 ### Requirement: Unsupported features fail before execution
 
-Constructs outside the v1 subset SHALL be rejected after parsing and before any SQL is executed, with `Unsupported { feature }` naming the construct. This SHALL cover at least: `DESCRIBE` (`"DESCRIBE"`), `SERVICE` (`"SERVICE"`), `GRAPH` with a variable (`"GRAPH variable"`), `FROM`, `FROM NAMED` or `GRAPH` with an IRI that is not a time IRI (`"named graph"`), custom aggregates, the functions listed as unsupported, and the property paths of the interim path requirement. A rejected query SHALL return no partial results.
+Constructs outside the v1 subset SHALL be rejected after parsing and before any SQL is executed, with `Unsupported { feature }` naming the construct. This SHALL cover at least: `DESCRIBE` (`"DESCRIBE"`), `SERVICE` with a variable or with an IRI that is not a time IRI, that is federation (`"SERVICE"`), `GRAPH` with a variable (`"GRAPH variable"`), `FROM`, `FROM NAMED` or `GRAPH` with an IRI outside the `tm:` namespace (`"named graph"`), custom aggregates, the functions listed as unsupported, and the property paths of the interim path requirement. A rejected query SHALL return no partial results. `SERVICE` with a `tm:` time IRI is not federation: it is the per-group time scope of the temporal dataset capability. `GRAPH` with a `tm:` IRI is a `Parse` error that names `SERVICE`, as that capability specifies.
 
-#### Scenario: SERVICE is rejected
+#### Scenario: Federated SERVICE is rejected
 - **WHEN** `SELECT * WHERE { SERVICE <http://dbpedia.org/sparql> { ?s ?p ?o } }` is submitted
 - **THEN** the request fails with `Unsupported { feature: "SERVICE" }`
 
@@ -322,7 +338,7 @@ The system SHALL predeclare the prefixes `rdf:`, `rdfs:`, `xsd:`, `sys:` (`urn:t
 
 ### Requirement: Result terms
 
-Every solution value SHALL be an RDF term. IRIs SHALL be returned as IRIs. Anonymous nodes, blank nodes, statements (eids) and transactions SHALL be returned as the skolem IRIs `urn:tiramemsu:node:<n>`, `urn:tiramemsu:bnode:<n>`, `urn:tiramemsu:stmt:<n>` and `urn:tiramemsu:tx:<t>`, where `<n>` and `<t>` are unsigned decimal numbers. Literals SHALL be returned as follows: integers as `xsd:integer`, booleans as `xsd:boolean` (`true`/`false`), date-times as `xsd:dateTime` in UTC with a `Z` suffix and fractional seconds only when the milliseconds are non-zero, dates as `xsd:date`, plain strings without a datatype, language strings with their lower-cased tag, and every other literal with its stored lexical form and datatype IRI.
+Every solution value SHALL be an RDF term. IRIs SHALL be returned as IRIs. Anonymous nodes, blank nodes, statements (eids) and transactions SHALL be returned as the skolem IRIs `urn:tiramemsu:node:<n>`, `urn:tiramemsu:bnode:<n>`, `urn:tiramemsu:stmt:<n>` and `urn:tiramemsu:tx:<t>`, where `<n>` and `<t>` are unsigned decimal numbers. Literals SHALL be returned as follows: integers as `xsd:integer`, booleans as `xsd:boolean` (`true`/`false`), date-times as `xsd:dateTime` written in their stored offset (the local time for that offset followed by `±hh:mm`, `Z` for a zero offset, and no suffix when stored without a timezone) with fractional seconds only when the milliseconds are non-zero, dates as `xsd:date`, plain strings without a datatype, language strings with their lower-cased tag, and every other literal with its stored lexical form and datatype IRI.
 
 #### Scenario: Eid rendered as statement IRI
 - **WHEN** `(v:alice v:worksAt v:acme)` has eid number 12 and `SELECT ?r WHERE { v:alice v:worksAt v:acme ~ ?r }` is run
@@ -331,6 +347,10 @@ Every solution value SHALL be an RDF term. IRIs SHALL be returned as IRIs. Anony
 #### Scenario: Date-time rendering
 - **WHEN** a value stored as the instant 2026-09-01T12:00:00.250Z is returned
 - **THEN** it is the literal `"2026-09-01T12:00:00.250Z"^^xsd:dateTime`, and the instant 2026-09-01T12:00:00.000Z is returned as `"2026-09-01T12:00:00Z"^^xsd:dateTime`
+
+#### Scenario: Date-time rendering keeps the offset
+- **WHEN** values inserted as `"2026-09-01T14:00:00.000+02:00"^^xsd:dateTime`, `"2026-09-01T12:00:00+00:00"^^xsd:dateTime` and `"2026-09-01T12:00:00"^^xsd:dateTime` are returned
+- **THEN** they are `"2026-09-01T14:00:00+02:00"^^xsd:dateTime`, `"2026-09-01T12:00:00Z"^^xsd:dateTime` and `"2026-09-01T12:00:00"^^xsd:dateTime`
 
 ### Requirement: SPARQL JSON results
 

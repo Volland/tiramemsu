@@ -14,8 +14,8 @@ When the predicate position of a TriplePattern is a constant equal to one of the
 | `sys:object` | the statement's `o` | as stored |
 | `tm:txAdded` | `t_add` | transaction |
 | `tm:txRetracted` | `t_ret` | transaction |
-| `tm:validFrom` | `v_from` | datetime (epoch ms, UTC) |
-| `tm:validTo` | `v_to` | datetime (epoch ms, UTC) |
+| `tm:validFrom` | `v_from` | datetime (the stored UTC instant, with offset `Z`) |
+| `tm:validTo` | `v_to` | datetime (the stored UTC instant, with offset `Z`) |
 | `tm:retractKind` | `ret_kind` | integer (0 explicit, 1 cascade, 2 supersede, 3 cardinality) |
 
 A pattern whose predicate is a variable SHALL match only stored triples and SHALL NOT produce virtual triples.
@@ -92,6 +92,10 @@ When the object of a virtual-predicate pattern is a constant, the executor SHALL
 #### Scenario: Wrong object kind
 - **WHEN** an IR `TriplePattern(?r, tm:txAdded, 150)` (an integer, not a transaction) is executed
 - **THEN** the result is empty
+
+#### Scenario: Valid-time constant compares by instant
+- **WHEN** a statement has `v_from = 2026-03-01T00:00:00Z` and an IR `TriplePattern(?r, tm:validFrom, "2026-03-01T02:00:00+02:00"^^xsd:dateTime)` is executed under Now
+- **THEN** the result binds `?r` to that statement, because the constant denotes the same instant whatever its offset
 
 #### Scenario: Non-statement subject
 - **WHEN** an IR `TriplePattern(v:alice, sys:subject, ?x)` is executed

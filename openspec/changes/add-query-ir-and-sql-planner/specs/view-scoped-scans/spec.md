@@ -96,18 +96,26 @@ One generated SQL statement SHALL be able to contain patterns under different Vi
 - **THEN** each alias's predicates match its own view, and no alias carries another alias's predicates
 
 ### Requirement: Index-friendly scans
-For a single pattern with at least one bound position among subject, predicate and object, the SQLite query plan SHALL use an index of the view's family and SHALL NOT fully scan `triple`. A Now pattern with no valid-time filter SHALL use a covering `live_*` index: `live_spo` when the subject is bound, `live_pos` when only the predicate (with or without the object) is bound, and `live_osp` when only the object is bound. An `AsOf` or `History` pattern SHALL use a covering `hist_*` index chosen by the same rule. A Now pattern with a valid-time filter and a bound predicate SHALL use `live_pos` or `valid_p`. A pattern whose eid equals a constant SHALL use the integer primary key.
+For a single pattern with at least one bound position among subject, predicate and object, the SQLite query plan SHALL use a covering index and SHALL NOT fully scan `triple`. A Now pattern with no valid-time filter whose predicate has retracted rows (a churned predicate) SHALL use a covering `live_*` index: `live_spo` when the subject is bound, `live_pos` when only the predicate (with or without the object) is bound, and `live_osp` when only the object is bound. A Now pattern whose predicate has no retracted rows MAY use the `hist_*` index of the same key order instead, because with planner statistics the cost is equal and the view predicate `t_ret IS NULL` still selects the same rows. An `AsOf` or `History` pattern SHALL use a covering `hist_*` index chosen by the same rule. A Now pattern with a valid-time filter and a bound predicate SHALL use `live_pos` or `valid_p`. A pattern whose eid equals a constant SHALL use the integer primary key.
 
 #### Scenario: Now, subject and predicate bound
-- **WHEN** `EXPLAIN QUERY PLAN` is taken for `TriplePattern(v:alice, v:worksAt, ?o)` under Now
+- **WHEN** `EXPLAIN QUERY PLAN` is taken for `TriplePattern(v:alice, v:worksAt, ?o)` under Now, and `v:worksAt` has retracted rows
 - **THEN** the plan contains `USING COVERING INDEX live_spo`
+
+#### Scenario: Churned predicate in a join uses the live index
+- **WHEN** statistics are current, a predicate `v:status` has many retracted rows, and `EXPLAIN QUERY PLAN` is taken for a two-pattern Now join in which `TriplePattern(?x, v:status, ?s)` is bound only on its predicate
+- **THEN** the plan scans that pattern's alias with a covering `live_*` index, not a `hist_*` index
+
+#### Scenario: Churn-free predicate may use either family
+- **WHEN** statistics are current, a predicate has no retracted rows, and a Now pattern on it is explained inside a multi-pattern join
+- **THEN** the plan uses a covering `live_*` or `hist_*` index for that alias, never a full scan, and the result equals the result under a churned copy of the data
 
 #### Scenario: AsOf, subject and predicate bound
 - **WHEN** it is taken for the same pattern under `AsOf(Tx(150))`
 - **THEN** the plan contains `USING COVERING INDEX hist_spo`
 
 #### Scenario: Object bound
-- **WHEN** it is taken for `TriplePattern(?s, ?p, v:acme)` under Now
+- **WHEN** it is taken for `TriplePattern(?s, ?p, v:acme)` under Now, and some statements with object `v:acme` were retracted
 - **THEN** the plan contains `USING COVERING INDEX live_osp`
 
 #### Scenario: Predicate bound under History
