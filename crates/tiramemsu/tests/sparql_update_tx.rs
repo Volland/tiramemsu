@@ -53,6 +53,27 @@ fn failure_leaves_no_trace() {
     assert!(!t.has(&v("x"), &v("p"), &int(1)));
 }
 
+// predicate-schema "Rejected through SPARQL"
+// @lat: [[tests#Typed Layers#SPARQL Respects Typed Layers]]
+#[test]
+fn typed_layer_rejects_a_node_subject() {
+    let t = T::new();
+    t.upd("INSERT DATA { v:confidence sys:subjectType sys:STMT }");
+    let (last, before) = (t.last_t(), t.live());
+    let e = t.err("INSERT DATA { v:x v:p 1 } ; INSERT DATA { v:alice v:confidence 0.8 }");
+    assert!(matches!(e, Error::SubjectTypeMismatch { .. }), "{e:?}");
+    assert!(e.to_string().contains("subject type mismatch"), "{e}");
+    assert_eq!(t.last_t(), last);
+    assert_eq!(t.live(), before);
+    // an annotation's subject is the statement: accepted
+    t.upd("INSERT DATA { v:alice v:worksAt v:acme ~ _:r {| v:confidence 0.8 |} }");
+    let c = t.col(
+        "SELECT ?c WHERE { v:alice v:worksAt v:acme ~ ?r {| v:confidence ?c |} }",
+        "c",
+    );
+    assert_eq!(c.len(), 1);
+}
+
 // sparql-update "Updates run as one transaction on the current view": Update on a historical view is rejected
 #[test]
 fn update_on_a_historical_view_is_rejected() {

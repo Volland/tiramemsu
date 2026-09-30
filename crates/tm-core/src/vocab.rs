@@ -49,6 +49,8 @@ pub const SYS_UNIQUE: &str = "urn:tiramemsu:sys:unique";
 pub const SYS_VALUE_TYPE: &str = "urn:tiramemsu:sys:valueType";
 /// `sys:isEdge`.
 pub const SYS_IS_EDGE: &str = "urn:tiramemsu:sys:isEdge";
+/// `sys:subjectType`: the subject kinds a predicate accepts (any-of).
+pub const SYS_SUBJECT_TYPE: &str = "urn:tiramemsu:sys:subjectType";
 /// `sys:sensitive` (reserved for M6).
 pub const SYS_SENSITIVE: &str = "urn:tiramemsu:sys:sensitive";
 /// Feature name reported for `sys:sensitive`.
@@ -79,14 +81,21 @@ pub const SYS_GRAPH: &str = "urn:tiramemsu:sys:Graph";
 /// `rdf:type`.
 pub const RDF_TYPE: &str = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
 
-/// The four schema-flag predicates.
-pub const SCHEMA_FLAGS: [&str; 4] = [SYS_CARDINALITY, SYS_UNIQUE, SYS_VALUE_TYPE, SYS_IS_EDGE];
+/// The schema-flag predicates.
+pub const SCHEMA_FLAGS: [&str; 5] = [
+    SYS_CARDINALITY,
+    SYS_UNIQUE,
+    SYS_VALUE_TYPE,
+    SYS_SUBJECT_TYPE,
+    SYS_IS_EDGE,
+];
 
 /// `sys:` local names users may write as predicates with any subject.
-pub const SYS_ALLOWED: [&str; 8] = [
+pub const SYS_ALLOWED: [&str; 9] = [
     "cardinality",
     "unique",
     "valueType",
+    "subjectType",
     "isEdge",
     "vocab",
     "prefix",
@@ -97,7 +106,7 @@ pub const SYS_ALLOWED: [&str; 8] = [
 /// `sys:` local names users may write only with a transaction subject.
 pub const SYS_TX_METADATA: [&str; 3] = ["author", "source", "reason"];
 
-/// The tag IRI (`sys:<TAG>`) used as a `sys:valueType` object.
+/// The tag IRI (`sys:<TAG>`) used as a `sys:valueType` or `sys:subjectType` object.
 pub fn tag_iri(tag: Tag) -> String {
     format!("{SYS}{}", tag.name())
 }

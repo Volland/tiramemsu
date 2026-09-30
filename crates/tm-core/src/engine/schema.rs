@@ -1,4 +1,5 @@
-//! The predicate schema: `sys:cardinality`, `sys:unique`, `sys:valueType`, `sys:isEdge`.
+//! The predicate schema: `sys:cardinality`, `sys:unique`, `sys:valueType`,
+//! `sys:subjectType`, `sys:isEdge`.
 
 use super::Tx;
 use crate::error::{Error, Position, Result};
@@ -7,6 +8,35 @@ use crate::id::{Eid, ObjectId, Tag};
 use crate::vocab;
 
 /// The flags in force for one predicate.
+///
+/// # Example
+///
+/// A typed layer: `v:confidence` may annotate statements only.
+///
+/// ```
+/// use tm_core::{vocab, Error, Store, StoreOptions, Tag, TxOptions, Valid, Value};
+/// use tm_rusqlite as host;
+///
+/// # let dir = tempfile::tempdir().unwrap();
+/// # let path = dir.path().join("db");
+/// let mut store = Store::open(&host::RusqliteHost::new(), &path, StoreOptions::default())?;
+/// let iri = |s: &str| Value::iri(vocab::v(s));
+/// let stmt = Value::iri(vocab::tag_iri(Tag::Stmt));
+/// store.transact(TxOptions::default(), |tx| {
+///     tx.assert(iri("confidence"), Value::iri(vocab::SYS_SUBJECT_TYPE), stmt, Valid::ALWAYS)?;
+///     let e1 = tx.assert(iri("alice"), iri("worksAt"), iri("acme"), Valid::ALWAYS)?.eid();
+///     tx.assert(e1, iri("confidence"), Value::Double(0.8), Valid::ALWAYS)?;
+///     let p = tx.encode(iri("confidence"))?;
+///     assert_eq!(tx.schema(p)?.subject_types.len(), 1);
+///     Ok(())
+/// })?;
+/// let node_level = store.transact(TxOptions::default(), |tx| {
+///     tx.assert(iri("alice"), iri("confidence"), Value::Double(0.8), Valid::ALWAYS)
+///         .map(|_| ())
+/// });
+/// assert!(matches!(node_level, Err(Error::SubjectTypeMismatch { got: Tag::Iri, .. })));
+/// # Ok::<(), Error>(())
+/// ```
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct PredicateSchema {
     /// `sys:cardinality sys:one`.
@@ -15,16 +45,20 @@ pub struct PredicateSchema {
     pub unique: bool,
     /// `sys:valueType` object (a tag or datatype IRI).
     pub value_type: Option<ObjectId>,
+    /// `sys:subjectType` objects (tag IRIs, any-of) in eid order; empty means any
+    /// subject kind.
+    pub subject_types: Vec<ObjectId>,
     /// `sys:isEdge` value.
     pub is_edge: Option<bool>,
 }
 
-/// One of the four schema flags.
+/// One of the schema flags.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub(crate) enum Flag {
     Cardinality,
     Unique,
     ValueType,
+    SubjectType,
     IsEdge,
 }
 
@@ -34,11 +68,21 @@ impl Flag {
             vocab::SYS_CARDINALITY => Some(Flag::Cardinality),
             vocab::SYS_UNIQUE => Some(Flag::Unique),
             vocab::SYS_VALUE_TYPE => Some(Flag::ValueType),
+            vocab::SYS_SUBJECT_TYPE => Some(Flag::SubjectType),
             vocab::SYS_IS_EDGE => Some(Flag::IsEdge),
             _ => None,
         }
     }
+
+    /// True for a flag with one live value per predicate: a new value replaces the
+    /// old one (implicit cardinality one). `sys:subjectType` values accumulate.
+    pub(crate) fn single_valued(self) -> bool {
+        self != Flag::SubjectType
+    }
 }
+
+/// The tags a subject can have, and so the tags `sys:subjectType` may name.
+const SUBJECT_TAGS: [Tag; 5] = [Tag::Iri, Tag::Node, Tag::BNode, Tag::Stmt, Tag::Tx];
 
 const TRUE: ObjectId = ObjectId::from_raw((1 << 4) | Tag::Bool as i64);
 
@@ -69,6 +113,7 @@ impl Tx<'_> {
             self.sys_lookup(vocab::SYS_UNIQUE)?,
             self.sys_lookup(vocab::SYS_VALUE_TYPE)?,
             self.sys_lookup(vocab::SYS_IS_EDGE)?,
+            self.sys_lookup(vocab::SYS_SUBJECT_TYPE)?,
         ];
         let mut schema = PredicateSchema::default();
         if ids.iter().any(Option::is_some) {
@@ -76,13 +121,14 @@ impl Tx<'_> {
             let raw = |o: Option<ObjectId>| SqlValue::Integer(o.map_or(0, ObjectId::raw));
             let rows = self.exec.rows(
                 "SELECT p, o FROM triple WHERE s = ?1 AND t_ret IS NULL \
-                 AND p IN (?2, ?3, ?4, ?5) ORDER BY eid",
+                 AND p IN (?2, ?3, ?4, ?5, ?6) ORDER BY eid",
                 &[
                     SqlValue::Integer(p.raw()),
                     raw(ids[0]),
                     raw(ids[1]),
                     raw(ids[2]),
                     raw(ids[3]),
+                    raw(ids[4]),
                 ],
             )?;
             for r in rows {
@@ -96,6 +142,8 @@ impl Tx<'_> {
                     schema.value_type = Some(o);
                 } else if fp == ids[3] {
                     schema.is_edge = Some(o == TRUE);
+                } else if fp == ids[4] {
+                    schema.subject_types.push(o);
                 }
             }
         }
@@ -136,6 +184,108 @@ impl Tx<'_> {
         Ok(())
     }
 
+    /// Checks the tag of subject `s` against the subject types of `p`, if any.
+    pub(crate) fn check_subject_type(&mut self, p: ObjectId, s: ObjectId) -> Result<()> {
+        let types = self.schema(p)?.subject_types;
+        if types.is_empty() {
+            return Ok(());
+        }
+        let got = s.tag()?;
+        if self.subject_tags(&types)?.contains(&got) {
+            return Ok(());
+        }
+        Err(Error::SubjectTypeMismatch {
+            p,
+            expected: types,
+            got,
+        })
+    }
+
+    /// The tags named by `sys:subjectType` objects.
+    fn subject_tags(&mut self, types: &[ObjectId]) -> Result<Vec<Tag>> {
+        let mut tags = Vec::with_capacity(types.len());
+        for t in types {
+            if let Some(tag) = self.iri_of(*t)?.and_then(|i| vocab::tag_from_iri(&i)) {
+                tags.push(tag);
+            }
+        }
+        Ok(tags)
+    }
+
+    /// Live `sys:subjectType` flag statements of predicate `x`, as `(eid, object)`.
+    fn subject_type_rows(&mut self, x: ObjectId) -> Result<Vec<(Eid, ObjectId)>> {
+        let Some(st) = self.sys_lookup(vocab::SYS_SUBJECT_TYPE)? else {
+            return Ok(Vec::new());
+        };
+        let rows = self.exec.rows(
+            "SELECT eid, o FROM triple WHERE s = ?1 AND p = ?2 AND t_ret IS NULL ORDER BY eid",
+            &[SqlValue::Integer(x.raw()), SqlValue::Integer(st.raw())],
+        )?;
+        Ok(rows
+            .into_iter()
+            .filter_map(|r| {
+                let e = Eid::from_oid(ObjectId::from_raw(r[0].as_i64()?))?;
+                Some((e, ObjectId::from_raw(r[1].as_i64()?)))
+            })
+            .collect())
+    }
+
+    /// Live statements of predicate `x` whose subject tag is outside `tags`.
+    fn subject_type_violations(&mut self, x: ObjectId, tags: &[Tag]) -> Result<Vec<Eid>> {
+        let rows = self.exec.rows(
+            "SELECT eid, s FROM triple WHERE p = ?1 AND t_ret IS NULL ORDER BY eid",
+            &[SqlValue::Integer(x.raw())],
+        )?;
+        let mut out = Vec::new();
+        for r in rows {
+            let s = ObjectId::from_raw(r[1].as_i64().unwrap_or(0));
+            if !tags.contains(&s.tag()?) {
+                if let Some(e) = r[0]
+                    .as_i64()
+                    .and_then(|e| Eid::from_oid(ObjectId::from_raw(e)))
+                {
+                    out.push(e);
+                }
+            }
+        }
+        Ok(out)
+    }
+
+    /// Rejects retracting a `sys:subjectType` value when live data violates the
+    /// narrowed set of the remaining values. Retracting the last value lifts the
+    /// constraint; retracting any other statement is not a schema change here.
+    pub(crate) fn validate_flag_retraction(&mut self, e: Eid) -> Result<()> {
+        let Some(st) = self.sys_lookup(vocab::SYS_SUBJECT_TYPE)? else {
+            return Ok(());
+        };
+        let Some(row) = self.exec.first_row(
+            "SELECT s FROM triple WHERE eid = ?1 AND p = ?2 AND t_ret IS NULL",
+            &[
+                SqlValue::Integer(e.oid().raw()),
+                SqlValue::Integer(st.raw()),
+            ],
+        )?
+        else {
+            return Ok(());
+        };
+        let x = ObjectId::from_raw(row[0].as_i64().unwrap_or(0));
+        let rest: Vec<ObjectId> = self
+            .subject_type_rows(x)?
+            .into_iter()
+            .filter(|(f, _)| *f != e)
+            .map(|(_, o)| o)
+            .collect();
+        if rest.is_empty() {
+            return Ok(());
+        }
+        let tags = self.subject_tags(&rest)?;
+        let violating = self.subject_type_violations(x, &tags)?;
+        if violating.is_empty() {
+            return Ok(());
+        }
+        Err(Error::SchemaConflict { violating })
+    }
+
     /// Built-in validation of a flag statement `(s flag o)`.
     pub(crate) fn validate_flag(
         &mut self,
@@ -173,6 +323,10 @@ impl Tx<'_> {
                 };
                 (ok, Tag::Iri)
             }
+            Flag::SubjectType => {
+                let tag = self.iri_of(o)?.and_then(|i| vocab::tag_from_iri(&i));
+                (tag.is_some_and(|t| SUBJECT_TAGS.contains(&t)), Tag::Iri)
+            }
         };
         if !ok {
             let expected = self.sys(&vocab::tag_iri(expected))?;
@@ -186,12 +340,14 @@ impl Tx<'_> {
     }
 
     /// Rejects a flag value that live data (including this transaction's writes)
-    /// already violates.
+    /// already violates. `replacing` is the flag statement a supersede retracts,
+    /// which no longer counts towards the multi-valued `sys:subjectType`.
     pub(crate) fn validate_schema_change(
         &mut self,
         flag: Flag,
         x: ObjectId,
         o: ObjectId,
+        replacing: Option<Eid>,
     ) -> Result<()> {
         let mut violating: Vec<Eid> = Vec::new();
         let push = |v: &mut Vec<Eid>, raw: Option<i64>| {
@@ -242,6 +398,19 @@ impl Tx<'_> {
                         push(&mut violating, r[0].as_i64());
                     }
                 }
+            }
+            Flag::SubjectType => {
+                // the resulting any-of set: the live values, minus a superseded one,
+                // plus the new value
+                let mut types: Vec<ObjectId> = self
+                    .subject_type_rows(x)?
+                    .into_iter()
+                    .filter(|(e, _)| Some(*e) != replacing)
+                    .map(|(_, t)| t)
+                    .collect();
+                types.push(o);
+                let tags = self.subject_tags(&types)?;
+                violating = self.subject_type_violations(x, &tags)?;
             }
             Flag::IsEdge => return Ok(()),
         }

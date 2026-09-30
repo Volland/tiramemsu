@@ -6,8 +6,13 @@
 //! | `sys:subject` / `sys:object` | `s` / `o` | `a.s` / `a.o` | `a.s = ?id` |
 //! | `sys:predicate` | `p` | `a.p` | `a.p = ?id` (an IRI) |
 //! | `tm:txAdded` / `tm:txRetracted` | `t_add` / `t_ret` | `((a.t_add << 4) \| 4)` | `a.t_add = ?t` |
+//! | `tm:addedAt` / `tm:retractedAt` | `t_add` / `t_ret` | `(((SELECT tx.instant FROM tx WHERE tx.t = a.t_add) << 15) \| 13463)` | `a.t_add = (SELECT tx.t FROM tx WHERE tx.instant = ?instant)` |
 //! | `tm:validFrom` / `tm:validTo` | `v_from` / `v_to` | `((a.v_from << 15) \| 13463)`: a `DATETIME` with offset `Z` | `a.v_from = ?instant` |
 //! | `tm:retractKind` | `ret_kind` | `((a.ret_kind << 4) \| 5)` | `a.ret_kind = ?k` |
+//!
+//! The two instants are read from `tx` by its integer primary key, a rowid seek per
+//! row that keeps the pattern a single `triple` alias. A constant instant seeks the
+//! unique `tx_instant` index once instead, so the compare stays on `t_add`/`t_ret`.
 
 use tm_core::{ObjectId, Tag};
 use tm_ir::vocab;
@@ -40,6 +45,10 @@ pub enum VirtualPred {
     TxAdded,
     /// `tm:txRetracted`.
     TxRetracted,
+    /// `tm:addedAt`: the commit instant of `t_add`.
+    AddedAt,
+    /// `tm:retractedAt`: the commit instant of `t_ret`.
+    RetractedAt,
     /// `tm:validFrom`.
     ValidFrom,
     /// `tm:validTo`.
@@ -58,6 +67,8 @@ impl VirtualPred {
             vocab::SYS_OBJECT => VirtualPred::Object,
             vocab::TM_TX_ADDED => VirtualPred::TxAdded,
             vocab::TM_TX_RETRACTED => VirtualPred::TxRetracted,
+            vocab::TM_ADDED_AT => VirtualPred::AddedAt,
+            vocab::TM_RETRACTED_AT => VirtualPred::RetractedAt,
             vocab::TM_VALID_FROM => VirtualPred::ValidFrom,
             vocab::TM_VALID_TO => VirtualPred::ValidTo,
             vocab::TM_RETRACT_KIND => VirtualPred::RetractKind,
@@ -71,8 +82,8 @@ impl VirtualPred {
             VirtualPred::Subject => "s",
             VirtualPred::Predicate => "p",
             VirtualPred::Object => "o",
-            VirtualPred::TxAdded => "t_add",
-            VirtualPred::TxRetracted => "t_ret",
+            VirtualPred::TxAdded | VirtualPred::AddedAt => "t_add",
+            VirtualPred::TxRetracted | VirtualPred::RetractedAt => "t_ret",
             VirtualPred::ValidFrom => "v_from",
             VirtualPred::ValidTo => "v_to",
             VirtualPred::RetractKind => "ret_kind",
@@ -84,6 +95,7 @@ impl VirtualPred {
         matches!(
             self,
             VirtualPred::TxRetracted
+                | VirtualPred::RetractedAt
                 | VirtualPred::ValidFrom
                 | VirtualPred::ValidTo
                 | VirtualPred::RetractKind
@@ -98,6 +110,11 @@ impl VirtualPred {
                 format!("{a}.{c}")
             }
             VirtualPred::TxAdded | VirtualPred::TxRetracted => format!("(({a}.{c} << 4) | 4)"),
+            VirtualPred::AddedAt | VirtualPred::RetractedAt => {
+                format!(
+                    "(((SELECT tx.instant FROM tx WHERE tx.t = {a}.{c}) << 15) | {DATETIME_Z_LOW})"
+                )
+            }
             VirtualPred::ValidFrom | VirtualPred::ValidTo => {
                 format!("(({a}.{c} << 15) | {DATETIME_Z_LOW})")
             }
@@ -121,16 +138,24 @@ impl VirtualPred {
             VirtualPred::TxAdded | VirtualPred::TxRetracted => {
                 (tag == Tag::Tx).then_some(id.unsigned_payload() as i64)
             }
-            VirtualPred::ValidFrom | VirtualPred::ValidTo => {
-                (tag == Tag::DateTime).then_some(id.instant())
-            }
+            VirtualPred::AddedAt
+            | VirtualPred::RetractedAt
+            | VirtualPred::ValidFrom
+            | VirtualPred::ValidTo => (tag == Tag::DateTime).then_some(id.instant()),
             VirtualPred::RetractKind => (tag == Tag::Int).then_some(id.signed_payload()),
         }
     }
 
-    /// `a.col = ?` for a constant object.
+    /// `a.col = ?` for a constant object. For an instant, `?` is the epoch
+    /// milliseconds and the column is compared with the transaction committed then.
     pub fn object_compare(self, a: &str, placeholder: &str) -> String {
-        format!("{a}.{} = {placeholder}", self.column())
+        let c = self.column();
+        match self {
+            VirtualPred::AddedAt | VirtualPred::RetractedAt => {
+                format!("{a}.{c} = (SELECT tx.t FROM tx WHERE tx.instant = {placeholder})")
+            }
+            _ => format!("{a}.{c} = {placeholder}"),
+        }
     }
 }
 
@@ -153,6 +178,25 @@ mod tests {
         assert_eq!(
             VirtualPred::ValidTo.not_null("t1").as_deref(),
             Some("t1.v_to IS NOT NULL")
+        );
+        assert_eq!(
+            VirtualPred::from_iri("urn:tiramemsu:tm:addedAt"),
+            Some(VirtualPred::AddedAt)
+        );
+        assert_eq!(
+            VirtualPred::AddedAt.object_expr("t0"),
+            format!(
+                "(((SELECT tx.instant FROM tx WHERE tx.t = t0.t_add) << 15) | {DATETIME_Z_LOW})"
+            )
+        );
+        assert_eq!(VirtualPred::AddedAt.not_null("t0"), None);
+        assert_eq!(
+            VirtualPred::RetractedAt.not_null("t0").as_deref(),
+            Some("t0.t_ret IS NOT NULL")
+        );
+        assert_eq!(
+            VirtualPred::RetractedAt.object_compare("t0", "?1"),
+            "t0.t_ret = (SELECT tx.t FROM tx WHERE tx.instant = ?1)"
         );
     }
 
@@ -185,5 +229,10 @@ mod tests {
             VirtualPred::ValidFrom.object_column_value(dt),
             Some(7_200_000)
         );
+        assert_eq!(
+            VirtualPred::AddedAt.object_column_value(dt),
+            Some(7_200_000)
+        );
+        assert_eq!(VirtualPred::RetractedAt.object_column_value(tx), None);
     }
 }

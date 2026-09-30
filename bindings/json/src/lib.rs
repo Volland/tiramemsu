@@ -67,6 +67,7 @@ impl BindError {
             BindError::Db(e) => match e {
                 Error::UniqueViolation { .. } => "UniqueViolation",
                 Error::ValueTypeMismatch { .. } => "ValueTypeMismatch",
+                Error::SubjectTypeMismatch { .. } => "SubjectTypeMismatch",
                 Error::CascadeLimitExceeded { .. } => "CascadeLimitExceeded",
                 Error::PathLimitExceeded { .. } => "PathLimitExceeded",
                 Error::NotLive(_) => "NotLive",

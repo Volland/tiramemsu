@@ -41,6 +41,7 @@ mod tests {
     #[test]
     fn allow_list() {
         assert!(check_predicate("urn:tiramemsu:sys:unique", Tag::Iri).is_ok());
+        assert!(check_predicate("urn:tiramemsu:sys:subjectType", Tag::Iri).is_ok());
         assert!(check_predicate("urn:tiramemsu:sys:prefixIri", Tag::BNode).is_ok());
         assert!(check_predicate("urn:tiramemsu:sys:reason", Tag::Tx).is_ok());
         assert!(matches!(

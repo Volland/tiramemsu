@@ -29,8 +29,10 @@ impl Tx<'_> {
     /// # Errors
     ///
     /// [`Error::InvalidInterval`], [`Error::ReservedNamespace`] for a `sys:`/`tm:`
-    /// predicate a user may not write, [`Error::ValueTypeMismatch`] and
-    /// [`Error::UniqueViolation`] from the predicate's schema.
+    /// predicate a user may not write, [`Error::ValueTypeMismatch`],
+    /// [`Error::SubjectTypeMismatch`] and [`Error::UniqueViolation`] from the
+    /// predicate's schema, and [`Error::SchemaConflict`] for a schema flag that
+    /// live data violates.
     pub fn assert(
         &mut self,
         s: impl IntoObject,
@@ -147,7 +149,9 @@ impl Tx<'_> {
     /// # Errors
     ///
     /// [`Error::CascadeLimitExceeded`] when the cascade is larger than
-    /// [`crate::TxOptions::max_cascade`].
+    /// [`crate::TxOptions::max_cascade`], and [`Error::SchemaConflict`] when the
+    /// statement is one of several `sys:subjectType` values and live data violates
+    /// the remaining ones.
     // @lat: [[time-model#Operations#Retract]]
     pub fn retract(&mut self, eid: Eid) -> Result<bool> {
         self.retract_root(eid, RetKind::Explicit)
@@ -196,9 +200,9 @@ impl Tx<'_> {
     }
 
     /// The pre-insert pipeline shared by assert, create, confirm and metadata
-    /// (design D-8): positions, reserved namespace, interval, value type or flag
-    /// validation, schema-change validation, idempotency, unique, cardinality-one,
-    /// allocation, self-reference, insert.
+    /// (design D-8): positions, reserved namespace, interval, value and subject type
+    /// or flag validation, schema-change validation, idempotency, unique,
+    /// cardinality-one, allocation, self-reference, insert.
     pub(crate) fn write(
         &mut self,
         s: ObjectId,
@@ -218,16 +222,19 @@ impl Tx<'_> {
         match flag {
             Some(f) => {
                 self.validate_flag(f, p, s, o)?;
-                self.validate_schema_change(f, s, o)?;
+                self.validate_schema_change(f, s, o, None)?;
             }
-            None => self.check_value_type(p, o)?,
+            None => {
+                self.check_value_type(p, o)?;
+                self.check_subject_type(p, s)?;
+            }
         }
         if idempotent {
             if let Some(e) = self.find_overlapping(s, p, o, valid)? {
                 return Ok(Asserted::Existing(e));
             }
         }
-        self.unique_and_cardinality(s, p, o, valid, flag.is_some())?;
+        self.unique_and_cardinality(s, p, o, valid, flag.is_some_and(Flag::single_valued))?;
         let eid = self.alloc_eid();
         if s == eid.oid() || o == eid.oid() {
             return Err(Error::SelfReference(eid));
@@ -237,8 +244,8 @@ impl Tx<'_> {
     }
 
     /// Unique check then cardinality-one replacement for a statement about to be
-    /// inserted (design D-8 steps 5 and 6). Flag predicates are implicitly `one`
-    /// with valid time ignored.
+    /// inserted (design D-8 steps 5 and 6). Single-valued flag predicates are
+    /// implicitly `one` with valid time ignored.
     // @lat: [[time-model#Operations#Cardinality One]]
     pub(crate) fn unique_and_cardinality(
         &mut self,

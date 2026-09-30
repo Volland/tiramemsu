@@ -16,6 +16,10 @@ pub const SYS_ANY_RELATIONSHIP: &str = "urn:tiramemsu:sys:anyRelationship";
 pub const TM_TX_ADDED: &str = "urn:tiramemsu:tm:txAdded";
 /// `tm:txRetracted`: the transaction that retracted the statement.
 pub const TM_TX_RETRACTED: &str = "urn:tiramemsu:tm:txRetracted";
+/// `tm:addedAt`: the commit instant of the transaction that added the statement.
+pub const TM_ADDED_AT: &str = "urn:tiramemsu:tm:addedAt";
+/// `tm:retractedAt`: the commit instant of the transaction that retracted it.
+pub const TM_RETRACTED_AT: &str = "urn:tiramemsu:tm:retractedAt";
 /// `tm:validFrom`: the start of the statement's valid interval.
 pub const TM_VALID_FROM: &str = "urn:tiramemsu:tm:validFrom";
 /// `tm:validTo`: the end of the statement's valid interval.
@@ -24,12 +28,14 @@ pub const TM_VALID_TO: &str = "urn:tiramemsu:tm:validTo";
 pub const TM_RETRACT_KIND: &str = "urn:tiramemsu:tm:retractKind";
 
 /// Every virtual predicate IRI.
-pub const VIRTUAL: [&str; 8] = [
+pub const VIRTUAL: [&str; 10] = [
     SYS_SUBJECT,
     SYS_PREDICATE,
     SYS_OBJECT,
     TM_TX_ADDED,
     TM_TX_RETRACTED,
+    TM_ADDED_AT,
+    TM_RETRACTED_AT,
     TM_VALID_FROM,
     TM_VALID_TO,
     TM_RETRACT_KIND,

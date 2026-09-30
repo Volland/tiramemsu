@@ -340,3 +340,137 @@ host_test! {
         assert!(db.is_live(bb));
     }
 }
+
+// predicate-schema "Typed layer accepts a statement subject" / "Typed layer rejects a
+// node subject" / "Several values mean any-of" / "Subject type takes effect within its
+// transaction" / "Failed subject type prevents cardinality replacement"
+// @lat: [[tests#Typed Layers#Subject Type Constrains Subjects]]
+host_test! {
+    fn subject_type_constrains_subjects(db) {
+        let e1 = put(db, "alice", "worksAt", iri("acme"), Valid::ALWAYS);
+        flag(db, "confidence", "subjectType", sys("STMT"));
+        let (conf, stmt) = (db.id(&iri("confidence")), db.id(&sys("STMT")));
+        db.tx(|tx| tx.assert(e1, iri("confidence"), Value::Double(0.8), Valid::ALWAYS).map(|_| ()));
+        let before = db.snapshot();
+        let r = db.try_tx(|tx| tx.assert(iri("alice"), iri("confidence"), Value::Double(0.8), Valid::ALWAYS).map(|_| ()));
+        match r {
+            Err(e @ Error::SubjectTypeMismatch { .. }) => {
+                let msg = e.to_string();
+                assert!(msg.contains("subject type mismatch") && msg.contains("IRI"), "{msg}");
+                let Error::SubjectTypeMismatch { p, expected, got } = e else { unreachable!() };
+                assert_eq!((p, expected, got), (conf, vec![stmt], Tag::Iri));
+            }
+            other => panic!("expected SubjectTypeMismatch, got {other:?}"),
+        }
+        let r = db.try_tx(|tx| tx.create(iri("bob"), iri("confidence"), Value::Double(0.5), Valid::ALWAYS).map(|_| ()));
+        assert_err!(r, Error::SubjectTypeMismatch { .. });
+        assert_eq!(db.snapshot(), before);
+        // several values mean any-of; a second value retracts nothing
+        let fs = flag(db, "note", "subjectType", sys("STMT"));
+        let ft = flag(db, "note", "subjectType", sys("TX"));
+        assert!(db.is_live(fs) && db.is_live(ft));
+        let again = db.tx(|tx| {
+            let r = tx.assert(iri("note"), sys("subjectType"), sys("TX"), Valid::ALWAYS)?;
+            assert!(!r.is_new());
+            Ok(())
+        });
+        assert!(again.retracted.is_empty());
+        db.tx(|tx| {
+            tx.assert(e1, iri("note"), lit("x"), Valid::ALWAYS)?;
+            tx.meta(iri("note"), lit("y")).map(|_| ())
+        });
+        let r = db.try_tx(|tx| tx.assert(iri("alice"), iri("note"), lit("z"), Valid::ALWAYS).map(|_| ()));
+        assert_err!(r, Error::SubjectTypeMismatch { expected, got: Tag::Iri, .. } if expected.len() == 2);
+        // takes effect within its transaction
+        let r = db.try_tx(|tx| {
+            tx.assert(iri("score"), sys("subjectType"), sys("STMT"), Valid::ALWAYS)?;
+            tx.assert(iri("alice"), iri("score"), Value::Int(1), Valid::ALWAYS).map(|_| ())
+        });
+        assert_err!(r, Error::SubjectTypeMismatch { .. });
+        // checked after the value type and before cardinality-one replacement
+        db.tx(|tx| {
+            tx.assert(iri("rank"), sys("cardinality"), sys("one"), Valid::ALWAYS)?;
+            tx.assert(iri("rank"), sys("subjectType"), sys("STMT"), Valid::ALWAYS)?;
+            tx.assert(iri("rank"), sys("valueType"), Value::iri(XSD_INTEGER), Valid::ALWAYS)?;
+            Ok(())
+        });
+        let r1 = put(db, "x", "worksAt", iri("y"), Valid::ALWAYS);
+        let mut ranked = None;
+        db.tx(|tx| {
+            ranked = Some(tx.assert(r1, iri("rank"), Value::Int(1), Valid::ALWAYS)?.eid());
+            Ok(())
+        });
+        let r = db.try_tx(|tx| tx.assert(iri("alice"), iri("rank"), lit("one"), Valid::ALWAYS).map(|_| ()));
+        assert_err!(r, Error::ValueTypeMismatch { .. });
+        let r = db.try_tx(|tx| tx.assert(iri("alice"), iri("rank"), Value::Int(2), Valid::ALWAYS).map(|_| ()));
+        assert_err!(r, Error::SubjectTypeMismatch { .. });
+        assert!(db.is_live(ranked.unwrap()));
+    }
+}
+
+// predicate-schema "Subject type that no subject can have" / "A second subject type is
+// added"
+// @lat: [[tests#Typed Layers#Subject Type Values Are Validated]]
+host_test! {
+    fn subject_type_values_are_validated(db) {
+        for ok in ["IRI", "NODE", "BNODE", "STMT", "TX"] {
+            flag(db, "any", "subjectType", sys(ok));
+        }
+        let (any, st) = (db.id(&iri("any")), db.id(&sys("subjectType")));
+        assert_eq!(db.now(Some(any), Some(st), None).len(), 5);
+        for bad in [sys("INT"), sys("NOPE"), Value::iri(XSD_INTEGER), lit("STMT")] {
+            let r = db.try_tx(|tx| tx.assert(iri("confidence"), sys("subjectType"), bad, Valid::ALWAYS).map(|_| ()));
+            assert_err!(r, Error::ValueTypeMismatch { p, .. } if p == st);
+        }
+        let r = db.try_tx(|tx| tx.assert(sys("reason"), sys("subjectType"), sys("TX"), Valid::ALWAYS).map(|_| ()));
+        assert_err!(r, Error::ReservedNamespace(_));
+    }
+}
+
+// predicate-schema "Subject type over node-level data" / "Retracting one of several
+// subject types narrows the set" / "Retracting the last subject type lifts the
+// constraint"
+// @lat: [[tests#Typed Layers#Subject Type Changes Are Checked Against Live Data]]
+host_test! {
+    fn subject_type_schema_changes(db) {
+        let e1 = put(db, "alice", "worksAt", iri("acme"), Valid::ALWAYS);
+        let mut on_stmt = None;
+        db.tx(|tx| {
+            on_stmt = Some(tx.assert(e1, iri("confidence"), Value::Double(0.8), Valid::ALWAYS)?.eid());
+            Ok(())
+        });
+        let on_node = put(db, "alice", "confidence", Value::Double(0.5), Valid::ALWAYS);
+        let before = db.snapshot();
+        let r = db.try_tx(|tx| tx.assert(iri("confidence"), sys("subjectType"), sys("STMT"), Valid::ALWAYS).map(|_| ()));
+        assert_err!(r, Error::SchemaConflict { violating } if violating == vec![on_node]);
+        assert_eq!(db.snapshot(), before);
+        // a second value only widens the set
+        db.tx(|tx| tx.retract(on_node).map(|_| ()));
+        let fs = flag(db, "confidence", "subjectType", sys("STMT"));
+        let fi = flag(db, "confidence", "subjectType", sys("IRI"));
+        let on_iri = put(db, "bob", "confidence", Value::Double(0.4), Valid::ALWAYS);
+        // retracting one of several narrows the set, which live data violates
+        let r = db.try_tx(|tx| tx.retract(fi).map(|_| ()));
+        assert_err!(r, Error::SchemaConflict { violating } if violating == vec![on_iri]);
+        let (conf, st, stmt) = (db.id(&iri("confidence")), db.id(&sys("subjectType")), db.id(&sys("STMT")));
+        let r = db.try_tx(|tx| tx.retract_matching(Some(conf), Some(st), Some(stmt)).map(|_| ()));
+        assert_err!(r, Error::SchemaConflict { violating } if violating == vec![on_stmt.unwrap()]);
+        // superseding a value checks the set without the old value
+        let r = db.try_tx(|tx| tx.supersede(fi, Patch::object(sys("TX"))).map(|_| ()));
+        assert_err!(r, Error::SchemaConflict { violating } if violating == vec![on_iri]);
+        // once the data conforms, narrowing is allowed
+        db.tx(|tx| {
+            tx.retract(on_iri)?;
+            tx.retract(fi).map(|_| ())
+        });
+        let r = db.try_tx(|tx| tx.assert(iri("carol"), iri("confidence"), Value::Double(0.1), Valid::ALWAYS).map(|_| ()));
+        assert_err!(r, Error::SubjectTypeMismatch { .. });
+        // retracting the last value lifts the constraint, and the schema read earlier
+        // in the transaction is not reused
+        db.tx(|tx| {
+            tx.assert(e1, iri("confidence"), Value::Double(0.9), Valid::ALWAYS)?;
+            tx.retract(fs)?;
+            tx.assert(iri("carol"), iri("confidence"), Value::Double(0.1), Valid::ALWAYS).map(|_| ())
+        });
+    }
+}

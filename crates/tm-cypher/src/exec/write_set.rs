@@ -3,7 +3,7 @@
 use tm_core::{Eid, Error, ObjectId, Patch, Valid, Value};
 use tm_ir::{Expr as IrExpr, Func, Key, Op, TermOrVar, TriplePattern, View};
 
-use super::access::{is_sys, tv, RDF_TYPE};
+use super::access::{is_sys, is_tx_time, tv, RDF_TYPE};
 use super::write::{oid, term_of};
 use super::{core, Exec, Row};
 use crate::ast::*;
@@ -164,9 +164,9 @@ impl Exec<'_> {
                     };
                     if let (Value::Stmt(e), true) = (&term, Self::is_temporal_name(&key)) {
                         match key.text.as_str() {
-                            "txAdded" | "txRetracted" => {
+                            k if is_tx_time(k) => {
                                 return Err(CypherError::unsupported(
-                                    format!("SET of {} (transaction time is read-only)", key.text),
+                                    format!("SET of {k} (transaction time is read-only)"),
                                     Some(key.span),
                                 ))
                             }
@@ -308,12 +308,9 @@ impl Exec<'_> {
                     };
                     if let (Value::Stmt(id), true) = (&term, Self::is_temporal_name(&key)) {
                         match key.text.as_str() {
-                            "txAdded" | "txRetracted" => {
+                            k if is_tx_time(k) => {
                                 return Err(CypherError::unsupported(
-                                    format!(
-                                        "REMOVE of {} (transaction time is read-only)",
-                                        key.text
-                                    ),
+                                    format!("REMOVE of {k} (transaction time is read-only)"),
                                     Some(key.span),
                                 ))
                             }

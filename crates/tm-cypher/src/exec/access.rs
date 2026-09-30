@@ -17,8 +17,34 @@ use crate::value::{CypherValue, NodeValue, PathValue, RelValue, Val};
 /// `rdf:type`.
 pub const RDF_TYPE: &str = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
 
-/// The four temporal names that denote statement metadata.
-pub const TEMPORAL: [&str; 4] = ["txAdded", "txRetracted", "validFrom", "validTo"];
+/// The temporal names that denote statement metadata.
+pub const TEMPORAL: [&str; 6] = [
+    "txAdded",
+    "txRetracted",
+    "addedAt",
+    "retractedAt",
+    "validFrom",
+    "validTo",
+];
+
+/// The virtual predicate behind a temporal name on a statement, `None` for any
+/// other name.
+pub fn temporal_iri(name: &str) -> Option<&'static str> {
+    Some(match name {
+        "txAdded" => irv::TM_TX_ADDED,
+        "txRetracted" => irv::TM_TX_RETRACTED,
+        "addedAt" => irv::TM_ADDED_AT,
+        "retractedAt" => irv::TM_RETRACTED_AT,
+        "validFrom" => irv::TM_VALID_FROM,
+        "validTo" => irv::TM_VALID_TO,
+        _ => return None,
+    })
+}
+
+/// True for a temporal name whose value is transaction time (read-only).
+pub fn is_tx_time(name: &str) -> bool {
+    matches!(name, "txAdded" | "txRetracted" | "addedAt" | "retractedAt")
+}
 
 /// Payload bit that marks the synthetic eid of a virtual layer hop.
 const VIRTUAL_EID: u64 = 1 << 59;
@@ -204,9 +230,10 @@ impl Exec<'_> {
         };
         Ok(match (virt, &o) {
             (irv::TM_TX_ADDED | irv::TM_TX_RETRACTED, Value::Tx(t)) => Val::Int(t.0 as i64),
-            (irv::TM_VALID_FROM | irv::TM_VALID_TO, Value::DateTime { ms, .. }) => {
-                Val::DateTime { ms: *ms, tz: 0 }
-            }
+            (
+                irv::TM_VALID_FROM | irv::TM_VALID_TO | irv::TM_ADDED_AT | irv::TM_RETRACTED_AT,
+                Value::DateTime { ms, .. },
+            ) => Val::DateTime { ms: *ms, tz: 0 },
             (irv::TM_RETRACT_KIND, Value::Int(k)) => match retract_kind_name(*k) {
                 Some(n) => Val::Str(n.to_string()),
                 None => Val::Null,

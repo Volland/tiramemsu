@@ -60,6 +60,7 @@ Every failure is a typed error, and a failed transaction leaves no trace: no tx 
 |---|---|
 | `UniqueViolation { p, o, existing }` | Asserting a second live subject for a `sys:unique` predicate |
 | `ValueTypeMismatch { p, expected, got }` | The object violates `sys:valueType` |
+| `SubjectTypeMismatch { p, expected, got }` | The subject's kind is none of the predicate's `sys:subjectType` tags (a typed layer written on a node, say) |
 | `CascadeLimitExceeded { root, limit }` | The cascade set is larger than `max_cascade` |
 | `NotLive(eid)` | `supersede` or `confirm` on a retracted or unknown eid |
 | `InvalidPatch` | A patch tries to change `s` or `p`, gives an empty interval (`v_from ≥ v_to`), or changes nothing |

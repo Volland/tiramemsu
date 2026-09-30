@@ -110,6 +110,7 @@ Rules:
 - A statement may not use its own eid as its subject or object. Longer cycles (e7 about e8 about e7) are allowed, and the cascade handles them with a visited set. See [[time-model#Cascade]].
 - There is no named-graph column. Context, source, session or agent membership is itself a layer triple on the eid, e.g. `(e1 sys:inGraph :session12)`, which is how [[data-model#Named Graphs]] work. Physical isolation per agent means one SQLite file per agent.
 - Transactions are subjects too: `(tx205 sys:reason "user correction")`, `(tx205 sys:author :agent7)`.
+- **Typed layers:** a layer predicate can be declared to annotate only statements with `(v:confidence sys:subjectType sys:STMT)`. Then `(e1 v:confidence 0.8)` is accepted and `(v:alice v:confidence 0.8)` fails with `SubjectTypeMismatch`, so a query reading `?e v:confidence ?c` sees only statement annotations. See [[data-model#Predicate Schema]].
 
 ## Named Graphs
 
@@ -223,9 +224,12 @@ Predicates may carry optional schema flags, stored as `sys:` triples with the pr
 | `sys:cardinality` | `sys:one` / `sys:many` | `one`: asserting a new object retracts live objects with overlapping valid time. See [[time-model#Operations#Cardinality One]] |
 | `sys:unique` | `true` | At most one live subject per object value. Enables upsert and Cypher `MERGE` on that key. See [[time-model#Operations#Unique Upsert]] |
 | `sys:valueType` | a tag or datatype IRI | Asserts with any other object type are rejected |
+| `sys:subjectType` | a subject tag IRI: `sys:IRI`, `sys:NODE`, `sys:BNODE`, `sys:STMT`, `sys:TX` | Asserts whose subject has another kind fail with `SubjectTypeMismatch`. Several values mean any-of |
 | `sys:isEdge` | `true` / `false` | Forces the relationship or property view in Cypher, whatever the object kind |
 | `sys:sensitive` | `true` | Reserved for M6: objects are sealed with the data subject's key. Format 1 rejects the flag. See [[time-model#Erasure]] |
 
 - Schema triples are ordinary triples, so they are versioned and queryable (`MATCH (p:Predicate)`).
-- A schema change that live data already violates is rejected, and the error lists the violating eids.
+- Each flag holds one live value, and a new value retracts the old one with kind `cardinality`, except `sys:subjectType`, whose values accumulate.
+- A schema change that live data already violates is rejected, and the error lists the violating eids. For `sys:subjectType` the check uses the set the change leaves: retracting or superseding one of several values narrows it and is checked too, while retracting the last value lifts the constraint.
+- Checks on a write run in the order value type, subject type, uniqueness, cardinality-one replacement ([[time-model#Operations#Assert]]). The flags in force are read into [[crates/tm-core/src/engine/schema.rs#PredicateSchema]].
 - Schema checks run inside the writer transaction. See [[architecture#Connections and Concurrency]].
