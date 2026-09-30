@@ -1,0 +1,34 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 500" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif" role="img" aria-labelledby="t d">
+  <title id="t">Tiramemsu architecture</title>
+  <desc id="d">SPARQL, Cypher and the Rust API compile to one logical IR. A planner routes it to generated SQL or the native path engine. Both read through one view-aware scan over transaction time and valid time, on one SQLite file reached through an executor trait.</desc>
+  <defs><marker id="m" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="#3b2418"/></marker></defs>
+  <rect width="760" height="500" rx="18" fill="#fffaf0" stroke="#ecdcc0" stroke-width="2"/>
+  <g stroke="#3b2418" stroke-width="2.5" font-size="15" text-anchor="middle" fill="#2a1a10">
+    <g fill="#fff1d6"><rect x="40" y="30" width="200" height="56" rx="12"/><rect x="280" y="30" width="200" height="56" rx="12"/><rect x="520" y="30" width="200" height="56" rx="12"/></g>
+    <text x="140" y="55" font-weight="700">SPARQL 1.1 + 1.2</text><text x="140" y="75" font-size="13" fill="#6b5443">tm-sparql · spargebra</text>
+    <text x="380" y="55" font-weight="700">openCypher</text><text x="380" y="75" font-size="13" fill="#6b5443">tm-cypher · dual view</text>
+    <text x="620" y="55" font-weight="700">Rust API</text><text x="620" y="75" font-size="13" fill="#6b5443">Db · View · Tx</text>
+
+    <rect x="40" y="128" width="680" height="62" rx="12" fill="#ffe3ea"/>
+    <text x="380" y="152" font-weight="700">Logical IR (tm-ir)</text>
+    <text x="380" y="174" font-size="13" fill="#6b5443">patterns · joins · paths · aggregates · per-pattern view · semantic flags (set/bag, homomorphism/isomorphism, null)</text>
+
+    <g fill="#fff4d8"><rect x="40" y="232" width="330" height="62" rx="12"/><rect x="390" y="232" width="330" height="62" rx="12"/></g>
+    <text x="205" y="257" font-weight="700">Planner + SQL codegen (tm-exec)</text><text x="205" y="278" font-size="13" fill="#6b5443">one statement · join order from STAT4 statistics</text>
+    <text x="555" y="257" font-weight="700">Path engine</text><text x="555" y="278" font-size="13" fill="#6b5443">automaton search · tm_path table function</text>
+
+    <rect x="40" y="336" width="680" height="54" rx="12" fill="#fff"/>
+    <text x="380" y="360" font-weight="700">View-aware scan: time is resolved in exactly one place</text>
+    <text x="380" y="380" font-size="13" fill="#6b5443">now · asOf(t) · history × validAt(d), per pattern</text>
+
+    <rect x="40" y="430" width="680" height="54" rx="12" fill="#d9b98a"/>
+    <text x="380" y="454" font-weight="700">One SQLite file (WAL, STRICT), via a synchronous Executor trait</text>
+    <text x="380" y="474" font-size="13" fill="#3b2418">triple(eid, s, p, o, t_add, t_ret, v_from, v_to) · term · tx · triggers that forbid DELETE</text>
+  </g>
+  <g stroke="#3b2418" stroke-width="2.5" marker-end="url(#m)" fill="none">
+    <path d="M140 86 V126"/><path d="M380 86 V126"/><path d="M620 86 V126"/>
+    <path d="M205 190 V230"/><path d="M555 190 V230"/>
+    <path d="M205 294 V334"/><path d="M555 294 V334"/>
+    <path d="M380 390 V428"/>
+  </g>
+</svg>

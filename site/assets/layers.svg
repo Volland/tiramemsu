@@ -1,0 +1,64 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 520" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif" role="img" aria-labelledby="t d">
+  <title id="t">Layered graph: facts, annotations and beliefs</title>
+  <desc id="d">Three stacked layers. The bottom layer holds the fact alice worksAt acme as an edge with its own id e1. The middle layer holds two statements about e1: a confidence and a source. The top layer holds a belief b9 that is supported by e1. Dashed arrows point from each layer statement to the statement it is about.</desc>
+  <defs>
+    <marker id="p" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#d2456a"/></marker>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#3b2418"/></marker>
+  </defs>
+  <rect width="760" height="520" rx="18" fill="#fffaf0" stroke="#ecdcc0" stroke-width="2"/>
+
+  <!-- layer cards with a offset shadow for depth -->
+  <g stroke="#3b2418" stroke-width="2.5">
+    <rect x="50" y="34" width="680" height="96" rx="14" fill="#e9d6b0"/><rect x="40" y="24" width="680" height="96" rx="14" fill="#fff1d6"/>
+    <rect x="50" y="174" width="680" height="96" rx="14" fill="#e9c4cf"/><rect x="40" y="164" width="680" height="96" rx="14" fill="#ffe3ea"/>
+    <rect x="50" y="314" width="680" height="96" rx="14" fill="#d9b98a"/><rect x="40" y="304" width="680" height="96" rx="14" fill="#fff4d8"/>
+  </g>
+  <g font-size="13" font-weight="700" fill="#6b5443" letter-spacing=".06em">
+    <text x="58" y="46">LAYER 3 · BELIEFS</text><text x="58" y="186">LAYER 2 · ANNOTATIONS</text><text x="58" y="326">LAYER 1 · FACTS</text>
+  </g>
+
+  <!-- layer 1: alice -e1-> acme -->
+  <g stroke="#3b2418" stroke-width="2.5">
+    <circle cx="150" cy="362" r="24" fill="#fff"/><circle cx="650" cy="362" r="24" fill="#fff"/>
+    <line x1="174" y1="362" x2="624" y2="362" marker-end="url(#a)"/>
+    <rect x="345" y="348" width="130" height="28" rx="14" fill="#ff8fa3"/>
+  </g>
+  <g font-size="15" fill="#2a1a10" text-anchor="middle">
+    <text x="150" y="367">alice</text><text x="650" y="367">acme</text>
+    <text x="410" y="367" font-weight="700" fill="#2a1018">e1 · worksAt</text>
+  </g>
+
+  <!-- layer 2: statements about e1 -->
+  <g stroke="#3b2418" stroke-width="2.5" fill="#fff">
+    <rect x="160" y="206" width="170" height="30" rx="15"/><rect x="490" y="206" width="190" height="30" rx="15"/>
+  </g>
+  <g font-size="14" text-anchor="middle" fill="#2a1a10">
+    <text x="245" y="226">e2 · confidence 0.8</text><text x="585" y="226">e3 · source “chat-42”</text>
+  </g>
+
+  <!-- layer 3: b9 -e7 supportedBy-> e1 -->
+  <g stroke="#3b2418" stroke-width="2.5" fill="#fff">
+    <circle cx="200" cy="80" r="22"/>
+    <rect x="325" y="66" width="170" height="30" rx="15"/>
+  </g>
+  <line x1="222" y1="80" x2="325" y2="80" stroke="#3b2418" stroke-width="2.5"/>
+  <g font-size="14" text-anchor="middle" fill="#2a1a10">
+    <text x="200" y="85">b9</text><text x="410" y="86">e7 · supportedBy</text>
+  </g>
+
+  <!-- "is about": a layer statement has the id of the statement below it as subject or object -->
+  <g fill="none" stroke="#d2456a" stroke-width="2.5" stroke-dasharray="6 5">
+    <path d="M410 96 V344" marker-end="url(#p)"/>
+    <path d="M245 236 C 250 290, 340 300, 372 346" marker-end="url(#p)"/>
+    <path d="M585 236 C 580 290, 480 300, 448 346" marker-end="url(#p)"/>
+  </g>
+
+  <!-- legend -->
+  <g font-size="14" fill="#2a1a10">
+    <rect x="40" y="432" width="680" height="72" rx="12" fill="#fff" stroke="#ecdcc0" stroke-width="2"/>
+    <circle cx="66" cy="458" r="9" fill="#fff" stroke="#3b2418" stroke-width="2.5"/><text x="84" y="463">node</text>
+    <rect x="150" y="448" width="34" height="20" rx="10" fill="#ff8fa3" stroke="#3b2418" stroke-width="2.5"/><text x="194" y="463">statement (an edge with its own id)</text>
+    <path d="M470 458 H508" stroke="#d2456a" stroke-width="2.5" stroke-dasharray="6 5" marker-end="url(#p)"/><text x="520" y="463">is about (id as subject)</text>
+    <text x="58" y="490" fill="#6b5443">Each arrow is one ordinary triple, so a layer can sit on a layer, to any depth.</text>
+  </g>
+</svg>

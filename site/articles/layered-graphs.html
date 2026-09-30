@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Layered graphs, explained: tiramemsu</title>
+<meta name="description" content="What a layered graph is, why giving every fact an id makes provenance, confidence and beliefs ordinary queries, and how tiramemsu stores and corrects them.">
+<link rel="icon" href="../assets/logo.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+<header class="top"><div class="wrap">
+  <a class="brand" href="../"><img src="../assets/logo.svg" alt="">Tiramemsu</a>
+  <nav class="menu"><a href="../#features">Features</a><a href="../#start">Quick start</a><a href="./" aria-current="page">Articles</a><a href="https://github.com/Volland/tiramemsu">GitHub</a></nav>
+</div></header>
+
+<article class="post">
+<h1>Layered graphs, explained</h1>
+<p class="meta">Tiramemsu articles · 30 September 2026</p>
+
+<p>A knowledge graph stores facts: <em>Alice works at Acme</em>. Agents need more than that. They need to say <em>how sure am I</em>, <em>where did I read it</em>, <em>who told me</em>, <em>what do I conclude from it</em>, and later <em>I was wrong, it was Globex</em>. Those are statements about statements. A <strong>layered graph</strong> is a graph where that is not a special feature, because every fact has an id and can be talked about like any other node.</p>
+
+<h2>The problem: a triple cannot point at itself</h2>
+<p>In a plain triple store, <code>alice worksAt acme</code> is a row with no name. To add a confidence you have three bad options:</p>
+<ul>
+  <li><strong>Reification</strong> (RDF 1.0): invent a node <code>_:r</code>, then add <code>_:r subject alice</code>, <code>_:r predicate worksAt</code>, <code>_:r object acme</code>, and only then <code>_:r confidence 0.8</code>. Four extra rows, and the original fact is a separate row that nothing links to.</li>
+  <li><strong>Quads</strong>: put the fact in a “context” graph and describe the graph. The confidence now belongs to a group of facts, not to this one.</li>
+  <li><strong>Property graphs</strong>: an edge can have properties, but an edge cannot be the target of another edge, so a belief cannot be “about” a relationship.</li>
+</ul>
+
+<h2>The idea: every statement has an id</h2>
+<p>In tiramemsu, a fact is a row <code>(eid, s, p, o)</code> plus its lifetime. The <code>eid</code> is its address. Since an id can be used anywhere a node can, another statement can have it as its subject or object:</p>
+<figure>
+  <img src="../assets/layers.svg" alt="Three layers: the fact alice worksAt acme with id e1, a confidence e2 and a source e3 about e1, and a belief b9 supported by e1" width="760" height="520">
+  <figcaption>Layer 1 holds the fact. Layer 2 holds statements whose subject is <code>e1</code>. Layer 3 holds a belief whose object is <code>e1</code>. Each dashed arrow is one ordinary row.</figcaption>
+</figure>
+<p>There is no second data structure. “Layer” only describes how statements point at each other, and the depth is not limited. A confidence in a source's reliability is a statement about <code>e3</code>, which is a statement about <code>e1</code>. A statement may not use its own id, but longer cycles are allowed.</p>
+
+<h2>Asking layered questions</h2>
+<p>In SPARQL, RDF 1.2 annotation syntax binds straight to the id. These queries are from the test suite:</p>
+<pre><code><span class="c"># the fact's confidence and source, in one pattern</span>
+SELECT ?c ?s WHERE {
+  v:alice v:worksAt v:acme {| v:confidence ?c ; v:source ?s |}
+}
+
+<span class="c"># bind the id, then use it like any node</span>
+SELECT ?p ?c WHERE {
+  ?p v:worksAt v:acme ~ ?r
+  OPTIONAL { ?r v:confidence ?c }
+}
+
+<span class="c"># a layer on a layer: the method behind the confidence</span>
+SELECT ?c ?m WHERE {
+  v:alice v:worksAt v:acme {| v:confidence ?c ~ ?r2 {| v:method ?m |} |}
+}</code></pre>
+<p>In Cypher, the same id has two faces. It is a relationship, and it is also a node with the label <code>:Statement</code>, so a relationship can be the target of a pattern:</p>
+<pre><code>MATCH (a)-[r:worksAt]-&gt;(c), (b:Belief)-[:supportedBy]-&gt;(r)
+RETURN a, c, r.confidence, r.txAdded, b</code></pre>
+<p>A literal-valued statement about <code>r</code> reads as a property (<code>r.confidence</code>), and a node- or statement-valued one reads as a relationship. Both languages see the same rows, and a differential test suite checks that equivalent queries return equal results.</p>
+
+<h2>Walking across layers</h2>
+<p>To find what a belief rests on, follow its statements down to the entities they mention. The virtual hops <code>sys:subject</code> and <code>sys:object</code> step from a statement to its parts, so a path can cross layers:</p>
+<pre><code><span class="c"># SPARQL: everything behind belief9, through any number of layers</span>
+SELECT ?x WHERE { v:belief9 v:supportedBy/(sys:subject|sys:object)+ ?x }
+
+<span class="c"># Cypher</span>
+MATCH p = (b:Belief)-[:SUPPORTED_BY|`sys:subject`*2]-&gt;(x) RETURN x</code></pre>
+
+<h2>Layers have a life of their own</h2>
+<p>Because a layer statement is an ordinary row, it has its own transaction time and valid time. So the structure itself is versioned:</p>
+<ul>
+  <li><strong>Retracting a fact retracts its layers.</strong> The cascade follows subject and object positions, and every cascaded row gets the same retraction time, so <code>as_of</code> just before it still shows the whole structure, including what a belief relied on.</li>
+  <li><strong>Correcting a fact replays its layers.</strong> <code>supersede</code> retracts the fact and everything hanging off it, then inserts them again on the new fact, in one transaction. The history shows one correction, and the confidence and source survive.</li>
+  <li><strong>Changing a value is different.</strong> For a single-valued predicate like an age, <code>30</code> becoming <code>31</code> is a new fact: the source of “30” does not apply to “31”, so its layers are retracted and not replayed.</li>
+  <li><strong>Corroboration is a layer.</strong> <code>confirm(eid)</code> adds <code>(eid sys:confirmedBy tx)</code>, and the transaction carries the source and author. “Seen five times from three sources” is a query.</li>
+</ul>
+
+<h2>Named graphs are one more layer</h2>
+<p>Grouping by session, source document or agent is the same trick. A graph is a node, and membership is a statement <code>(e sys:inGraph g)</code> about the fact's id. A fact can be in many graphs or none, and it keeps a single id whatever the number. <code>GRAPH</code>, <code>FROM</code> and <code>WITH</code> in SPARQL work on it, and metadata about the graph is ordinary triples about the graph node.</p>
+
+<h2>What it costs</h2>
+<p>An id is not free. On a 750 000-triple test where 10 % of edges are annotated, the id-per-statement layout was about 50 % larger than a clustered <code>(s,p,o)</code> table with RDF 1.2 reifiers, and 2× slower on a set-semantics 2-hop join, because duplicates have to be removed. It was faster on annotation-heavy reads and writes (1.3× to 2.5×). The engine now skips duplicate removal for predicates that have never held two ids for the same triple. <a href="tiramemsu-vs-oxilite.html#numbers">The full table is in the comparison article.</a></p>
+<p class="note">If you never annotate, never correct and never look at the past, a plain triple store is smaller and simpler. Layers pay off when provenance, belief and revision are the point.</p>
+
+<h2>Try it</h2>
+<p>The repository has a runnable example, <code>cargo run -p tiramemsu --example quickstart</code>, which asserts a fact with a confidence and a source, corrects it, and queries before and after in SPARQL and Cypher.</p>
+<p><a href="tiramemsu-vs-oxilite.html">Next: how tiramemsu differs from oxilite →</a></p>
+</article>
+
+<footer><div class="wrap">
+  <span>Tiramemsu · MIT OR Apache-2.0 · <a href="https://github.com/Volland/tiramemsu">github.com/Volland/tiramemsu</a></span>
+  <span><a href="../">Home</a> · <a href="./">All articles</a></span>
+</div></footer>
+</body>
+</html>

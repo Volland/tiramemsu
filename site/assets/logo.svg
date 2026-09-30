@@ -1,0 +1,80 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-labelledby="t d">
+  <title id="t">Tiramemsu</title>
+  <desc id="d">A brain taking a bite out of a tiramisu whose layers are the layers of a graph: nodes on each layer joined by edges that cross between layers.</desc>
+  <defs>
+    <clipPath id="slice"><path d="M36 128 L204 128 L204 226 Q204 232 198 232 L42 232 Q36 232 36 226 Z"/></clipPath>
+    <clipPath id="top"><path d="M36 128 L204 128 L236 106 L68 106 Z"/></clipPath>
+    <clipPath id="side"><path d="M204 128 L236 106 L236 210 L204 232 Z"/></clipPath>
+    <mask id="bite">
+      <rect width="256" height="256" fill="#fff"/>
+      <circle cx="190" cy="112" r="15" fill="#000"/>
+      <circle cx="212" cy="118" r="11" fill="#000"/>
+      <circle cx="176" cy="126" r="9" fill="#000"/>
+    </mask>
+  </defs>
+
+  <!-- the tiramisu; a bite is missing at the top right, under the brain's mouth -->
+  <g mask="url(#bite)" stroke="#3b2418" stroke-width="4" stroke-linejoin="round">
+    <!-- front face: sponge, cream, sponge, cream, cocoa -->
+    <g clip-path="url(#slice)" stroke="none">
+      <rect x="36" y="128" width="168" height="104" fill="#c9924f"/>
+      <rect x="36" y="128" width="168" height="24" fill="#fff4d8"/>
+      <rect x="36" y="152" width="168" height="24" fill="#b07a3c"/>
+      <rect x="36" y="176" width="168" height="24" fill="#fff4d8"/>
+      <rect x="36" y="200" width="168" height="32" fill="#b07a3c"/>
+      <!-- coffee soaked into the sponge -->
+      <path d="M36 158 q20 8 40 0 t40 0 t40 0 t12 -2 v6 q-12 4 -28 0 t-40 0 t-40 0 t-24 2z" fill="#7a4a24" opacity=".55"/>
+      <path d="M36 208 q20 8 40 0 t40 0 t40 0 t12 -2 v6 q-12 4 -28 0 t-40 0 t-40 0 t-24 2z" fill="#7a4a24" opacity=".55"/>
+    </g>
+    <!-- right side face, darker -->
+    <g clip-path="url(#side)" stroke="none">
+      <rect x="204" y="106" width="32" height="126" fill="#a5793f"/>
+      <rect x="204" y="128" width="32" height="24" fill="#e8d7ae"/>
+      <rect x="204" y="176" width="32" height="24" fill="#e8d7ae"/>
+    </g>
+    <!-- top face, dusted with cocoa -->
+    <g clip-path="url(#top)" stroke="none">
+      <rect x="36" y="106" width="200" height="22" fill="#5a3320"/>
+      <g fill="#3b2418" opacity=".7"><circle cx="70" cy="120" r="1.6"/><circle cx="92" cy="114" r="1.4"/><circle cx="112" cy="122" r="1.6"/><circle cx="134" cy="112" r="1.4"/><circle cx="150" cy="122" r="1.6"/><circle cx="118" cy="116" r="1.2"/></g>
+    </g>
+    <g fill="none">
+      <path d="M36 128 L68 106 H150"/>
+      <path d="M36 128 V226 Q36 232 42 232 H204 L236 210 V148"/>
+      <path d="M36 128 H168 M204 128 V232"/>
+    </g>
+  </g>
+
+  <!-- the layered graph: nodes sit on the layers, edges cross between them -->
+  <g stroke="#3b2418" stroke-width="3" stroke-linecap="round" fill="none">
+    <path d="M62 140 L104 164"/><path d="M104 164 L82 188"/><path d="M104 164 L152 142"/>
+    <path d="M152 142 L172 188"/><path d="M82 188 L130 216"/><path d="M172 188 L130 216"/>
+    <path d="M62 140 L152 142" stroke-dasharray="1 7"/>
+  </g>
+  <g stroke="#3b2418" stroke-width="3">
+    <circle cx="62" cy="140" r="7" fill="#fff4d8"/>
+    <circle cx="152" cy="142" r="7" fill="#fff4d8"/>
+    <circle cx="104" cy="164" r="8" fill="#ff8fa3"/>
+    <circle cx="82" cy="188" r="7" fill="#fff4d8"/>
+    <circle cx="172" cy="188" r="7" fill="#fff4d8"/>
+    <circle cx="130" cy="216" r="8" fill="#ff8fa3"/>
+  </g>
+
+  <!-- the brain, with a mouth open over the bite -->
+  <g stroke="#3b2418" stroke-width="4" stroke-linejoin="round" stroke-linecap="round">
+    <path d="M132 84 c-16 -4 -22 -22 -8 -32 c2 -14 20 -20 32 -12 c8 -10 28 -8 34 6 c14 2 20 18 12 28 c8 10 0 26 -14 26 c-6 8 -22 8 -30 0 c-14 4 -30 -6 -26 -16z" fill="#f7a9ba"/>
+    <g fill="none" stroke="#c76a83" stroke-width="3">
+      <path d="M158 44 c-4 12 4 18 -2 30"/>
+      <path d="M140 58 c8 -2 10 6 16 4"/>
+      <path d="M176 52 c-8 4 -6 14 2 16"/>
+      <path d="M138 78 c6 -4 12 0 14 6"/>
+      <path d="M168 84 c4 -6 12 -6 18 -2"/>
+    </g>
+    <!-- open mouth and eyes -->
+    <path d="M150 90 q14 14 32 0 q-2 12 -16 12 q-12 0 -16 -12z" fill="#7a2338" stroke-width="3"/>
+    <path d="M158 96 q8 5 16 0" fill="none" stroke="#ff8fa3" stroke-width="3"/>
+    <circle cx="150" cy="70" r="3.6" fill="#3b2418" stroke="none"/>
+    <circle cx="176" cy="70" r="3.6" fill="#3b2418" stroke="none"/>
+  </g>
+  <!-- crumbs -->
+  <g fill="#5a3320"><circle cx="196" cy="98" r="2.2"/><circle cx="208" cy="92" r="1.8"/><circle cx="188" cy="90" r="1.6"/></g>
+</svg>

@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tiramemsu: layered, never-forget memory for agents</title>
+<meta name="description" content="Tiramemsu is an embedded graph database on SQLite. Every fact has an id, so facts can carry layers of provenance and belief, and nothing is ever deleted. SPARQL and Cypher over one store.">
+<link rel="icon" href="assets/logo.svg" type="image/svg+xml">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="top"><div class="wrap">
+  <a class="brand" href="./"><img src="assets/logo.svg" alt="">Tiramemsu</a>
+  <nav class="menu"><a href="#features">Features</a><a href="#layers">Layers</a><a href="#start">Quick start</a><a href="articles/">Articles</a><a href="https://github.com/Volland/tiramemsu">GitHub</a></nav>
+</div></header>
+
+<main>
+<div class="wrap hero">
+  <div>
+    <h1>Memory that has <em>layers</em> and never forgets.</h1>
+    <p class="lead">Tiramemsu is an embedded graph database on SQLite for agent and personal memory. Every fact has its own id, so a fact can carry a confidence, a source, or a belief about it, layer on layer. Every change is kept, with when it was made and when it was true.</p>
+    <div class="btns"><a class="btn primary" href="#start">Quick start</a><a class="btn" href="articles/layered-graphs.html">What are layered graphs?</a><a class="btn" href="articles/tiramemsu-vs-oxilite.html">Tiramemsu vs oxilite</a></div>
+  </div>
+  <img src="assets/logo.svg" alt="A brain taking a bite out of a tiramisu whose layers are a graph">
+</div>
+
+<section id="features"><div class="wrap">
+  <h2>What it does</h2>
+  <p class="sub">A small Rust core over one SQLite file. Two query languages, one store, exact answers to “what did we know, and when?”.</p>
+  <div class="grid">
+    <div class="card"><span class="tag">Layers</span><h3>Every fact has an id</h3><p>A statement is a row with its own id, so it can be the subject or object of other statements. Provenance, confidence and beliefs stack to any depth.</p></div>
+    <div class="card"><span class="tag">Time</span><h3>Bitemporal, forever</h3><p>Transaction time records when the database learned or dropped a fact. Valid time records when it held in the world. <code>as_of</code>, <code>history</code> and <code>valid_at</code> views, per query or per pattern.</p></div>
+    <div class="card"><span class="tag">Never forget</span><h3>Nothing is deleted</h3><p>SQLite triggers forbid <code>DELETE</code> and second retractions in the file itself. Forgetting means retracting, and the past stays exact.</p></div>
+    <div class="card"><span class="tag">Correct</span><h3>Supersede, confirm, speculate</h3><p>Correct a fact and its layers are replayed on the new one. Confirm a fact from a new source. Try changes in a <code>with</code> block that leaves no trace.</p></div>
+    <div class="card"><span class="tag">Query</span><h3>SPARQL and Cypher</h3><p>SPARQL 1.1 with RDF 1.2 annotations, and openCypher, share one IR and one semantics table. A relationship is also a <code>:Statement</code> node.</p></div>
+    <div class="card"><span class="tag">Paths</span><h3>Native path engine</h3><p>Reachability, trails and shortest paths as an automaton search, also as a SQL table function. Paths can cross layers to reach what a belief is about.</p></div>
+    <div class="card"><span class="tag">Graphs</span><h3>Named graphs as tags</h3><p>A graph is a node and membership is one more layer statement. <code>GRAPH</code>, <code>FROM</code> and <code>WITH</code> work with no new column or table.</p></div>
+    <div class="card"><span class="tag">Embedded</span><h3>One file, one crate</h3><p>Rust library over bundled SQLite (WAL, STRICT). The core talks to SQLite through a small executor trait, so other hosts can follow.</p></div>
+  </div>
+</div></section>
+
+<section id="layers"><div class="wrap">
+  <h2>Layered graphs</h2>
+  <p class="sub">A layer is not a separate structure. It is a statement whose subject is the id of another statement.</p>
+  <figure><img src="assets/layers.svg" alt="Three layers: the fact alice worksAt acme, a confidence and a source about it, and a belief supported by it" width="760" height="520"></figure>
+  <p><a href="articles/layered-graphs.html">Read the full explanation →</a></p>
+</div></section>
+
+<section id="how"><div class="wrap">
+  <h2>How it is built</h2>
+  <p class="sub">Two front ends compile to one logical IR. Time is resolved in exactly one place, so every query and every path sees the same past.</p>
+  <figure><img src="assets/architecture.svg" alt="Architecture: SPARQL, Cypher and the Rust API compile to one IR; a planner and a path engine read through a view-aware scan over one SQLite file" width="760" height="500"></figure>
+</div></section>
+
+<section id="start"><div class="wrap">
+  <h2>Quick start</h2>
+  <p class="sub">This is <code>crates/tiramemsu/examples/quickstart.rs</code>, which you can run with <code>cargo run -p tiramemsu --example quickstart</code>. Setup lines are trimmed here.</p>
+<pre><code><span class="k">let</span> db = Db::open(dir.join(<span class="s">"memory.db"</span>), OpenOptions::default())?;
+
+<span class="c">// 1. A fact is a statement with its own id, so it can carry layers.</span>
+db.transact(TxOptions::default(), |tx| {
+    <span class="k">let</span> eid = <span class="k">match</span> tx.assert(v(<span class="s">"alice"</span>), v(<span class="s">"worksAt"</span>), v(<span class="s">"acme"</span>), Valid::ALWAYS)? {
+        Asserted::New(e) | Asserted::Existing(e) =&gt; e,
+    };
+    tx.assert(Value::Stmt(eid), v(<span class="s">"confidence"</span>), &amp;conf, Valid::ALWAYS)?;
+    tx.assert(Value::Stmt(eid), v(<span class="s">"source"</span>), Value::str(<span class="s">"chat-2026-09-29"</span>), Valid::ALWAYS)?;
+    Ok(())
+})?;
+
+<span class="c">// 2. Correct it: the layers are replayed on the new fact, nothing is deleted.</span>
+<span class="k">let</span> corrected = db.transact(TxOptions::default(), |tx| {
+    tx.supersede(fact, Patch { o: Some(v(<span class="s">"globex"</span>)), ..Patch::default() })?; Ok(())
+})?;
+
+<span class="c">// 3. What is believed now, and what was believed before the correction?</span>
+<span class="k">let</span> q = <span class="s">"SELECT ?who ?org WHERE { ?who v:worksAt ?org }"</span>;
+db.as_of(TimeRef::Tx(corrected.t.0 - <span class="s">1</span>)).sparql(q)?;   <span class="c">// alice → acme</span>
+db.now().sparql(q)?;                                        <span class="c">// alice → globex</span>
+
+<span class="c">// 4. The same store in Cypher: the confidence layer is a relationship property.</span>
+db.now().cypher(<span class="s">"MATCH (p)-[r:worksAt]-&gt;(o) RETURN p, o, r.confidence"</span>, &amp;CypherParams::default())?; <span class="c">// 0.8</span></code></pre>
+</div></section>
+
+<section id="numbers"><div class="wrap">
+  <h2>Where it stands</h2>
+  <p class="sub">Tiramemsu is new: designed in September 2026 and implemented in one pass. Here is what is measured, and what is not.</p>
+  <div class="grid">
+    <div class="card"><h3>58 000 lines of Rust</h3><p>Seven crates, 927 tests, 30 capability specs written before the code (OpenSpec) and a design graph kept in sync (lat.md).</p></div>
+    <div class="card"><h3>SPARQL</h3><p>634 of 781 in-scope W3C tests pass. Every other one is listed with a reason, and an unexpected result fails the build.</p></div>
+    <div class="card"><h3>Cypher</h3><p>2 615 of 3 880 openCypher TCK scenarios (67 %). Temporal types, <code>CALL</code> and a few dual-view cases are deferred and listed.</p></div>
+    <div class="card"><h3>Speed</h3><p>Raw SQLite lookups on its schema take about 4 µs at 11 million statements. Statements cost about 150 bytes each with all indexes. <a href="articles/tiramemsu-vs-oxilite.html#numbers">Details and caveats</a>.</p></div>
+  </div>
+  <p class="note"><strong>Known limits.</strong> As-of lookups slow down as one key collects many updates. Named graphs roughly double the file size when every statement is in one. Decimals come back as doubles in SPARQL. There is no server, binding or MCP crate yet.</p>
+</div></section>
+
+<section id="articles"><div class="wrap">
+  <h2>Articles</h2>
+  <ul class="list-articles">
+    <li class="card"><h3><a href="articles/layered-graphs.html">Layered graphs, explained</a></h3><p>Why giving every fact an id turns provenance, confidence and beliefs into ordinary queries.</p></li>
+    <li class="card"><h3><a href="articles/tiramemsu-vs-oxilite.html">How tiramemsu differs from oxilite</a></h3><p>Same author, same SQLite base, different answers to “what is a statement?”. With a benchmark.</p></li>
+  </ul>
+</div></section>
+</main>
+
+<footer><div class="wrap">
+  <span>Tiramemsu · MIT OR Apache-2.0 · <a href="https://github.com/Volland/tiramemsu">github.com/Volland/tiramemsu</a></span>
+  <span>Static page: no scripts, no trackers, no external fonts.</span>
+</div></footer>
+</body>
+</html>

@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>How tiramemsu differs from oxilite</title>
+<meta name="description" content="Tiramemsu and oxilite share an author and a SQLite base. They differ on what a statement is, how time is stored, and where they run. A comparison with a benchmark and a list of what each does not do.">
+<link rel="icon" href="../assets/logo.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+<header class="top"><div class="wrap">
+  <a class="brand" href="../"><img src="../assets/logo.svg" alt="">Tiramemsu</a>
+  <nav class="menu"><a href="../#features">Features</a><a href="../#start">Quick start</a><a href="./" aria-current="page">Articles</a><a href="https://github.com/Volland/tiramemsu">GitHub</a></nav>
+</div></header>
+
+<article class="post">
+<h1>How tiramemsu differs from oxilite</h1>
+<p class="meta">Tiramemsu articles · 30 September 2026</p>
+
+<p><a href="https://github.com/Volland/oxilite">oxilite</a> is a shipped, Oxigraph-compatible RDF database on SQLite, by the same author. Tiramemsu started from what oxilite taught and asks a different question. oxilite asks <em>“how do I run standard RDF and SPARQL anywhere SQLite runs, including Cloudflare D1?”</em>. Tiramemsu asks <em>“what should an agent's memory look like if every fact can be corrected, doubted and revisited?”</em>. They are complements more than competitors, and it is honest to start with the difference in maturity.</p>
+
+<h2>Maturity first</h2>
+<table>
+<tr><th></th><th>oxilite</th><th>tiramemsu</th></tr>
+<tr><td>Status</td><td>Shipped, published, documented, with bindings and a studio</td><td>New. Designed and implemented in September 2026, one library, no bindings yet</td></tr>
+<tr><td>Conformance</td><td>Oxigraph's own W3C and store tests run on it; 96 % of the openCypher TCK</td><td>634 of 781 in-scope W3C tests; 67 % of the TCK (deviations listed, not hidden)</td></tr>
+<tr><td>Where it runs</td><td>rusqlite, dlopen, Turso, Cloudflare D1, WebAssembly, Durable Objects</td><td>rusqlite only (an executor trait leaves room for more)</td></tr>
+<tr><td>Also has</td><td>Datalog, OWL reasoning, SHACL and ShEx, JSON-LD and credentials, full-text, vectors, Python and Node bindings, MCP</td><td>None of these yet. Full-text and vectors are planned</td></tr>
+</table>
+<p>If you need SPARQL on D1, reasoning, or a drop-in for Oxigraph today, use oxilite. What follows is where the designs differ, not a claim that tiramemsu does more.</p>
+
+<h2>1. What is a statement?</h2>
+<p>This is the root difference. In oxilite a statement is a <strong>quad</strong> <code>(s, p, o, g)</code>: a key in a clustered table, so the same triple in the same graph is one row, as RDF says. To say something about a triple, oxilite uses RDF 1.2 <em>reifiers</em>: a separate node that points at a “triple term”. It adds a reifier only when needed, for relationship properties or parallel edges.</p>
+<p>In tiramemsu a statement is a <strong>row with its own id</strong>, <code>(eid, s, p, o)</code>, plus a lifetime. Two rows with the same <code>(s, p, o)</code> are two occurrences, each with its own history. The id can be the subject or object of any other statement, which is what makes <a href="layered-graphs.html">layered graphs</a> a native feature and not an encoding.</p>
+<figure>
+<table>
+<tr><th>Concern</th><th>oxilite (quads + reifiers)</th><th>tiramemsu (statement ids)</th></tr>
+<tr><td>Annotate a fact</td><td>Triple term + reifier node + the annotation: 3 rows</td><td>1 row whose subject is the fact's id</td></tr>
+<tr><td>Annotate an annotation</td><td>Another triple term and reifier</td><td>1 row again</td></tr>
+<tr><td>Same fact, two episodes</td><td>One row; history is in a separate change log</td><td>Two rows, each with lifetime and valid time</td></tr>
+<tr><td>Retract with its annotations</td><td>Ambiguous: reifiers are shared by every occurrence</td><td>Cascade over subject and object positions</td></tr>
+<tr><td>RDF semantics</td><td>Set of quads, standard</td><td>Set semantics recovered per query, bag for Cypher</td></tr>
+<tr><td>Graphs</td><td>A column in every key</td><td>A node, plus a membership statement</td></tr>
+</table>
+</figure>
+
+<h2>2. How is time stored?</h2>
+<p>oxilite keeps <code>quads</code> as the present and records changes beside it in an append-only <code>quad_log</code>, written by triggers, at an opt-in versioning level. A past state is read from the log with a probe per pattern. That keeps present-day queries exactly as fast as before, and it is a good fit for D1, where every index entry is billed.</p>
+<p>Tiramemsu makes time part of the row: <code>t_add</code> and <code>t_ret</code> for when the database believed it, and <code>v_from</code> and <code>v_to</code> for when it was true. It is always on and bitemporal, which oxilite is not (it has no valid time). Current state is served by partial indexes on <code>t_ret IS NULL</code>, and the past by full covering indexes with the newest version first. The bet is that a past read is one index range, not a log probe. <strong>That bet is not yet tested head to head</strong>; oxilite's own benchmark harness is queued to run on both.</p>
+<p>Tiramemsu also refuses to forget. SQLite triggers reject <code>DELETE</code> and any second change to a row, inside the file. oxilite has a real <code>purge</code> that rewrites history. Tiramemsu plans crypto-shredding for legal erasure instead: destroy a key, keep the rows.</p>
+
+<h2>3. What can you do to a fact?</h2>
+<p>oxilite gives you SPARQL Update: insert and delete triples, with commits, diffs and time travel around them. Tiramemsu adds memory verbs, because a memory needs more than insert and delete:</p>
+<ul>
+  <li><code>assert</code> is idempotent and <code>create</code> makes a parallel edge.</li>
+  <li><code>supersede</code> corrects a fact and replays its layers.</li>
+  <li><code>confirm</code> records another source for a fact.</li>
+  <li>A predicate can be <em>cardinality one</em> (a new value replaces the old) or <em>unique</em> (upsert by key).</li>
+  <li><code>with</code> runs a hypothetical change and discards it. <code>dry_run</code> previews a cascade.</li>
+</ul>
+
+<h2>4. Two languages, one IR</h2>
+<p>oxilite lowers Cypher to SPARQL algebra and evaluates what SQL cannot in a Rust tail. That reuses its planner and works well: it passes 96 % of the TCK. Tiramemsu has one logical IR with explicit semantic flags (set or bag, homomorphism or relationship isomorphism, unbound or three-valued null), so both languages sit beside each other, and a differential suite checks that equivalent queries agree. The cost is that tiramemsu's Cypher runs part of its work in an interpreter, and its TCK score is lower for now.</p>
+<p>Tiramemsu also has a native path engine, an automaton search that batches neighbour lookups per layer. It exposes a <code>tm_path</code> table function and can cross layers. oxilite uses recursive CTEs seeded from a bound endpoint.</p>
+
+<h2>5. Where it runs</h2>
+<p>oxilite's core does no I/O. It emits SQL requests and consumes responses, so the same compiler runs against rusqlite, D1 or JavaScript. Every write is one atomic batch, because D1 offers nothing else. Tiramemsu's engine reads before it writes (idempotent assert, cascades, unique checks), so it needs interactive transactions and cannot run on D1. It talks to SQLite through a small synchronous trait, which leaves room for Durable Objects, Turso or WebAssembly, and for now only rusqlite is implemented.</p>
+
+<h2 id="numbers">6. A benchmark: what does an id cost?</h2>
+<p>To check the cost of statement ids, the same 750 000 triples were loaded into two layouts on SQLite, with 10 % of the <code>knows</code> edges carrying a confidence and 1 % of those carrying a source. <em>A</em> is tiramemsu's layout (id as rowid, annotations as rows about the id). <em>B</em> is oxilite's model (clustered <code>(s,p,o)</code> key, triple terms and reifiers). Both had three covering permutations and live data only.</p>
+<table>
+<tr><th>Measure</th><th>A: ids</th><th>B: reifiers</th><th>B vs A</th></tr>
+<tr><td>File size</td><td>53.6 MB</td><td>35.5 MB</td><td class="win">B is 34 % smaller</td></tr>
+<tr><td>Plain point lookup</td><td>2.7 µs</td><td>2.8 µs</td><td>same</td></tr>
+<tr><td>A node's edges with their confidence</td><td>6.5 µs</td><td>8.7 µs</td><td class="lose">A is 1.3× faster</td></tr>
+<tr><td>All edges with confidence ≥ 95</td><td>2.1 ms</td><td>5.2 ms</td><td class="lose">A is 2.5× faster</td></tr>
+<tr><td>Source of a confidence (2 levels)</td><td>5.0 µs</td><td>5.3 µs</td><td>about equal</td></tr>
+<tr><td>2-hop join, SPARQL set semantics</td><td>10.3 µs</td><td>4.9 µs</td><td class="win">B is 2× faster</td></tr>
+<tr><td>2-hop join, bag semantics</td><td>5.0 µs</td><td>4.7 µs</td><td>same</td></tr>
+<tr><td>Write an edge and a confidence</td><td>35 µs</td><td>47 µs</td><td class="lose">A is 1.3× faster</td></tr>
+</table>
+<p>The id costs about half again in storage and pays for itself on annotation-heavy reads and writes. It loses on set-semantics joins, where duplicates must be removed, and tiramemsu now skips that step for predicates that have never held two ids for the same triple (halving that join in the same test). The script is in the repository under <code>bench/eid-vs-reifier/</code>. It is one machine and a synthetic data set, so treat it as a direction, not a verdict.</p>
+<p>oxilite reports its own numbers for history: about 4.8 rows written per triple without versioning and 8.8 with its full as-of index, and past reads about 3× the present for subject-bound patterns, 10–100× without the as-of index for predicate-bound ones. Tiramemsu's full schema stores about 150 bytes per statement, and the as-of lookup slows down as one key collects many updates (2.7 µs at one update per key, 45 µs at a thousand). Both have a weak spot in history. They are different ones.</p>
+
+<h2>Which should you use?</h2>
+<table>
+<tr><th>You want</th><th>Use</th></tr>
+<tr><td>Standard RDF and SPARQL, Oxigraph compatibility, D1, reasoning or SHACL</td><td>oxilite</td></tr>
+<tr><td>Facts that carry provenance, confidence and beliefs, with corrections and exact history of both belief and truth</td><td>tiramemsu</td></tr>
+<tr><td>A mature dependency today</td><td>oxilite</td></tr>
+</table>
+<p class="note">Tiramemsu borrowed from oxilite on purpose: statistics as a precondition for SQLite join ordering, allow-list test harnesses where every expected deviation has a reason, <code>SERVICE</code> rather than <code>GRAPH</code> for scoping time, and the retrieval design planned next.</p>
+<p><a href="layered-graphs.html">← Layered graphs, explained</a></p>
+</article>
+
+<footer><div class="wrap">
+  <span>Tiramemsu · MIT OR Apache-2.0 · <a href="https://github.com/Volland/tiramemsu">github.com/Volland/tiramemsu</a></span>
+  <span><a href="../">Home</a> · <a href="./">All articles</a></span>
+</div></footer>
+</body>
+</html>
