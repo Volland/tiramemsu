@@ -7,6 +7,9 @@ Systems studied for the design, with what was taken from each and what was avoid
 A research graph database (GPL-2.0) whose domain graph gives every edge an id, with tagged 64-bit ObjectIds, B+tree permutations, leapfrog triejoin and automaton-based path search.
 
 - **Taken:** edge ids as first-class objects ([[data-model#Statements]]); inline small values in a tagged id ([[data-model#ObjectId]]); permutation indexes ([[storage#Schema]]); product-automaton paths ([[query#Physical Planning#Path Engine]]); LFTJ as a later option ([[query#Physical Planning#LFTJ]]).
+- **Facts checked (2026-09-30):** GPL-2.0, C++, single node, and the README says it is "not production ready". Its only tag is `v1.0.0`, though commits continue into August 2026. It has MQL updates (atomic on failure) but SPARQL updates are only `INSERT DATA` and `DELETE DATA`, SPARQL `GRAPH` and `FROM` are not implemented, and it has no temporal support. Wikidata Truthy (1.26 billion triples) takes 203 GB, about 161 bytes per triple. On its authors' own 2023 benchmarks it answers single-pattern queries in 0.07 s on average and path queries with no timeouts in 1 683 queries, where Neo4j, Jena and Blazegraph time out on dozens.
+- **Measured here:** worst-case-optimal joins are 36–104× faster than SQLite's plan on skewed and layered cyclic patterns and no faster on uniform graphs (`bench/triangles/`), which supports the deferred M4 ([[query#Physical Planning#LFTJ]]).
+- **Not taken:** custom B+trees and buffer manager (SQLite does this), the GPL, and a high-byte tag.
 - **Changed:** the tag moves to the low bits for SQLite's signed varints; the separate Properties table is dropped, so properties have ids too; one store serves SPARQL and Cypher, where MillenniumDB keeps separate physical models.
 
 ## Datomic
