@@ -237,3 +237,62 @@ fn ordinary_graph_iri_names_a_graph() {
     let s = t.sel("SELECT * FROM <http://example.org/graph1> WHERE { ?s ?p ?o }");
     assert!(s.rows.is_empty());
 }
+
+/// Four statements recorded at 2026-03-10: alice valid from the day before, bob from
+/// April, carol for the first half of 2025, dave for 2025 and 2026.
+fn recorded_on_march_10() -> T {
+    let t = T::new();
+    t.clock.set(ms("2026-03-10T00:00:00Z"));
+    t.tx(|tx| {
+        let at = |a: &str, b: &str| (v(a), v("worksAt"), v(b));
+        for ((s, p, o), valid) in [
+            (at("alice", "acme"), Valid::from(ms("2026-03-09T00:00:00Z"))),
+            (at("bob", "acme"), Valid::from(ms("2026-04-01T00:00:00Z"))),
+            (
+                at("carol", "initech"),
+                Valid::between(ms("2025-01-01T00:00:00Z"), ms("2025-06-01T00:00:00Z")),
+            ),
+            (
+                at("dave", "initech"),
+                Valid::between(ms("2025-01-01T00:00:00Z"), ms("2027-01-01T00:00:00Z")),
+            ),
+        ] {
+            tx.assert(s, p, o, valid)?;
+        }
+        Ok(())
+    });
+    t
+}
+
+// virtual-predicates "Learned late" / "Recorded after it stopped being true"
+// @lat: [[tests#Query#Bitemporal Recipes In SPARQL]]
+#[test]
+fn learned_late_and_recorded_after_the_fact() {
+    let t = recorded_on_march_10();
+    let added = t.col(
+        "SELECT ?a WHERE { v:alice v:worksAt ?o ~ ?r . ?r tm:addedAt ?a }",
+        "a",
+    );
+    assert_eq!(
+        added,
+        some(&[Value::DateTime {
+            ms: ms("2026-03-10T00:00:00Z"),
+            tz: Some(0)
+        }])
+    );
+    let late = t.col(
+        "SELECT ?s WHERE { ?s v:worksAt ?o ~ ?r . ?r tm:addedAt ?a ; tm:validFrom ?f \
+         FILTER(?a > ?f) } ORDER BY ?s",
+        "s",
+    );
+    assert_eq!(late, some(&[v("alice"), v("carol"), v("dave")]));
+    let after = t.col(
+        "SELECT ?s WHERE { ?s v:worksAt ?o ~ ?r . ?r tm:addedAt ?a ; tm:validTo ?to \
+         FILTER(?a > ?to) }",
+        "s",
+    );
+    assert_eq!(after, some(&[v("carol")]));
+    // a constant instant with another offset names the same transaction
+    let n = t.sel("SELECT ?r WHERE { ?r tm:addedAt \"2026-03-10T02:00:00+02:00\"^^xsd:dateTime }");
+    assert_eq!(n.rows.len(), 4);
+}

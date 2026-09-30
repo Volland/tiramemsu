@@ -223,6 +223,104 @@ fn constant_objects() {
     ));
 }
 
+// virtual-predicates "Instant a statement was added" / "Live statement has no
+// retractedAt" / "Retraction instant in history" / "Later retraction visible under
+// AsOf" / "Constant instant with another offset" / "Instant of no transaction" /
+// "Wrong object kind for an instant"
+// @lat: [[tests#Query#Statement Instants Come From The Tx Table]]
+#[test]
+fn statement_instants() {
+    const DAY: i64 = 86_400_000;
+    let d10 = 1_773_100_800_000i64; // 2026-03-10T00:00:00Z
+    let dt = |ms: i64| Value::DateTime { ms, tz: Some(0) };
+    let t = TestDb::new();
+    t.clock.set(d10);
+    let mut es = Vec::new();
+    t.tx(|tx| {
+        es.push(tx.assert(v("a"), v("p"), v("b"), Valid::ALWAYS)?.eid());
+        es.push(tx.assert(v("c"), v("p"), v("d"), Valid::ALWAYS)?.eid());
+        Ok(())
+    });
+    t.clock.set(d10 + 2 * DAY);
+    t.tx(|tx| tx.retract(es[0]).map(|_| ()));
+    let with = |view: View, e: Eid, p: &str| {
+        let bb = b().at(view);
+        run(&t.db.now(), &bb.query(bb.triple(e, p, "?w")))
+    };
+    // tm:addedAt under Now, and no retractedAt for a live statement
+    assert_eq!(
+        with(View::NOW, es[1], "tm:addedAt").get(0, "w"),
+        Some(&dt(d10))
+    );
+    let q = b().query(b().triple("?r", "tm:retractedAt", "?w"));
+    assert!(run(&t.db.now(), &q).is_empty());
+    // the retraction instant under History, and under AsOf a later retraction
+    assert_eq!(
+        with(View::history(), es[0], "tm:retractedAt").get(0, "w"),
+        Some(&dt(d10 + 2 * DAY))
+    );
+    let asof = with(View::as_of_tx(1), es[0], "tm:retractedAt");
+    assert_eq!(asof.get(0, "w"), Some(&dt(d10 + 2 * DAY)));
+    assert_eq!(
+        rows(&with(View::as_of_tx(1), es[0], "tm:txRetracted")),
+        expect(&[&["tx2"]])
+    );
+    // a bound eid reads the instant from its own row: one triple alias
+    let q = b().query(Op::join(vec![
+        Op::Triple(b().t("?a", "v:p", "?c").with_eid("?r")),
+        b().triple("?r", "tm:addedAt", "?w"),
+    ]));
+    let ex = explain(&t.db.now(), &q);
+    assert_eq!(count_triple_aliases(ex.sql.as_deref().unwrap()), 1);
+    assert_eq!(run(&t.db.now(), &q).get(0, "w"), Some(&dt(d10)));
+    // a constant compares by instant and seeks tx_instant
+    let h = b().at(View::history());
+    let iso = Value::literal(
+        "2026-03-10T02:00:00+02:00",
+        Some(tm_core::vocab::XSD_DATETIME),
+        None,
+    );
+    let q = h.query(h.triple("?r", "tm:addedAt", iso));
+    assert_eq!(run(&t.db.now(), &q).len(), 2);
+    let plan = explain(&t.db.now(), &q).query_plan.join("\n");
+    assert!(plan.contains("tx_instant"), "{plan}");
+    let q = h.query(h.triple("?r", "tm:retractedAt", dt(d10 + 2 * DAY)));
+    assert_eq!(
+        rows(&run(&t.db.now(), &q)),
+        expect(&[&[&es[0].to_string()]])
+    );
+    // an instant of no transaction, and a constant of another kind
+    let q = h.query(h.triple("?r", "tm:addedAt", dt(d10 + 1)));
+    assert!(run(&t.db.now(), &q).is_empty());
+    let q = h.query(h.triple("?r", "tm:addedAt", Value::Tx(TxId(1))));
+    assert!(run(&t.db.now(), &q).is_empty());
+}
+
+// virtual-predicates "Statement instants come from the transaction table": values
+// compare with other date-times by instant in filters
+// @lat: [[tests#Query#Statement Instants Filter By Instant]]
+#[test]
+fn statement_instants_in_filters() {
+    let d10 = 1_773_100_800_000i64;
+    let dt = |ms: i64, tz: i16| Value::DateTime { ms, tz: Some(tz) };
+    let t = TestDb::new();
+    t.clock.set(d10);
+    t.tx(|tx| tx.assert(v("a"), v("p"), v("b"), Valid::ALWAYS).map(|_| ()));
+    t.clock.set(d10 + 1_000);
+    t.tx(|tx| tx.assert(v("c"), v("p"), v("d"), Valid::ALWAYS).map(|_| ()));
+    let q = |op: fn(Expr, Expr) -> Expr, c: Value| {
+        b().query(
+            b().triple("?r", "tm:addedAt", "?w")
+                .filter(op(Expr::var("w"), Expr::val(c))),
+        )
+    };
+    // 2026-03-10T02:00:00.500+02:00 is 500 ms after the first commit
+    let mid = dt(d10 + 500, 120);
+    assert_eq!(run(&t.db.now(), &q(Expr::gt, mid.clone())).len(), 1);
+    assert_eq!(run(&t.db.now(), &q(Expr::lt, mid)).len(), 1);
+    assert_eq!(run(&t.db.now(), &q(Expr::gt, dt(d10 - 1, 0))).len(), 2);
+}
+
 // virtual-predicates "Path expression with a virtual hop" is in path_and_region.rs
 
 fn volatile_db() -> (TestDb, Eid) {

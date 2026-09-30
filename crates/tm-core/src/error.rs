@@ -86,6 +86,16 @@ pub enum Error {
         /// The kind of the rejected object.
         got: Tag,
     },
+    /// The subject's kind is not one of the predicate's `sys:subjectType` values.
+    #[error("subject type mismatch on {p}: expected one of {expected:?}, got {}", got.name())]
+    SubjectTypeMismatch {
+        /// The predicate whose subject type was violated.
+        p: ObjectId,
+        /// The allowed tag IRIs, in eid order of their flag statements.
+        expected: Vec<ObjectId>,
+        /// The kind of the rejected subject.
+        got: Tag,
+    },
     /// A cascade set is larger than `max_cascade`.
     #[error("cascade from {root} exceeds the limit of {limit} statements")]
     CascadeLimitExceeded {

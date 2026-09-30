@@ -9,7 +9,7 @@ use tm_core::{Eid, Value};
 use tm_ir::vocab as irv;
 use tm_ir::{Expr, Func, Op, TermOrVar, TriplePattern, Values, Var, View};
 
-use super::access::{is_sys, stmt_of, tv, virtual_eid, RDF_TYPE, TEMPORAL};
+use super::access::{is_sys, stmt_of, temporal_iri, tv, virtual_eid, RDF_TYPE, TEMPORAL};
 use super::{Exec, Flags, Row};
 use crate::ast::*;
 use crate::error::{CResult, CypherError};
@@ -212,19 +212,9 @@ impl Exec<'_> {
         stmt_subject: bool,
         f: &Flags,
     ) -> Option<Expr> {
-        let (iri, virt) = if stmt_subject && !key.contains(':') && TEMPORAL.contains(&key) {
-            (
-                match key {
-                    "txAdded" => irv::TM_TX_ADDED,
-                    "txRetracted" => irv::TM_TX_RETRACTED,
-                    "validFrom" => irv::TM_VALID_FROM,
-                    _ => irv::TM_VALID_TO,
-                }
-                .to_string(),
-                true,
-            )
-        } else {
-            (key.to_string(), false)
+        let (iri, virt) = match temporal_iri(key) {
+            Some(v) if stmt_subject && !key.contains(':') => (v.to_string(), true),
+            _ => (key.to_string(), false),
         };
         if !virt && f.edge_true.contains(&iri) {
             return None;
@@ -329,6 +319,7 @@ impl Exec<'_> {
                 if let Some(pm) = &n.props {
                     self.collect_props(
                         pm,
+                        false,
                         &mut info.props,
                         &mut info.id,
                         &mut dynamic,
@@ -430,15 +421,16 @@ impl Exec<'_> {
                 if let Some(pm) = &r.props {
                     let mut props = Vec::new();
                     let mut id = None;
-                    self.collect_props(pm, &mut props, &mut id, &mut dynamic, &mut impossible)?;
+                    self.collect_props(
+                        pm,
+                        true,
+                        &mut props,
+                        &mut id,
+                        &mut dynamic,
+                        &mut impossible,
+                    )?;
                     for (k, v) in props {
-                        let iri = if TEMPORAL.contains(&k.as_str()) {
-                            k.clone()
-                        } else {
-                            k
-                        };
-                        match self.prop_constraint(TermOrVar::var(&e), &iri, &v, view, true, &flags)
-                        {
+                        match self.prop_constraint(TermOrVar::var(&e), &k, &v, view, true, &flags) {
                             Some(x) => filters.push(x),
                             None => impossible = true,
                         }
@@ -682,9 +674,13 @@ impl Exec<'_> {
         })
     }
 
+    /// The entries of a property map as `(key IRI, value)`. On a statement
+    /// (`stmt`), a temporal name keeps its bare text so that `prop_constraint`
+    /// reads the statement's metadata instead of a stored property.
     fn collect_props(
         &mut self,
         pm: &crate::ast::Expr,
+        stmt: bool,
         out: &mut Vec<(String, PropVal)>,
         id: &mut Option<Value>,
         dynamic: &mut Vec<(String, Expr2)>,
@@ -702,6 +698,7 @@ impl Exec<'_> {
             return Err(CypherError::parse(pm.span, "a property map is expected"));
         };
         for (k, e) in entries {
+            let temporal = stmt && !k.text.contains(':') && TEMPORAL.contains(&k.text.as_str());
             if depends_on_row(e) {
                 let pv = self.fresh("pv");
                 dynamic.push((pv.clone(), e.clone()));
@@ -712,7 +709,11 @@ impl Exec<'_> {
                         Some(k.span),
                     ));
                 }
-                let iri = self.vocab.resolve(k)?;
+                let iri = if temporal {
+                    k.text.clone()
+                } else {
+                    self.vocab.resolve(k)?
+                };
                 out.push((iri, PropVal::Dynamic(pv)));
             } else {
                 let v = self.eval(e, &Row::new())?;
@@ -721,7 +722,8 @@ impl Exec<'_> {
                         CypherError::Parse { msg, .. } => CypherError::parse(k.span, msg),
                         other => other,
                     })?;
-                if !(k.text == "@id" && k.escaped) {
+                let raw = temporal || (k.text == "@id" && k.escaped);
+                if !raw {
                     // re-resolve the key with the vocabulary (push_prop_val used raw text)
                     if let Some(last) = out.last_mut() {
                         last.0 = self.vocab.resolve(k)?;

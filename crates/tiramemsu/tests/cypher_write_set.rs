@@ -281,6 +281,39 @@ fn detach_delete() {
     assert_eq!(r.rows.len(), 1);
 }
 
+// predicate-schema "Rejected through Cypher"
+// @lat: [[tests#Typed Layers#Cypher Respects Typed Layers]]
+#[test]
+fn typed_layer_rejects_a_node_subject() {
+    let t = T::new();
+    t.assert(&[
+        (v("alice"), v("worksAt"), v("acme")),
+        (
+            v("confidence"),
+            Value::iri("urn:tiramemsu:sys:subjectType"),
+            Value::iri("urn:tiramemsu:sys:STMT"),
+        ),
+    ]);
+    let before = t.last_t();
+    for text in [
+        "CREATE (:Person {confidence: 0.8})",
+        "MATCH (n {`@id`: 'v:alice'}) SET n.confidence = 0.8",
+    ] {
+        let e = t.werr(text);
+        assert!(
+            matches!(e, Error::SubjectTypeMismatch { .. }),
+            "{text}: {e:?}"
+        );
+    }
+    assert_eq!(t.last_t(), before);
+    // on a relationship the subject is the statement: accepted
+    t.w("MATCH ()-[r:worksAt]->() SET r.confidence = 0.8");
+    assert_eq!(
+        t.one("MATCH ()-[r:worksAt]->() RETURN r.confidence"),
+        f(0.8)
+    );
+}
+
 // "valueType mismatch" / "Writing a reserved predicate" / "Cascade limit"
 #[test]
 fn schema_and_namespace_rules() {

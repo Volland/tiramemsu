@@ -132,9 +132,13 @@ Some predicates are computed from the triple row instead of stored, by [[crates/
 |---|---|---|
 | `sys:subject`, `sys:object`, `sys:predicate` | `s`, `o`, `p` of the statement `eid` | Path hops through layers. See [[query#Physical Planning#Path Engine]] |
 | `tm:txAdded`, `tm:txRetracted` | `t_add`, `t_ret` as `TX` ids | SPARQL `?r tm:txAdded ?t`, Cypher `r.txAdded` |
+| `tm:addedAt`, `tm:retractedAt` | the `instant` of `t_add`, `t_ret` as `DATETIME` with offset `Z` | SPARQL `?r tm:addedAt ?when`, Cypher `r.addedAt` |
 | `tm:validFrom`, `tm:validTo` | `v_from`, `v_to` as `DATETIME` | SPARQL and Cypher |
 | `tm:retractKind` | `ret_kind` | History queries |
 | volatile keys | `volatile.value` for `(s, key)` | Cypher `n.lastSeen` under `Now` only. See [[storage#Volatile Table]] |
+
+- **Instants:** `tm:addedAt` and `tm:retractedAt` read `tx.instant` with a scalar subquery by the integer primary key `tx.t`, so the pattern stays one `triple` alias and a bound eid still costs no extra scan. A constant date-time compares by instant: `t_add = (SELECT t FROM tx WHERE instant = ?)` seeks the unique `tx_instant` index once. `tm:retractedAt` is absent while the statement is live; under `asOf` it shows a later retraction, as `tm:txRetracted` does.
+- **Bitemporal recipes:** the instants sit beside `tm:validFrom` and `tm:validTo` in one row, so "learned late" is `?r tm:addedAt ?a ; tm:validFrom ?f FILTER(?a > ?f)` and "recorded after it stopped being true" is `FILTER(?a > ?to)` over `tm:validTo`. SPARQL has no date-time arithmetic, so a lag of more than N days is a Cypher query: `r.addedAt.epochMillis - r.validFrom.epochMillis > $days * 86400000`.
 
 ## Physical Planning
 
@@ -295,7 +299,7 @@ MATCH (a)-[r:WORKS_AT]->(c), (b:Belief)-[:SUPPORTED_BY]->(r)
 RETURN a, c, r.confidence, r.txAdded, b
 ```
 
-- A statement used as a node has the implicit label `:Statement`, which exposes `txAdded`, `txRetracted`, `validFrom` and `validTo` as properties.
+- A statement used as a node has the implicit label `:Statement`, which exposes `txAdded`, `txRetracted`, `addedAt`, `retractedAt`, `validFrom` and `validTo` as properties.
 - `startNode(r)`, `endNode(r)` and `type(r)` work on either form.
 - Property or relationship: a literal-valued triple about `r` is a property, and a node- or statement-valued triple is a relationship. `sys:isEdge` overrides this. See [[data-model#Statements]].
 - Every standard Cypher query means the same as in Neo4j, except that a relationship variable may stand in node position, which Neo4j rejects. A variable first bound as a node still cannot be used as a relationship.
@@ -325,13 +329,13 @@ Time can be chosen from the API or inside queries in both dialects, either for t
 | Valid at | `.valid_at(ms)` | `FROM <urn:tiramemsu:tm:validAt/2025-03-01>` | `USE VALID AT date('2025-03-01')` |
 | History | `.history()` | `FROM <urn:tiramemsu:tm:history>` | `USE HISTORY` |
 | Per pattern | view per call | `SERVICE <urn:tiramemsu:tm:asOf/150> { … }` | `CALL { USE AS OF 150 MATCH … RETURN … }` |
-| Statement time | — | `?r tm:txAdded ?t` | `r.txAdded` |
+| Statement time | — | `?r tm:txAdded ?t`, `?r tm:addedAt ?when` | `r.txAdded`, `r.addedAt` |
 
 - The default, with no clause, is tx `Now` and valid time unfiltered. Valid-time filtering is always opt-in, because an implicit "valid now" would silently hide past facts.
 - The `tm:` IRIs are recognised only in `FROM` (whole query) and `SERVICE` (one group). Anywhere else they are ordinary IRIs. Nested `SERVICE` groups override per part, innermost first.
 - `SERVICE` is used instead of `GRAPH` so that time and a named graph can be combined later (`SERVICE <tm:asOf/150> { GRAPH <g> { … } }`). A `GRAPH` block inside a `SERVICE` group is read in the group's view, and `FROM` may carry time IRIs beside graph IRIs. A `tm:` IRI as a graph name fails with a `Parse` error that names `SERVICE`. oxilite takes the same route for version scoping ([[prior-art#oxilite]]).
 - In Cypher, `USE` takes only time clauses in v1; `USE GRAPH g` is `Unsupported("USE GRAPH")`. There is one graph per database file. A `USE` is accepted at the start of a query, of a `UNION` branch or of a `CALL { }` body (after an importing `WITH`); each selector overrides the inherited one independently ([[crates/tm-cypher/src/exec/time.rs#resolve]]). A write query with a non-`Now` top-level `USE` is `Unsupported`; a historical `CALL { USE … }` inside a write query is allowed.
-- The statement time properties `txAdded`, `txRetracted` (Integers), `validFrom` and `validTo` (DateTimes) and ``tm:retractKind`` denote metadata on statements even when a stored property has the same name (which stays reachable as `` `v:txAdded` ``); on ordinary nodes they are ordinary keys, and they are never listed by `keys()`. `SET r.validFrom` or `r.validTo` supersedes the statement and rebinds the variable.
+- The statement time properties `txAdded`, `txRetracted` (Integers), `addedAt`, `retractedAt` (the commit instants, DateTimes), `validFrom` and `validTo` (DateTimes) and ``tm:retractKind`` denote metadata on statements even when a stored property has the same name (which stays reachable as `` `v:txAdded` ``); on ordinary nodes they are ordinary keys, and they are never listed by `keys()`. A relationship property map (`-[r {addedAt: …}]->`) tests the same metadata. `SET r.validFrom` or `r.validTo` supersedes the statement and rebinds the variable; `SET` or `REMOVE` of the four transaction-time names is `Unsupported`. The name table is [[crates/tm-cypher/src/exec/access.rs#temporal_iri]].
 
 ```sparql
 # what changed about alice's employer between tx 150 and now

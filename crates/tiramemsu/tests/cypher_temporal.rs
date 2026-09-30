@@ -376,6 +376,117 @@ fn set_valid_time_on_a_statement() {
     assert_eq!(t.last_t(), before);
 }
 
+/// `e1 = (alice worksAt acme)` with `confidence`, referenced by `belief9`, all
+/// committed at 2026-03-10T00:00:00Z.
+fn instants() -> (T, Eid) {
+    let t = T::new();
+    t.clock.set(date_ms(2026, 3, 10));
+    let mut e1 = None;
+    t.tx(|tx| {
+        let e = tx
+            .assert(v("alice"), v("worksAt"), v("acme"), Valid::ALWAYS)?
+            .eid();
+        tx.assert(e, v("confidence"), Value::Double(0.8), Valid::ALWAYS)?;
+        tx.assert(v("belief9"), rdf_type(), v("Belief"), Valid::ALWAYS)?;
+        tx.assert(v("belief9"), v("SUPPORTED_BY"), e, Valid::ALWAYS)?;
+        e1 = Some(e);
+        Ok(())
+    });
+    (t, e1.unwrap())
+}
+
+// cypher-temporal-clauses "Commit instants of a relationship" / "Retraction instant in
+// history" / "Same metadata on the node form" / "Time metadata not listed as keys" /
+// "Shadowed user property reachable by CURIE" / "addedAt is read-only"
+// @lat: [[tests#Query#Cypher Statement Instants]]
+#[test]
+fn statement_instants() {
+    let (t, e1) = instants();
+    let r = t.q("MATCH (a)-[r:worksAt]->(c) RETURN r.addedAt, r.retractedAt, keys(r)");
+    let j = r.to_json();
+    assert_eq!(j["rows"][0][0], "2026-03-10T00:00:00.000Z");
+    assert_eq!(r.rows[0][1], null());
+    assert_eq!(r.rows[0][2], list(vec![s("confidence")]));
+    let node = t.q("MATCH (:Belief)-[:SUPPORTED_BY]->(x) RETURN x.addedAt, x.`tm:addedAt`");
+    assert_eq!(node.to_json()["rows"][0][0], "2026-03-10T00:00:00.000Z");
+    assert_eq!(node.rows[0][0], node.rows[0][1]);
+    // a relationship property map tests the metadata
+    let hit = "MATCH ()-[r:worksAt {addedAt: datetime('2026-03-10T02:00:00+02:00')}]->() \
+               RETURN count(r)";
+    assert_eq!(t.one(hit), i(1));
+    let miss = "MATCH ()-[r:worksAt {addedAt: datetime('2026-03-11T00:00:00Z')}]->() \
+                RETURN count(r)";
+    assert_eq!(t.one(miss), i(0));
+    assert_eq!(
+        t.one("MATCH ()-[r:worksAt {txAdded: 1}]->() RETURN count(r)"),
+        i(1)
+    );
+    // transaction time is read-only, and nothing is written
+    let before = t.last_t();
+    for text in [
+        "MATCH ()-[r:worksAt]->() SET r.addedAt = datetime()",
+        "MATCH ()-[r:worksAt]->() REMOVE r.retractedAt",
+    ] {
+        assert!(matches!(t.werr(text), Error::Unsupported { .. }), "{text}");
+    }
+    assert_eq!(t.last_t(), before);
+    // a stored property of the same name stays reachable by CURIE
+    t.assert(&[(Value::Stmt(e1), v("addedAt"), sv("custom"))]);
+    let r = t.q("MATCH ()-[r:worksAt]->() RETURN r.addedAt, r.`v:addedAt`, keys(r)");
+    assert_eq!(r.to_json()["rows"][0][0], "2026-03-10T00:00:00.000Z");
+    assert_eq!(r.rows[0][1], s("custom"));
+    assert_eq!(r.rows[0][2], list(vec![s("confidence")]));
+    // the retraction instant, visible in history
+    t.clock.set(date_ms(2026, 3, 12));
+    t.tx(|tx| tx.retract(e1).map(|_| ()));
+    let r = t.q("USE HISTORY MATCH ()-[r:worksAt]->() RETURN r.retractedAt");
+    assert_eq!(r.to_json()["rows"][0][0], "2026-03-12T00:00:00.000Z");
+}
+
+// cypher-temporal-clauses "Learned late by more than N days" / "Recorded after it
+// stopped being true in Cypher"
+// @lat: [[tests#Query#Bitemporal Recipes In Cypher]]
+#[test]
+fn learned_late_and_recorded_after_the_fact() {
+    let t = T::new();
+    t.clock.set(date_ms(2026, 3, 10));
+    t.tx(|tx| {
+        let at = |a: &str, b: &str| (v(a), v("worksAt"), v(b));
+        for ((s, p, o), valid) in [
+            (at("alice", "acme"), Valid::from(date_ms(2026, 3, 9))),
+            (at("bob", "acme"), Valid::from(date_ms(2026, 4, 1))),
+            (
+                at("carol", "initech"),
+                Valid::between(date_ms(2025, 1, 1), date_ms(2025, 6, 1)),
+            ),
+            (
+                at("dave", "initech"),
+                Valid::between(date_ms(2025, 1, 1), date_ms(2027, 1, 1)),
+            ),
+        ] {
+            tx.assert(s, p, o, valid)?;
+        }
+        Ok(())
+    });
+    let late = |days: i64| -> Vec<String> {
+        t.qp(
+            "MATCH (a)-[r:worksAt]->() \
+             WHERE r.addedAt.epochMillis - r.validFrom.epochMillis > $days * 86400000 \
+             RETURN a ORDER BY elementId(a)",
+            &params(&[("days", i(days))]),
+        )
+        .rows
+        .iter()
+        .map(|r| short(&r[0]))
+        .collect()
+    };
+    assert_eq!(late(30), ["carol", "dave"]);
+    assert_eq!(late(0), ["alice", "carol", "dave"]);
+    let after = t.q("MATCH (a)-[r:worksAt]->() WHERE r.addedAt > r.validTo RETURN a");
+    assert_eq!(after.rows.len(), 1);
+    assert_eq!(short(&after.rows[0][0]), "carol");
+}
+
 // @lat: [[tests#Named Graphs#Cypher Keeps One Graph]]
 #[test]
 fn use_graph_is_unsupported() {

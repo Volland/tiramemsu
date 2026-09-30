@@ -103,7 +103,7 @@ Tx ..> TxOptions
 - Overlap test: `(a.v_from IS NULL OR b.v_to IS NULL OR a.v_from < b.v_to) AND (b.v_from IS NULL OR a.v_to IS NULL OR b.v_from < a.v_to)`.
 - An overlapping but different interval is **not** merged or widened. Use supersede to change it.
 - `Asserted` says `New(eid)` or `Existing(eid)`. With `on_existing = Confirm`, an existing match also gets a `sys:confirmedBy` triple. See [[time-model#Operations#Confirm]].
-- Schema checks run before insert: `sys:valueType`, `sys:unique`, then `sys:cardinality`. See [[data-model#Predicate Schema]].
+- Schema checks run before insert: `sys:valueType` on the object, `sys:subjectType` on the subject, `sys:unique`, then `sys:cardinality`. The two type checks run before the idempotency lookup. See [[data-model#Predicate Schema]].
 - SPARQL `INSERT` and Cypher `MERGE` / `SET` map to assert.
 
 ```plantuml
@@ -111,7 +111,7 @@ Tx ..> TxOptions
 skinparam shadowing false
 start
 :assert(s, p, o, valid);
-:check sys:valueType(p);
+:check sys:valueType(p) and sys:subjectType(p);
 if (live (s,p,o) with overlapping valid?) then (yes)
   :return Existing(eid);
   if (on_existing = Confirm?) then (yes)

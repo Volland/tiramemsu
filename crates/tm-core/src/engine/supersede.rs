@@ -109,7 +109,7 @@ impl Tx<'_> {
         match flag {
             Some(f) => {
                 self.validate_flag(f, row.p, row.s, new_o)?;
-                self.validate_schema_change(f, row.s, new_o)?;
+                self.validate_schema_change(f, row.s, new_o, Some(root))?;
             }
             None => self.check_value_type(row.p, new_o)?,
         }
@@ -128,7 +128,13 @@ impl Tx<'_> {
             self.retract_row(*m, RetKind::Supersede)?;
         }
         // schema pipeline for the new root: unique, then cardinality-one
-        self.unique_and_cardinality(row.s, row.p, new_o, new_valid, flag.is_some())?;
+        self.unique_and_cardinality(
+            row.s,
+            row.p,
+            new_o,
+            new_valid,
+            flag.is_some_and(Flag::single_valued),
+        )?;
         let map = |id: ObjectId| {
             Eid::from_oid(id)
                 .and_then(|e| sigma.get(&e))

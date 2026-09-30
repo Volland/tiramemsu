@@ -6,7 +6,7 @@ use std::collections::BTreeMap;
 use tm_core::Value;
 use tm_ir::vocab as irv;
 
-use super::access::{stmt_of, tv, TEMPORAL};
+use super::access::{stmt_of, temporal_iri, tv};
 use super::{Exec, Row};
 use crate::ast::*;
 use crate::error::{CResult, CypherError};
@@ -621,13 +621,8 @@ impl Exec<'_> {
                 self.check_not_deleted(base)?;
                 let view = self.view();
                 if let Some(e) = stmt_of(base) {
-                    if !key.text.contains(':') && TEMPORAL.contains(&key.text.as_str()) {
-                        let virt = match key.text.as_str() {
-                            "txAdded" => irv::TM_TX_ADDED,
-                            "txRetracted" => irv::TM_TX_RETRACTED,
-                            "validFrom" => irv::TM_VALID_FROM,
-                            _ => irv::TM_VALID_TO,
-                        };
+                    if let Some(virt) = temporal_iri(&key.text).filter(|_| !key.text.contains(':'))
+                    {
                         return self.virtual_prop(e, virt, view);
                     }
                     let iri = self.vocab.resolve(key)?;

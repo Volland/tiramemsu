@@ -54,6 +54,7 @@ impl Tx<'_> {
         if self.live(root)? != Some(true) {
             return Ok(false);
         }
+        self.validate_flag_retraction(root)?;
         let set = self.cascade_set(root)?;
         for (i, e) in set.into_iter().enumerate() {
             let k = if i == 0 || kind != RetKind::Explicit {

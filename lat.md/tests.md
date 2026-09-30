@@ -186,6 +186,30 @@ A path using `sys:subject` hops finds the entities behind a statement that a bel
 
 A Cypher `-[*]->` pattern without an upper bound stops at `max_hops` and does not fail.
 
+### Statement Instants Come From The Tx Table
+
+`tm:addedAt` and `tm:retractedAt` return the commit instants of `t_add` and `t_ret` as UTC date-times, under Now, History and `asOf` (which shows a later retraction), with one triple alias for a bound eid.
+
+A constant with another offset compares by instant and seeks `tx_instant`, and an instant of no transaction or a constant of another kind matches nothing. See [[query#Views and Scans#Virtual Predicates]].
+
+### Statement Instants Filter By Instant
+
+A `FILTER` comparing `tm:addedAt` with a date-time constant in another offset keeps exactly the statements committed after or before that instant.
+
+### Bitemporal Recipes In SPARQL
+
+With a manual clock, "learned late" (`addedAt > validFrom`) and "recorded after it stopped being true" (`addedAt > validTo`) return the expected statements, and a constant instant finds every statement of that transaction.
+
+### Cypher Statement Instants
+
+`r.addedAt` and `r.retractedAt` read the commit instants on a relationship, its node form and in `USE HISTORY`, and a property map matches them.
+
+`keys()` omits them, a stored `v:addedAt` stays reachable by CURIE, and `SET` or `REMOVE` of them is `Unsupported` and writes nothing.
+
+### Bitemporal Recipes In Cypher
+
+`r.addedAt.epochMillis - r.validFrom.epochMillis > $days * 86400000` finds statements learned more than N days late, and `r.addedAt > r.validTo` finds statements recorded after they stopped being true.
+
 ## Named Graphs
 
 Checks of [[data-model#Named Graphs]] across the core, the planner, SPARQL query and update, and Cypher.
@@ -315,3 +339,35 @@ A cardinality-one replacement written into a graph retracts the old statement an
 ### Cypher Keeps One Graph
 
 `USE GRAPH g1 MATCH …` and `USE g1 …` fail with `Unsupported("USE GRAPH")` before any write, and the time forms of `USE` are unaffected.
+
+## Typed Layers
+
+Checks of the `sys:subjectType` flag of [[data-model#Predicate Schema]] in the core, through both front ends and through the JSON bridge.
+
+### Subject Type Constrains Subjects
+
+A `sys:STMT` predicate accepts a statement subject and rejects a node with `SubjectTypeMismatch` naming the predicate, the tag IRIs and the tag, on assert and create, leaving no trace.
+
+Several values mean any-of and accumulate, the flag takes effect within its transaction, and the check runs after the value type and before cardinality-one replacement.
+
+### Subject Type Values Are Validated
+
+The five subject tags are accepted as values, while a literal tag, an unknown tag, a datatype IRI or a string fails with `ValueTypeMismatch` for `sys:subjectType`, and a `sys:` subject is `ReservedNamespace`.
+
+### Subject Type Changes Are Checked Against Live Data
+
+The first value over node-level data, and retracting or superseding one of several values, fail with `SchemaConflict` listing the violating eids.
+
+This holds for `retract_matching` too. Retracting the last value lifts the constraint, also after a schema read earlier in the same transaction.
+
+### SPARQL Respects Typed Layers
+
+`INSERT DATA` of a node-level triple on a `sys:STMT` predicate fails with `SubjectTypeMismatch` and the whole request writes nothing, while an annotation `{| v:confidence 0.8 |}` is accepted.
+
+### Cypher Respects Typed Layers
+
+`CREATE` and `SET` of a node property on a `sys:STMT` predicate fail with `SubjectTypeMismatch` and write nothing, while `SET r.confidence` on a relationship is accepted.
+
+### Bridge Reports Subject Type Mismatch
+
+A `transact` call that violates `sys:subjectType` fails with code `SubjectTypeMismatch` and commits none of its operations.

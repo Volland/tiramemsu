@@ -328,6 +328,32 @@ fn errors_carry_a_code_and_bad_arguments_are_told_apart() {
     assert!(matches!(e.code(), "InvalidPatch" | "NotLive"));
 }
 
+// json-bridge "Subject type violation"
+// @lat: [[tests#Typed Layers#Bridge Reports Subject Type Mismatch]]
+#[test]
+fn subject_type_mismatch_has_its_own_code() {
+    let (_d, db) = open();
+    let sys = |s: &str| json!({ "iri": format!("urn:tiramemsu:sys:{s}") });
+    db.call(
+        "transact",
+        &json!({ "ops": [{ "op": "assert", "s": v("confidence"), "p": sys("subjectType"), "o": sys("STMT") }] }),
+    )
+    .unwrap();
+    let e = db
+        .call(
+            "transact",
+            &json!({ "ops": [
+                { "op": "assert", "s": v("alice"), "p": v("worksAt"), "o": v("acme") },
+                { "op": "assert", "s": v("alice"), "p": v("confidence"), "o": 0.8 },
+            ]}),
+        )
+        .unwrap_err();
+    assert_eq!(e.code(), "SubjectTypeMismatch");
+    assert_eq!(e.to_json()["code"], "SubjectTypeMismatch");
+    let live = db.call("triples", &json!({})).unwrap();
+    assert_eq!(live.as_array().unwrap().len(), 1, "{live}");
+}
+
 #[test]
 fn a_failed_transaction_commits_nothing() {
     let (_d, db) = open();
