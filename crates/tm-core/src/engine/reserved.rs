@@ -15,6 +15,10 @@ pub(crate) fn check_predicate(p_iri: &str, s_tag: Tag) -> Result<()> {
             feature: vocab::SENSITIVE_FEATURE.to_string(),
         });
     }
+    // engine-owned: only GRAPH blocks, WITH and `Tx::add_to_graph` write memberships
+    if p_iri == vocab::SYS_IN_GRAPH {
+        return Err(Error::ReservedNamespace(p_iri.to_string()));
+    }
     if p_iri.starts_with(vocab::TM) {
         return Err(Error::ReservedNamespace(p_iri.to_string()));
     }
@@ -54,6 +58,10 @@ mod tests {
         assert!(matches!(
             check_predicate("urn:tiramemsu:sys:sensitive", Tag::Iri),
             Err(Error::Unsupported { .. })
+        ));
+        assert!(matches!(
+            check_predicate("urn:tiramemsu:sys:inGraph", Tag::Stmt),
+            Err(Error::ReservedNamespace(m)) if m == vocab::SYS_IN_GRAPH
         ));
         assert!(check_predicate("urn:tiramemsu:v:name", Tag::Iri).is_ok());
     }

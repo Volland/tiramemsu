@@ -1,0 +1,1 @@
+{"head":{"vars":["g","s"]},"results":{"bindings":[{"g":{"type":"uri","value":"http://example.org/g"},"s":{"type":"uri","value":"urn:tiramemsu:v:alice"}},{"g":{"type":"uri","value":"http://example.org/g"},"s":{"type":"uri","value":"urn:tiramemsu:v:bob"}},{"g":{"type":"uri","value":"http://example.org/graph1"},"s":{"type":"uri","value":"urn:tiramemsu:v:alice"}}]}}

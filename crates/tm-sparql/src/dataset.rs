@@ -8,10 +8,10 @@
 
 use spargebra::algebra::QueryDataset;
 use spargebra::term::NamedNode;
-use tm_core::{value, vocab, Result, TimeRef, TxSel, ValidSel};
+use tm_core::{value, vocab, Error, Result, TimeRef, TxSel, ValidSel, Value};
 use tm_ir::View;
 
-use crate::error::{invalid_time_iri, unsupported, CONFLICTING_TIME, NAMED_GRAPH};
+use crate::error::{invalid_time_iri, unsupported, CONFLICTING_TIME};
 
 /// A parsed `tm:` time IRI.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
@@ -107,21 +107,19 @@ impl ViewScope {
         Ok(())
     }
 
-    /// The scope of a `FROM` / `USING` dataset. `FROM NAMED` / `USING NAMED` time
-    /// IRIs are validated and have no effect; any other IRI is a named graph.
+    /// The time scope of a `FROM` / `USING` dataset: the `tm:` IRIs of the default
+    /// clauses. `FROM NAMED` / `USING NAMED` time IRIs are validated and have no
+    /// effect; every other IRI names a graph and is read by [`GraphDataset`].
     pub fn from_dataset(ds: Option<&QueryDataset>) -> Result<ViewScope> {
         let mut scope = ViewScope::default();
         let Some(ds) = ds else { return Ok(scope) };
         for n in &ds.default {
-            match parse_time_iri(n.as_str())? {
-                Some(t) => scope.add_clause(t)?,
-                None => return Err(unsupported(NAMED_GRAPH)),
+            if let Some(t) = parse_time_iri(n.as_str())? {
+                scope.add_clause(t)?;
             }
         }
         for n in ds.named.iter().flatten() {
-            if parse_time_iri(n.as_str())?.is_none() {
-                return Err(unsupported(NAMED_GRAPH));
-            }
+            parse_time_iri(n.as_str())?;
         }
         Ok(scope)
     }
@@ -136,6 +134,70 @@ impl ViewScope {
     /// from `base` (the view the text was submitted on).
     pub fn resolve(self, base: View) -> View {
         base.overlay(self.tx, self.valid)
+    }
+}
+
+/// A graph name as a value: an IRI, `NODE` or `BNODE`. Any other term (a statement
+/// or transaction skolem IRI) fails with `InvalidGraphName`.
+pub fn graph_name(iri: &str) -> Result<Value> {
+    let v = Value::Iri(iri.to_string()).canonical();
+    match v {
+        Value::Iri(_) | Value::Node(_) | Value::BNode(_) => Ok(v),
+        other => Err(Error::InvalidGraphName {
+            term: other.to_string(),
+        }),
+    }
+}
+
+/// The graph part of a `FROM` / `USING` dataset (`lat.md/data-model#Named Graphs`).
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct GraphDataset {
+    /// The non-time IRIs of `FROM` / `USING`: the default graph is the statements in
+    /// at least one of them. Empty: the default graph is the union of everything.
+    pub default: Vec<Value>,
+    /// The non-time IRIs of `FROM NAMED` / `USING NAMED`. `Some` restricts `GRAPH`
+    /// to them; `None` means every graph is visible.
+    pub named: Option<Vec<Value>>,
+}
+
+impl GraphDataset {
+    /// The graph part of `ds`; `tm:` IRIs are skipped (see [`ViewScope`]).
+    pub fn from_dataset(ds: Option<&QueryDataset>) -> Result<GraphDataset> {
+        let mut out = GraphDataset::default();
+        let Some(ds) = ds else { return Ok(out) };
+        for n in &ds.default {
+            if !is_tm_iri(n.as_str()) {
+                let g = graph_name(n.as_str())?;
+                if !out.default.contains(&g) {
+                    out.default.push(g);
+                }
+            }
+        }
+        for n in ds.named.iter().flatten() {
+            if !is_tm_iri(n.as_str()) {
+                let g = graph_name(n.as_str())?;
+                let list = out.named.get_or_insert_with(Vec::new);
+                if !list.contains(&g) {
+                    list.push(g);
+                }
+            }
+        }
+        Ok(out)
+    }
+
+    /// The selector of the default graph.
+    pub fn default_selector(&self) -> tm_ir::GraphSel {
+        if self.default.is_empty() {
+            tm_ir::GraphSel::Any
+        } else {
+            tm_ir::GraphSel::Set(
+                self.default
+                    .iter()
+                    .cloned()
+                    .map(tm_ir::TermOrVar::Const)
+                    .collect(),
+            )
+        }
     }
 }
 
@@ -239,20 +301,44 @@ mod tests {
     }
 
     #[test]
-    fn named_graphs_and_from_named() {
-        let g = ds(&["http://example.org/graph1"], None);
-        assert!(matches!(
-            ViewScope::from_dataset(Some(&g)),
-            Err(Error::Unsupported { feature }) if feature == NAMED_GRAPH
-        ));
+    fn graph_iris_are_not_time_and_time_iris_are_not_graphs() {
+        let g = ds(
+            &["http://example.org/graph1"],
+            Some(&["http://example.org/g2"]),
+        );
+        assert_eq!(
+            ViewScope::from_dataset(Some(&g)).unwrap(),
+            ViewScope::inherit()
+        );
+        let gd = GraphDataset::from_dataset(Some(&g)).unwrap();
+        assert_eq!(gd.default, vec![Value::iri("http://example.org/graph1")]);
+        assert_eq!(gd.named, Some(vec![Value::iri("http://example.org/g2")]));
+        // a time IRI beside a graph IRI: each side reads its own part
+        let both = ds(&[&format!("{P}asOf/7"), "http://example.org/g1"], None);
+        assert!(ViewScope::from_dataset(Some(&both)).unwrap().tx.is_some());
+        assert_eq!(
+            GraphDataset::from_dataset(Some(&both))
+                .unwrap()
+                .default
+                .len(),
+            1
+        );
         // FROM NAMED with a time IRI is a no-op
         let n = ds(&[], Some(&[&format!("{P}asOf/9")]));
         assert_eq!(
             ViewScope::from_dataset(Some(&n)).unwrap(),
             ViewScope::inherit()
         );
-        let bad = ds(&[], Some(&["http://example.org/g"]));
-        assert!(ViewScope::from_dataset(Some(&bad)).is_err());
+        assert_eq!(
+            GraphDataset::from_dataset(Some(&n)).unwrap(),
+            GraphDataset::default()
+        );
+        // a statement IRI is not a graph name
+        let bad = ds(&["urn:tiramemsu:stmt:5"], None);
+        assert!(matches!(
+            GraphDataset::from_dataset(Some(&bad)),
+            Err(Error::InvalidGraphName { .. })
+        ));
     }
 
     // sparql-temporal-dataset "SERVICE scopes a group in time": nesting

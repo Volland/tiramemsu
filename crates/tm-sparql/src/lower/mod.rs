@@ -19,9 +19,9 @@ use spargebra::term::TriplePattern as SpTriple;
 use spargebra::Query;
 use tm_core::{Result, Value};
 use tm_ir::validate::scope;
-use tm_ir::{Expr, IrQuery, Op, Var};
+use tm_ir::{Expr, GraphSel, IrQuery, Op, Var};
 
-use crate::dataset::ViewScope;
+use crate::dataset::{GraphDataset, ViewScope};
 use crate::env::Env;
 use crate::error::{unsupported, DESCRIBE};
 use crate::parse::AssocHints;
@@ -59,6 +59,13 @@ pub struct Lowerer<'a> {
     pub(crate) renames: HashMap<String, Var>,
     /// Text hints for re-associating arithmetic chains.
     pub(crate) assoc: AssocHints,
+    /// The `FROM` / `FROM NAMED` (or `USING`) graphs of the request.
+    pub(crate) dataset: GraphDataset,
+    /// The graph selection of the pattern being lowered: the dataset's default graph,
+    /// replaced inside a `GRAPH` block.
+    pub(crate) active: GraphSel,
+    /// How many triple patterns took a `GRAPH ?g` selector so far.
+    pub(crate) graph_var_uses: u32,
 }
 
 impl<'a> Lowerer<'a> {
@@ -70,7 +77,17 @@ impl<'a> Lowerer<'a> {
             bnodes: HashMap::new(),
             renames: HashMap::new(),
             assoc: AssocHints::default(),
+            dataset: GraphDataset::default(),
+            active: GraphSel::Any,
+            graph_var_uses: 0,
         }
+    }
+
+    /// Sets the graph dataset of the request; the default graph becomes the active
+    /// selection.
+    pub fn set_dataset(&mut self, dataset: GraphDataset) {
+        self.active = dataset.default_selector();
+        self.dataset = dataset;
     }
 
     /// The variable standing for the blank node label `label`.
@@ -109,6 +126,7 @@ pub fn lower_query(q: &Query, env: &Env) -> Result<QueryPlan> {
 pub fn lower_query_with(q: &Query, env: &Env, assoc: AssocHints) -> Result<QueryPlan> {
     let mut l = Lowerer::new(env);
     l.assoc = assoc;
+    l.set_dataset(GraphDataset::from_dataset(q.dataset())?);
     let root_scope = ViewScope::from_dataset(q.dataset())?;
     match q {
         Query::Describe { .. } => Err(unsupported(DESCRIBE)),

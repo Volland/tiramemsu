@@ -5,6 +5,7 @@
 
 mod cascade;
 mod config;
+mod graph;
 mod ops;
 mod reserved;
 pub mod schema;
@@ -284,6 +285,10 @@ pub struct Tx<'a> {
     existing: Vec<Eid>,
     retracted: Vec<(Eid, RetKind)>,
     superseded: Vec<(Eid, Eid)>,
+    memberships: Vec<Eid>,
+    memberships_retracted: Vec<(Eid, RetKind)>,
+    /// The id of `sys:inGraph` once known (`Some(None)`: not interned yet).
+    in_graph: Option<Option<ObjectId>>,
     schema_cache: HashMap<ObjectId, PredicateSchema>,
     multi_seen: HashSet<ObjectId>,
     ext: Option<std::sync::Arc<dyn std::any::Any + Send + Sync>>,
@@ -360,6 +365,9 @@ impl<'a> Tx<'a> {
             existing: Vec::new(),
             retracted: Vec::new(),
             superseded: Vec::new(),
+            memberships: Vec::new(),
+            memberships_retracted: Vec::new(),
+            in_graph: None,
             schema_cache: HashMap::new(),
             multi_seen: HashSet::new(),
             ext: None,
@@ -425,6 +433,8 @@ impl<'a> Tx<'a> {
             existing,
             retracted: self.retracted.clone(),
             superseded: self.superseded.clone(),
+            memberships: self.memberships.clone(),
+            memberships_retracted: self.memberships_retracted.clone(),
         }
     }
 
@@ -603,10 +613,38 @@ impl<'a> Tx<'a> {
             ],
         )?;
         if n > 0 {
-            self.retracted.push((eid, kind));
+            if self.is_membership(eid)? {
+                self.memberships_retracted.push((eid, kind));
+            } else {
+                self.retracted.push((eid, kind));
+            }
             self.schema_cache.clear();
         }
         Ok(n > 0)
+    }
+
+    /// The id of `sys:inGraph`, `None` while it has never been interned.
+    fn in_graph_id(&mut self) -> Result<Option<ObjectId>> {
+        if let Some(Some(id)) = self.in_graph {
+            return Ok(Some(id));
+        }
+        let id = self.sys_lookup(vocab::SYS_IN_GRAPH)?;
+        self.in_graph = Some(id);
+        Ok(id)
+    }
+
+    /// True when statement `eid` is a graph membership (its predicate is `sys:inGraph`).
+    fn is_membership(&mut self, eid: Eid) -> Result<bool> {
+        let Some(ig) = self.in_graph_id()? else {
+            return Ok(false);
+        };
+        Ok(self
+            .exec
+            .query_i64(
+                "SELECT p FROM triple WHERE eid = ?1",
+                &[SqlValue::Integer(eid.oid().raw())],
+            )?
+            .is_some_and(|p| p == ig.raw()))
     }
 
     fn is_flag_predicate(&mut self, p: ObjectId) -> Result<bool> {

@@ -1,0 +1,3 @@
+; Homomorphism Unbound SetOfTriples
+(project [?o ?p ?s]
+  (triple ?s ?p ?o :view asOf/tx:1 :graph (<http://example.org/g>)))

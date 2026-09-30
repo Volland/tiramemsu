@@ -1,0 +1,6 @@
+---
+source: crates/tm-exec/tests/graph_selector.rs
+expression: text
+---
+SELECT t0.s AS c0 FROM triple AS t0, triple AS t1 WHERE t0.p = ?1 AND t0.t_add <= ?2 AND (t0.t_ret IS NULL OR t0.t_ret > ?2) AND t1.p = ?3 AND t1.o = ?4 AND t1.t_add <= ?5 AND (t1.t_ret IS NULL OR t1.t_ret > ?5) AND t0.eid = t1.s
+-- params: 5

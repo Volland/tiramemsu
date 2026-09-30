@@ -95,6 +95,24 @@ pub enum Error {
     /// A user write uses a reserved `sys:` or `tm:` predicate.
     #[error("reserved namespace: {0}")]
     ReservedNamespace(String),
+    /// A graph name that is not an IRI, a `NODE` or a `BNODE`.
+    #[error("invalid graph name: {term}")]
+    InvalidGraphName {
+        /// The rejected term, rendered.
+        term: String,
+    },
+    /// `CLEAR GRAPH` or `DROP GRAPH` on a graph with no membership and no declaration.
+    #[error("graph not found: {graph}")]
+    GraphNotFound {
+        /// The graph, rendered.
+        graph: String,
+    },
+    /// `CREATE GRAPH` on a graph that is already declared.
+    #[error("graph already exists: {graph}")]
+    GraphExists {
+        /// The graph, rendered.
+        graph: String,
+    },
     /// A schema change is violated by live data.
     #[error("schema change conflicts with live statements {violating:?}")]
     SchemaConflict {

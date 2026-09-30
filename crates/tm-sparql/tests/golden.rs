@@ -68,6 +68,24 @@ fn api_fixture(name: &str, t: &TestDb) {
             })
             .unwrap();
         }
+        "graphs" => {
+            // alice in two graphs, bob in one, carol in none
+            t.db.transact(Default::default(), |tx| {
+                let g = |n: &str| Value::iri(format!("http://example.org/{n}"));
+                let a = tx
+                    .assert(v("alice"), v("worksAt"), v("acme"), Valid::ALWAYS)?
+                    .eid();
+                let b = tx
+                    .assert(v("bob"), v("worksAt"), v("acme"), Valid::ALWAYS)?
+                    .eid();
+                tx.assert(v("carol"), v("name"), Value::str("Carol"), Valid::ALWAYS)?;
+                tx.add_to_graph(a, g("g"), Default::default())?;
+                tx.add_to_graph(a, g("graph1"), Default::default())?;
+                tx.add_to_graph(b, g("g"), Default::default())?;
+                Ok(())
+            })
+            .unwrap();
+        }
         other => panic!("unknown fixture {other}"),
     }
 }

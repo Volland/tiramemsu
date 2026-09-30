@@ -3,7 +3,7 @@
 use std::cell::RefCell;
 
 use tm_core::{
-    read, Error, Event, Executor, ObjectId, Result, TermReader, Triple, Value, ViewSpec,
+    read, Eid, Error, Event, Executor, ObjectId, Result, TermReader, Triple, Value, ViewSpec,
 };
 use tm_exec::{CacheMode, Explain, PathRequest, PathRow, QueryEngine, QueryResult};
 use tm_ir::{IrQuery, Params, PathMode};
@@ -122,6 +122,39 @@ impl<'a> View<'a> {
     ) -> Result<Vec<Triple>> {
         let spec = self.spec;
         self.exec(|e, _| read::triples(e, &spec, s, p, o))
+    }
+
+    /// The graphs of this view: every graph with at least one visible membership of a
+    /// visible statement, plus every declared graph (`CREATE GRAPH`), in id order.
+    /// Time selection applies to the memberships and to the declarations.
+    ///
+    /// ```
+    /// # use tiramemsu::*;
+    /// # let dir = tempfile::tempdir().unwrap();
+    /// let db = Db::open(dir.path().join("g.db"), OpenOptions::default())?;
+    /// let v = |s: &str| Value::iri(format!("urn:tiramemsu:v:{s}"));
+    /// db.transact(TxOptions::default(), |tx| {
+    ///     let e = tx.assert(v("alice"), v("worksAt"), v("acme"), Valid::ALWAYS)?.eid();
+    ///     tx.add_to_graph(e, v("session12"), AssertOpts::default())?;
+    ///     Ok(())
+    /// })?;
+    /// let g = db.now().encode(&v("session12"))?.unwrap();
+    /// assert_eq!(db.now().graphs()?, vec![g]);
+    /// assert_eq!(db.now().graph_members(g)?.len(), 1);
+    /// # Ok::<(), Error>(())
+    /// ```
+    // @lat: [[data-model#Named Graphs]]
+    pub fn graphs(&self) -> Result<Vec<ObjectId>> {
+        let spec = self.spec;
+        self.exec(|e, _| read::graphs(e, &spec))
+    }
+
+    /// The eids of the statements that are members of `graph` in this view, ascending:
+    /// the statement and its `sys:inGraph` membership are both visible here. A graph
+    /// that no statement is in gives an empty list.
+    pub fn graph_members(&self, graph: ObjectId) -> Result<Vec<Eid>> {
+        let spec = self.spec;
+        self.exec(|e, _| read::graph_members(e, &spec, graph))
     }
 
     /// The values of `(s, key)`: the objects of the statements the view selects,

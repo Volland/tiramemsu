@@ -106,11 +106,46 @@ pub struct Test {
     pub query: Option<PathBuf>,
     pub request: Option<PathBuf>,
     pub data: Vec<PathBuf>,
-    pub graph_data: Vec<PathBuf>,
+    /// Named graph data: the file and the graph name (`None`: the file's IRI).
+    pub graph_data: Vec<GraphData>,
     pub result: Option<PathBuf>,
     pub result_data: Vec<PathBuf>,
-    pub result_graph_data: Vec<PathBuf>,
+    pub result_graph_data: Vec<GraphData>,
     pub approval: Option<String>,
+}
+
+/// A named graph of a test: its data file and its name.
+#[derive(Debug, Clone)]
+pub struct GraphData {
+    pub file: PathBuf,
+    /// The `rdfs:label` of an update test; a query test names the graph by its file.
+    pub label: Option<String>,
+}
+
+impl GraphData {
+    /// The graph IRI.
+    pub fn iri(&self) -> String {
+        self.label
+            .clone()
+            .unwrap_or_else(|| format!("file://{}", self.file.display()))
+    }
+}
+
+fn graph_data(g: &Graph, p: &Term) -> Option<GraphData> {
+    const RDFS_LABEL: &str = "http://www.w3.org/2000/01/rdf-schema#label";
+    let key = term_key(p)?;
+    if key.starts_with("_:") {
+        let file = g.iri(&key, &format!("{UT}graph"))?;
+        Some(GraphData {
+            file: path_of(&file),
+            label: g.text(&key, RDFS_LABEL),
+        })
+    } else {
+        Some(GraphData {
+            file: path_of(&key),
+            label: None,
+        })
+    }
 }
 
 fn path_of(iri: &str) -> PathBuf {
@@ -169,8 +204,8 @@ pub fn read_manifest(path: &Path) -> Vec<Test> {
                         .into_iter()
                         .chain(g.objects(&action, &format!("{UT}graphData")))
                     {
-                        if let Some(i) = term_key(p) {
-                            test.graph_data.push(path_of(&i));
+                        if let Some(d) = graph_data(&g, p) {
+                            test.graph_data.push(d);
                         }
                     }
                 } else {
@@ -185,8 +220,8 @@ pub fn read_manifest(path: &Path) -> Vec<Test> {
                         }
                     }
                     for p in g.objects(&result, &format!("{UT}graphData")) {
-                        if let Some(i) = term_key(p) {
-                            test.result_graph_data.push(path_of(&i));
+                        if let Some(d) = graph_data(&g, p) {
+                            test.result_graph_data.push(d);
                         }
                     }
                 } else {

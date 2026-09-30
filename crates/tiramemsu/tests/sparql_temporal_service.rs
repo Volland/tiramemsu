@@ -150,24 +150,24 @@ fn service_variable_rejected() {
     );
 }
 
-// sparql-temporal-dataset "Non-time graphs are unsupported": GRAPH inside a time scope is still a named graph
+// named-graphs "Graphs combine with SERVICE time scopes": GRAPH inside a time scope names a graph
 #[test]
-fn graph_inside_a_time_scope_is_a_named_graph() {
+fn graph_inside_a_time_scope_names_a_graph() {
     let t = T::new();
-    let e = t.err(&format!(
+    let s = t.sel(&format!(
         "SELECT * WHERE {{ SERVICE <{P}asOf/150> {{ GRAPH <http://example.org/g> {{ ?s ?p ?o }} }} }}"
     ));
-    assert_unsupported(e, "named graph");
+    assert!(s.rows.is_empty());
 }
 
-// sparql-query "Unsupported features fail before execution": GRAPH variable is rejected
+// sparql-query "Out-of-subset constructs fail before execution": GRAPH variable is evaluated
 #[test]
-fn graph_variable_rejected() {
+fn graph_variable_is_evaluated() {
     let t = T::new();
-    assert_unsupported(
-        t.err("SELECT ?g WHERE { GRAPH ?g { ?s ?p ?o } }"),
-        "GRAPH variable",
-    );
+    assert!(t
+        .sel("SELECT ?g WHERE { GRAPH ?g { ?s ?p ?o } }")
+        .rows
+        .is_empty());
 }
 
 // sparql-temporal-dataset "Statement-time virtual predicates": When was a fact added, and by whom

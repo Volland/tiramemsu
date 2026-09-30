@@ -72,6 +72,13 @@ pub const SYS_DB: &str = "urn:tiramemsu:sys:db";
 /// `sys:vocab`.
 pub const SYS_VOCAB: &str = "urn:tiramemsu:sys:vocab";
 
+/// `sys:inGraph`: the membership predicate `(eid sys:inGraph graph)` (engine-owned).
+pub const SYS_IN_GRAPH: &str = "urn:tiramemsu:sys:inGraph";
+/// `sys:Graph`: the class of a declared named graph (`CREATE GRAPH`).
+pub const SYS_GRAPH: &str = "urn:tiramemsu:sys:Graph";
+/// `rdf:type`.
+pub const RDF_TYPE: &str = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
+
 /// The four schema-flag predicates.
 pub const SCHEMA_FLAGS: [&str; 4] = [SYS_CARDINALITY, SYS_UNIQUE, SYS_VALUE_TYPE, SYS_IS_EDGE];
 

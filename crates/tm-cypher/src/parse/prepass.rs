@@ -184,10 +184,7 @@ fn use_clause(c: &mut Cur) -> CResult<TimeSel> {
     }
     if tx.is_none() && valid.is_none() {
         let sp = t_span(c.peek(0), start);
-        return Err(CypherError::unsupported(
-            "USE <graph name>",
-            Some(start.cover(sp)),
-        ));
+        return Err(CypherError::unsupported("USE GRAPH", Some(start.cover(sp))));
     }
     Ok(TimeSel {
         tx,

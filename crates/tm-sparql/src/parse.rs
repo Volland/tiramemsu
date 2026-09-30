@@ -292,6 +292,52 @@ pub fn first_keyword(text: &str) -> Option<String> {
     }
 }
 
+/// The operation keywords of an update request, one per `;`-separated operation,
+/// upper-cased. `spargebra` rewrites `ADD`, `MOVE` and `COPY` into other operations,
+/// so the unsupported ones are recognised here, on the text.
+pub fn operation_keywords(text: &str) -> Vec<String> {
+    let b = text.as_bytes();
+    let (mut i, mut start, mut depth) = (0, 0, 0usize);
+    let mut segments = Vec::new();
+    while i < b.len() {
+        match b[i] {
+            b'#' => {
+                while i < b.len() && b[i] != b'\n' {
+                    i += 1;
+                }
+                continue;
+            }
+            b'<' => {
+                if let Some(e) = text[i + 1..].find(['>', ' ', '\n', '\t']) {
+                    if b[i + 1 + e] == b'>' {
+                        i += e + 2;
+                        continue;
+                    }
+                }
+            }
+            q @ (b'"' | b'\'') => {
+                i += 1;
+                while i < b.len() && b[i] != q {
+                    if b[i] == b'\\' {
+                        i += 1;
+                    }
+                    i += 1;
+                }
+            }
+            b'{' => depth += 1,
+            b'}' => depth = depth.saturating_sub(1),
+            b';' if depth == 0 => {
+                segments.push(&text[start..i]);
+                start = i + 1;
+            }
+            _ => {}
+        }
+        i += 1;
+    }
+    segments.push(&text[start..]);
+    segments.into_iter().filter_map(first_keyword).collect()
+}
+
 /// Parses `text` as a query only (syntax tests): no dispatch, no path check.
 pub fn parse_query_only(text: &str, env: &Env) -> Result<Query> {
     parser(env)?

@@ -52,6 +52,9 @@ pub fn scope(op: &Op) -> Scope {
             if let Some(e) = &t.eid {
                 s.push(e);
             }
+            if let crate::op::GraphSel::Var(g) = &t.graph {
+                s.push(g);
+            }
         }
         Op::Path(p) => {
             term_var(&p.start, &mut s);
@@ -222,6 +225,30 @@ fn check_expr(e: &Expr) -> Result<()> {
 fn check_op(op: &Op) -> Result<()> {
     match op {
         Op::Triple(t) => {
+            match &t.graph {
+                crate::op::GraphSel::Set(gs) if gs.is_empty() => {
+                    return Err(invalid(
+                        "a graph set must name at least one graph".to_string(),
+                    ));
+                }
+                crate::op::GraphSel::Set(gs)
+                    if gs
+                        .iter()
+                        .any(|g| !matches!(g, TermOrVar::Const(_) | TermOrVar::Param(_))) =>
+                {
+                    return Err(invalid(
+                        "a graph set holds constants and parameters only".to_string(),
+                    ));
+                }
+                _ => {}
+            }
+            if let (TermOrVar::Const(Value::Iri(p)), true) = (&t.p, !t.graph.is_any()) {
+                if is_virtual(p) {
+                    return Err(invalid(format!(
+                        "virtual predicate <{p}> cannot be selected by graph"
+                    )));
+                }
+            }
             if let (TermOrVar::Const(Value::Iri(p)), Some(e)) = (&t.p, &t.eid) {
                 if is_virtual(p) {
                     return Err(invalid(format!(
@@ -386,6 +413,29 @@ mod tests {
             .triple("?a", "v:p", "?b")
             .order_limit(vec![], None, Some(-5));
         assert!(is_invalid(op));
+    }
+
+    // @lat: [[tests#Named Graphs#Graph Selector Text And Validation]]
+    #[test]
+    fn graph_selector_text_and_validation() {
+        use crate::op::GraphSel;
+        let any = TriplePattern::new("?s", "v:p", "?o", View::now());
+        let set = |gs: Vec<TermOrVar>| Op::Triple(any.clone().in_graph(GraphSel::Set(gs)));
+        assert_eq!(
+            crate::display::sexpr_line(&Op::Triple(any.clone())),
+            "(triple ?s <v:p> ?o :view now)",
+        );
+        let text = crate::display::sexpr_line(&set(vec![TermOrVar::iri("urn:g1"), "$g".into()]));
+        assert!(text.ends_with(":graph (<urn:g1> $g))"), "{text}");
+        let var = Op::Triple(any.clone().in_graph(GraphSel::Var("g".into())));
+        assert!(crate::display::sexpr_line(&var).ends_with(":graph ?g)"));
+        assert!(scope(&var).binds(&"g".into()));
+        assert!(is_invalid(set(vec![])));
+        assert!(is_invalid(set(vec!["?x".into()])));
+        let virt = TriplePattern::new("?r", crate::vocab::TM_TX_ADDED, "?t", View::now())
+            .in_graph(GraphSel::Set(vec![TermOrVar::iri("urn:g1")]));
+        assert!(is_invalid(Op::Triple(virt)));
+        assert!(!is_invalid(set(vec![TermOrVar::iri("urn:g1")])));
     }
 
     // virtual-predicates "Eid on a virtual pattern" (validation half)

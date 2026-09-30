@@ -4,13 +4,20 @@
 
 use tm_core::{Result, Value};
 use tm_ir::validate::check_count;
-use tm_ir::{Expr, IrQuery, Op, Params, TermOrVar};
+use tm_ir::{Expr, GraphSel, IrQuery, Op, Params, TermOrVar, TriplePattern, Var};
 
 use crate::error::invalid;
 
 struct Binder<'a> {
     params: &'a Params,
+    /// Numbers the internal eid variables of graph joins.
+    fresh: std::cell::Cell<u32>,
 }
+
+/// Prefix of the internal eid variables a graph selector introduces (`~` cannot
+/// start a user variable, and the SPARQL front end uses one-letter kinds).
+const GRAPH_EID_PREFIX: &str = "~gsel";
+const GRAPH_VAR_PREFIX: &str = "~gvar";
 
 impl Binder<'_> {
     fn value(&self, name: &str) -> Result<Value> {
@@ -55,6 +62,69 @@ impl Binder<'_> {
         })
     }
 
+    /// Lowers a graph selector to an ordinary membership join under the pattern's
+    /// own view (`lat.md/data-model#Named Graphs`, design Decision 6). The statement
+    /// pattern binds its eid `e`, and the membership pattern `(e sys:inGraph g)`
+    /// constrains it:
+    ///
+    /// - `Set([g])` joins `(e inGraph g)`, so the small side can drive the join;
+    /// - `Set([g1, g2, ..])` keeps the statement once through
+    ///   `EXISTS { (e inGraph ?x) FILTER ?x IN (g1, g2, ..) }`;
+    /// - `Var(g)` joins `(e inGraph ?g)`: one solution per membership.
+    fn graph_join(&self, mut t: TriplePattern) -> Result<Op> {
+        let sel = std::mem::take(&mut t.graph);
+        if sel.is_any() {
+            return Ok(Op::Triple(t));
+        }
+        let n = self.fresh.get();
+        self.fresh.set(n + 1);
+        let e = t.eid.clone().unwrap_or_else(|| {
+            let v = Var::new(format!("{GRAPH_EID_PREFIX}{n}"));
+            t.eid = Some(v.clone());
+            v
+        });
+        let member = |o: TermOrVar| {
+            Op::Triple(TriplePattern::new(
+                TermOrVar::Var(e.clone()),
+                TermOrVar::iri(tm_ir::vocab::SYS_IN_GRAPH),
+                o,
+                t.view,
+            ))
+        };
+        let membership = match sel {
+            GraphSel::Any => unreachable!("handled above"),
+            GraphSel::Var(g) => member(TermOrVar::Var(g)),
+            GraphSel::Set(gs) => {
+                let gs = gs
+                    .iter()
+                    .map(|g| self.term(g))
+                    .collect::<Result<Vec<_>>>()?;
+                match gs.as_slice() {
+                    [one] => member(one.clone()),
+                    _ => {
+                        let x = Var::new(format!("{GRAPH_VAR_PREFIX}{n}"));
+                        let list = gs
+                            .into_iter()
+                            .map(|g| match g {
+                                TermOrVar::Const(v) => Ok(Expr::val(v)),
+                                _ => {
+                                    Err(invalid("a graph set holds constants and parameters only"))
+                                }
+                            })
+                            .collect::<Result<Vec<_>>>()?;
+                        let inner = member(TermOrVar::Var(x.clone())).filter(Expr::In(
+                            Box::new(Expr::Var(x)),
+                            list,
+                            false,
+                        ));
+                        return Ok(Op::Triple(t).filter(Expr::exists(inner)));
+                    }
+                }
+            }
+        };
+        Ok(Op::join(vec![Op::Triple(t), membership]))
+    }
+
     fn op(&self, op: &Op) -> Result<Op> {
         let b = |x: &Op| self.op(x).map(Box::new);
         Ok(match op {
@@ -63,7 +133,7 @@ impl Binder<'_> {
                 t.s = self.term(&t.s)?;
                 t.p = self.term(&t.p)?;
                 t.o = self.term(&t.o)?;
-                Op::Triple(t)
+                self.graph_join(t)?
             }
             Op::Path(p) => {
                 let mut p = p.clone();
@@ -159,7 +229,11 @@ impl Binder<'_> {
 /// Substitutes every parameter of `q` from `params`.
 pub fn bind(q: &IrQuery, params: &Params) -> Result<IrQuery> {
     Ok(IrQuery {
-        root: Binder { params }.op(&q.root)?,
+        root: Binder {
+            params,
+            fresh: std::cell::Cell::new(0),
+        }
+        .op(&q.root)?,
         semantics: q.semantics,
     })
 }

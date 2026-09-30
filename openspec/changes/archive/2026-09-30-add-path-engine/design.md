@@ -497,3 +497,4 @@ This is greenfield. There is no file-format change and no data migration.
 
 - Chunk size for `rarray` batches (default 256) and the LRU size for compiled paths (default 64). Benchmarks will tune both. Neither changes specs or tasks.
 - Whether the relationship-view classifier for the wildcard is shared with `tm-cypher`, or duplicated in `tm-exec` behind one test fixture. It depends on where M2b puts it. Either way the behaviour is fixed by the specs.
+- Graph-filtered path search (a graph filter on the neighbour fetcher) is the follow-up of `add-named-graphs`: until then property paths, `shortestPath` and `tm_path` under `GRAPH` or a `FROM <g>` default graph fail with `Unsupported { feature: "named graph path" }`.

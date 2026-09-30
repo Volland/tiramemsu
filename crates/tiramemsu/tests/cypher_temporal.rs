@@ -375,3 +375,22 @@ fn set_valid_time_on_a_statement() {
     ));
     assert_eq!(t.last_t(), before);
 }
+
+// @lat: [[tests#Named Graphs#Cypher Keeps One Graph]]
+#[test]
+fn use_graph_is_unsupported() {
+    let t = job_change();
+    let before = t.last_t();
+    for text in [
+        "USE GRAPH g1 MATCH (n) RETURN n",
+        "USE g1 MATCH (n) RETURN n",
+    ] {
+        match t.qerr(text) {
+            Error::Unsupported { feature } => assert_eq!(feature, "USE GRAPH", "{text}"),
+            other => panic!("{text}: {other:?}"),
+        }
+    }
+    assert_eq!(t.last_t(), before);
+    // the time forms of USE are unaffected
+    assert_eq!(t.one("USE AS OF 0 MATCH (n) RETURN count(n) AS c"), i(0));
+}

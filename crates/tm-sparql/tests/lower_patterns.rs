@@ -80,15 +80,47 @@ fn service_and_graph_lowering() {
         "SERVICE",
     );
     unsupported("SELECT * WHERE { SERVICE ?e { ?s ?p ?o } }", "SERVICE");
-    unsupported(
-        "SELECT * WHERE { GRAPH <http://ex/g> { ?s ?p ?o } }",
-        "named graph",
-    );
-    unsupported(
+    // GRAPH blocks lower to a graph selector on the block's triple patterns
+    let g = ir("SELECT * WHERE { GRAPH <http://ex/g> { ?s ?p ?o } }");
+    assert!(g.contains(":graph (<http://ex/g>)"), "{g}");
+    let h = ir(
         "SELECT * WHERE { SERVICE <urn:tiramemsu:tm:history> { GRAPH <http://ex/g> { ?s ?p ?o } } }",
-        "named graph",
     );
-    unsupported("SELECT * WHERE { GRAPH ?g { ?s ?p ?o } }", "GRAPH variable");
+    assert!(
+        h.contains(":view history") && h.contains(":graph (<http://ex/g>)"),
+        "{h}"
+    );
+    let v = ir("SELECT * WHERE { GRAPH ?g { ?s ?p ?o } }");
+    assert!(
+        v.contains(":graph ?~g0") && v.contains("(extend ?g ?~g0"),
+        "{v}"
+    );
+    // nested GRAPH replaces the outer graph
+    let n = ir("SELECT * WHERE { GRAPH <http://ex/a> { GRAPH <http://ex/b> { ?s ?p ?o } } }");
+    assert!(
+        n.contains("<http://ex/b>") && !n.contains("<http://ex/a>"),
+        "{n}"
+    );
+    // FROM NAMED restricts GRAPH, FROM sets the default graph
+    let f = ir("SELECT * FROM <http://ex/a> FROM NAMED <http://ex/b> WHERE { ?s ?p ?o GRAPH ?g { ?x ?y ?z } }");
+    assert!(
+        f.contains(":graph (<http://ex/a>)") && f.contains(":graph ?~g"),
+        "{f}"
+    );
+    // properties paths under a graph selection are refused before execution
+    unsupported(
+        "SELECT ?x WHERE { GRAPH <http://ex/g> { <urn:tiramemsu:v:a> <urn:tiramemsu:v:k>+ ?x } }",
+        "named graph path",
+    );
+    unsupported(
+        "SELECT ?x FROM <http://ex/g> WHERE { <urn:tiramemsu:v:a> <urn:tiramemsu:v:k>+ ?x }",
+        "named graph path",
+    );
+    // a statement IRI is not a graph name
+    assert!(matches!(
+        err("SELECT * WHERE { GRAPH <urn:tiramemsu:stmt:1> { ?s ?p ?o } }"),
+        tm_core::Error::InvalidGraphName { .. }
+    ));
     match err("SELECT * WHERE { GRAPH <urn:tiramemsu:tm:asOf/150> { ?s ?p ?o } }") {
         tm_core::Error::Parse { msg, .. } => assert!(msg.contains("SERVICE")),
         other => panic!("{other:?}"),

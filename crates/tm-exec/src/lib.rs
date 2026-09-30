@@ -101,7 +101,8 @@ impl QueryEngine {
         validate(q)?;
         let query = plan::bind::bind(q, params)?;
         plan::route::precheck(&query, &self.registry)?;
-        let columns = output_vars(&query.root);
+        // graph joins add internal variables to the plan, never to the result
+        let columns = output_vars(&q.root);
         Ok(Prepared { query, columns })
     }
 

@@ -163,6 +163,16 @@ fn write_op(out: &mut String, op: &Op, depth: usize, pretty: bool) {
             if t.include_volatile {
                 out.push_str(" :volatile");
             }
+            match &t.graph {
+                crate::op::GraphSel::Any => {}
+                crate::op::GraphSel::Set(gs) => {
+                    let gs: Vec<String> = gs.iter().map(term).collect();
+                    let _ = write!(out, " :graph ({})", gs.join(" "));
+                }
+                crate::op::GraphSel::Var(v) => {
+                    let _ = write!(out, " :graph {v}");
+                }
+            }
             out.push(')');
         }
         Op::Path(p) => {

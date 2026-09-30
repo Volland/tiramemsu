@@ -154,7 +154,7 @@ Every case under `crates/tm-sparql/tests/golden` runs on a fresh database and is
 
 ### SPARQL W3C Subset
 
-The manifest-driven runner executes the in-scope SPARQL 1.0, 1.1 and 1.2 test categories against fresh databases. It fails on any failure that is not in `expected-deviations.toml`, and on any listed test that now passes.
+The manifest-driven runner executes the in-scope SPARQL 1.0, 1.1 and 1.2 categories on fresh databases, with `graphData` as named graphs. It fails on any failure not in `expected-deviations.toml`, and on any listed test that now passes.
 
 ### Skewed Joins Start Selective
 
@@ -185,3 +185,133 @@ A path using `sys:subject` hops finds the entities behind a statement that a bel
 ### Unbounded Paths Are Capped
 
 A Cypher `-[*]->` pattern without an upper bound stops at `max_hops` and does not fail.
+
+## Named Graphs
+
+Checks of [[data-model#Named Graphs]] across the core, the planner, SPARQL query and update, and Cypher.
+
+### Membership Is Engine Owned
+
+Asserting `sys:inGraph` through `Tx::assert` or `create` fails with `ReservedNamespace`, and a schema statement cannot be added to a graph. Nothing is written in either case. See [[data-model#Named Graphs]].
+
+### Graph Names Are Validated
+
+A literal or a statement as graph name fails with `InvalidGraphName` on every graph method and writes nothing, while IRI, `NODE` and `BNODE` names work.
+
+### Error Messages Name The Term
+
+`InvalidGraphName`, `GraphNotFound` and `GraphExists` render messages that name the rejected term or graph.
+
+### Statement Can Be In Many Graphs
+
+One statement added to two graphs keeps one eid and gets two memberships, adding twice is idempotent, and a retracted statement cannot be added. The report lists memberships apart from statements.
+
+### Remove And Clear Keep Statements
+
+`remove_from_graph` and `clear_graph` retract memberships only, removing a non-member is a no-op, `create_graph` is idempotent, and `drop_graph` retracts the declaration and keeps other metadata.
+
+### Views Apply To Membership
+
+`graph_members` and `graphs` honour `asOf`, `history` and `validAt` for the membership, and the member statement must be visible in the same view.
+
+### Cascade And Supersede Drop Memberships
+
+Retracting a statement retracts its memberships with `ret_kind` cascade in the same transaction. Supersede and cardinality-one replacement do not copy memberships to the replacement.
+
+### Membership Lookups Use Live Indexes
+
+`EXPLAIN QUERY PLAN` of `(p = sys:inGraph, o = g)` and `(s = eid, p = sys:inGraph)` shows index seeks with no table scan and no new index. After churn and `ANALYZE` the graph lookup uses `live_pos`, and `sqlite_stat4` has samples for it.
+
+### Membership Matches A Model
+
+For random adds, removes, clears and retracts, `graph_members` of every graph equals a model of `(eid, graph)` pairs now and as of every earlier transaction.
+
+### Graph Selector Text And Validation
+
+The IR text form prints `:graph` for a set or a variable, the variable is in scope, and an empty set, a variable in a set or a selector on a virtual predicate is invalid.
+
+### Graph Selector Lowers To Membership Join
+
+A graph selector of one graph, several graphs or a variable runs as a membership join in the pattern's view. A statement in two listed graphs matches once, and `Var` gives a row per membership.
+
+An unknown graph matches nothing, and no internal variable reaches the result.
+
+### Graph Selector SQL Snapshots
+
+The generated SQL for a graph set of one, of several and a variable, and for a membership under `asOf`, matches the stored `insta` snapshots.
+
+### Small Graph Seeks First
+
+With an 1 800-member graph and a 3-member graph over the same statements, a pattern restricted to the small graph starts its plan from the membership scan, after `ANALYZE` (D19).
+
+### GRAPH Selects By Membership
+
+`GRAPH <g>`, `GRAPH ?g` (one row per membership), a bound graph variable, nested `GRAPH` and an unknown graph give the rows of the spec, and a statement in no graph has no graph.
+
+### Default Graph Is The Union
+
+Without `FROM`, a query sees every statement once, a statement in two graphs appears once, `FILTER NOT EXISTS { ?e sys:inGraph ?g }` selects statements in no graph, and a store without graphs behaves as before.
+
+### Dataset Clauses
+
+`FROM` narrows the default graph to the union of the listed graphs, `FROM NAMED` limits `GRAPH` for constant and variable names, and a time IRI may sit beside a graph IRI.
+
+### Graphs Combine With Service Scopes
+
+`SERVICE <tm:asOf/t> { GRAPH <g> { … } }` and `GRAPH <g> { SERVICE … }` read membership and statement in the scoped view, and a `tm:` IRI as a graph name still fails with a `Parse` error that names `SERVICE`.
+
+### Graph Metadata Is Ordinary Triples
+
+Triples about a graph node are written and read like any triple, are visible in the default graph, and are not members of the graph.
+
+### Membership Carries Layers
+
+A membership is a statement: `~ ?m {| … |}` annotates it, and a statement annotated inside `GRAPH` follows the graph while its annotation triples read the default view.
+
+### Duplicates Follow Memberships
+
+A statement in two graphs appears once in the default graph and once per membership under `GRAPH ?g`, also for a predicate that holds parallel eids.
+
+### Membership Is Bitemporal In SPARQL
+
+`asOf` shows a past membership, `history` lists a removed one, `validAt` honours a bounded membership, and a plain delete retracts a statement together with its memberships.
+
+### Property Paths Inside Graphs Are Rejected
+
+A property path under `GRAPH` or a `FROM <g>` default graph, also inside an update `WHERE`, fails with `Unsupported("named graph path")` before any SQL runs, and the same path outside a graph still runs.
+
+### Graph Names Are Rejected When Invalid
+
+A statement or transaction IRI as graph name, in `GRAPH`, `FROM`, `CREATE` or a template, and a graph variable bound to a literal, fail with `InvalidGraphName` and write nothing.
+
+### SPARQL Insert Into A Graph
+
+`INSERT DATA` and templates into a graph assert the statement and a membership idempotently, an already-live statement only gains a membership, `GRAPH ?g` templates use the `WHERE` binding, and an unbound graph variable is a `Parse` error.
+
+### SPARQL Delete From A Graph
+
+Deleting in a `GRAPH` block retracts the membership only, a non-member or unknown graph is a no-op, and a plain delete retracts the statement and every membership.
+
+### SPARQL WITH And USING
+
+`WITH` sets the graph of templates and scopes the `WHERE`, `USING` and `USING NAMED` scope the `WHERE` default and `GRAPH`, and a time IRI as a data-block graph is a `Parse` error.
+
+### SPARQL Graph Management
+
+`CREATE`, `CLEAR`, `DROP` with `GRAPH` and `NAMED`, `SILENT`, `GraphNotFound` and `GraphExists` behave as specified: `CLEAR` keeps statements and `DROP` also drops the declaration but not other metadata.
+
+### Graph Updates Fail Atomically
+
+A failing graph operation or a rejected `LOAD`, `ADD`, `MOVE`, `COPY`, `CLEAR DEFAULT` or `DROP ALL` aborts the whole request and stores nothing.
+
+### SPARQL Membership Predicate Is Engine Owned
+
+`INSERT DATA` of a `sys:inGraph` triple is `ReservedNamespace`, a schema statement in a `GRAPH` block is rejected, and memberships are readable in SPARQL.
+
+### Cardinality One Drops Old Memberships
+
+A cardinality-one replacement written into a graph retracts the old statement and its membership with kind cardinality, and the new statement is a member.
+
+### Cypher Keeps One Graph
+
+`USE GRAPH g1 MATCH …` and `USE g1 …` fail with `Unsupported("USE GRAPH")` before any write, and the time forms of `USE` are unaffected.

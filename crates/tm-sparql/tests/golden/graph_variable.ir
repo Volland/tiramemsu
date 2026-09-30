@@ -1,0 +1,5 @@
+; Homomorphism Unbound SetOfTriples
+(project [?g ?s]
+  (orderLimit [(asc ?g) (asc ?s)]
+    (extend ?g ?~g0
+      (triple ?s ?p ?o :view now :graph ?~g0))))

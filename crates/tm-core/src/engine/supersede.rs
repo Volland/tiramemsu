@@ -101,7 +101,13 @@ impl Tx<'_> {
                 .and_then(|e| sigma.get(&e))
                 .map_or(id, |e| e.oid())
         };
+        // memberships are retracted with the old statement and never copied: adding
+        // the replacement to graphs is an explicit act of the writer
+        let in_graph = self.sys_lookup(vocab::SYS_IN_GRAPH)?;
         for r in rows {
+            if Some(r.p) == in_graph {
+                continue;
+            }
             let new = sigma[&r.eid];
             let s = map(r.s);
             let (o, valid) = if r.eid == root {

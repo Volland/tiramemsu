@@ -1,0 +1,65 @@
+{
+ "N": 1000000,
+ "sqlite": "3.45.3",
+ "load_s": 41.72156691699638,
+ "rows_before": 11000500,
+ "live_before": 7000500,
+ "bytes_before": 1759518720,
+ "membership_load_s": 335.99125579197425,
+ "rows_after": 18001000,
+ "bytes_after": 3376406528,
+ "storage_ratio": 1.918937542193356,
+ "row_ratio": 1.6363801645379756,
+ "live_ratio": 2.0,
+ "small_members": 100,
+ "large_members": 5000000,
+ "queries": {
+  "no_graph_knows_count": {
+   "ms": 101.664,
+   "rows": 5000000,
+   "plan": [
+    "SEARCH t0 USING COVERING INDEX live_pos (p=?)"
+   ]
+  },
+  "graph_small_knows": {
+   "ms": 0.01,
+   "rows": 100,
+   "plan": [
+    "SEARCH t1 USING COVERING INDEX hist_pos (p=? AND o=?)",
+    "SEARCH t0 USING INTEGER PRIMARY KEY (rowid=?)"
+   ]
+  },
+  "graph_partition_knows": {
+   "ms": 48.553,
+   "rows": 50000,
+   "plan": [
+    "SEARCH t1 USING COVERING INDEX hist_pos (p=? AND o=?)",
+    "SEARCH t0 USING INTEGER PRIMARY KEY (rowid=?)"
+   ]
+  },
+  "graph_large_knows": {
+   "ms": 550.008,
+   "rows": 5000000,
+   "plan": [
+    "SEARCH t1 USING COVERING INDEX hist_pos (p=? AND o=?)",
+    "SEARCH t0 USING INTEGER PRIMARY KEY (rowid=?)"
+   ]
+  },
+  "graph_var_all": {
+   "ms": 7732.531,
+   "rows": 102,
+   "plan": [
+    "SEARCH t1 USING COVERING INDEX live_pos (p=?)",
+    "SEARCH t0 USING INTEGER PRIMARY KEY (rowid=?)"
+   ]
+  },
+  "graph_small_type_person": {
+   "ms": 0.008,
+   "rows": 0,
+   "plan": [
+    "SEARCH t1 USING COVERING INDEX hist_pos (p=? AND o=?)",
+    "SEARCH t0 USING INTEGER PRIMARY KEY (rowid=?)"
+   ]
+  }
+ }
+}

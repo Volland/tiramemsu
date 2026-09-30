@@ -7,6 +7,28 @@ use crate::term::TermOrVar;
 use crate::var::Var;
 use crate::view::View;
 
+/// Which named graphs a triple pattern's statement must be a member of
+/// (`lat.md/data-model#Named Graphs`). Membership is read in the pattern's own view.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub enum GraphSel {
+    /// No graph condition: the default graph is the union of every statement.
+    #[default]
+    Any,
+    /// Member of at least one listed graph (constants or parameters). The statement
+    /// matches once however many of the listed graphs contain it.
+    Set(Vec<TermOrVar>),
+    /// Binds the variable to each graph the statement is a member of: one solution
+    /// per membership.
+    Var(Var),
+}
+
+impl GraphSel {
+    /// True for [`GraphSel::Any`].
+    pub fn is_any(&self) -> bool {
+        matches!(self, GraphSel::Any)
+    }
+}
+
 /// A view-scoped triple pattern: one statement per solution.
 #[derive(Clone, Debug, PartialEq)]
 pub struct TriplePattern {
@@ -24,6 +46,8 @@ pub struct TriplePattern {
     pub iso_group: Option<u32>,
     /// Also match volatile values (under `{Now, Unfiltered}` with a constant predicate).
     pub include_volatile: bool,
+    /// The graph membership the statement must have (`Any` by default).
+    pub graph: GraphSel,
 }
 
 impl TriplePattern {
@@ -42,7 +66,14 @@ impl TriplePattern {
             view,
             iso_group: None,
             include_volatile: false,
+            graph: GraphSel::Any,
         }
+    }
+
+    /// Restricts the statement to a graph selection.
+    pub fn in_graph(mut self, graph: GraphSel) -> TriplePattern {
+        self.graph = graph;
+        self
     }
 
     /// Binds the eid to `var`.

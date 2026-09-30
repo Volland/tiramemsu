@@ -230,10 +230,10 @@ fn time_iri_as_data() {
     assert_eq!(t.col(&q, "x"), some(&[iri]));
 }
 
-// sparql-temporal-dataset "Non-time graphs are unsupported": Ordinary named graph rejected
+// named-graphs "Dataset clauses": a non-time FROM IRI names a graph, it is not an error
 #[test]
-fn ordinary_named_graph_rejected() {
+fn ordinary_graph_iri_names_a_graph() {
     let t = T::new();
-    let e = t.err("SELECT * FROM <http://example.org/graph1> WHERE { ?s ?p ?o }");
-    assert_unsupported(e, "named graph");
+    let s = t.sel("SELECT * FROM <http://example.org/graph1> WHERE { ?s ?p ?o }");
+    assert!(s.rows.is_empty());
 }

@@ -108,8 +108,29 @@ e8 --> e7 : subject
 
 Rules:
 - A statement may not use its own eid as its subject or object. Longer cycles (e7 about e8 about e7) are allowed, and the cascade handles them with a visited set. See [[time-model#Cascade]].
-- There is no named-graph column. Context, source, session or agent membership is itself a layer triple on the eid, e.g. `(e1 sys:inContext :session12)`. Physical isolation per agent means one SQLite file per agent.
+- There is no named-graph column. Context, source, session or agent membership is itself a layer triple on the eid, e.g. `(e1 sys:inGraph :session12)`, which is how [[data-model#Named Graphs]] work. Physical isolation per agent means one SQLite file per agent.
 - Transactions are subjects too: `(tx205 sys:reason "user correction")`, `(tx205 sys:author :agent7)`.
+
+## Named Graphs
+
+A named graph is a node, and membership is a layer statement `(e sys:inGraph g)` on a statement's eid. Graphs are tags on statements, not containers, and they need no column, no table and no format change (D28).
+
+```sparql
+INSERT DATA { GRAPH v:session12 { v:alice v:worksAt v:acme } }   # statement + membership
+INSERT DATA { v:session12 v:startedBy v:agent7 }                  # metadata: an ordinary triple
+```
+
+- **Graph names:** an `IRI`, `NODE` or `BNODE` id. A literal, statement or transaction is `InvalidGraphName`. A graph exists in a view while at least one membership of a visible statement is visible; `CREATE GRAPH` also declares it with `(g rdf:type sys:Graph)`, so empty graphs can be listed.
+- **Tags, not containers:** one statement keeps one eid however many graphs it is in, so assert stays idempotent and confidence on a fact belongs to the fact. `INSERT DATA` into two graphs gives one statement and two memberships.
+- **Membership is a statement:** it has its own eid, transaction time and valid time, accepts layers (`{| v:addedBy … |}`), and is read in the pattern's own view, so `asOf` shows the graph as it was and `validAt` honours a bounded membership. SPARQL memberships have unbounded valid time; `Tx::add_to_graph` can bound it.
+- **Engine-owned:** only `GRAPH` blocks, `WITH` and the `Tx` methods write `sys:inGraph`; a direct assert is `ReservedNamespace`. A statement whose predicate is in `sys:` (schema flags, bookkeeping) belongs to no graph.
+- **Delete is membership-only:** `DELETE … { GRAPH <g> { t } }`, `Tx::remove_from_graph`, `CLEAR GRAPH` and `DROP GRAPH` retract memberships and never the member statement. A plain delete retracts the statement, and the cascade retracts its memberships (`ret_kind` cascade). Superseding a member statement drops its memberships; the writer adds the replacement to graphs explicitly.
+- **Default graph is the union** of every visible statement (Decision D28, a deviation from W3C SPARQL, where it holds only triples outside named graphs). `FROM <g>` narrows it to members of `g`; `FROM NAMED` limits `GRAPH`. See [[query#Front Ends#SPARQL]].
+- **Metadata about a graph** is ordinary triples with the graph as subject. They are not members of the graph merely because of their subject.
+- **Use graphs or plain layers:** use graphs for dataset syntax and interchange; use a plain layer triple such as `(e v:session :s12)` when a query never needs `GRAPH`. Both are layers underneath.
+- **Cost:** one extra row and its nine index entries per membership, about 1.9 times the file for a store where every live statement has one membership ([[storage#Graph Memberships]]). `GRAPH <g>` seeks `(p = sys:inGraph, o = g)` on the live `(p, o)` index and costs the size of the graph.
+
+Implementation: `crates/tm-core/src/engine/graph.rs` holds the `Tx` operations, [[crates/tm-core/src/read.rs#graph_members]] the reads behind `View::graphs` and `View::graph_members`, and the graph selector on `TriplePattern` lowers to a membership join in `tm-exec`.
 
 ## ObjectId
 
@@ -185,7 +206,7 @@ These namespaces belong to the engine. User data cannot assert `sys:` predicates
 
 | Prefix | IRI | Use |
 |---|---|---|
-| `sys:` | `urn:tiramemsu:sys:` | Engine bookkeeping: `supersedes`, `confirmedBy`, `reason`, `author`, schema flags, vocab, prefixes, virtual `subject`/`object` hops |
+| `sys:` | `urn:tiramemsu:sys:` | Engine bookkeeping: `supersedes`, `confirmedBy`, `inGraph`, `Graph`, `reason`, `author`, schema flags, vocab, prefixes, virtual `subject`/`object` hops |
 | `tm:` | `urn:tiramemsu:tm:` | Time IRIs and functions in queries: `tm:asOf/…`, `tm:validAt/…`, `tm:history`, `tm:txAdded` |
 | `v:` | `urn:tiramemsu:v:` (default) | User vocabulary |
 | — | `urn:tiramemsu:node:` / `urn:tiramemsu:bnode:` | Skolem IRIs for anonymous nodes |

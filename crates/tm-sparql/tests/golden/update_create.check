@@ -1,0 +1,1 @@
+SELECT ?g WHERE { ?g a <urn:tiramemsu:sys:Graph> }

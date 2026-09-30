@@ -2,6 +2,8 @@
 
 use tm_core::vocab::{SYS, TM};
 
+/// `sys:inGraph`: the membership predicate of a named graph.
+pub const SYS_IN_GRAPH: &str = "urn:tiramemsu:sys:inGraph";
 /// `sys:subject`: the subject of the statement named by the subject.
 pub const SYS_SUBJECT: &str = "urn:tiramemsu:sys:subject";
 /// `sys:predicate`: the predicate of the statement.

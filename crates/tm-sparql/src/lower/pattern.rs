@@ -5,14 +5,15 @@ use spargebra::algebra::{GraphPattern, OrderExpression};
 use spargebra::term::{GroundTerm, NamedNodePattern, TriplePattern as SpTriple};
 use tm_core::{Result, Value};
 use tm_ir::validate::scope;
-use tm_ir::{Expr, Join, Key, Op, TermOrVar, Values, Var};
+use tm_ir::{Expr, GraphSel, Join, Key, Op, TermOrVar, Values, Var};
 
 use super::bgp::{empty_op, is_empty_op};
 use super::vars::is_internal;
 use super::Lowerer;
-use crate::dataset::{is_tm_iri, ViewScope};
+use crate::dataset::{graph_name, is_tm_iri, ViewScope};
 use crate::error::{
-    time_iri_in_graph, unsupported, GRAPH_VARIABLE, NAMED_GRAPH, ORDER_BY_DISTINCT, SERVICE,
+    time_iri_in_graph, unsupported, GRAPH_SUBQUERY, GRAPH_WITHOUT_PATTERN, NAMED_GRAPH_PATH,
+    ORDER_BY_DISTINCT, SERVICE,
 };
 use crate::terms;
 
@@ -80,7 +81,13 @@ impl Lowerer<'_> {
                 subject,
                 path,
                 object,
-            } => self.path(subject, path, object, view),
+            } => {
+                // the path engine takes a view, not a graph selection (named-graphs)
+                if !self.active.is_any() {
+                    return Err(unsupported(NAMED_GRAPH_PATH));
+                }
+                self.path(subject, path, object, view)
+            }
             GraphPattern::Join { .. } => {
                 let mut operands = Vec::new();
                 flatten_join(gp, &mut operands);
@@ -137,7 +144,14 @@ impl Lowerer<'_> {
                 let r = self.pattern(right, sc)?;
                 let ls = scope(&l);
                 let rs = scope(&r);
-                let shared: Vec<Var> = ls.vars.iter().filter(|v| rs.binds(v)).cloned().collect();
+                // the graph variable of an enclosing `GRAPH ?g` block correlates the two
+                // sides but is not a variable of the solutions MINUS compares
+                let shared: Vec<Var> = ls
+                    .vars
+                    .iter()
+                    .filter(|v| rs.binds(v) && !super::vars::is_graph_var(v))
+                    .cloned()
+                    .collect();
                 if shared.is_empty() {
                     // no shared variable: MINUS removes nothing
                     return Ok(l);
@@ -178,12 +192,12 @@ impl Lowerer<'_> {
                 },
                 NamedNodePattern::Variable(_) => Err(unsupported(SERVICE)),
             },
-            GraphPattern::Graph { name, .. } => match name {
+            GraphPattern::Graph { name, inner } => match name {
                 NamedNodePattern::NamedNode(n) if is_tm_iri(n.as_str()) => {
                     Err(time_iri_in_graph(n.as_str()))
                 }
-                NamedNodePattern::NamedNode(_) => Err(unsupported(NAMED_GRAPH)),
-                NamedNodePattern::Variable(_) => Err(unsupported(GRAPH_VARIABLE)),
+                NamedNodePattern::NamedNode(n) => self.graph_block(n.as_str(), inner, sc),
+                NamedNodePattern::Variable(v) => self.graph_var_block(v.as_str(), inner, sc),
             },
             GraphPattern::Group {
                 inner,
@@ -196,6 +210,64 @@ impl Lowerer<'_> {
             | GraphPattern::Reduced { .. }
             | GraphPattern::Slice { .. } => self.modifiers(gp, sc),
         }
+    }
+
+    /// `GRAPH <g> { … }`: the block's statements must be members of `g`. A graph that
+    /// a `FROM NAMED` list leaves out matches nothing (the block keeps its variables).
+    fn graph_block(&mut self, iri: &str, inner: &GraphPattern, sc: ViewScope) -> Result<Op> {
+        let g = graph_name(iri)?;
+        let hidden = self
+            .dataset
+            .named
+            .as_ref()
+            .is_some_and(|list| !list.contains(&g));
+        let outer = std::mem::replace(&mut self.active, GraphSel::Set(vec![TermOrVar::Const(g)]));
+        let op = self.pattern(inner, sc);
+        self.active = outer;
+        let op = op?;
+        Ok(if hidden {
+            op.filter(Expr::Const(Value::Bool(false)))
+        } else {
+            op
+        })
+    }
+
+    /// `GRAPH ?g { … }`: one solution per membership, `?g` bound to the graph. The
+    /// block's patterns share an internal graph variable, so a `MINUS` or `OPTIONAL`
+    /// inside compares solutions of one graph and never sees `?g` as a shared
+    /// variable. A `FROM NAMED` list restricts the graphs `?g` ranges over.
+    fn graph_var_block(&mut self, name: &str, inner: &GraphPattern, sc: ViewScope) -> Result<Op> {
+        let user = self.var(name);
+        let internal = self.vars.fresh("g");
+        let outer = std::mem::replace(&mut self.active, GraphSel::Var(internal.clone()));
+        let used_before = self.graph_var_uses;
+        let op = self.pattern(inner, sc);
+        self.active = outer;
+        let op = op?;
+        if self.graph_var_uses == used_before {
+            return Err(unsupported(GRAPH_WITHOUT_PATTERN));
+        }
+        if !scope(&op).binds(&internal) {
+            // a subquery hides the graph variable of its patterns
+            return Err(unsupported(GRAPH_SUBQUERY));
+        }
+        let op = if scope(&op).binds(&user) {
+            // `GRAPH ?g { ?g :p ?o }`: the graph is also a node of the block
+            op.filter(Expr::SameTerm(
+                Box::new(Expr::Var(user.clone())),
+                Box::new(Expr::Var(internal)),
+            ))
+        } else {
+            op.extend(user.name(), Expr::Var(internal))
+        };
+        Ok(match &self.dataset.named {
+            Some(list) => op.filter(Expr::In(
+                Box::new(Expr::Var(user)),
+                list.iter().cloned().map(Expr::Const).collect(),
+                false,
+            )),
+            None => op,
+        })
     }
 
     fn values(

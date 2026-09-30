@@ -33,6 +33,11 @@ pub fn is_internal(v: &Var) -> bool {
     v.name().starts_with(INTERNAL_PREFIX)
 }
 
+/// True for the internal graph variable of a `GRAPH ?g` block.
+pub fn is_graph_var(v: &Var) -> bool {
+    v.name().starts_with(&format!("{INTERNAL_PREFIX}g"))
+}
+
 /// The variables of `vars` that a user can see, in order.
 pub fn visible(vars: &[Var]) -> Vec<Var> {
     vars.iter().filter(|v| !is_internal(v)).cloned().collect()

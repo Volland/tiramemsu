@@ -111,6 +111,10 @@ test = "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/aggregates/manife
 reason = "M1 executor: an expression mixing stored terms and computed values (COALESCE, aggregates over them) is not supported"
 
 [[deviation]]
+test = "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/aggregates/manifest#agg-empty-group-count-graph"
+reason = "named graphs: GRAPH ?g over a subquery is unsupported (a subquery hides the graph of its patterns)"
+
+[[deviation]]
 test = "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/aggregates/manifest#agg-avg-distinct"
 reason = "xsd:decimal results of aggregates are computed as xsd:double (M1 executor)"
 
@@ -125,6 +129,10 @@ reason = "M1 executor: GROUP_CONCAT(DISTINCT ...) with a separator is not suppor
 [[deviation]]
 test = "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/aggregates/manifest#agg-sum-distinct"
 reason = "xsd:decimal results of aggregates are computed as xsd:double (M1 executor)"
+
+[[deviation]]
+test = "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/bindings/manifest#graph"
+reason = "named graphs: GRAPH ?g whose block has no triple pattern is unsupported (VALUES alone cannot enumerate graphs)"
 
 [[deviation]]
 test = "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/functions/manifest#strdt01"
@@ -287,8 +295,44 @@ test = "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/json-res/manifest
 reason = "canonical decimal: 5.0 is stored and returned as '5.0', the expected file has '5'"
 
 [[deviation]]
+test = "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/basic-update/manifest#insert-05a"
+reason = "named graphs: DROP GRAPH retracts memberships only, so the member statements stay live (design Decision 3)"
+
+[[deviation]]
+test = "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/basic-update/manifest#insert-data-same-bnode"
+reason = "named graphs: DROP GRAPH retracts memberships only, so the member statements stay live (design Decision 3)"
+
+[[deviation]]
+test = "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/basic-update/manifest#insert-where-same-bnode"
+reason = "named graphs: DROP GRAPH retracts memberships only, so the member statements stay live (design Decision 3)"
+
+[[deviation]]
+test = "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/basic-update/manifest#insert-where-same-bnode2"
+reason = "named graphs: DROP GRAPH retracts memberships only, so the member statements stay live (design Decision 3)"
+
+[[deviation]]
+test = "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/delete-data/manifest#dawg-delete-data-02"
+reason = "named graphs: DELETE DATA in a GRAPH block retracts the membership only, the statement stays live (design Decision 3)"
+
+[[deviation]]
+test = "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/delete-data/manifest#dawg-delete-data-05"
+reason = "named graphs: the default graph is the union (design Decision 4), so a plain DELETE DATA also removes the statement from every named graph"
+
+[[deviation]]
+test = "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/delete-where/manifest#dawg-delete-where-02"
+reason = "named graphs: DELETE WHERE in a GRAPH block retracts the membership only, the statement stays live (design Decision 3)"
+
+[[deviation]]
+test = "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/delete-where/manifest#dawg-delete-where-05"
+reason = "named graphs: the default graph is the union (design Decision 4), so a plain DELETE WHERE also removes the statement from every named graph"
+
+[[deviation]]
 test = "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/optional-filter/manifest#dawg-optional-filter-005-not-simplified"
 reason = "spargebra 0.4.7 merges a FILTER in a nested group inside OPTIONAL into the join condition"
+
+[[deviation]]
+test = "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/algebra/manifest#join-combo-2"
+reason = "named graphs: the default graph is the union (design Decision 4), so default-graph patterns also match the named graph data"
 
 [[deviation]]
 test = "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/distinct/manifest#no-distinct-1"

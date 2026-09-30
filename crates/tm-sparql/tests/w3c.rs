@@ -84,34 +84,94 @@ fn read(p: &Path) -> String {
     fs::read_to_string(p).unwrap_or_else(|e| panic!("{p:?}: {e}"))
 }
 
+fn parse_file(f: &Path) -> Result<Vec<tm_sparql::results::RdfTriple>, String> {
+    let ext = f.extension().and_then(|e| e.to_str()).unwrap_or("");
+    match ext {
+        "ttl" | "nt" => {
+            // through the engine terms, keeping triple terms and blank nodes
+            let base = format!("file://{}", f.display());
+            let mut p = oxttl::TurtleParser::new()
+                .with_base_iri(base)
+                .map_err(|e| e.to_string())?;
+            if ext == "nt" {
+                p = oxttl::TurtleParser::new();
+            }
+            let mut ts = Vec::new();
+            for t in p.for_reader(fs::read(f).map_err(|e| e.to_string())?.as_slice()) {
+                ts.push(support::rdf_triple(&t.map_err(|e| e.to_string())?));
+            }
+            Ok(ts)
+        }
+        other => Err(format!("skip: data format .{other}")),
+    }
+}
+
 fn load_data(db: &tiramemsu::Db, files: &[PathBuf]) -> Result<(), String> {
     for f in files {
-        let ext = f.extension().and_then(|e| e.to_str()).unwrap_or("");
-        match ext {
-            "ttl" | "nt" => {
-                // through the engine terms, keeping triple terms and blank nodes
-                let base = format!("file://{}", f.display());
-                let mut p = oxttl::TurtleParser::new()
-                    .with_base_iri(base)
-                    .map_err(|e| e.to_string())?;
-                if ext == "nt" {
-                    p = oxttl::TurtleParser::new();
-                }
-                let mut ts = Vec::new();
-                for t in p.for_reader(fs::read(f).map_err(|e| e.to_string())?.as_slice()) {
-                    ts.push(support::rdf_triple(&t.map_err(|e| e.to_string())?));
-                }
-                load_triples(db, &ts)?;
-            }
-            other => return Err(format!("skip: data format .{other}")),
-        }
+        load_triples(db, &parse_file(f)?)?;
     }
     Ok(())
 }
 
+/// Loads each file as a named graph: the statements, and one membership per statement.
+fn load_graphs(db: &tiramemsu::Db, graphs: &[GraphData]) -> Result<(), String> {
+    for g in graphs {
+        let ts = parse_file(&g.file)?;
+        if ts.is_empty() {
+            continue;
+        }
+        let text = format!(
+            "INSERT DATA {{ GRAPH <{}> {{\n{}}} }}",
+            g.iri(),
+            tm_sparql::results::nt::write(&ts)
+        );
+        db.now().sparql(&text).map_err(|e| format!("{e}"))?;
+    }
+    Ok(())
+}
+
+/// Resolves the relative IRIs of a request against the directory of its file (the
+/// engine configures no base IRI, so the runner does what a base IRI would do).
+fn resolve_relative(text: &str, file: &Path) -> String {
+    let dir = format!("file://{}/", file.parent().unwrap().display());
+    let mut out = String::new();
+    let mut rest = text;
+    while let Some(i) = rest.find('<') {
+        out.push_str(&rest[..i]);
+        let after = &rest[i + 1..];
+        let end = after.find(|c: char| c == '>' || c.is_whitespace() || "<\"{}|^`\\".contains(c));
+        match end {
+            Some(e) if after.as_bytes()[e] == b'>' && e > 0 && !after[..e].contains(':') => {
+                out.push('<');
+                out.push_str(&dir);
+                out.push_str(&after[..e]);
+                out.push('>');
+                rest = &after[e + 1..];
+            }
+            _ => {
+                out.push('<');
+                rest = after;
+            }
+        }
+    }
+    out.push_str(rest);
+    out
+}
+
+/// The historical substring test of this runner (it also matches `WITHIN`, `FROMAGE`).
+/// It still decides which tests run, so that this change adds graph tests and does
+/// not un-skip unrelated ones.
 fn uses_named_graphs(text: &str) -> bool {
     let up = text.to_ascii_uppercase();
     up.contains("FROM") || up.contains("GRAPH") || up.contains("USING") || up.contains("WITH")
+}
+
+/// True when a graph keyword occurs as a word outside comments.
+fn really_uses_graphs(text: &str) -> bool {
+    text.lines()
+        .filter(|l| !l.trim_start().starts_with('#'))
+        .flat_map(|l| l.split(|c: char| !c.is_ascii_alphanumeric()))
+        .any(|w| ["FROM", "GRAPH", "USING", "WITH"].contains(&w.to_ascii_uppercase().as_str()))
 }
 
 fn is_ordered(text: &str) -> bool {
@@ -142,12 +202,12 @@ fn run_query(t: &Test) -> Outcome {
     let (Some(q), Some(res)) = (&t.query, &t.result) else {
         return Outcome::Skip("no query or result".into());
     };
-    if !t.graph_data.is_empty() {
-        return Outcome::Skip("named graph data".into());
-    }
-    let text = read(q);
+    let mut text = read(q);
     if uses_named_graphs(&text) {
-        return Outcome::Skip("named graphs (FROM/GRAPH)".into());
+        if !really_uses_graphs(&text) {
+            return Outcome::Skip("named graphs (FROM/GRAPH)".into());
+        }
+        text = resolve_relative(&text, q);
     }
     let expected = match read_expected(res) {
         Ok(e) => e,
@@ -158,6 +218,12 @@ fn run_query(t: &Test) -> Outcome {
         return match e.strip_prefix("skip: ") {
             Some(s) => Outcome::Skip(s.to_string()),
             None => Outcome::Fail(format!("data: {e}")),
+        };
+    }
+    if let Err(e) = load_graphs(&db.db, &t.graph_data) {
+        return match e.strip_prefix("skip: ") {
+            Some(s) => Outcome::Skip(s.to_string()),
+            None => Outcome::Fail(format!("graph data: {e}")),
         };
     }
     let actual = match db.db.now().sparql(&text) {
@@ -210,7 +276,10 @@ fn run_query(t: &Test) -> Outcome {
 }
 
 fn dump_graph(db: &tiramemsu::Db) -> Result<Vec<[String; 3]>, String> {
-    match db.now().sparql("CONSTRUCT { ?s ?p ?o } WHERE { ?s ?p ?o }") {
+    // graph memberships are statements of the store; the dump lists the data only
+    match db.now().sparql(
+        "CONSTRUCT { ?s ?p ?o } WHERE { ?s ?p ?o FILTER(?p != <urn:tiramemsu:sys:inGraph>) }",
+    ) {
         Ok(SparqlResult::Graph(g)) => Ok(g
             .iter()
             .map(|t| [rdf_text(&t.s), rdf_text(&t.p), rdf_text(&t.o)])
@@ -220,19 +289,36 @@ fn dump_graph(db: &tiramemsu::Db) -> Result<Vec<[String; 3]>, String> {
     }
 }
 
+fn triples_of(sol: &tiramemsu::Solutions) -> Vec<[String; 3]> {
+    let col = |n: &str| sol.col(n).expect("column");
+    let (cs, cp, co) = (col("s"), col("p"), col("o"));
+    sol.rows
+        .iter()
+        .map(|r| {
+            let t = |i: usize| {
+                r[i].as_ref()
+                    .map(|c| rdf_text(&tm_sparql::results::term::render(c)))
+                    .unwrap_or_default()
+            };
+            [t(cs), t(cp), t(co)]
+        })
+        .collect()
+}
+
 fn run_update(t: &Test) -> Outcome {
     let Some(req) = &t.request else {
         return Outcome::Skip("no request".into());
     };
-    if !t.graph_data.is_empty() || !t.result_graph_data.is_empty() {
-        return Outcome::Skip("named graph data".into());
-    }
-    let text = read(req);
+    let mut text = read(req);
     if uses_named_graphs(&text) {
-        return Outcome::Skip("named graphs (GRAPH/USING/WITH)".into());
+        if !really_uses_graphs(&text) {
+            return Outcome::Skip("named graphs (GRAPH/USING/WITH)".into());
+        }
+        text = resolve_relative(&text, req);
     }
     let db = TestDb::new();
-    if let Err(e) = load_data(&db.db, &t.data) {
+    let loaded = load_data(&db.db, &t.data).and_then(|()| load_graphs(&db.db, &t.graph_data));
+    if let Err(e) = loaded {
         return match e.strip_prefix("skip: ") {
             Some(s) => Outcome::Skip(s.to_string()),
             None => Outcome::Fail(format!("data: {e}")),
@@ -241,19 +327,70 @@ fn run_update(t: &Test) -> Outcome {
     if let Err(e) = db.db.now().sparql(&text) {
         return Outcome::Fail(format!("{e}"));
     }
-    let want = match t
-        .result_data
-        .iter()
-        .map(|f| read_graph(f))
-        .collect::<Result<Vec<_>, _>>()
-    {
-        Ok(v) => v.concat(),
+    let read_all = |files: &[PathBuf]| {
+        files
+            .iter()
+            .map(|f| read_graph(f))
+            .collect::<Result<Vec<_>, _>>()
+            .map(|v| v.concat())
+    };
+    let default_want = match read_all(&t.result_data) {
+        Ok(v) => v,
         Err(e) => return Outcome::Skip(e),
     };
+    let mut named_want: Vec<(String, Vec<[String; 3]>)> = Vec::new();
+    for g in &t.result_graph_data {
+        match read_graph(&g.file) {
+            Ok(ts) => named_want.push((g.iri(), ts)),
+            Err(e) => return Outcome::Skip(e),
+        }
+    }
+    // the statements are the union of the default graph and every named graph
+    let mut want = default_want;
+    for (_, ts) in &named_want {
+        want.extend(ts.iter().cloned());
+    }
     match dump_graph(&db.db) {
-        Ok(got) if graphs_equal(&got, &want) => Outcome::Pass,
-        Ok(got) => Outcome::Fail(format!("store differs\n  got:  {got:?}\n  want: {want:?}")),
-        Err(e) => Outcome::Fail(e),
+        Ok(got) if graphs_equal(&got, &want) => {}
+        Ok(got) => {
+            return Outcome::Fail(format!("store differs\n  got:  {got:?}\n  want: {want:?}"))
+        }
+        Err(e) => return Outcome::Fail(e),
+    }
+    // each named graph holds exactly the expected triples, and no other graph exists
+    for (iri, ts) in &named_want {
+        let q = format!("SELECT ?s ?p ?o WHERE {{ GRAPH <{iri}> {{ ?s ?p ?o }} }}");
+        match db.db.now().sparql(&q) {
+            Ok(SparqlResult::Solutions(sol)) if graphs_equal(&triples_of(&sol), ts) => {}
+            Ok(SparqlResult::Solutions(sol)) => {
+                return Outcome::Fail(format!(
+                    "graph <{iri}> differs\n  got:  {:?}\n  want: {ts:?}",
+                    triples_of(&sol)
+                ))
+            }
+            other => return Outcome::Fail(format!("graph <{iri}>: {other:?}")),
+        }
+    }
+    match db
+        .db
+        .now()
+        .sparql("SELECT DISTINCT ?g WHERE { GRAPH ?g { ?s ?p ?o } }")
+    {
+        Ok(SparqlResult::Solutions(sol)) => {
+            let extra: Vec<String> = sol
+                .rows
+                .iter()
+                .filter_map(|r| r[0].as_ref())
+                .map(|c| rdf_text(&tm_sparql::results::term::render(c)))
+                .filter(|g| !named_want.iter().any(|(iri, _)| *g == format!("<{iri}>")))
+                .collect();
+            if extra.is_empty() {
+                Outcome::Pass
+            } else {
+                Outcome::Fail(format!("unexpected graphs {extra:?}"))
+            }
+        }
+        other => Outcome::Fail(format!("graph list: {other:?}")),
     }
 }
 

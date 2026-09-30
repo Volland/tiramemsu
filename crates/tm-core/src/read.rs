@@ -137,3 +137,100 @@ pub fn tx_instant(exec: &mut dyn Executor, t: u64) -> Result<Option<i64>> {
         &[SqlValue::Integer(t as i64)],
     )
 }
+
+/// The ids of `sys:inGraph`, `rdf:type` and `sys:Graph`; `None` for one that is not
+/// interned yet (a store that never used graphs has none of them).
+fn graph_terms(exec: &mut dyn Executor) -> Result<[Option<ObjectId>; 3]> {
+    use crate::term::TermReader;
+    use crate::value::Value;
+    use crate::vocab;
+    let mut out = [None; 3];
+    for (slot, iri) in out
+        .iter_mut()
+        .zip([vocab::SYS_IN_GRAPH, vocab::RDF_TYPE, vocab::SYS_GRAPH])
+    {
+        *slot = TermReader::encode(exec, &Value::iri(iri))?;
+    }
+    Ok(out)
+}
+
+/// The eids of the statements that are members of `graph` in `spec`: the member
+/// statement and its `sys:inGraph` membership are both visible in the view.
+// @lat: [[data-model#Named Graphs]]
+pub fn graph_members(
+    exec: &mut dyn Executor,
+    spec: &ViewSpec,
+    graph: ObjectId,
+) -> Result<Vec<Eid>> {
+    let [Some(ig), _, _] = graph_terms(exec)? else {
+        return Ok(Vec::new());
+    };
+    let mut params = Params::new();
+    let (p, o) = (params.push(ig.raw()), params.push(graph.raw()));
+    let mut conds = vec![format!("m.p = {p}"), format!("m.o = {o}")];
+    for alias in ["m", "a"] {
+        let t = scan_predicates(spec, alias, &mut params);
+        if !t.is_empty() {
+            conds.push(t);
+        }
+    }
+    let sql = format!(
+        "SELECT DISTINCT a.eid FROM triple m JOIN triple a ON a.eid = m.s WHERE {} ORDER BY a.eid",
+        conds.join(" AND ")
+    );
+    let mut out = Vec::new();
+    exec.query(&sql, params.values(), &mut |r| {
+        if let Some(e) = r[0]
+            .as_i64()
+            .and_then(|r| Eid::from_oid(ObjectId::from_raw(r)))
+        {
+            out.push(e);
+        }
+        Ok(())
+    })?;
+    Ok(out)
+}
+
+/// The graphs of `spec`: every graph with a visible membership of a visible
+/// statement, plus every declared `(g rdf:type sys:Graph)`, ascending.
+pub fn graphs(exec: &mut dyn Executor, spec: &ViewSpec) -> Result<Vec<ObjectId>> {
+    let [ig, ty, sg] = graph_terms(exec)?;
+    let mut params = Params::new();
+    let mut parts = Vec::new();
+    if let Some(ig) = ig {
+        let p = params.push(ig.raw());
+        let mut conds = vec![format!("m.p = {p}")];
+        for alias in ["m", "a"] {
+            let t = scan_predicates(spec, alias, &mut params);
+            if !t.is_empty() {
+                conds.push(t);
+            }
+        }
+        parts.push(format!(
+            "SELECT m.o AS g FROM triple m JOIN triple a ON a.eid = m.s WHERE {}",
+            conds.join(" AND ")
+        ));
+    }
+    if let (Some(ty), Some(sg)) = (ty, sg) {
+        let (p, o) = (params.push(ty.raw()), params.push(sg.raw()));
+        let mut conds = vec![format!("d.p = {p}"), format!("d.o = {o}")];
+        let t = scan_predicates(spec, "d", &mut params);
+        if !t.is_empty() {
+            conds.push(t);
+        }
+        parts.push(format!(
+            "SELECT d.s AS g FROM triple d WHERE {}",
+            conds.join(" AND ")
+        ));
+    }
+    if parts.is_empty() {
+        return Ok(Vec::new());
+    }
+    let sql = format!("{} ORDER BY g", parts.join(" UNION "));
+    let mut out = Vec::new();
+    exec.query(&sql, params.values(), &mut |r| {
+        out.push(ObjectId::from_raw(r[0].as_i64().unwrap_or(0)));
+        Ok(())
+    })?;
+    Ok(out)
+}

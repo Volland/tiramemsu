@@ -37,8 +37,8 @@ pub mod vocab;
 pub use agg::{Agg, AggFunc, Key};
 pub use expr::{ArithOp, CmpOp, Expr, Func, Lookup, LookupMode};
 pub use op::{
-    Aggregate, Extend, Filter, IrQuery, Join, LeftJoin, Op, OrderLimit, PathPattern, Project,
-    RowNumber, TriplePattern, Union, Unnest, Values,
+    Aggregate, Extend, Filter, GraphSel, IrQuery, Join, LeftJoin, Op, OrderLimit, PathPattern,
+    Project, RowNumber, TriplePattern, Union, Unnest, Values,
 };
 pub use params::{params, Params};
 pub use path::{PathExpr, PathMode};

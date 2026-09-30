@@ -6,10 +6,13 @@ use tm_core::{Dialect, Error, Span};
 pub const DESCRIBE: &str = "DESCRIBE";
 /// `SERVICE` with a variable or a non-time IRI (federation).
 pub const SERVICE: &str = "SERVICE";
-/// `GRAPH ?g`.
-pub const GRAPH_VARIABLE: &str = "GRAPH variable";
-/// A named graph: `FROM`, `GRAPH`, `WITH`, `USING` with a non-time IRI.
-pub const NAMED_GRAPH: &str = "named graph";
+/// A property path (or `shortestPath`, `tm_path`) inside `GRAPH` or under a
+/// `FROM <g>` default graph.
+pub const NAMED_GRAPH_PATH: &str = "named graph path";
+/// `GRAPH ?g { SELECT … }`: a subquery hides the graph of its patterns.
+pub const GRAPH_SUBQUERY: &str = "GRAPH ?g over a subquery";
+/// `GRAPH ?g { … }` whose block binds no variable through a triple pattern.
+pub const GRAPH_WITHOUT_PATTERN: &str = "GRAPH ?g without a triple pattern";
 /// Property paths inside a triple-term position (not a path endpoint).
 pub const PROPERTY_PATH: &str = "property path";
 /// Negated property sets `!p` and `!(p|^q)`.

@@ -98,21 +98,22 @@ fn no_op_request_still_commits() {
     assert!(r.asserted.is_empty() && r.existing.is_empty() && r.retracted.is_empty());
 }
 
-// sparql-update "Unsupported update operations": CLEAR is rejected
+// sparql-update "Unsupported graph operations": CLEAR DEFAULT is rejected
 #[test]
-fn clear_is_rejected() {
+fn clear_default_is_rejected() {
     let t = T::new();
     t.assert(&[(v("a"), v("b"), v("c"))]);
-    assert_unsupported(t.err("CLEAR DEFAULT"), "CLEAR");
+    assert_unsupported(t.err("CLEAR DEFAULT"), "CLEAR DEFAULT");
+    assert_unsupported(t.err("CLEAR ALL"), "CLEAR ALL");
     assert!(t.has(&v("a"), &v("b"), &v("c")));
 }
 
-// sparql-update "Unsupported update operations": DROP SILENT is still rejected
+// sparql-update "Unsupported graph operations": DROP SILENT ALL is still rejected
 #[test]
-fn drop_silent_is_still_rejected() {
+fn drop_silent_all_is_still_rejected() {
     let t = T::new();
-    assert_unsupported(t.err("DROP SILENT ALL"), "DROP");
-    assert_unsupported(t.err("CREATE GRAPH <http://example.org/g>"), "CREATE");
+    assert_unsupported(t.err("DROP SILENT ALL"), "DROP ALL");
+    assert_unsupported(t.err("DROP DEFAULT"), "DROP DEFAULT");
 }
 
 // sparql-update "Unsupported update operations": Rejected operation aborts the whole request
@@ -128,59 +129,44 @@ fn rejected_operation_aborts_the_whole_request() {
     assert_eq!(t.last_t(), before);
 }
 
+// sparql-update "Unsupported graph operations": ADD, MOVE, COPY and LOAD name themselves
 #[test]
 fn add_move_copy_are_rejected() {
     let t = T::new();
-    for q in [
-        "ADD <http://example.org/a> TO <http://example.org/b>",
-        "MOVE <http://example.org/a> TO <http://example.org/b>",
-        "COPY <http://example.org/a> TO <http://example.org/b>",
-    ] {
-        match t.err(q) {
-            Error::Unsupported { feature } => {
-                assert!(
-                    ["named graph", "ADD", "MOVE", "COPY", "DROP", "CLEAR"]
-                        .contains(&feature.as_str()),
-                    "{q}: {feature}"
-                )
-            }
-            other => panic!("{q}: {other:?}"),
-        }
-    }
-}
-
-// sparql-update "Time-scoped WHERE in updates": GRAPH in INSERT DATA is rejected
-#[test]
-fn graph_in_insert_data_is_rejected() {
-    let t = T::new();
     let before = t.last_t();
-    assert_unsupported(
-        t.err("INSERT DATA { GRAPH <urn:tiramemsu:tm:asOf/150> { v:a v:b v:c } }"),
-        "named graph",
-    );
-    assert_unsupported(
-        t.err("INSERT DATA { GRAPH <http://example.org/g> { v:a v:b v:c } }"),
-        "named graph",
-    );
+    for (q, want) in [
+        (
+            "ADD <http://example.org/a> TO <http://example.org/b>",
+            "ADD",
+        ),
+        (
+            "MOVE <http://example.org/a> TO <http://example.org/b>",
+            "MOVE",
+        ),
+        (
+            "COPY <http://example.org/a> TO <http://example.org/b>",
+            "COPY",
+        ),
+        (
+            "COPY SILENT <http://example.org/a> TO <http://example.org/b>",
+            "COPY",
+        ),
+        ("LOAD <http://example.org/a>", "LOAD"),
+    ] {
+        assert_unsupported(t.err(q), want);
+    }
     assert_eq!(t.last_t(), before);
 }
 
-// sparql-update "Time-scoped WHERE in updates": WITH is rejected
+// sparql-update "Time- and graph-scoped WHERE in updates": a time IRI as the graph of INSERT DATA is rejected
 #[test]
-fn with_is_rejected() {
+fn time_iri_as_insert_data_graph_is_rejected() {
     let t = T::new();
-    assert_unsupported(
-        t.err("WITH <http://example.org/g> DELETE { ?s ?p ?o } WHERE { ?s ?p ?o }"),
-        "named graph",
-    );
-    assert_unsupported(
-        t.err("DELETE { ?s ?p ?o } USING <http://example.org/g> WHERE { ?s ?p ?o }"),
-        "named graph",
-    );
-    assert_unsupported(
-        t.err("DELETE { ?s ?p ?o } USING NAMED <http://example.org/g> WHERE { ?s ?p ?o }"),
-        "named graph",
-    );
+    let before = t.last_t();
+    let (_, msg) =
+        assert_parse(t.err("INSERT DATA { GRAPH <urn:tiramemsu:tm:asOf/150> { v:a v:b v:c } }"));
+    assert!(msg.contains("SERVICE"), "{msg}");
+    assert_eq!(t.last_t(), before);
 }
 
 // sparql-update "Update parse errors report position": Variable in INSERT DATA

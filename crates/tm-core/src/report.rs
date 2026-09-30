@@ -229,6 +229,11 @@ pub struct TxReport {
     pub retracted: Vec<(Eid, RetKind)>,
     /// `(old, new)` pairs of every supersede, root first.
     pub superseded: Vec<(Eid, Eid)>,
+    /// Every new graph membership `(e sys:inGraph g)`, in insertion order. Memberships
+    /// are listed here and not in `asserted`.
+    pub memberships: Vec<Eid>,
+    /// Every retracted membership with its kind, listed here and not in `retracted`.
+    pub memberships_retracted: Vec<(Eid, RetKind)>,
 }
 
 /// One statement row as returned by a lookup.

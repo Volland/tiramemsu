@@ -37,10 +37,19 @@ pub fn prepare(text: &str, env: &Env) -> Result<Prepared> {
             env,
             parse::assoc_hints(text),
         )?))),
-        Parsed::Update(u) => Ok(Prepared::Update(update::plan_update(
-            &u,
-            env,
-            parse::assoc_hints(text),
-        )?)),
+        Parsed::Update(u) => {
+            // ADD, MOVE, COPY and LOAD are named before anything else is checked
+            if let Some(kw) = parse::operation_keywords(text)
+                .into_iter()
+                .find(|k| matches!(k.as_str(), "LOAD" | "ADD" | "MOVE" | "COPY"))
+            {
+                return Err(error::unsupported(kw));
+            }
+            Ok(Prepared::Update(update::plan_update(
+                &u,
+                env,
+                parse::assoc_hints(text),
+            )?))
+        }
     }
 }

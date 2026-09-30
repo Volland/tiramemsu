@@ -91,6 +91,12 @@ One row per statement occurrence. The row is its own lifetime: `t_add` is the as
 - The valid-time columns are in every index key so that views combining time filters stay covering.
 - A row is only ever updated from `t_ret IS NULL` to a value. See [[storage#Invariant Triggers]].
 
+## Graph Memberships
+
+A graph membership `(e, sys:inGraph, g)` is an ordinary row of the triple table, so it costs one row and nine index entries, and `GRAPH <g>` seeks `(p, o)` on the existing indexes. See [[data-model#Named Graphs]].
+
+On the benchmark fixture (`bench/named-graphs`, 1.1 M statements, 700 000 live), giving every live statement one membership doubled the live rows and grew the file 1.92 times (rows 1.64 times, because retracted rows get none). A graph of 100 members seeks in microseconds and one of 500 000 members takes 44 ms. On the 11 M-statement fixture the ratio is the same (1.92 times, 3.38 GB against 1.76 GB), a 100-member graph takes 0.01 ms, a 50 000-member graph 49 ms and a 5 M-member graph 550 ms (the same join without a graph: 102 ms). No format change is needed. SQLite picks `hist_pos` or `live_pos` for the `(p, o)` seek at equal cost; both are seeks, and after churn plus `ANALYZE` it takes `live_pos`.
+
 ## Multi-Eid Predicates
 
 `pred_multi` lists every predicate that has ever held two eids with the same `(s, p, o)`, live or retracted. SPARQL removes duplicates only for those predicates. See [[query#Front Ends#SPARQL]].

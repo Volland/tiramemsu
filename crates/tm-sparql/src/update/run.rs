@@ -2,11 +2,11 @@
 
 use std::collections::HashMap;
 
-use tm_core::{Eid, ObjectId, Result, SqlValue, Tx, Valid, Value};
+use tm_core::{AssertOpts, Eid, Error, ObjectId, Result, SqlValue, Tx, Valid, Value};
 use tm_ir::IrQuery;
 
 use super::inst::{instantiate, Node, Row, TripleN};
-use super::{UpdateOp, UpdatePlan};
+use super::{GraphRef, GraphTarget, Template, UpdateOp, UpdatePlan};
 use crate::error::{unsupported, REIFIER_MANY, REIFIER_NOT_STATEMENT, REIFIES_WITHOUT_TRIPLE};
 use crate::results::Solutions;
 
@@ -15,18 +15,21 @@ const RDF_REIFIES: &str = "http://www.w3.org/1999/02/22-rdf-syntax-ns#reifies";
 /// Evaluates an IR query on the writer connection of the running transaction.
 pub type Select<'a> = dyn FnMut(&mut Tx<'_>, &IrQuery) -> Result<Solutions> + 'a;
 
+/// A triple with the graph it is written to (`None`: no `GRAPH` block).
+type InGraph = (TripleN, Option<Value>);
+
 /// Runs every operation of `plan` in order on `tx`. The `WHERE` of an operation
 /// is evaluated through `select` on the transaction's own connection, so it sees
 /// the effects of the earlier operations.
 pub fn run(plan: &UpdatePlan, tx: &mut Tx<'_>, select: &mut Select<'_>) -> Result<()> {
     for op in &plan.ops {
         match op {
-            UpdateOp::InsertData(triples) => {
-                let ts = instantiate_all(triples, None)?;
+            UpdateOp::InsertData(templates) => {
+                let ts = instantiate_all(templates, None)?;
                 Inserter::new(tx).insert(ts)?;
             }
-            UpdateOp::DeleteData(triples) => {
-                let ts = instantiate_all(triples, None)?;
+            UpdateOp::DeleteData(templates) => {
+                let ts = instantiate_all(templates, None)?;
                 delete(tx, ts)?;
             }
             UpdateOp::DeleteInsert {
@@ -49,19 +52,91 @@ pub fn run(plan: &UpdatePlan, tx: &mut Tx<'_>, select: &mut Select<'_>) -> Resul
                     Inserter::new(tx).insert(ts)?;
                 }
             }
+            UpdateOp::Create { graph, silent } => {
+                if declared(tx, graph)? {
+                    if !silent {
+                        return Err(Error::GraphExists {
+                            graph: graph.to_string(),
+                        });
+                    }
+                } else {
+                    tx.create_graph(graph)?;
+                }
+            }
+            UpdateOp::Clear {
+                target,
+                silent,
+                drop,
+            } => clear(tx, target, *silent, *drop)?,
         }
     }
     Ok(())
 }
 
-fn instantiate_all(
-    templates: &[spargebra::term::TriplePattern],
-    row: Option<Row<'_>>,
-) -> Result<Vec<TripleN>> {
+/// The graph of `v` if it is already known to the store (`None`: no statement
+/// mentions it, so it has no membership and no declaration). A value that cannot
+/// name a graph fails with `InvalidGraphName`.
+fn known_graph(tx: &mut Tx<'_>, v: &Value) -> Result<Option<ObjectId>> {
+    if !matches!(v, Value::Iri(_) | Value::Node(_) | Value::BNode(_)) {
+        return Err(Error::InvalidGraphName {
+            term: v.to_string(),
+        });
+    }
+    tx.lookup(v)
+}
+
+fn declared(tx: &mut Tx<'_>, g: &Value) -> Result<bool> {
+    match known_graph(tx, g)? {
+        Some(id) => tx.graph_declared(id),
+        None => Ok(false),
+    }
+}
+
+/// `CLEAR` and `DROP` of one graph or of every named graph.
+fn clear(tx: &mut Tx<'_>, target: &GraphTarget, silent: bool, drop: bool) -> Result<()> {
+    let graphs: Vec<ObjectId> = match target {
+        GraphTarget::Named => tx.live_graphs()?,
+        GraphTarget::Graph(g) => {
+            let id = known_graph(tx, g)?;
+            let exists = match id {
+                Some(id) => tx.graph_declared(id)? || tx.graph_has_members(id)?,
+                None => false,
+            };
+            match (exists, id) {
+                (true, Some(id)) => vec![id],
+                _ if silent => Vec::new(),
+                _ => {
+                    return Err(Error::GraphNotFound {
+                        graph: g.to_string(),
+                    })
+                }
+            }
+        }
+    };
+    for g in graphs {
+        if drop {
+            tx.drop_graph(g)?;
+        } else {
+            tx.clear_graph(g)?;
+        }
+    }
+    Ok(())
+}
+
+fn instantiate_all(templates: &[Template], row: Option<Row<'_>>) -> Result<Vec<InGraph>> {
     let mut out = Vec::new();
     for t in templates {
-        if let Some(t) = instantiate(t, row)? {
-            out.push(t);
+        let graph = match &t.graph {
+            GraphRef::Default => None,
+            GraphRef::Named(g) => Some(g.clone()),
+            GraphRef::Var(v) => match row.and_then(|r| r.sol.get(r.row, v).cloned()) {
+                Some(g) => Some(g),
+                // an unbound graph variable drops the triple, like any unbound variable
+                None => continue,
+            },
+        };
+        if let Some(triple) = instantiate(&t.triple, row)? {
+            out.push((triple, graph));
         }
     }
     Ok(out)
@@ -126,23 +201,33 @@ impl<'a, 't> Inserter<'a, 't> {
         Ok(self.tx.assert(s, p, o, Valid::ALWAYS)?.eid())
     }
 
-    fn insert(&mut self, triples: Vec<TripleN>) -> Result<()> {
-        // 1. reifiers: each maps to exactly one triple
-        let mut reifs: Vec<(Key, TripleN)> = Vec::new();
-        for t in triples.iter().filter(|t| is_reifies(t)) {
+    /// Adds statement `eid` to `graph` (a membership, idempotent).
+    fn add_member(&mut self, eid: Eid, graph: &Option<Value>) -> Result<()> {
+        if let Some(g) = graph {
+            self.tx.add_to_graph(eid, g, AssertOpts::default())?;
+        }
+        Ok(())
+    }
+
+    fn insert(&mut self, all: Vec<InGraph>) -> Result<()> {
+        let triples: Vec<&TripleN> = all.iter().map(|(t, _)| t).collect();
+        // 1. reifiers: each maps to exactly one triple (and the graph of the pattern)
+        let mut reifs: Vec<(Key, TripleN, Option<Value>)> = Vec::new();
+        for (t, g) in all.iter().filter(|(t, _)| is_reifies(t)) {
             let Node::Triple(inner) = &t.o else {
                 return Err(unsupported(REIFIES_WITHOUT_TRIPLE));
             };
             let key = reifier_key(&t.s)?;
-            match reifs.iter().find(|(k, _)| *k == key) {
-                Some((_, prev)) if prev != &**inner => return Err(unsupported(REIFIER_MANY)),
+            match reifs.iter().find(|(k, _, _)| *k == key) {
+                Some((_, prev, _)) if prev != &**inner => return Err(unsupported(REIFIER_MANY)),
                 Some(_) => {}
-                None => reifs.push((key, (**inner).clone())),
+                None => reifs.push((key, (**inner).clone(), g.clone())),
             }
         }
         // 2. assert the reified statements; bind blank reifiers to their eids
-        for (key, triple) in &reifs {
+        for (key, triple, graph) in &reifs {
             let asserted = self.assert_triple(triple)?;
+            self.add_member(asserted, graph)?;
             match key {
                 Key::Blank(l) => {
                     self.sigma.insert(l.clone(), asserted);
@@ -160,9 +245,11 @@ impl<'a, 't> Inserter<'a, 't> {
             }
         }
         // 3. everything else
-        for t in triples.iter().filter(|t| !is_reifies(t)) {
-            self.assert_triple(t)?;
+        for (t, g) in all.iter().filter(|(t, _)| !is_reifies(t)) {
+            let eid = self.assert_triple(t)?;
+            self.add_member(eid, g)?;
         }
+        let _ = triples;
         Ok(())
     }
 }
@@ -219,15 +306,16 @@ fn candidate_ids(tx: &mut Tx<'_>, n: &Node) -> Result<Vec<ObjectId>> {
 
 /// Retracts the statements the triples denote. A triple with a reifier bound to
 /// an eid retracts exactly that eid; other triples retract every live statement
-/// with that content. Instantiated triples are deduplicated.
-fn delete(tx: &mut Tx<'_>, triples: Vec<TripleN>) -> Result<()> {
+/// with that content. A triple in a `GRAPH` block retracts only the membership of
+/// those statements in that graph. Instantiated triples are deduplicated.
+fn delete(tx: &mut Tx<'_>, triples: Vec<InGraph>) -> Result<()> {
     let mut seen = std::collections::HashSet::new();
-    let triples: Vec<TripleN> = triples
+    let triples: Vec<InGraph> = triples
         .into_iter()
         .filter(|t| seen.insert(format!("{t:?}")))
         .collect();
-    let mut covered: Vec<TripleN> = Vec::new();
-    for t in triples.iter().filter(|t| is_reifies(t)) {
+    let mut covered: Vec<&TripleN> = Vec::new();
+    for (t, graph) in triples.iter().filter(|(t, _)| is_reifies(t)) {
         let Node::Triple(inner) = &t.o else {
             return Err(unsupported(REIFIES_WITHOUT_TRIPLE));
         };
@@ -246,19 +334,49 @@ fn delete(tx: &mut Tx<'_>, triples: Vec<TripleN>) -> Result<()> {
         if want.is_none() || stored_content(tx, e)? != want {
             return Err(unsupported(REIFIER_NOT_STATEMENT));
         }
-        tx.retract(e)?;
-        covered.push((**inner).clone());
+        match graph {
+            None => {
+                tx.retract(e)?;
+            }
+            Some(g) => remove_member(tx, e, g)?,
+        }
+        covered.push(&**inner);
     }
-    for t in triples
+    for (t, graph) in triples
         .iter()
-        .filter(|t| !is_reifies(t) && !covered.contains(t))
+        .filter(|(t, _)| !is_reifies(t) && !covered.contains(&t))
     {
-        let Some(p) = tx.lookup(&t.p)? else { continue };
+        let Some(p) = tx.lookup(&t.p)? else {
+            if let Some(g) = graph {
+                known_graph(tx, g)?;
+            }
+            continue;
+        };
         for s in candidate_ids(tx, &t.s)? {
             for o in candidate_ids(tx, &t.o)? {
-                tx.retract_matching(Some(s), Some(p), Some(o))?;
+                match graph {
+                    None => {
+                        tx.retract_matching(Some(s), Some(p), Some(o))?;
+                    }
+                    Some(g) => {
+                        for e in live_eids(tx, s, p, o)? {
+                            if let Some(e) = Eid::from_oid(e) {
+                                remove_member(tx, e, g)?;
+                            }
+                        }
+                    }
+                }
             }
         }
+    }
+    Ok(())
+}
+
+/// Removes statement `e` from graph `g`; a graph the store has never seen holds
+/// nothing, so it is a no-op (and interns no term).
+fn remove_member(tx: &mut Tx<'_>, e: Eid, g: &Value) -> Result<()> {
+    if let Some(id) = known_graph(tx, g)? {
+        tx.remove_from_graph(e, id)?;
     }
     Ok(())
 }

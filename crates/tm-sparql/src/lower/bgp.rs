@@ -41,6 +41,9 @@ struct Items {
     triples: Vec<TriplePattern>,
     filters: Vec<Expr>,
     empty: bool,
+    /// Variables that name a reifier: triples about them are annotations, read from
+    /// the default view whatever `GRAPH` block they sit in.
+    reifiers: Vec<Var>,
 }
 
 impl Lowerer<'_> {
@@ -55,7 +58,11 @@ impl Lowerer<'_> {
         }
         let mut triples = std::mem::take(&mut items.triples);
         eliminate_redundant(&mut triples);
-        let ops: Vec<Op> = triples.into_iter().map(Op::Triple).collect();
+        let reifiers = std::mem::take(&mut items.reifiers);
+        let ops: Vec<Op> = triples
+            .into_iter()
+            .map(|t| Op::Triple(self.select_graph(t, &reifiers)))
+            .collect();
         let mut op = if ops.len() == 1 {
             ops.into_iter().next().expect("one")
         } else {
@@ -67,6 +74,24 @@ impl Lowerer<'_> {
         Ok(op)
     }
 
+    /// Applies the active graph selection to a statement pattern. Annotation
+    /// triples (subject is a reifier of this pattern) and virtual predicates are not
+    /// statements of the graph: they read the default view.
+    fn select_graph(&mut self, t: TriplePattern, reifiers: &[Var]) -> TriplePattern {
+        let annotation =
+            t.eid.is_none() && matches!(&t.s, TermOrVar::Var(v) if reifiers.contains(v));
+        let virtual_pred =
+            matches!(&t.p, TermOrVar::Const(Value::Iri(p)) if tm_ir::vocab::is_virtual(p));
+        if annotation || virtual_pred {
+            t
+        } else {
+            if matches!(self.active, tm_ir::GraphSel::Var(_)) {
+                self.graph_var_uses += 1;
+            }
+            t.in_graph(self.active.clone())
+        }
+    }
+
     fn one_pattern(&mut self, p: &SpTriple, view: View, items: &mut Items) -> Result<()> {
         let is_reifies =
             matches!(&p.predicate, NamedNodePattern::NamedNode(n) if n.as_str() == RDF_REIFIES);
@@ -75,6 +100,9 @@ impl Lowerer<'_> {
                 return Err(unsupported(REIFIES_WITHOUT_TRIPLE));
             };
             let target = self.reifier(&p.subject);
+            if let Reifier::Var(v) = &target {
+                items.reifiers.push(v.clone());
+            }
             return self.triple_term(t, target, view, items);
         }
         let s = self.position(&p.subject, view, items)?;

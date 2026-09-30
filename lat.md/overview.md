@@ -61,6 +61,7 @@ Rows D19–D25 were added the same day, after a comparison with oxilite ([[prior
 | D24 | Crypto-shredding is scheduled (M6); format 1 reserves tag 15 and `sys:sensitive` for it | [[time-model#Erasure]] |
 | D25 | Retrieval (FTS5 over the term dictionary, vectors on hosts that have them) is a planned milestone | [[roadmap#Milestones]] |
 | D27 | SPARQL removes duplicate `(s, p, o)` only for predicates recorded in `pred_multi`; the eid stays as the statement identity | [[storage#Multi-Eid Predicates]] |
+| D28 | Named graphs are tags: a graph is a node and membership is a layer statement `(e sys:inGraph g)`, so there is no quad column; the default graph is the union | [[data-model#Named Graphs]] |
 | D26 | SQLite stays the engine. DuckDB was benchmarked on the workload and is only an optional read-only analytics tool over the SQLite file | [[prior-art#DuckDB]] |
 
 ## Open Inputs
