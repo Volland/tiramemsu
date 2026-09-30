@@ -84,6 +84,15 @@ impl std::fmt::Debug for Store {
 
 impl Store {
     /// Opens (creating or migrating) the database at `path` through `host`.
+    ///
+    /// A new file gets the format-1 schema and its triggers; an older file is
+    /// migrated forward in one transaction.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::FormatVersion`] when the file is from a newer format,
+    /// [`Error::ForeignFile`] when it is a SQLite file that is not a tiramemsu
+    /// database, [`Error::Sqlite`] for host failures.
     pub fn open(host: &dyn Host, path: &Path, opts: StoreOptions) -> Result<Store> {
         let exec = storage::open(
             host,
@@ -152,6 +161,42 @@ impl Store {
     /// Runs one transaction. On any error the transaction is rolled back and leaves
     /// no trace; ids seen inside a failed body may be reissued. With
     /// `opts.dry_run`, the report is returned and every effect discarded (ids burned).
+    ///
+    /// Use it for every write: one call is one `BEGIN IMMEDIATE` transaction with one
+    /// gap-free [`TxId`], and the [`TxReport`] lists what it asserted, retracted and
+    /// superseded. Calling `transact` from inside `f` is not possible (the closure
+    /// holds the only writer).
+    ///
+    /// # Errors
+    ///
+    /// Any error returned by `f` or by an operation inside it (for example
+    /// [`Error::UniqueViolation`]) aborts and rolls back the transaction; a host
+    /// failure is reported as [`Error::Sqlite`].
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use tm_core::{vocab::v, Error, Store, StoreOptions, TxOptions, Valid, Value};
+    /// use tm_rusqlite as host;
+    ///
+    /// # let dir = tempfile::tempdir().unwrap();
+    /// # let path = dir.path().join("db");
+    /// let mut store = Store::open(&host::RusqliteHost::new(), &path, StoreOptions::default())?;
+    ///
+    /// // A failing body leaves nothing behind.
+    /// let failed = store.transact(TxOptions::default(), |tx| {
+    ///     tx.assert(Value::iri(v("a")), Value::iri(v("p")), Value::Int(1), Valid::ALWAYS)?;
+    ///     Err(Error::custom("changed my mind"))
+    /// });
+    /// assert!(failed.is_err());
+    ///
+    /// let report = store.transact(TxOptions::default(), |tx| {
+    ///     tx.assert(Value::iri(v("a")), Value::iri(v("p")), Value::Int(1), Valid::ALWAYS)?;
+    ///     Ok(())
+    /// })?;
+    /// assert_eq!(report.t.0, 1); // the failed attempt used no number
+    /// # Ok::<(), Error>(())
+    /// ```
     pub fn transact(
         &mut self,
         opts: TxOptions,
@@ -189,6 +234,10 @@ impl Store {
     /// Speculation: runs `ops` inside a savepoint, then `query` on the writer so it
     /// sees the uncommitted state, then rolls everything back. Ids allocated inside
     /// are burned. `query` is not called when `ops` fails.
+    ///
+    /// Use it to ask "what would the graph look like if" without changing anything:
+    /// `query` runs on the writer and sees the uncommitted state. Nothing is
+    /// committed and no transaction number is consumed.
     // @lat: [[time-model#Speculative Transactions]]
     pub fn speculate<R>(
         &mut self,

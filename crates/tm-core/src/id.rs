@@ -135,6 +135,23 @@ impl TryFrom<u8> for Tag {
 }
 
 /// A signed 64-bit value identifier: `(payload << 4) | tag`.
+///
+/// This is what the `triple` table stores in its `s`, `p` and `o` columns. Small
+/// values (integers, booleans, dates, short strings, counters) are held inline in
+/// the payload; everything else is a dictionary term id. Ordering is that of the
+/// raw integer, so it groups by payload, not by [`Tag`]. Use
+/// [`ObjectId::tag`] to learn the kind.
+///
+/// # Example
+///
+/// ```
+/// use tm_core::{ObjectId, Tag};
+///
+/// let id = ObjectId::from_signed(Tag::Int, -7);
+/// assert_eq!(id.tag().unwrap(), Tag::Int);
+/// assert_eq!(id.signed_payload(), -7);
+/// assert_eq!(id.raw() & 15, Tag::Int as i64);
+/// ```
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct ObjectId(i64);
 
@@ -204,6 +221,18 @@ impl fmt::Display for ObjectId {
 }
 
 /// A statement id: an ObjectId whose tag is `STMT`.
+///
+/// Every statement has one, it is never reused, and it can appear as the subject
+/// or object of other statements (that is how layers are built). Displayed as `e<n>`.
+///
+/// ```
+/// use tm_core::{Eid, Tag};
+///
+/// let e = Eid::new(42);
+/// assert_eq!(e.to_string(), "e42");
+/// assert_eq!(e.oid().tag().unwrap(), Tag::Stmt);
+/// assert_eq!(Eid::from_oid(e.oid()), Some(e));
+/// ```
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Eid(ObjectId);
 

@@ -91,6 +91,12 @@ pub enum UpdateOp {
 }
 
 /// A checked update request: the operations run in order in one transaction.
+///
+/// Produced by [`prepare`](crate::prepare) (as [`Prepared::Update`](crate::Prepared::Update))
+/// before any transaction opens, so unsupported operations fail without side
+/// effects. Insert maps to assert, delete to retract with cascade to layers.
+/// Execute it with [`run`] inside a `tm_core::Tx`; the facade does this in one
+/// transaction per request.
 #[derive(Clone, Debug)]
 pub struct UpdatePlan {
     /// The operations.

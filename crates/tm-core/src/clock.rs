@@ -23,6 +23,19 @@ impl Clock for SystemClock {
 }
 
 /// A clock that only moves when told to (tests).
+///
+/// Pass it in [`StoreOptions::clock`](crate::StoreOptions) to make transaction
+/// instants, and therefore `as_of(Instant)` views, deterministic.
+///
+/// ```
+/// use tm_core::{Clock, ManualClock};
+///
+/// let c = ManualClock::new(1_000);
+/// c.advance(500);
+/// assert_eq!(c.now_ms(), 1_500);
+/// c.set(10);
+/// assert_eq!(c.now_ms(), 10);
+/// ```
 #[derive(Debug, Default)]
 pub struct ManualClock(AtomicI64);
 

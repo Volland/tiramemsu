@@ -15,7 +15,19 @@ use tm_ir::vocab;
 /// The low 15 bits of a `DATETIME` id with offset `Z`: `(841 << 4) | 7`.
 pub const DATETIME_Z_LOW: i64 = (841 << 4) | 7;
 
-/// A virtual predicate.
+/// A virtual predicate: a predicate computed from the statement row instead of
+/// stored, so it costs no join.
+///
+/// # Example
+///
+/// ```
+/// use tm_exec::virtual_pred::VirtualPred;
+///
+/// let p = VirtualPred::from_iri("urn:tiramemsu:tm:txAdded");
+/// assert_eq!(p, Some(VirtualPred::TxAdded));
+/// assert_eq!(p.unwrap().column(), "t_add");
+/// assert!(VirtualPred::from_iri("urn:tiramemsu:v:name").is_none());
+/// ```
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 pub enum VirtualPred {
     /// `sys:subject`.

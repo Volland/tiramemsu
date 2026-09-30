@@ -34,6 +34,19 @@ pub enum ValidSel {
 }
 
 /// A view: a transaction-time selector plus a valid-time selector. A pure value.
+///
+/// Transaction time answers "what did the database believe", valid time "what was
+/// true". The two are independent, so any of now, as-of and history can be combined
+/// with a [`ViewSpec::valid_at`] filter. Pass a view to [`crate::read::triples`].
+///
+/// ```
+/// use tm_core::{TimeRef, TxSel, ValidSel, ViewSpec};
+///
+/// let v = ViewSpec::as_of(TimeRef::Tx(3)).valid_at(1_000);
+/// assert_eq!(v.tx, TxSel::AsOf(TimeRef::Tx(3)));
+/// assert_eq!(v.valid, ValidSel::At(1_000));
+/// assert_eq!(ViewSpec::default(), ViewSpec::now());
+/// ```
 #[derive(Copy, Clone, Debug, Default, PartialEq, Eq, Hash)]
 pub struct ViewSpec {
     /// Transaction time.

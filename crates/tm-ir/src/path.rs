@@ -3,6 +3,19 @@
 use tm_core::Value;
 
 /// A property-path expression.
+///
+/// # Example
+///
+/// ```
+/// use tm_ir::PathExpr;
+///
+/// // knows+ / ^manages
+/// let p = PathExpr::Seq(vec![
+///     PathExpr::iri("urn:tiramemsu:v:knows").plus(),
+///     PathExpr::iri("urn:tiramemsu:v:manages").inverse(),
+/// ]);
+/// assert!(matches!(p, PathExpr::Seq(ref v) if v.len() == 2));
+/// ```
 #[derive(Clone, Debug, PartialEq)]
 pub enum PathExpr {
     /// One predicate hop (an IRI; `sys:anyRelationship` is the Cypher wildcard).

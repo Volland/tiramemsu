@@ -4,11 +4,20 @@ description = "Tiramemsu executor host on rusqlite with bundled SQLite"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+readme = "README.md"
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
 rust-version.workspace = true
 
 [dependencies]
 tm-core = { workspace = true }
 rusqlite = { version = "0.40", features = ["bundled", "functions", "vtab", "array"] }
+
+[dev-dependencies]
+tempfile = "3"
 
 # The workspace forbids unsafe code; this host crate only denies it, so that the
 # virtual-table glue in `table_fn.rs` (rusqlite's vtab traits are `unsafe` to

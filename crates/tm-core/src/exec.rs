@@ -147,6 +147,11 @@ pub struct Capabilities {
 ///
 /// Every statement `tm-core` issues, including DDL, pragmas and migrations, goes
 /// through this trait. Hosts may cache prepared statements.
+///
+/// Implement it (together with [`Host`]) to run the engine on another SQLite
+/// binding. A host must provide prepared statements with `?N` parameters,
+/// interactive transactions, savepoints and a stable snapshot inside a read
+/// transaction; anything optional is declared through [`Capabilities`].
 // @lat: [[architecture#Executor]]
 pub trait Executor: Send {
     /// The capabilities of the host that opened this executor.
@@ -372,6 +377,10 @@ impl Default for HostOptions {
 }
 
 /// A SQLite host: opens executors on a database file.
+///
+/// [`Store::open`](crate::Store::open) takes a `&dyn Host`. The only host in this
+/// workspace is `RusqliteHost`, in the `tm-rusqlite` crate. A host that declares no
+/// `reader_pool` is never asked for [`Host::open_reader`].
 pub trait Host: Send + Sync {
     /// The capabilities this host declares.
     fn capabilities(&self) -> Capabilities;

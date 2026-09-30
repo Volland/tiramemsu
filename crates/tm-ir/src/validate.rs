@@ -348,6 +348,13 @@ fn check_op(op: &Op) -> Result<()> {
 /// collides with a grouping variable, a Values row whose width differs from its
 /// variable list, a negative skip or limit, and a virtual-predicate pattern that
 /// binds an eid.
+///
+/// Run this on every tree a front end produces; the executor runs it again
+/// before planning. It needs no database.
+///
+/// # Errors
+///
+/// Returns `Error::InvalidQuery` for the first problem found.
 pub fn validate(q: &IrQuery) -> Result<()> {
     check_op(&q.root)
 }

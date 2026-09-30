@@ -4,6 +4,12 @@ description = "Tiramemsu logical query IR: operators, views, semantic flags and 
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+readme = "README.md"
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
 rust-version.workspace = true
 
 [dependencies]

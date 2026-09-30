@@ -7,6 +7,19 @@ use crate::value::Value;
 pub use crate::event::{Event, Op};
 
 /// A half-open valid-time interval `[from, to)` in epoch ms; `None` is unbounded.
+///
+/// Valid time says when a fact is true in the world, independent of when the
+/// database learned it (transaction time).
+///
+/// ```
+/// use tm_core::Valid;
+///
+/// let v = Valid::between(100, 200);
+/// assert!(v.contains(100) && !v.contains(200));
+/// assert!(Valid::ALWAYS.contains(i64::MIN));
+/// assert!(v.check().is_ok());
+/// assert!(Valid::between(5, 5).check().is_err());
+/// ```
 #[derive(Copy, Clone, Debug, Default, PartialEq, Eq, Hash)]
 pub struct Valid {
     /// Inclusive start.

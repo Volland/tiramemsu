@@ -1,6 +1,4 @@
-//! The `rusqlite` executor host for Tiramemsu: bundled SQLite, prepared-statement
-//! caching, busy timeout, and the registration hook for user functions and virtual
-//! tables. Host-specific mechanisms stay in this crate.
+#![doc = include_str!("../README.md")]
 #![deny(unsafe_code)]
 #![warn(missing_docs)]
 
@@ -26,6 +24,18 @@ pub use error::map_err;
 pub use register::RegisterFn;
 
 /// The rusqlite host: opens [`RusqliteExec`] connections.
+///
+/// Pass it to `tm_core::Store::open`. It is cheap to clone and holds no connection
+/// itself; every `open_writer` / `open_reader` call opens a new one. The writer
+/// creates the file when it is missing, readers are read-only.
+///
+/// ```
+/// use tm_core::Host;
+/// use tm_rusqlite::RusqliteHost;
+///
+/// let caps = RusqliteHost::default().capabilities();
+/// assert!(caps.reader_pool && caps.functions && caps.vtab);
+/// ```
 #[derive(Clone)]
 pub struct RusqliteHost {
     caps: Capabilities,
@@ -47,6 +57,14 @@ impl Default for RusqliteHost {
 }
 
 /// The `PRAGMA compile_options` of the linked SQLite.
+///
+/// Useful to see why `stat4` or `fts5` is or is not declared. Returns an empty list
+/// if an in-memory connection cannot be opened.
+///
+/// ```
+/// let opts = tm_rusqlite::compile_options();
+/// assert!(opts.iter().any(|o| o.starts_with("THREADSAFE")));
+/// ```
 pub fn compile_options() -> Vec<String> {
     let Ok(conn) = Connection::open_in_memory() else {
         return Vec::new();
@@ -80,6 +98,11 @@ impl RusqliteHost {
     }
 
     /// Adds a registration callback run on every opened connection.
+    ///
+    /// The callback runs after the busy timeout and the default registrations, on
+    /// the writer and on every reader, so a function registered here is visible to
+    /// all queries. If it fails, opening the connection fails with `Error::Sqlite`.
+    /// A second call replaces the first callback.
     pub fn with_register(mut self, f: Arc<RegisterFn>) -> RusqliteHost {
         self.register = Some(f);
         self
@@ -119,6 +142,23 @@ impl Host for RusqliteHost {
 }
 
 /// One rusqlite connection implementing the executor trait.
+///
+/// Normally created by [`RusqliteHost`]. Statements run through
+/// `prepare_cached`, parameters are bound positionally (`?1`, `?2`, ...), and an
+/// `SqlValue::IntArray` is bound as a `rarray` value.
+///
+/// ```
+/// use tm_core::{Capabilities, Executor, SqlValue};
+/// use tm_rusqlite::RusqliteExec;
+///
+/// let conn = rusqlite::Connection::open_in_memory().unwrap();
+/// let mut exec = RusqliteExec::from_connection(conn, Capabilities::default());
+/// exec.execute_batch("CREATE TABLE t(x INTEGER)").unwrap();
+/// exec.execute("INSERT INTO t VALUES (?1)", &[SqlValue::Integer(7)]).unwrap();
+/// let mut seen = Vec::new();
+/// exec.query("SELECT x FROM t", &[], &mut |r| { seen.push(r[0].clone()); Ok(()) }).unwrap();
+/// assert_eq!(seen, vec![SqlValue::Integer(7)]);
+/// ```
 pub struct RusqliteExec {
     conn: Connection,
     caps: Capabilities,

@@ -10,7 +10,9 @@ use tm_sparql::Prepared;
 
 use crate::view::View;
 
-/// The result of [`View::sparql`].
+/// The result of [`View::sparql`]: which variant you get follows the query form.
+/// Use [`SparqlResult::solutions`] for `SELECT`, and `write_sparql_json` or
+/// `write_ntriples` for the wire formats.
 #[derive(Clone, Debug, PartialEq)]
 pub enum SparqlResult {
     /// A `SELECT` result.
@@ -92,7 +94,29 @@ impl View<'_> {
     }
 
     /// Runs SPARQL query text on this view (`SELECT`, `ASK`, `CONSTRUCT`) or an
-    /// update request on the plain current view.
+    /// update request on the plain current view. RDF 1.2 annotations (`{| ... |}`,
+    /// `~ ?r`) reach the layers of a fact, and `SERVICE <urn:tiramemsu:tm:asOf/N>`
+    /// changes the time of one group. `v:`, `sys:`, `tm:`, `rdf:`, `rdfs:` and `xsd:`
+    /// are predeclared. An update is one transaction on the writer.
+    ///
+    /// # Errors
+    ///
+    /// `Parse` for invalid text, `Unsupported` for constructs outside the supported
+    /// subset (including an update on an as-of, history or valid-at view), `Eval`
+    /// for runtime errors, and the write errors of [`crate::Db::transact`] for updates.
+    ///
+    /// ```
+    /// # use tiramemsu::*;
+    /// # let dir = tempfile::tempdir().unwrap();
+    /// # let db = Db::open(dir.path().join("m.db"), OpenOptions::default())?;
+    /// db.now().sparql("INSERT DATA { v:alice v:worksAt v:acme }")?;
+    /// let r = db.now().sparql("SELECT ?o WHERE { v:alice v:worksAt ?o }")?;
+    /// let solutions = r.solutions().unwrap();
+    /// assert_eq!(solutions.vars, ["o"]);
+    /// assert_eq!(solutions.rows.len(), 1);
+    /// assert!(matches!(db.now().sparql("SELECT ?"), Err(Error::Parse { .. })));
+    /// # Ok::<(), Error>(())
+    /// ```
     pub fn sparql(&self, text: &str) -> Result<SparqlResult> {
         let env = self.sparql_env()?;
         match tm_sparql::prepare(text, &env)? {

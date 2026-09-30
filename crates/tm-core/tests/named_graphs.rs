@@ -94,6 +94,27 @@ fn error_messages_name_the_term() {
     assert_eq!(c.to_string(), "graph already exists: <urn:y>");
 }
 
+// Regression: `graphs` listed a graph once per membership when nothing was declared.
+host_test! {
+    fn graphs_are_listed_once(db) {
+        let mut eids = Vec::new();
+        db.tx(|tx| {
+            for o in ["b", "c", "d"] {
+                eids.push(tx.assert(iri("a"), iri("p"), iri(o), Valid::ALWAYS)?.eid());
+            }
+            Ok(())
+        });
+        db.tx(|tx| {
+            for e in &eids {
+                tx.add_to_graph(*e, g("1"), AssertOpts::default())?;
+            }
+            Ok(())
+        });
+        let g1 = db.id(&g("1"));
+        assert_eq!(db.read(|x| read::graphs(x, &ViewSpec::NOW)), vec![g1]);
+    }
+}
+
 // @lat: [[tests#Named Graphs#Statement Can Be In Many Graphs]]
 host_test! {
     fn tags_not_containers(db) {

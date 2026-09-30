@@ -69,7 +69,12 @@ fn node(n: &spargebra::term::NamedNode) -> RdfTerm {
     render(&terms::named_node(n))
 }
 
-/// Instantiates `template` once per solution.
+/// Instantiates a `CONSTRUCT` template once per solution row.
+///
+/// Rows that leave a template variable unbound skip that triple, blank nodes are
+/// fresh per row, and duplicate triples are dropped. The facade calls this with
+/// [`QueryForm::Construct`](crate::lower::QueryForm::Construct)'s template and the
+/// query's [`Solutions`].
 pub fn instantiate(template: &[TriplePattern], sol: &Solutions) -> Result<Vec<RdfTriple>> {
     let mut out = Vec::new();
     let mut seen = HashSet::new();

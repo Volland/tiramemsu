@@ -1,6 +1,9 @@
 //! Byte spans into the original query text.
 
 /// A half-open byte range of the original query text (extensions included).
+///
+/// `USE` clauses and `REPEATABLE ELEMENTS` are blanked before parsing without
+/// moving any byte, so a span always indexes the text the caller wrote.
 #[derive(Copy, Clone, Debug, Default, PartialEq, Eq, Hash)]
 pub struct Span {
     /// First byte.

@@ -1,22 +1,4 @@
-//! Tiramemsu: a bitemporal, never-forget triple store on one SQLite file.
-//!
-//! The facade exposes three handles: [`Db`] opens the file and runs transactions,
-//! [`View`] is an immutable time selection that reads, and [`Tx`] holds the write
-//! operations. Every statement has its own identity (eid), transaction time is
-//! Datomic-style (`t`, instants, as-of, history, speculation), and valid time is an
-//! immutable half-open interval. Nothing is ever deleted.
-//!
-//! ```no_run
-//! use tiramemsu::{Db, OpenOptions, TxOptions, Valid, Value};
-//! let db = Db::open("memory.db", OpenOptions::default())?;
-//! let v = |s: &str| Value::iri(format!("urn:tiramemsu:v:{s}"));
-//! let report = db.transact(TxOptions::default(), |tx| {
-//!     tx.assert(v("alice"), v("worksAt"), v("acme"), Valid::ALWAYS)?;
-//!     Ok(())
-//! })?;
-//! let rows = db.now().triples(None, None, None)?;
-//! # Ok::<(), tiramemsu::Error>(())
-//! ```
+#![doc = include_str!("../README.md")]
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
 

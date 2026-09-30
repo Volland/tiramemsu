@@ -77,7 +77,17 @@ pub fn param_val(v: &CypherValue) -> Val {
     }
 }
 
-/// Runs a compiled program. Returns the result table.
+/// Runs a compiled program on `runner` and returns the result table.
+///
+/// Clauses run in order over rows of values; every write clause goes through
+/// [`Runner::with_tx`], so the whole query is one transaction when the runner
+/// wraps one. A query without `RETURN` returns no rows.
+///
+/// # Errors
+///
+/// [`CypherError::Eval`] for runtime type errors, division by zero and values
+/// that cannot be stored, [`CypherError::Unsupported`] for a write on a
+/// read-only runner, and [`CypherError::Core`] for store failures.
 pub fn run(
     prog: &CypherProgram,
     params: &CypherParams,

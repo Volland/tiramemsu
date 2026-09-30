@@ -4,6 +4,12 @@ description = "Tiramemsu query executor: planner, router, SQL codegen, decoding 
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+readme = "README.md"
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
 rust-version.workspace = true
 
 [dependencies]
@@ -16,8 +22,8 @@ regex = "1"
 insta = "1"
 proptest = "1"
 tempfile = "3"
-tm-rusqlite = { workspace = true }
-tiramemsu = { workspace = true }
+tm-rusqlite = { path = "../tm-rusqlite" }
+tiramemsu = { path = "../tiramemsu" }
 rusqlite = { version = "0.40", features = ["bundled"] }
 
 [lints]

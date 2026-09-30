@@ -1061,6 +1061,7 @@ name = "tm-rusqlite"
 version = "0.1.0"
 dependencies = [
  "rusqlite",
+ "tempfile",
  "tm-core",
 ]
 

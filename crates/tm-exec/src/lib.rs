@@ -1,31 +1,4 @@
-//! Tiramemsu query executor (`lat.md/query#Physical Planning`): turns a
-//! [`tm_ir::IrQuery`] into one parameterised SQL statement over the bitemporal
-//! `triple` table, runs it on the right connection and decodes the ObjectIds into
-//! typed values.
-//!
-//! The pipeline is: validate → bind parameters → route (paths to the native
-//! `tm_path` operator) → resolve views and encode constants on the executing
-//! connection → normalise (Empty propagation) → generate SQL → run → decode.
-//! `tm-exec` reaches SQLite only through `tm-core`'s [`tm_core::Executor`] and
-//! needs the host capabilities `functions` and `vtab` ([`host`]).
-//!
-//! ```
-//! use tiramemsu::{Db, OpenOptions, TxOptions, Valid, Value};
-//! use tm_ir::builder::IrBuilder;
-//!
-//! let dir = tempfile::tempdir().unwrap();
-//! let db = Db::open(dir.path().join("x.db"), OpenOptions::default())?;
-//! let v = |s: &str| Value::iri(format!("urn:tiramemsu:v:{s}"));
-//! db.transact(TxOptions::default(), |tx| {
-//!     tx.assert(v("alice"), v("worksAt"), v("acme"), Valid::ALWAYS)?;
-//!     Ok(())
-//! })?;
-//! let b = IrBuilder::sparql();
-//! let q = b.query(b.triple("?a", "v:worksAt", "?c"));
-//! let r = db.now().execute_ir(&q, &tm_ir::Params::new())?;
-//! assert_eq!(r.get(0, "c"), Some(&v("acme")));
-//! # Ok::<(), tiramemsu::Error>(())
-//! ```
+#![doc = include_str!("../README.md")]
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
 
@@ -59,6 +32,29 @@ type Hook = Arc<dyn Fn() + Send + Sync>;
 
 /// The query engine of one database: native operators, planner options and the
 /// shared term cache.
+///
+/// One engine serves every connection of a database. The usual flow is
+/// [`install`](QueryEngine::install) once per connection, then
+/// [`prepare`](QueryEngine::prepare) a query (pure, no I/O) and
+/// [`execute`](QueryEngine::execute) or [`explain`](QueryEngine::explain) it on
+/// a connection inside a read transaction. The `tiramemsu` facade does all of
+/// this for you.
+///
+/// # Example
+///
+/// ```
+/// use tm_exec::{OperatorRegistry, PlannerOptions, QueryEngine};
+/// use tm_ir::{builder::IrBuilder, Params};
+///
+/// let engine = QueryEngine::new(PlannerOptions::default(), OperatorRegistry::new(), 1024);
+/// let b = IrBuilder::sparql();
+/// let p = engine.prepare(&b.query(b.triple("?s", "v:p", "?o")), &Params::new())?;
+/// assert_eq!(p.columns().len(), 2);
+/// // A `$name` that was not supplied is rejected before any SQL exists.
+/// let q = b.query(b.triple("?s", "v:p", "$missing"));
+/// assert!(engine.prepare(&q, &Params::new()).is_err());
+/// # Ok::<(), tm_core::Error>(())
+/// ```
 pub struct QueryEngine {
     registry: OperatorRegistry,
     options: PlannerOptions,
@@ -91,12 +87,22 @@ impl QueryEngine {
     }
 
     /// Checks the host capabilities of a connection and registers the SQL helper
-    /// functions and native operators on it.
+    /// functions and native operators on it. Call it once per connection, before
+    /// running queries on it.
+    ///
+    /// # Errors
+    ///
+    /// `MissingCapability` if the host lacks `functions` or `vtab`.
     pub fn install(&self, exec: &mut dyn Executor) -> Result<()> {
         host::install(exec, &self.registry)
     }
 
     /// Validates `q`, binds `params` and checks routing, without any I/O.
+    ///
+    /// # Errors
+    ///
+    /// `InvalidQuery` for structurally invalid IR or a missing parameter, and
+    /// `Unsupported` for a path pattern when no path operator is registered.
     pub fn prepare(&self, q: &IrQuery, params: &Params) -> Result<Prepared> {
         validate(q)?;
         let query = plan::bind::bind(q, params)?;
@@ -107,6 +113,10 @@ impl QueryEngine {
     }
 
     /// Runs a prepared query on `exec`.
+    ///
+    /// Call it inside a read transaction so planning, the statement and
+    /// decoding share one snapshot. Use [`CacheMode::Shared`] on a reader and
+    /// [`CacheMode::Scoped`] on the writer inside a speculation.
     pub fn execute(
         &self,
         exec: &mut dyn Executor,
@@ -116,7 +126,9 @@ impl QueryEngine {
         exec::run(self, ExecContext { exec, cache }, p)
     }
 
-    /// Explains a prepared query on `exec` without running it.
+    /// Explains a prepared query on `exec` without running it: routing, SQL
+    /// text, bound parameters and `EXPLAIN QUERY PLAN`. Use it to check that a
+    /// query uses the index you expect.
     pub fn explain(&self, exec: &mut dyn Executor, p: &Prepared) -> Result<Explain> {
         exec::explain(self, exec, p)
     }

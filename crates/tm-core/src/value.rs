@@ -25,6 +25,21 @@ pub const MAX_OFFSET_MIN: i16 = 14 * 60;
 const MS_PER_DAY: i128 = 86_400_000;
 
 /// A value in any statement position.
+///
+/// This is the decoded, owned form; [`ObjectId`](crate::ObjectId) is the encoded
+/// form stored in the database. Write operations accept either (through
+/// [`IntoObject`](crate::IntoObject)). Values are canonicalised on encoding, so
+/// equal values always get the same id and assert can match by id.
+///
+/// ```
+/// use tm_core::{codec::{self, Encoded}, Tag, Value};
+///
+/// // Short strings and integers are inline: no dictionary row is needed.
+/// match codec::encode(&Value::str("hi")) {
+///     Encoded::Inline(id) => assert_eq!(id.tag().unwrap(), Tag::ShortStr),
+///     _ => panic!("expected inline"),
+/// }
+/// ```
 #[derive(Clone, Debug, PartialEq)]
 pub enum Value {
     /// An IRI. Skolem IRIs (`urn:tiramemsu:node:<n>`, ...) encode to their inline id.

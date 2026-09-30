@@ -10,6 +10,16 @@ use crate::udf;
 
 /// Fails with `MissingCapability` naming the first missing capability
 /// (`functions`, then `vtab`). Never degrades silently.
+///
+/// # Example
+///
+/// ```
+/// use tm_core::Capabilities;
+/// use tm_exec::host::check_capabilities;
+///
+/// let none = Capabilities::default();
+/// assert!(check_capabilities(none).is_err());
+/// ```
 // @lat: [[architecture#Executor]]
 pub fn check_capabilities(c: Capabilities) -> Result<()> {
     if !c.functions {
@@ -23,6 +33,10 @@ pub fn check_capabilities(c: Capabilities) -> Result<()> {
 
 /// Checks the capabilities of `exec`, then registers every helper function and
 /// every native operator on it.
+///
+/// # Errors
+///
+/// `MissingCapability` if the host cannot register functions or virtual tables.
 pub fn install(exec: &mut dyn Executor, ops: &OperatorRegistry) -> Result<()> {
     check_capabilities(exec.capabilities())?;
     let reg = exec

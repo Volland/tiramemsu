@@ -5,6 +5,11 @@ use tm_core::{Dialect, Error, Span as CoreSpan};
 use crate::span::Span;
 
 /// A front-end failure. `Core` carries an error of the store (write failures).
+///
+/// Convert with [`CypherError::into_core`] to get the shared `tm_core::Error`,
+/// which turns a `Parse` span into a line and column. `Unsupported` is the
+/// contract for the deferred families: a construct outside the v1 subset fails
+/// with its feature name instead of returning a wrong answer.
 #[derive(Debug)]
 pub enum CypherError {
     /// Invalid text or a compile-time semantic error, with the offending span.
@@ -55,7 +60,9 @@ impl CypherError {
         CypherError::Eval { msg: msg.into() }
     }
 
-    /// Converts to the facade error; `text` is needed to compute line and column.
+    /// Converts to the facade error; `text` is the query text the span points
+    /// into, needed to compute line and column. The span end and the location of an
+    /// `Unsupported` are dropped.
     pub fn into_core(self, text: &str) -> Error {
         match self {
             CypherError::Parse { span, msg } => {

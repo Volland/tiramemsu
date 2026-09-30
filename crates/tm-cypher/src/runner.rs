@@ -6,6 +6,8 @@ use tm_core::{Result, Tx, Value};
 use tm_ir::{IrQuery, Params};
 
 /// The rows of an IR query: every cell is a term (`None` = missing).
+///
+/// This is the shape a [`Runner`] returns for [`Runner::run_ir`].
 #[derive(Clone, Debug, Default)]
 pub struct Rows {
     /// Column variable names.
@@ -21,7 +23,14 @@ impl Rows {
     }
 }
 
-/// Runs IR and, on a write handle, transaction operations.
+/// Runs IR and, on a write handle, transaction operations: how a compiled
+/// program reaches the store.
+///
+/// Implement it to host `tm-cypher` on another executor. The `tiramemsu` facade
+/// implements it twice: read-only over a view, and read-write over a
+/// transaction, where reads see the transaction's own earlier writes. A read-only
+/// runner returns `false` from [`writable`](Runner::writable) and fails
+/// [`with_tx`](Runner::with_tx) with `Unsupported`.
 pub trait Runner {
     /// Executes an IR query on the connection this program runs on. Each pattern
     /// is evaluated under its own view.

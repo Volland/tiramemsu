@@ -16,6 +16,16 @@ use crate::result::{ExecStats, ResultValue};
 
 /// The shared `id → term` cache of one database, used by every reader. Terms are
 /// immutable and never deleted, so entries never go stale.
+///
+/// # Example
+///
+/// ```
+/// use tm_exec::TermCache;
+///
+/// let cache = TermCache::new(8);
+/// assert!(cache.is_empty());
+/// assert_eq!(cache.capacity(), 8);
+/// ```
 #[derive(Debug)]
 pub struct TermCache {
     inner: Mutex<LruCache<i64, Value>>,
@@ -72,6 +82,9 @@ impl TermCache {
 }
 
 /// Where decoded terms are cached.
+///
+/// The split keeps speculative terms (from `Db::with`) out of the cache that
+/// committed readers share.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum CacheMode {
     /// A reader on committed state: read and fill the shared cache.

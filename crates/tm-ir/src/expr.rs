@@ -231,7 +231,10 @@ pub struct Lookup {
     pub include_volatile: bool,
 }
 
-/// A scalar expression.
+/// A scalar expression, used in filters, `Extend`, aggregates and ordering keys.
+///
+/// Build simple ones with [`Expr::var`], [`Expr::val`], [`Expr::eq`] and friends;
+/// `Exists`/`NotExists` embed a sub-[`Op`].
 #[derive(Clone, Debug, PartialEq)]
 pub enum Expr {
     /// A variable.

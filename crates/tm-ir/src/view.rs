@@ -5,6 +5,21 @@ pub use tm_core::{TimeRef, TxSel, ValidSel};
 
 /// The time selection of one triple or path pattern.
 ///
+/// A view pairs a transaction-time selector (what the database believed) with a
+/// valid-time selector (when the fact held). The default is [`View::NOW`]; valid
+/// time is filtered only when asked for.
+///
+/// # Example
+///
+/// ```
+/// use tm_ir::{TimeRef, TxSel, ValidSel, View};
+///
+/// let v = View::as_of_tx(150).valid_at(1_700_000_000_000);
+/// assert_eq!(v.tx, TxSel::AsOf(TimeRef::Tx(150)));
+/// assert_eq!(v.valid, ValidSel::At(1_700_000_000_000));
+/// assert_eq!(View::default(), View::NOW);
+/// ```
+///
 /// Pattern views are always explicit: front ends lower with the handle's
 /// [`View`] (the view descriptor) as the default and [`View::overlay`] a
 /// query-level or per-pattern clause on top of it.

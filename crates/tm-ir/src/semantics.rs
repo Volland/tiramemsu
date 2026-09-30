@@ -31,6 +31,20 @@ pub enum GraphSet {
 }
 
 /// The three semantic flags of one query.
+///
+/// They encode every difference between SPARQL and Cypher that the executor
+/// must know about. Start from [`Semantics::sparql`] or [`Semantics::cypher`]
+/// and adjust with the `with_*` methods.
+///
+/// # Example
+///
+/// ```
+/// use tm_ir::{GraphSet, Semantics};
+///
+/// // Cypher matching rules, but count each distinct triple once.
+/// let s = Semantics::cypher().with_graph_set(GraphSet::SetOfTriples);
+/// assert_eq!(s.graph_set, GraphSet::SetOfTriples);
+/// ```
 #[derive(Copy, Clone, Debug, Default, PartialEq, Eq, Hash)]
 pub struct Semantics {
     /// Pattern matching mode.

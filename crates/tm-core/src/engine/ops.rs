@@ -20,6 +20,17 @@ impl Tx<'_> {
     /// Asserts `(s, p, o)` valid over `valid`. Idempotent: returns
     /// `Existing(eid)` when a live statement with the same `(s, p, o)` and an
     /// overlapping valid interval exists.
+    ///
+    /// This is the default way to record a fact: asserting the same thing twice
+    /// yields one statement. Use [`Tx::create`] when parallel edges are wanted. The
+    /// returned [`Asserted`] carries the eid, which can then be the subject of
+    /// further statements.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::InvalidInterval`], [`Error::ReservedNamespace`] for a `sys:`/`tm:`
+    /// predicate a user may not write, [`Error::ValueTypeMismatch`] and
+    /// [`Error::UniqueViolation`] from the predicate's schema.
     pub fn assert(
         &mut self,
         s: impl IntoObject,
@@ -128,6 +139,15 @@ impl Tx<'_> {
 
     /// Retracts a live statement with cascade. Returns false for a retracted or
     /// unknown eid.
+    ///
+    /// This is how a fact is forgotten: the row stays and gets `t_ret`, so `as_of`
+    /// and history views still show it. Every statement layered on it (its
+    /// provenance, confidence, memberships) is retracted with it.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::CascadeLimitExceeded`] when the cascade is larger than
+    /// [`crate::TxOptions::max_cascade`].
     // @lat: [[time-model#Operations#Retract]]
     pub fn retract(&mut self, eid: Eid) -> Result<bool> {
         self.retract_root(eid, RetKind::Explicit)

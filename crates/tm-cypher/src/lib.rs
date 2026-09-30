@@ -1,4 +1,4 @@
-//! Tiramemsu Cypher front end (`lat.md/query#Front Ends#Cypher`).
+#![doc = include_str!("../README.md")]
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
 

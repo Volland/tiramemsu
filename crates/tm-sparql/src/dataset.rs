@@ -13,7 +13,9 @@ use tm_ir::View;
 
 use crate::error::{invalid_time_iri, unsupported, CONFLICTING_TIME};
 
-/// A parsed `tm:` time IRI.
+/// A parsed `tm:` time IRI: `asOf/<t>`, `asOf/<instant>`, `history` or
+/// `validAt/<instant>` under `urn:tiramemsu:tm:`. Only `FROM` and `SERVICE` give
+/// these IRIs their meaning; anywhere else they are ordinary IRIs.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum TimeIri {
     /// `asOf/<t>`, `asOf/<instant>` or `history`: the transaction-time part.
@@ -39,6 +41,24 @@ fn instant_ms(text: &str) -> Option<i64> {
 
 /// Parses `iri` as a time IRI. `Ok(None)` when it is not in the `tm:` namespace;
 /// a `tm:` IRI that is not a valid time IRI is a `Parse` error naming the IRI.
+///
+/// # Example
+///
+/// ```
+/// use tm_sparql::dataset::{parse_time_iri, TimeIri};
+///
+/// assert!(matches!(
+///     parse_time_iri("urn:tiramemsu:tm:asOf/150")?,
+///     Some(TimeIri::Tx(_))
+/// ));
+/// assert!(matches!(
+///     parse_time_iri("urn:tiramemsu:tm:validAt/2025-03-01")?,
+///     Some(TimeIri::Valid(_))
+/// ));
+/// assert_eq!(parse_time_iri("https://example.org/g")?, None); // an ordinary graph IRI
+/// assert!(parse_time_iri("urn:tiramemsu:tm:asOf/soon").is_err());
+/// # Ok::<(), tm_core::Error>(())
+/// ```
 pub fn parse_time_iri(iri: &str) -> Result<Option<TimeIri>> {
     let Some(rest) = iri.strip_prefix(vocab::TM) else {
         return Ok(None);
@@ -63,6 +83,10 @@ pub fn parse_time_iri(iri: &str) -> Result<Option<TimeIri>> {
 }
 
 /// The time parts a clause names; an absent part is inherited.
+///
+/// A `FROM` scopes the whole query, a `SERVICE <tm:...>` scopes one group and
+/// nests with the innermost part winning. [`resolve`](ViewScope::resolve) merges
+/// a scope over the view the text was submitted on.
 #[derive(Copy, Clone, Debug, Default, PartialEq, Eq)]
 pub struct ViewScope {
     /// The transaction-time part.

@@ -4,7 +4,14 @@ description = "Tiramemsu SPARQL 1.1/1.2 front end: parsing, lowering to the quer
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+readme = "README.md"
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
 rust-version.workspace = true
+exclude = ["tests/"]
 
 [dependencies]
 tm-core = { workspace = true }
@@ -13,7 +20,7 @@ spargebra = { version = "0.4.7", features = ["sparql-12"] }
 peg = "0.8"
 
 [dev-dependencies]
-tiramemsu = { workspace = true }
+tiramemsu = { path = "../tiramemsu" }
 tempfile = "3"
 toml = "0.8"
 oxttl = { version = "0.2", features = ["rdf-12"] }

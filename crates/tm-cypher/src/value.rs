@@ -441,7 +441,9 @@ fn write_key(v: &Val, out: &mut String) {
     }
 }
 
-/// A node in a result.
+/// A node in a result. A statement used as a node has the label `Statement`
+/// first and the time properties `txAdded`, `txRetracted`, `validFrom` and
+/// `validTo`.
 #[derive(Clone, Debug, PartialEq)]
 pub struct NodeValue {
     /// The stored term.
@@ -454,7 +456,8 @@ pub struct NodeValue {
     pub properties: BTreeMap<String, CypherValue>,
 }
 
-/// A relationship in a result.
+/// A relationship in a result. `eid` is the statement id, and the same id is
+/// also a [`NodeValue`] wherever the query used it in node position.
 #[derive(Clone, Debug, PartialEq)]
 pub struct RelValue {
     /// The statement eid.
@@ -481,6 +484,9 @@ pub struct PathValue {
 }
 
 /// A value in a result table.
+///
+/// Datetimes keep the offset they were stored with; a `LocalDateTime` has none.
+/// Integers are 64-bit. [`to_json`](CypherValue::to_json) gives the JSON form.
 #[derive(Clone, Debug, PartialEq)]
 pub enum CypherValue {
     /// `null`.
@@ -517,6 +523,21 @@ pub enum CypherValue {
 }
 
 /// A query result: columns and rows, plus the transaction report of a write.
+///
+/// `report` is `Some` only for queries run through `Db::cypher_write`.
+///
+/// # Example
+///
+/// ```
+/// use tm_cypher::{CypherResult, CypherValue};
+///
+/// let r = CypherResult {
+///     columns: vec!["n".into()],
+///     rows: vec![vec![CypherValue::Integer(1)]],
+///     report: None,
+/// };
+/// assert_eq!(r.to_json().to_string(), r#"{"columns":["n"],"rows":[[1]]}"#);
+/// ```
 #[derive(Clone, Debug, PartialEq)]
 pub struct CypherResult {
     /// Column names.

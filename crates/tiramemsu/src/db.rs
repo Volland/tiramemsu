@@ -19,7 +19,20 @@ use tm_rusqlite::RusqliteHost;
 use crate::pool::ReaderPool;
 use crate::view::View;
 
-/// Per-database tuning knobs (`lat.md/api#Open Options`).
+/// Per-database tuning knobs, passed to [`Db::open`].
+///
+/// `OpenOptions::default()` suits most applications. Override `clock` to make
+/// transaction instants deterministic in tests, `readers` to size the read pool,
+/// and `path_max_hops` / `path_max_states` to bound path searches.
+///
+/// ```
+/// # use tiramemsu::*;
+/// # let dir = tempfile::tempdir().unwrap();
+/// let opts = OpenOptions { readers: 2, path_max_states: 100_000, ..OpenOptions::default() };
+/// let db = Db::open(dir.path().join("m.db"), opts)?;
+/// assert_eq!(db.reader_count(), 2);
+/// # Ok::<(), Error>(())
+/// ```
 #[derive(Clone)]
 pub struct OpenOptions {
     /// Number of read-only connections (default 4). Ignored when the host has no
@@ -149,12 +162,34 @@ impl std::fmt::Debug for Db {
 }
 
 impl Db {
-    /// Opens (creating or migrating) the database at `path` with the `rusqlite` host.
+    /// Opens (creating or migrating) the database at `path` with the bundled
+    /// `rusqlite` host. This is the usual entry point: it starts the single writer
+    /// and the reader pool and installs the query engine.
+    ///
+    /// # Errors
+    ///
+    /// `FormatVersion` when the file was written by a newer format, `ForeignFile`
+    /// when it is a SQLite database that is not a tiramemsu one, and `Sqlite` for
+    /// I/O or locking failures.
+    ///
+    /// ```
+    /// # use tiramemsu::*;
+    /// # let dir = tempfile::tempdir().unwrap();
+    /// let db = Db::open(dir.path().join("memory.db"), OpenOptions::default())?;
+    /// assert!(db.now().triples(None, None, None)?.is_empty());
+    /// # Ok::<(), Error>(())
+    /// ```
     pub fn open(path: impl AsRef<Path>, opts: OpenOptions) -> Result<Db> {
         Db::open_with_host(RusqliteHost::new(), path, opts)
     }
 
-    /// Opens the database at `path` through any executor host.
+    /// Opens the database at `path` through any executor [`Host`], for embedding on
+    /// a SQLite other than the bundled one.
+    ///
+    /// # Errors
+    ///
+    /// As [`Db::open`], plus `MissingCapability` when `opts.query_engine` is set and
+    /// the host lacks `functions` or `vtab`.
     pub fn open_with_host(
         host: impl Host,
         path: impl AsRef<Path>,
@@ -317,13 +352,20 @@ impl Db {
         }
     }
 
-    /// Runs a full `ANALYZE` on the writer.
+    /// Runs a full `ANALYZE` on the writer. Worth calling once after a large bulk
+    /// load; normal operation runs `PRAGMA optimize` on its own (`optimize_every`).
+    ///
+    /// # Errors
+    ///
+    /// `Reentrant` inside a running transaction, or `Sqlite`.
     pub fn optimize(&self) -> Result<()> {
         let _held = HeldGuard::acquire(self.id)?;
         self.lock()?.optimize()
     }
 
-    /// Runs one transaction on the single writer and returns its report.
+    /// Runs one transaction on the single writer and returns its report. This is the
+    /// only way to write: assert, retract, supersede and the rest are methods of the
+    /// [`Tx`] the closure receives.
     ///
     /// If the body or any operation fails, the whole transaction is rolled back and
     /// leaves no trace: no `tx` row, statement, term, volatile change or counter
@@ -332,6 +374,32 @@ impl Db {
     /// the report is returned and all effects are discarded (allocated ids are
     /// burned). Starting a write from inside another write or speculation on the
     /// same database fails with [`Error::Reentrant`].
+    ///
+    /// # Errors
+    ///
+    /// Whatever the operations raise (schema violations, `NotLive`,
+    /// `CascadeLimitExceeded`, ...), an error returned by the closure, or `Sqlite`.
+    ///
+    /// ```
+    /// # use tiramemsu::*;
+    /// # let dir = tempfile::tempdir().unwrap();
+    /// # let db = Db::open(dir.path().join("m.db"), OpenOptions::default())?;
+    /// let v = |s: &str| Value::iri(format!("urn:tiramemsu:v:{s}"));
+    /// let report = db.transact(TxOptions::default(), |tx| {
+    ///     tx.assert(v("alice"), v("worksAt"), v("acme"), Valid::ALWAYS)?;
+    ///     Ok(())
+    /// })?;
+    /// assert_eq!(report.t, TxId(1));
+    ///
+    /// // A failing body commits nothing, not even the first assert.
+    /// let failed = db.transact(TxOptions::default(), |tx| {
+    ///     tx.assert(v("bob"), v("worksAt"), v("acme"), Valid::ALWAYS)?;
+    ///     Err(Error::custom("changed my mind"))
+    /// });
+    /// assert!(failed.is_err());
+    /// assert_eq!(db.now().triples(None, None, None)?.len(), 1);
+    /// # Ok::<(), Error>(())
+    /// ```
     pub fn transact<F>(&self, opts: TxOptions, f: F) -> Result<TxReport>
     where
         F: FnOnce(&mut Tx<'_>) -> Result<()>,
@@ -351,6 +419,27 @@ impl Db {
     /// No transaction number is consumed and no event is logged; ids allocated
     /// inside are burned so they are never reissued. `query` is not called when
     /// `ops` fails.
+    ///
+    /// Use it for "what would happen if" questions; it holds the write lock, so keep
+    /// it short. To preview only a report, use `TxOptions { dry_run: true, .. }`.
+    ///
+    /// # Errors
+    ///
+    /// The error of `ops` or of `query`, or `Reentrant` inside another write.
+    ///
+    /// ```
+    /// # use tiramemsu::*;
+    /// # let dir = tempfile::tempdir().unwrap();
+    /// # let db = Db::open(dir.path().join("m.db"), OpenOptions::default())?;
+    /// let v = |s: &str| Value::iri(format!("urn:tiramemsu:v:{s}"));
+    /// let seen = db.with(
+    ///     |tx| { tx.assert(v("alice"), v("worksAt"), v("acme"), Valid::ALWAYS)?; Ok(()) },
+    ///     |view| Ok(view.triples(None, None, None)?.len()),
+    /// )?;
+    /// assert_eq!(seen, 1);
+    /// assert!(db.now().triples(None, None, None)?.is_empty()); // nothing was kept
+    /// # Ok::<(), Error>(())
+    /// ```
     pub fn with<F, G, R>(&self, ops: F, query: G) -> Result<R>
     where
         F: FnOnce(&mut Tx<'_>) -> Result<()>,
@@ -365,22 +454,32 @@ impl Db {
         })
     }
 
-    /// The now view (live statements, valid time unfiltered).
+    /// The now view: live statements, valid time unfiltered. Views are cheap values;
+    /// creating one does no I/O.
     pub fn now(&self) -> View<'_> {
         View::on_db(self, ViewSpec::NOW)
     }
 
-    /// The as-of view at a transaction number or a wall-clock instant.
+    /// The as-of view at a transaction number or a wall-clock instant: what the
+    /// database believed then. Exact for every past `t`, since nothing is deleted.
+    /// An instant resolves to the last transaction at or before it, and to the empty
+    /// view before the first.
     pub fn as_of(&self, at: TimeRef) -> View<'_> {
         View::on_db(self, ViewSpec::as_of(at))
     }
 
-    /// The history view (every statement ever committed, with its lifetime).
+    /// The history view: every statement ever committed, with its real lifetime
+    /// (`t_add`, `t_ret`, `ret_kind`). Use it for audits and "how did this change".
     pub fn history(&self) -> View<'_> {
         View::on_db(self, ViewSpec::history())
     }
 
-    /// Every event with `t > since`, ordered by time, asserts before retracts, eid.
+    /// Every event with `t > since`, ordered by time, asserts before retracts, eid:
+    /// the change log for replication, auditing and "what happened since I last looked".
+    ///
+    /// # Errors
+    ///
+    /// `Sqlite` on a read failure.
     pub fn events_since(&self, since: u64) -> Result<Vec<Event>> {
         self.now().events_since(since)
     }

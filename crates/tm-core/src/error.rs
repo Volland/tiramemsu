@@ -46,6 +46,23 @@ pub struct Span {
 }
 
 /// Every failure of the store. A failed transaction leaves no trace.
+///
+/// The enum is `#[non_exhaustive]`, so match with a wildcard arm. Host failures
+/// arrive as [`Error::Sqlite`] with a [`SqlError`] carrying the SQLite result code
+/// (see [`Error::sql`]); your own failures inside a transaction body can be wrapped
+/// with [`Error::custom`]. Some variants (`Parse`, `PathLimitExceeded`,
+/// `MissingCapability`, ...) are produced only by the query crates above `tm-core`.
+///
+/// ```
+/// use tm_core::Error;
+///
+/// let e = Error::custom("stop");
+/// match e {
+///     Error::Custom(_) => {}
+///     _ => unreachable!(),
+/// }
+/// assert_eq!(Error::unsupported("SEALED").to_string(), "unsupported: SEALED");
+/// ```
 #[non_exhaustive]
 #[derive(Debug, thiserror::Error)]
 pub enum Error {

@@ -4,7 +4,14 @@ description = "Tiramemsu Cypher front end: parser adapter, semantic analysis and
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+readme = "README.md"
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
 rust-version.workspace = true
+exclude = ["tests/"]
 
 [dependencies]
 tm-core = { workspace = true }
@@ -18,7 +25,7 @@ serde_json = "1"
 [dev-dependencies]
 proptest = "1"
 insta = { version = "1", features = ["json"] }
-tiramemsu = { workspace = true }
+tiramemsu = { path = "../tiramemsu" }
 tempfile = "3"
 
 [lints]

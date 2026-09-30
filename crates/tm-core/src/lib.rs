@@ -1,8 +1,4 @@
-//! Tiramemsu core: the ObjectId codec, the term dictionary, the SQLite storage
-//! format, the single-writer transaction engine, temporal views and the event log.
-//!
-//! `tm-core` reaches SQLite only through its own [`exec::Executor`] trait and
-//! depends on no SQLite binding; hosts such as `tm-rusqlite` implement it.
+#![doc = include_str!("../README.md")]
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
 

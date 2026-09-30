@@ -1,5 +1,5 @@
 //! The search modes: breadth-first search over `(node, DFA state)`, one layer per
-//! hop count, one batched fetch round per layer. Every mode shares [`expand`].
+//! hop count, one batched fetch round per layer. Every mode shares `expand`.
 
 mod reach;
 mod shortest;

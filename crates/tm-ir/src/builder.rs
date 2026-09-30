@@ -87,6 +87,20 @@ impl IntoTerm for Var {
 }
 
 /// Builds IR with a default View for every pattern it creates.
+///
+/// Pattern positions are plain strings: `?x` is a variable, `$x` a parameter,
+/// `v:x` (also `sys:`, `tm:`, `xsd:`, `rdf:`) a CURIE and anything else an IRI.
+/// Use [`IrBuilder::at`] to change the View of the patterns that follow.
+///
+/// # Example
+///
+/// ```
+/// use tm_ir::builder::IrBuilder;
+///
+/// let b = IrBuilder::sparql();
+/// let q = b.query(b.bgp(&[("?p", "v:worksAt", "?c"), ("?c", "v:locatedIn", "$city")]));
+/// assert!(q.to_string().contains("locatedIn"));
+/// ```
 #[derive(Copy, Clone, Debug, Default)]
 pub struct IrBuilder {
     /// The View given to new patterns.

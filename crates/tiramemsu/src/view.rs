@@ -85,7 +85,9 @@ impl<'a> View<'a> {
     }
 
     /// A view of the same transaction time, keeping only statements valid at
-    /// `epoch_ms`. The original view is unchanged.
+    /// `epoch_ms` (intervals are half open, `[from, to)`). Combine it with
+    /// `now`, `as_of` or `history` to ask "what did we believe then about when".
+    /// The original view is unchanged.
     pub fn valid_at(self, epoch_ms: i64) -> View<'a> {
         View {
             spec: self.spec.valid_at(epoch_ms),
@@ -113,7 +115,28 @@ impl<'a> View<'a> {
     }
 
     /// Every statement selected by the view that matches the bound positions, in
-    /// ascending eid order. Never writes.
+    /// ascending eid order. This is the low-level lookup; use [`View::sparql`] or
+    /// [`View::cypher`] for anything with joins. Never writes.
+    ///
+    /// # Errors
+    ///
+    /// `Sqlite` on a read failure.
+    ///
+    /// ```
+    /// # use tiramemsu::*;
+    /// # let dir = tempfile::tempdir().unwrap();
+    /// # let db = Db::open(dir.path().join("m.db"), OpenOptions::default())?;
+    /// let v = |s: &str| Value::iri(format!("urn:tiramemsu:v:{s}"));
+    /// db.transact(TxOptions::default(), |tx| {
+    ///     tx.assert(v("alice"), v("worksAt"), v("acme"), Valid::ALWAYS)?;
+    ///     Ok(())
+    /// })?;
+    /// let alice = db.now().encode(&v("alice"))?.unwrap();
+    /// let rows = db.now().triples(Some(alice), None, None)?;
+    /// assert_eq!(rows.len(), 1);
+    /// assert_eq!(db.now().decode(rows[0].o)?, v("acme"));
+    /// # Ok::<(), Error>(())
+    /// ```
     pub fn triples(
         &self,
         s: Option<ObjectId>,
@@ -165,7 +188,8 @@ impl<'a> View<'a> {
         self.exec(|e, _| read::values(e, &spec, s, key))
     }
 
-    /// Encodes a value for a lookup. Never inserts: `None` when a dictionary value
+    /// Encodes a value for a lookup, so it can be passed to [`View::triples`],
+    /// [`View::path`] or [`View::values`]. Never inserts: `None` when a dictionary value
     /// is not stored, so any pattern using it matches nothing.
     pub fn encode(&self, v: &Value) -> Result<Option<ObjectId>> {
         self.exec(|e, _| TermReader::encode(e, v))
@@ -224,6 +248,32 @@ impl<'a> View<'a> {
     /// (`u32::MAX` for none). Rows come in the deterministic order of the mode; `REACH`
     /// rows carry no path value. Inside `Db::with` the path sees the speculative
     /// statements.
+    ///
+    /// Path steps can cross layers through the virtual hops `sys:subject` and
+    /// `sys:object` of a fact id, for example `supportedBy/(sys:subject|sys:object)`.
+    ///
+    /// # Errors
+    ///
+    /// `Parse` (dialect `Path`) for a malformed path, `PathLimitExceeded` when the
+    /// search passes `OpenOptions::path_max_states`, and `Unsupported` without the
+    /// query engine.
+    ///
+    /// ```
+    /// # use tiramemsu::*;
+    /// # let dir = tempfile::tempdir().unwrap();
+    /// # let db = Db::open(dir.path().join("m.db"), OpenOptions::default())?;
+    /// let v = |s: &str| Value::iri(format!("urn:tiramemsu:v:{s}"));
+    /// db.transact(TxOptions::default(), |tx| {
+    ///     tx.assert(v("a"), v("knows"), v("b"), Valid::ALWAYS)?;
+    ///     tx.assert(v("b"), v("knows"), v("c"), Valid::ALWAYS)?;
+    ///     Ok(())
+    /// })?;
+    /// let view = db.now();
+    /// let a = view.encode(&v("a"))?.unwrap();
+    /// let rows = view.path(a, "knows+", PathMode::Reachability, u32::MAX)?;
+    /// assert_eq!(rows.len(), 2); // b and c
+    /// # Ok::<(), Error>(())
+    /// ```
     pub fn path(
         &self,
         start: ObjectId,

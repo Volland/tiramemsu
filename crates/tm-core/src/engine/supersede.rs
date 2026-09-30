@@ -48,6 +48,39 @@ impl Tx<'_> {
     /// `supersede` and replays it under new eids with references rewired through
     /// the substitution map σ, applying `patch` to the root. Links the new root to
     /// the old one with `sys:supersedes` and returns the new root eid.
+    ///
+    /// Use it to correct a fact while keeping what was said about it: the layers
+    /// (source, confidence) move to the new statement, the old ones stay in history.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::NotLive`] when `root` is retracted or unknown, and
+    /// [`Error::InvalidPatch`] for an empty interval or a patch that changes nothing.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use tm_core::{vocab::v, Patch, Store, StoreOptions, TxOptions, Valid, Value};
+    /// use tm_rusqlite as host;
+    ///
+    /// # let dir = tempfile::tempdir().unwrap();
+    /// # let path = dir.path().join("db");
+    /// let mut store = Store::open(&host::RusqliteHost::new(), &path, StoreOptions::default())?;
+    /// let report = store.transact(TxOptions::default(), |tx| {
+    ///     let fact = tx.assert(Value::iri(v("alice")), Value::iri(v("city")), Value::str("Kyiv"), Valid::ALWAYS)?.eid();
+    ///     tx.assert(fact, Value::iri(v("source")), Value::str("chat"), Valid::ALWAYS)?;
+    ///     Ok(())
+    /// })?;
+    /// let fact = report.asserted[0];
+    /// let report = store.transact(TxOptions::default(), |tx| {
+    ///     tx.supersede(fact, Patch::object(Value::str("Lviv")))?;
+    ///     Ok(())
+    /// })?;
+    /// let (old, new) = report.superseded[0];
+    /// assert_eq!(old, fact);
+    /// assert_ne!(new, fact);
+    /// # Ok::<(), tm_core::Error>(())
+    /// ```
     // @lat: [[time-model#Operations#Supersede]]
     pub fn supersede(&mut self, root: Eid, patch: Patch) -> Result<Eid> {
         let row = match self.load_row(root)? {

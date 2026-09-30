@@ -48,14 +48,27 @@ pub const MOVE: &str = "MOVE";
 /// `COPY`.
 pub const COPY: &str = "COPY";
 
-/// `Unsupported { feature }`.
+/// `Unsupported { feature }`: the error every construct outside the v1 subset
+/// returns. `feature` is one of the constants of this module or a function name
+/// such as `"MD5"`, so callers can match on it.
+///
+/// # Example
+///
+/// ```
+/// use tm_core::Error;
+/// use tm_sparql::error::{unsupported, DESCRIBE};
+///
+/// assert!(matches!(unsupported(DESCRIBE), Error::Unsupported { feature } if feature == "DESCRIBE"));
+/// ```
 pub fn unsupported(feature: impl Into<String>) -> Error {
     Error::Unsupported {
         feature: feature.into(),
     }
 }
 
-/// `Parse { dialect: Sparql, span, msg }`.
+/// `Parse { dialect: Sparql, span, msg }`: invalid text or a static error
+/// (undeclared prefix, malformed `tm:` IRI). `span` is a line and column when
+/// the parser reported one.
 pub fn parse_error(span: Option<Span>, msg: impl Into<String>) -> Error {
     Error::Parse {
         dialect: Dialect::Sparql,

@@ -35,6 +35,33 @@ fn row_to_triple(r: &[SqlValue], mask_retraction: bool) -> Triple {
 
 /// Every statement selected by `spec` that matches the bound positions, ordered by
 /// eid. As-of rows report `t_ret` and `ret_kind` as `None`.
+///
+/// `None` in a position is a wildcard. Call it inside [`Store::read`](crate::Store::read)
+/// so the lookup runs in one read transaction.
+///
+/// # Example
+///
+/// ```
+/// use tm_core::{read, vocab::v, Store, StoreOptions, TimeRef, TxOptions, Valid, Value, ViewSpec};
+/// use tm_rusqlite as host;
+///
+/// # let dir = tempfile::tempdir().unwrap();
+/// # let path = dir.path().join("db");
+/// let mut store = Store::open(&host::RusqliteHost::new(), &path, StoreOptions::default())?;
+/// let t1 = store.transact(TxOptions::default(), |tx| {
+///     tx.assert(Value::iri(v("a")), Value::iri(v("p")), Value::Int(1), Valid::ALWAYS)?;
+///     Ok(())
+/// })?.t;
+/// store.transact(TxOptions::default(), |tx| {
+///     let eid = tx.assert(Value::iri(v("a")), Value::iri(v("p")), Value::Int(1), Valid::ALWAYS)?.eid();
+///     tx.retract(eid)?;
+///     Ok(())
+/// })?;
+/// let then = store.read(|e| read::triples(e, &ViewSpec::as_of(TimeRef::Tx(t1.0)), None, None, None))?;
+/// let now = store.read(|e| read::triples(e, &ViewSpec::now(), None, None, None))?;
+/// assert_eq!((then.len(), now.len()), (1, 0));
+/// # Ok::<(), tm_core::Error>(())
+/// ```
 pub fn triples(
     exec: &mut dyn Executor,
     spec: &ViewSpec,
@@ -207,7 +234,8 @@ pub fn graphs(exec: &mut dyn Executor, spec: &ViewSpec) -> Result<Vec<ObjectId>>
             }
         }
         parts.push(format!(
-            "SELECT m.o AS g FROM triple m JOIN triple a ON a.eid = m.s WHERE {}",
+            // DISTINCT: without a UNION, a graph would be listed once per membership.
+            "SELECT DISTINCT m.o AS g FROM triple m JOIN triple a ON a.eid = m.s WHERE {}",
             conds.join(" AND ")
         ));
     }

@@ -16,6 +16,10 @@ pub enum NativeKind {
 }
 
 /// A native operator. `add-path-engine` (M3) implements the `Path` kind.
+///
+/// Implement this to expose a custom algorithm to SQL as an eponymous
+/// table-valued function. The planner routes only [`NativeKind`] shapes it
+/// knows, so a new kind also needs planner support.
 pub trait NativeOperator: Send + Sync {
     /// Its kind.
     fn kind(&self) -> NativeKind;
@@ -31,6 +35,15 @@ pub trait NativeOperator: Send + Sync {
 }
 
 /// The registered native operators of one database.
+///
+/// # Example
+///
+/// ```
+/// use tm_exec::OperatorRegistry;
+///
+/// let reg = OperatorRegistry::new();
+/// assert!(reg.path().is_none() && reg.lftj().is_none());
+/// ```
 #[derive(Clone, Default)]
 pub struct OperatorRegistry {
     ops: Vec<Arc<dyn NativeOperator>>,
@@ -74,6 +87,17 @@ impl OperatorRegistry {
 }
 
 /// LFTJ routing (M4). With `enabled` and no operator, cyclic BGPs still go to SQL.
+///
+/// No LFTJ operator ships yet, so this only changes the [`RouteNote`](crate::RouteNote) reported
+/// by explain.
+///
+/// # Example
+///
+/// ```
+/// use tm_exec::LftjConfig;
+///
+/// assert!(!LftjConfig::default().enabled);
+/// ```
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct LftjConfig {
     /// Route cyclic BGPs to LFTJ when an operator exists (default false).

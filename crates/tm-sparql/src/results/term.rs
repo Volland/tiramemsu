@@ -2,7 +2,12 @@
 
 use tm_core::{value, vocab, Value};
 
-/// An RDF term as returned to callers.
+/// An RDF term as returned to callers: what a stored [`Value`] looks like in
+/// SPARQL JSON and N-Triples.
+///
+/// Nodes, blank nodes, statements and transactions are IRIs of the form
+/// `urn:tiramemsu:node:<n>`, `bnode:<n>`, `stmt:<n>` and `tx:<t>`. Written back in
+/// a later query they resolve to the same ids.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum RdfTerm {
     /// An IRI (skolem IRIs for nodes, blank nodes, statements and transactions).

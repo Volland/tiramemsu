@@ -17,6 +17,9 @@ use crate::sqlgen::Gen;
 use crate::QueryEngine;
 
 /// A validated query with its parameters bound, ready to run on any connection.
+///
+/// Made by [`QueryEngine::prepare`]. It holds no connection and no snapshot, so
+/// it can be run more than once; each run re-plans against the data it sees.
 #[derive(Clone, Debug)]
 pub struct Prepared {
     pub(crate) query: IrQuery,

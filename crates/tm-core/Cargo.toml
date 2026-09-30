@@ -4,6 +4,12 @@ description = "Tiramemsu core: ObjectId codec, term dictionary, storage format, 
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+readme = "README.md"
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
 rust-version.workspace = true
 
 [dependencies]
@@ -13,7 +19,7 @@ lru = "0.18"
 [dev-dependencies]
 proptest = "1"
 tempfile = "3"
-tm-rusqlite = { workspace = true }
+tm-rusqlite = { path = "../tm-rusqlite" }
 rusqlite = { version = "0.40", features = ["bundled"] }
 
 [lints]

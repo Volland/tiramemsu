@@ -6,7 +6,12 @@ members = ["crates/*"]
 version = "0.1.0"
 edition = "2021"
 license = "MIT OR Apache-2.0"
-rust-version = "1.86"
+rust-version = "1.88"
+authors = ["Volodymyr Pavlyshyn"]
+repository = "https://github.com/Volland/tiramemsu"
+homepage = "https://github.com/Volland/tiramemsu"
+keywords = ["graph-database", "sqlite", "sparql", "cypher", "agent-memory"]
+categories = ["database-implementations"]
 
 [workspace.lints.rust]
 unsafe_code = "forbid"
@@ -15,10 +20,10 @@ unsafe_code = "forbid"
 all = { level = "warn", priority = -1 }
 
 [workspace.dependencies]
-tm-core = { path = "crates/tm-core" }
-tm-rusqlite = { path = "crates/tm-rusqlite" }
-tiramemsu = { path = "crates/tiramemsu" }
-tm-ir = { path = "crates/tm-ir" }
-tm-exec = { path = "crates/tm-exec" }
-tm-sparql = { path = "crates/tm-sparql" }
-tm-cypher = { path = "crates/tm-cypher" }
+tm-core = { path = "crates/tm-core", version = "0.1.0" }
+tm-rusqlite = { path = "crates/tm-rusqlite", version = "0.1.0" }
+tiramemsu = { path = "crates/tiramemsu", version = "0.1.0" }
+tm-ir = { path = "crates/tm-ir", version = "0.1.0" }
+tm-exec = { path = "crates/tm-exec", version = "0.1.0" }
+tm-sparql = { path = "crates/tm-sparql", version = "0.1.0" }
+tm-cypher = { path = "crates/tm-cypher", version = "0.1.0" }

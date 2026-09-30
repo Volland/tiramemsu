@@ -30,6 +30,10 @@ impl GraphSel {
 }
 
 /// A view-scoped triple pattern: one statement per solution.
+///
+/// Its own [`View`] decides which statements are visible, so two patterns of
+/// one query can look at different points in time. Set `eid` to bind the
+/// statement id (needed to reach layers or to count parallel statements).
 #[derive(Clone, Debug, PartialEq)]
 pub struct TriplePattern {
     /// Subject position.
@@ -96,6 +100,9 @@ impl TriplePattern {
 }
 
 /// A path between two endpoints, evaluated by the native path operator.
+///
+/// Like [`TriplePattern`] it carries its own [`View`]. A recursive path needs a
+/// bound endpoint when it is executed by `tm-exec`.
 #[derive(Clone, Debug, PartialEq)]
 pub struct PathPattern {
     /// Start endpoint.
@@ -229,7 +236,13 @@ pub struct RowNumber {
     pub var: Var,
 }
 
-/// A logical operator.
+/// A logical operator: one node of the query tree.
+///
+/// Leaves are [`TriplePattern`], [`PathPattern`] and [`Values`]; the rest are
+/// relational operators over child operators. Build trees with the constructor
+/// methods on `Op` (`Op::join`, [`Op::filter`], `Op::project`, ...) or with
+/// [`IrBuilder`](crate::builder::IrBuilder), then check them with
+/// [`validate`](crate::validate::validate).
 #[derive(Clone, Debug, PartialEq)]
 pub enum Op {
     /// A triple pattern.
@@ -374,6 +387,21 @@ impl From<PathPattern> for Op {
 }
 
 /// A query: an operator tree plus its semantic flags.
+///
+/// This is the unit a front end hands to the executor. Prefer the
+/// [`IrQuery::sparql`] and [`IrQuery::cypher`] presets unless you need a custom
+/// flag combination.
+///
+/// # Example
+///
+/// ```
+/// use tm_ir::builder::IrBuilder;
+/// use tm_ir::{GraphSet, IrQuery};
+///
+/// let b = IrBuilder::cypher();
+/// let q = IrQuery::cypher(b.triple("?a", "v:knows", "?b"));
+/// assert_eq!(q.semantics.graph_set, GraphSet::BagOfEids);
+/// ```
 #[derive(Clone, Debug, PartialEq)]
 pub struct IrQuery {
     /// The root operator.

@@ -44,6 +44,10 @@ pub struct ExecStats {
 
 /// The result of a query: columns, rows of optional cells (`None` = missing), and
 /// statistics.
+///
+/// Use [`get`](QueryResult::get) for one term and
+/// [`column`](QueryResult::column) for a whole column; read `rows` directly when
+/// cells can be lists.
 #[derive(Clone, Debug, PartialEq)]
 pub struct QueryResult {
     /// The result variables, in column order.
@@ -130,6 +134,9 @@ pub struct RegionInfo {
 }
 
 /// The explained plan of a query; the query itself is never stepped.
+///
+/// When `short_circuit` is true the query is empty by construction (for
+/// example a constant that is in no statement) and `sql` is `None`.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Explain {
     /// The regions.

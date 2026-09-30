@@ -77,7 +77,14 @@ impl VocabSource for Lazy<'_> {
     }
 }
 
-/// The path engine of one database.
+/// The path engine of one database: a breadth-first search over the product of a
+/// path automaton and the graph, shared by SPARQL paths, Cypher variable-length
+/// patterns, `tm_path` and `View::path`.
+///
+/// [`run`](PathEngine::run) streams rows to a sink and can stop early;
+/// [`eval`](PathEngine::eval) collects them. A search that exceeds
+/// `PathOptions::max_states` fails with `PathLimitExceeded` rather than return a
+/// truncated result.
 // @lat: [[query#Physical Planning#Path Engine]]
 pub struct PathEngine {
     opts: PathOptions,

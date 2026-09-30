@@ -1,22 +1,4 @@
-//! Tiramemsu logical query IR: the front-end-neutral algebra that SPARQL, Cypher
-//! and the programmatic API lower to (`lat.md/query#Logical IR`).
-//!
-//! An [`IrQuery`] is an operator tree ([`Op`]) plus the query's [`Semantics`].
-//! Every triple and path pattern carries its own [`View`].
-//!
-//! ```
-//! use tm_ir::builder::IrBuilder;
-//! use tm_ir::{Expr, Op, View};
-//!
-//! // "what did alice work at as of tx 150, and where does she work now?"
-//! let b = IrBuilder::sparql();
-//! let before = b.at(View::as_of_tx(150)).triple("v:alice", "v:worksAt", "?before");
-//! let after = b.triple("v:alice", "v:worksAt", "?after");
-//! let q = b.query(
-//!     Op::join(vec![before, after]).filter(Expr::ne(Expr::var("before"), Expr::var("after"))),
-//! );
-//! assert!(q.to_string().contains("asOf/tx:150"));
-//! ```
+#![doc = include_str!("../README.md")]
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
 

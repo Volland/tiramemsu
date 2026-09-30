@@ -3,7 +3,25 @@
 use tm_core::vocab;
 use tm_ir::View;
 
-/// What `prepare` needs to know about the caller's view and database.
+/// What [`prepare`](crate::prepare) needs to know about the caller's view and database.
+///
+/// The facade builds one per call from the live database settings. Build your own
+/// when you prepare text outside a `tiramemsu::Db`: start from [`Env::new`] and set
+/// `vocab`, `prefixes`, `speculative` or `now_ms` as needed.
+///
+/// # Example
+///
+/// ```
+/// use tm_ir::View;
+/// use tm_sparql::{env::Env, prepare};
+///
+/// let mut env = Env::new(View::NOW);
+/// env.prefixes.push(("ex".into(), "https://example.org/".into()));
+/// // `ex:` needs no PREFIX line, and `v:` is the default vocabulary
+/// prepare("SELECT ?x WHERE { ?x ex:knows v:alice }", &env)?;
+/// assert!(env.is_current());
+/// # Ok::<(), tm_core::Error>(())
+/// ```
 #[derive(Clone, Debug)]
 pub struct Env {
     /// The view the text was submitted on (the default of every pattern).

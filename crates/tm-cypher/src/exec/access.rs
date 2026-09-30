@@ -25,7 +25,7 @@ const VIRTUAL_EID: u64 = 1 << 59;
 
 /// The relationship value of a virtual layer hop (`sys:subject`, `sys:object` or
 /// `sys:predicate`, kind 0, 1, 2) of statement `base`: a synthetic eid that
-/// [`Exec::stmt_parts`] resolves to the statement's part, in the stored direction.
+/// `Exec::stmt_parts` resolves to the statement's part, in the stored direction.
 pub fn virtual_eid(base: Eid, kind: u8) -> Eid {
     Eid::new(VIRTUAL_EID | (u64::from(kind) << 50) | base.n())
 }

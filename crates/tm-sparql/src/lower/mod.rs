@@ -27,7 +27,8 @@ use crate::error::{unsupported, DESCRIBE};
 use crate::parse::AssocHints;
 use vars::VarAlloc;
 
-/// The result form of a lowered query.
+/// The result form of a lowered query: how to turn the executor's rows into the
+/// answer the text asked for.
 #[derive(Clone, Debug, PartialEq)]
 pub enum QueryForm {
     /// `SELECT`: the rows are the solutions.
@@ -42,6 +43,10 @@ pub enum QueryForm {
 }
 
 /// A lowered query: the IR to run and how to read its rows.
+///
+/// The IR carries the SPARQL semantic flags, so an executor can run it
+/// unchanged. `Display` on [`IrQuery`] prints it as text, which is what the
+/// golden tests of this crate compare.
 #[derive(Clone, Debug, PartialEq)]
 pub struct QueryPlan {
     /// The result form.

@@ -155,7 +155,26 @@ fn vocab_of(settings: crate::sparql::Settings) -> Vocab {
 impl View<'_> {
     /// Runs a read-only Cypher query on this view. Every pattern is evaluated
     /// under the view's time selection unless the query overrides it. A query with
-    /// a write clause fails with `Unsupported` before anything runs.
+    /// a write clause fails with `Unsupported` before anything runs; use
+    /// [`Db::cypher_write`] or [`TxCypher::cypher`] to write.
+    ///
+    /// # Errors
+    ///
+    /// `Parse` for invalid text, `Unsupported` for write clauses or constructs
+    /// outside the supported subset, and `Eval` for runtime errors.
+    ///
+    /// ```
+    /// # use tiramemsu::*;
+    /// # let dir = tempfile::tempdir().unwrap();
+    /// # let db = Db::open(dir.path().join("m.db"), OpenOptions::default())?;
+    /// let none = CypherParams::default();
+    /// db.cypher_write(TxOptions::default(), "CREATE (:Person {name: 'Alice'})", &none)?;
+    /// let r = db.now().cypher("MATCH (p:Person) RETURN p.name AS name", &none)?;
+    /// assert_eq!(r.rows, [[CypherValue::String("Alice".into())]]);
+    /// // A write clause is refused on a view.
+    /// assert!(db.now().cypher("CREATE (:Person)", &none).is_err());
+    /// # Ok::<(), Error>(())
+    /// ```
     pub fn cypher(&self, text: &str, params: &CypherParams) -> Result<CypherResult> {
         let vocab = vocab_of(self.exec(|e, _| read_settings(e))?);
         let ctx = CompileCtx {
@@ -169,7 +188,8 @@ impl View<'_> {
     }
 }
 
-/// Cypher inside a caller's `transact` closure.
+/// Cypher inside a caller's `transact` closure, so Cypher and the Rust operations
+/// share one transaction.
 pub trait TxCypher {
     /// Runs a Cypher query (reads and writes) in this transaction: every clause
     /// sees the effects of the earlier ones, and a failure fails the transaction.
@@ -200,7 +220,28 @@ impl TxCypher for Tx<'_> {
 
 impl Db {
     /// Runs a Cypher query that may write in exactly one transaction and returns
-    /// its rows together with the transaction report.
+    /// its rows together with the transaction report (in `CypherResult::report`).
+    /// Use it for a one-shot write; use [`TxCypher::cypher`] to combine it with other
+    /// operations.
+    ///
+    /// # Errors
+    ///
+    /// `Parse`, `Unsupported` and `Eval` for the query, `DeleteConnectedNode` for
+    /// `DELETE` of a node with relationships, and the write errors of
+    /// [`Db::transact`]. A failure commits nothing.
+    ///
+    /// ```
+    /// # use tiramemsu::*;
+    /// # let dir = tempfile::tempdir().unwrap();
+    /// # let db = Db::open(dir.path().join("m.db"), OpenOptions::default())?;
+    /// let out = db.cypher_write(
+    ///     TxOptions::default(),
+    ///     "CREATE (:Person {name: 'Alice'})-[:KNOWS]->(:Person {name: 'Bob'})",
+    ///     &CypherParams::default(),
+    /// )?;
+    /// assert!(!out.report.unwrap().asserted.is_empty());
+    /// # Ok::<(), Error>(())
+    /// ```
     pub fn cypher_write(
         &self,
         opts: TxOptions,
