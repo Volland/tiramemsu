@@ -353,3 +353,37 @@ fn open_options_are_checked() {
     let db = Database::open(path.to_str().unwrap(), &json!({ "readers": 2 })).unwrap();
     assert_eq!(db.call("info", &J::Null).unwrap()["readers"], 2);
 }
+
+#[test]
+fn dependents_preview_a_retraction_on_any_view() {
+    let (_d, db) = open();
+    let r = db
+        .call(
+            "transact",
+            &json!({ "ops": [
+                { "op": "assert", "s": v("alice"), "p": v("worksAt"), "o": v("acme"), "as": "job" },
+                { "op": "assert", "s": {"ref": "job"}, "p": v("source"), "o": "chat-1" },
+                { "op": "assert", "s": v("belief9"), "p": v("supportedBy"), "o": {"ref": "job"} }
+            ]}),
+        )
+        .unwrap();
+    let job = r["refs"]["job"].clone();
+    assert_eq!(
+        db.call("dependents", &json!({ "eid": job })).unwrap(),
+        r["asserted"]
+    );
+    // once retracted: nothing on the now view, the structure as of transaction 1
+    db.call(
+        "transact",
+        &json!({ "ops": [{ "op": "retract", "eid": job }] }),
+    )
+    .unwrap();
+    let then = json!({ "eid": { "stmt": job }, "view": { "kind": "asOf", "tx": 1 } });
+    assert_eq!(db.call("dependents", &then).unwrap(), r["asserted"]);
+    assert_eq!(
+        db.call("dependents", &json!({ "eid": job })).unwrap(),
+        json!([])
+    );
+    let e = db.call("dependents", &json!({})).unwrap_err();
+    assert_eq!(e.code(), "InvalidArgument");
+}

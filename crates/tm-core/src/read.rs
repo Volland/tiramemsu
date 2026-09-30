@@ -3,6 +3,8 @@
 //! These functions issue plain SELECTs; the caller decides the snapshot (a read
 //! transaction on a reader, or the writer inside a speculation).
 
+use std::collections::HashSet;
+
 use crate::error::Result;
 use crate::event::{Event, Op};
 use crate::exec::{Executor, Params, SqlValue};
@@ -163,6 +165,105 @@ pub fn tx_instant(exec: &mut dyn Executor, t: u64) -> Result<Option<i64>> {
         "SELECT instant FROM tx WHERE t = ?1",
         &[SqlValue::Integer(t as i64)],
     )
+}
+
+/// True when statement `eid` is selected by `spec`.
+pub(crate) fn visible(exec: &mut dyn Executor, spec: &ViewSpec, eid: Eid) -> Result<bool> {
+    let mut params = Params::new();
+    let e = params.push(eid.oid().raw());
+    let mut conds = vec![format!("a.eid = {e}")];
+    let time = scan_predicates(spec, "a", &mut params);
+    if !time.is_empty() {
+        conds.push(time);
+    }
+    let sql = format!("SELECT a.eid FROM triple a WHERE {}", conds.join(" AND "));
+    Ok(exec.query_i64(&sql, params.values())?.is_some())
+}
+
+/// The statements that stand on `root` in `spec`: `root` first, then, breadth-first,
+/// every statement selected by the view whose subject or object is a statement
+/// already reached. Each expansion is appended in ascending eid order and a visited
+/// set makes reference cycles terminate, so under the now view this is the cascade
+/// set a retraction of `root` would retract, in the same order. Empty when `root` is
+/// not selected by the view.
+///
+/// Use it to see what a retraction would take with it without the writer, or, with
+/// an as-of or history view, what depended on a statement then. The read is never
+/// truncated: the cascade limit `max_cascade` applies to retractions only.
+///
+/// # Errors
+///
+/// [`crate::Error::Sqlite`] on a read failure.
+///
+/// # Example
+///
+/// ```
+/// use tm_core::{read, vocab::v, Store, StoreOptions, TimeRef, TxOptions, Valid, Value, ViewSpec};
+/// use tm_rusqlite as host;
+///
+/// # let dir = tempfile::tempdir().unwrap();
+/// # let path = dir.path().join("db");
+/// let mut store = Store::open(&host::RusqliteHost::new(), &path, StoreOptions::default())?;
+/// let r = store.transact(TxOptions::default(), |tx| {
+///     let fact = tx.assert(Value::iri(v("alice")), Value::iri(v("worksAt")), Value::iri(v("acme")), Valid::ALWAYS)?.eid();
+///     tx.assert(fact, Value::iri(v("confidence")), Value::Double(0.8), Valid::ALWAYS)?;
+///     Ok(())
+/// })?;
+/// let (fact, layer) = (r.asserted[0], r.asserted[1]);
+/// store.transact(TxOptions::default(), |tx| tx.retract(fact).map(|_| ()))?;
+///
+/// let now = store.read(|e| read::dependents(e, &ViewSpec::now(), fact))?;
+/// let then = store.read(|e| read::dependents(e, &ViewSpec::as_of(TimeRef::Tx(r.t.0)), fact))?;
+/// assert!(now.is_empty());
+/// assert_eq!(then, vec![fact, layer]);
+/// # Ok::<(), tm_core::Error>(())
+/// ```
+// @lat: [[time-model#Cascade#Dependents]]
+pub fn dependents(exec: &mut dyn Executor, spec: &ViewSpec, root: Eid) -> Result<Vec<Eid>> {
+    if !visible(exec, spec, root)? {
+        return Ok(Vec::new());
+    }
+    // one statement per expansion, the shape of `Tx::cascade_set` with the view's
+    // time predicates in place of `t_ret IS NULL`
+    let mut params = Params::new();
+    let e = params.push(0i64);
+    let mut halves = Vec::with_capacity(2);
+    for col in ["s", "o"] {
+        let mut conds = vec![format!("a.{col} = {e}")];
+        let time = scan_predicates(spec, "a", &mut params);
+        if !time.is_empty() {
+            conds.push(time);
+        }
+        halves.push(format!(
+            "SELECT a.eid FROM triple a WHERE {}",
+            conds.join(" AND ")
+        ));
+    }
+    let sql = format!("{} ORDER BY eid", halves.join(" UNION "));
+    let mut values = params.values().to_vec();
+    let mut order = vec![root];
+    let mut seen: HashSet<Eid> = HashSet::from([root]);
+    let mut i = 0;
+    while i < order.len() {
+        values[0] = SqlValue::Integer(order[i].oid().raw());
+        i += 1;
+        let mut found = Vec::new();
+        exec.query(&sql, &values, &mut |r| {
+            if let Some(x) = r[0]
+                .as_i64()
+                .and_then(|r| Eid::from_oid(ObjectId::from_raw(r)))
+            {
+                found.push(x);
+            }
+            Ok(())
+        })?;
+        for x in found {
+            if seen.insert(x) {
+                order.push(x);
+            }
+        }
+    }
+    Ok(order)
 }
 
 /// The ids of `sys:inGraph`, `rdf:type` and `sys:Graph`; `None` for one that is not

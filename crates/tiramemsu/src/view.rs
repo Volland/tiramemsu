@@ -309,3 +309,42 @@ impl<'a> View<'a> {
         self.exec(|e, _| read::events_since(e, since))
     }
 }
+
+// Statement dependents and fact bundles (OpenSpec change `add-fact-bundles`), kept in
+// their own block.
+impl View<'_> {
+    /// The statements that stand on `eid` in this view: `eid` first, then,
+    /// breadth-first, every visible statement whose subject or object is a statement
+    /// already reached, each expansion in ascending eid order. Empty when `eid` is
+    /// not visible here.
+    ///
+    /// On the now view this is exactly what retracting `eid` would take with it (the
+    /// cascade set), read without the writer lock; on an as-of view it is what
+    /// depended on `eid` then, and on the history view everything that ever did. The
+    /// result is never truncated: `TxOptions::max_cascade` guards retractions only.
+    ///
+    /// # Errors
+    ///
+    /// `Sqlite` on a read failure.
+    ///
+    /// ```
+    /// # use tiramemsu::*;
+    /// # let dir = tempfile::tempdir().unwrap();
+    /// # let db = Db::open(dir.path().join("m.db"), OpenOptions::default())?;
+    /// let v = |s: &str| Value::iri(format!("urn:tiramemsu:v:{s}"));
+    /// let r = db.transact(TxOptions::default(), |tx| {
+    ///     let job = tx.assert(v("alice"), v("worksAt"), v("acme"), Valid::ALWAYS)?.eid();
+    ///     tx.assert(job, v("source"), Value::str("chat"), Valid::ALWAYS)?;
+    ///     tx.assert(v("belief9"), v("supportedBy"), job, Valid::ALWAYS)?;
+    ///     Ok(())
+    /// })?;
+    /// let job = r.asserted[0];
+    /// assert_eq!(db.now().dependents(job)?, r.asserted); // job, its source, the belief
+    /// # Ok::<(), Error>(())
+    /// ```
+    // @lat: [[time-model#Cascade#Dependents]]
+    pub fn dependents(&self, eid: Eid) -> Result<Vec<Eid>> {
+        let spec = self.spec;
+        self.exec(|e, _| read::dependents(e, &spec, eid))
+    }
+}

@@ -80,6 +80,40 @@ A cascade larger than `max_cascade` fails with `CascadeLimitExceeded`, and the d
 
 `dry_run` returns the full retracted set while the triple and tx tables stay unchanged. Only the burned-id counters in `meta` advance.
 
+## Dependents
+
+Behaviour of [[time-model#Cascade#Dependents]], the read-only cascade walk on any view.
+
+### Dependents Follow Layers
+
+`dependents(e1)` lists e1, then its layers and references breadth-first in cascade order; plain nodes are not walked, a retracted layer is not walked, and an invisible root gives nothing.
+
+### Dependents Terminate On Cycles
+
+Two statements that reference each other, plus a statement linking them, are each listed once from either end, on the now and the history view.
+
+### Dependents Follow The View
+
+After a structure is retracted, `asOf` before the retraction lists it again, by transaction and by instant; `history` lists every statement that ever stood on the root, and `validAt` drops a layer valid in another period.
+
+### Dependents Are Unbounded
+
+A statement with 20 layers lists all 21 statements while a retraction with `max_cascade = 10` fails, and the read advances no id counter.
+
+### Dependents Match The Dry Run
+
+On random layered graphs (both hosts), `dependents(e)` on the now view equals the retracted set plus retracted memberships of a dry-run `retract(e)`, in the same order, and is empty for a retracted `e`.
+
+The graphs mix layers, references, links between statements, reference cycles, memberships, confirmations, supersedes and retractions.
+
+### Dependents Match Cascade And Path
+
+Through the facade, for random layered graphs, `View::dependents(e)`, the dry-run retraction of `e` and the ends of `View::path(e, "(^sys:subject|^sys:object)*", REACH)` are the same set for every live statement.
+
+### Dependents Reproduce The Past
+
+Through the facade, the as-of and history views reproduce the dependents of a retracted structure (layer on a layer, a belief, a membership), and a speculation sees its own new layers.
+
 ## Storage Invariants
 
 Checks of the SQLite-level guarantees in [[storage#Invariant Triggers]] and [[storage#Query Shapes]].
