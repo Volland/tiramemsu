@@ -98,3 +98,5 @@ figure { margin: 26px 0; } figcaption { color: var(--muted); font-size: 14.5px; 
 footer { border-top: 1px solid var(--line); padding: 28px 0 44px; color: var(--muted); font-size: 14.5px; }
 footer .wrap { display: flex; flex-wrap: wrap; gap: 8px 24px; justify-content: space-between; }
 footer a { color: var(--muted); }
+article.legal h2 { font-size: 21px; margin-top: 30px; }
+article.legal p { margin: 0 0 12px; }
