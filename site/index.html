@@ -105,7 +105,7 @@ db.now().cypher(<span class="s">"MATCH (p)-[r:worksAt]-&gt;(o) RETURN p, o, r.co
     <div class="card"><h3>Cypher</h3><p>2 615 of 3 880 openCypher TCK scenarios (67 %). Temporal types, <code>CALL</code> and a few dual-view cases are deferred and listed.</p></div>
     <div class="card"><h3>Speed</h3><p>Raw SQLite lookups on its schema take about 4 µs at 11 million statements. Statements cost about 150 bytes each with all indexes. <a href="articles/tiramemsu-vs-oxilite.html#numbers">Details and caveats</a>.</p></div>
   </div>
-  <p class="note"><strong>Known limits.</strong> As-of lookups slow down as one key collects many updates. Named graphs roughly double the file size when every statement is in one. Decimals come back as doubles in SPARQL. There is no server, binding or MCP crate yet.</p>
+  <p class="note"><strong>Known limits.</strong> As-of lookups slow down as one key collects many updates. Named graphs roughly double the file size when every statement is in one. Decimals come back as doubles in SPARQL. There is no server, WASM binding or MCP crate yet, and the Node.js and Python packages are built but not published.</p>
 </div></section>
 
 <section id="articles"><div class="wrap">

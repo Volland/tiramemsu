@@ -9,7 +9,7 @@ An embedded graph database on SQLite. Every fact has an id, so facts can carry l
 
 <p align="center"><a href="site/articles/layered-graphs.html">Layered graphs, explained</a> · <a href="site/articles/tiramemsu-vs-oxilite.html">Tiramemsu vs oxilite</a> · <a href="lat.md/">Design (lat.md)</a> · <a href="openspec/specs/">Specs (OpenSpec)</a></p>
 
-> **Status: new.** Designed and implemented in September 2026 as one Rust library. It is not published to crates.io, has no server or bindings yet, and runs on rusqlite only. What is measured and what is not is listed under [Status](#status).
+> **Status: new.** Designed and implemented in September 2026 as one Rust library. It is not published to crates.io, has no server yet, and runs on rusqlite only. Node.js and Python packages exist in [`bindings/`](bindings/) but are not published either. What is measured and what is not is listed under [Status](#status).
 
 ## Why
 
@@ -135,11 +135,11 @@ lat check                              # design graph and code refs stay in sync
 | Cypher | 2 615 of 3 880 openCypher TCK scenarios (67 %). Temporal types, `CALL`, and a few dual-view cases are deferred and listed in `crates/tm-cypher/tests/tck/allowlist.txt` |
 | Speed | Raw SQLite lookups on the schema take about 4 µs at 11 million statements; about 150 bytes per statement with all indexes. See [`bench/`](bench/) |
 
-**Known limits.** As-of lookups slow down as one key collects many updates. A membership per statement roughly doubles the file. SPARQL decimals come back as doubles. Path patterns inside `GRAPH` are unsupported. There is no MCP server, binding or network server yet. The comparison with oxilite's change-log approach to history is not benchmarked head to head.
+**Known limits.** As-of lookups slow down as one key collects many updates. A membership per statement roughly doubles the file. SPARQL decimals come back as doubles. Path patterns inside `GRAPH` are unsupported. There is no MCP server, WASM binding or network server yet. The comparison with oxilite's change-log approach to history is not benchmarked head to head.
 
 ## How it differs from oxilite
 
-[oxilite](https://github.com/Volland/oxilite) is a shipped, Oxigraph-compatible RDF database on SQLite by the same author. It stores quads and uses reifiers for annotations, keeps history in a change log, and runs on D1, WebAssembly and more. Tiramemsu stores statements with ids, keeps lifetime in the row and is bitemporal, but it is new, runs on rusqlite only and has none of oxilite's reasoning, validation or bindings. [The article](site/articles/tiramemsu-vs-oxilite.html) has the details and a benchmark.
+[oxilite](https://github.com/Volland/oxilite) is a shipped, Oxigraph-compatible RDF database on SQLite by the same author. It stores quads and uses reifiers for annotations, keeps history in a change log, and runs on D1, WebAssembly and more. Tiramemsu stores statements with ids, keeps lifetime in the row and is bitemporal, but it is new, runs on rusqlite only and has none of oxilite's reasoning or validation, and its Node.js and Python packages are not published yet. [The article](site/articles/tiramemsu-vs-oxilite.html) has the details and a benchmark.
 
 ## Repository
 
@@ -148,6 +148,7 @@ lat check                              # design graph and code refs stay in sync
 | `crates/` | The seven crates |
 | `lat.md/` | The design as a cross-linked knowledge graph: architecture, data model, time model, storage, query, tests |
 | `openspec/specs/` | Requirements with scenarios, one folder per capability; `openspec/changes/archive/` has the changes that built them |
+| `bindings/` | The JSON bridge, and the Node.js (`@tiramemsu/node`) and Python (`tiramemsu`) packages built on it; publishing guides in `docs/` |
 | `bench/` | SQLite versus DuckDB, and ids versus reifiers, benchmarks with results |
 | `docs/design-options.md` | The option analysis behind the design decisions |
 | `site/` | The static website (GitHub Pages) and its articles |

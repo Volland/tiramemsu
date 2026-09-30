@@ -125,7 +125,7 @@
 <tr><td>now, valid at 2024-02-01</td><td>nobody</td><td>Acme ended 2024-01-01, Globex began 2024-03-01. Two months between jobs, and the database says so.</td></tr>
 <tr><td>as of t=1</td><td>acme</td><td>Only e1 existed.</td></tr>
 <tr><td>as of t=1, valid at 2026-01-01</td><td>acme</td><td>We believed she was still there. We were wrong, and we remember being wrong.</td></tr>
-<tr><td>history</td><td>acme, acme, globex</td><td>e1, e2 and e3, including the retracted one.</td></tr>
+<tr><td>history</td><td>SPARQL: acme, globex<br>Cypher: acme, acme, globex</td><td>e1, e2 and e3 are all visible, including the retracted e1. SPARQL sees a set of (subject, predicate, object), so the two Acme episodes are one row. Cypher sees one row per statement.</td></tr>
 </tbody>
 </table>
 
