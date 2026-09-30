@@ -48,3 +48,53 @@ jobs:
             echo "tm-core depends on a SQLite binding" >&2
             exit 1
           fi
+
+  # The language bindings over the JSON bridge (spec binding-release). Wheels and addons for
+  # release are built by python-wheels.yml and npm-publish.yml.
+  python:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.91.1"
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Build, test and type-check
+        working-directory: bindings/python
+        run: |
+          python -m venv .venv
+          source .venv/bin/activate
+          pip install maturin pytest mypy
+          maturin develop
+          python -m pytest
+          mypy --strict python/tiramemsu
+
+  node:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.91.1"
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Build, test and type-check
+        working-directory: bindings/node
+        run: |
+          npm ci
+          npm run build:native
+          npm run build
+          npm test

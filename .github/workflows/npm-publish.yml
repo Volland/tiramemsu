@@ -1,0 +1,94 @@
+# Builds the `@tiramemsu/node` addon (bindings/node) on every supported platform, packs one
+# package that carries all of them, and publishes it to npm with provenance.
+# See docs/node-publishing.md.
+#
+# - A `v*` tag (the release tag) builds and publishes.
+# - A manual run builds; it publishes only when `publish` is checked.
+name: npm publish
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: "Publish to npm"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  addon:
+    name: addon ${{ matrix.platform }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { platform: linux-x64, os: ubuntu-latest }
+          - { platform: linux-arm64, os: ubuntu-24.04-arm }
+          - { platform: darwin-arm64, os: macos-14 }
+          - { platform: darwin-x64, os: macos-15-intel }
+          - { platform: win32-x64, os: windows-latest }
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.91.1"
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      # Building and testing on the platform itself is the smoke test.
+      - name: Build and test
+        working-directory: bindings/node
+        shell: bash
+        run: |
+          npm ci
+          npm run build:native
+          npm run build
+          npm test
+      - uses: actions/upload-artifact@v4
+        with:
+          name: addon-${{ matrix.platform }}
+          path: bindings/node/tiramemsu.${{ matrix.platform }}.node
+          if-no-files-found: error
+
+  publish:
+    needs: [addon]
+    runs-on: ubuntu-latest
+    # Only a release tag, or a manual run with `publish` checked, may publish.
+    if: startsWith(github.ref, 'refs/tags/v') || inputs.publish
+    # The environment holds the NPM_TOKEN secret and can require a reviewer.
+    environment:
+      name: npm
+      url: https://www.npmjs.com/package/@tiramemsu/node
+    permissions:
+      contents: read
+      id-token: write   # npm provenance
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+      - uses: actions/download-artifact@v4
+        with:
+          path: bindings/node
+          pattern: addon-*
+          merge-multiple: true
+      - name: Build the TypeScript and check the package
+        working-directory: bindings/node
+        run: |
+          npm ci --ignore-scripts
+          npm run build
+          ls tiramemsu.*.node
+          test "$(ls tiramemsu.*-*.node | wc -l)" -eq 5
+          npm pack --dry-run
+      - name: Publish
+        working-directory: bindings/node
+        run: npm publish --provenance --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
