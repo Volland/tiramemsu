@@ -1,18 +1,25 @@
 //! The `rusqlite` executor host for Tiramemsu: bundled SQLite, prepared-statement
 //! caching, busy timeout, and the registration hook for user functions and virtual
 //! tables. Host-specific mechanisms stay in this crate.
-#![forbid(unsafe_code)]
+#![deny(unsafe_code)]
 #![warn(missing_docs)]
 
 mod error;
 pub mod register;
+mod table_fn;
 
 use std::path::Path;
 use std::sync::Arc;
 
 use rusqlite::types::Value as RValue;
 use rusqlite::{Connection, OpenFlags};
-use tm_core::{Capabilities, Executor, Host, HostOptions, Result, SqlValue};
+use std::panic::AssertUnwindSafe;
+
+use rusqlite::functions::FunctionFlags;
+use tm_core::{
+    AggregateFunction, AggregateState, Capabilities, Executor, Host, HostOptions, HostRegistry,
+    Result, ScalarFunction, SqlValue, TableFunction,
+};
 
 pub use error::map_err;
 pub use register::RegisterFn;
@@ -225,5 +232,89 @@ impl Executor for RusqliteExec {
 
     fn release(&mut self, name: &str) -> Result<()> {
         self.execute_batch(&format!("RELEASE \"{name}\""))
+    }
+
+    fn registry(&mut self) -> Option<&mut dyn HostRegistry> {
+        if self.caps.functions || self.caps.vtab {
+            Some(self)
+        } else {
+            None
+        }
+    }
+}
+
+fn user_err(m: String) -> rusqlite::Error {
+    rusqlite::Error::UserFunctionError(m.into())
+}
+
+fn flags(deterministic: bool) -> FunctionFlags {
+    let mut f = FunctionFlags::SQLITE_UTF8;
+    if deterministic {
+        f |= FunctionFlags::SQLITE_DETERMINISTIC | FunctionFlags::SQLITE_INNOCUOUS;
+    }
+    f
+}
+
+struct AggAdapter(Arc<dyn Fn() -> Box<dyn AggregateState> + Send + Sync>);
+
+type AggAcc = AssertUnwindSafe<Box<dyn AggregateState>>;
+
+impl rusqlite::functions::Aggregate<AggAcc, RValue> for AggAdapter {
+    fn init(&self, _ctx: &mut rusqlite::functions::Context<'_>) -> rusqlite::Result<AggAcc> {
+        Ok(AssertUnwindSafe((self.0)()))
+    }
+
+    fn step(
+        &self,
+        ctx: &mut rusqlite::functions::Context<'_>,
+        acc: &mut AggAcc,
+    ) -> rusqlite::Result<()> {
+        let args: Vec<SqlValue> = (0..ctx.len()).map(|i| from_ref(ctx.get_raw(i))).collect();
+        acc.0.step(&args).map_err(user_err)
+    }
+
+    fn finalize(
+        &self,
+        _ctx: &mut rusqlite::functions::Context<'_>,
+        acc: Option<AggAcc>,
+    ) -> rusqlite::Result<RValue> {
+        let mut st = match acc {
+            Some(a) => a.0,
+            None => (self.0)(),
+        };
+        st.finish().map(|v| to_rusqlite(&v)).map_err(user_err)
+    }
+}
+
+impl HostRegistry for RusqliteExec {
+    fn register_scalar(&mut self, f: ScalarFunction) -> Result<()> {
+        let body = f.func.clone();
+        self.conn
+            .create_scalar_function(
+                f.name.as_str(),
+                f.n_args,
+                flags(f.deterministic),
+                move |ctx| {
+                    let args: Vec<SqlValue> =
+                        (0..ctx.len()).map(|i| from_ref(ctx.get_raw(i))).collect();
+                    body(&args).map(|v| to_rusqlite(&v)).map_err(user_err)
+                },
+            )
+            .map_err(map_err)
+    }
+
+    fn register_aggregate(&mut self, f: AggregateFunction) -> Result<()> {
+        self.conn
+            .create_aggregate_function(
+                f.name.as_str(),
+                f.n_args,
+                flags(true),
+                AggAdapter(f.init.clone()),
+            )
+            .map_err(map_err)
+    }
+
+    fn register_table(&mut self, f: TableFunction) -> Result<()> {
+        table_fn::register(&self.conn, f).map_err(map_err)
     }
 }

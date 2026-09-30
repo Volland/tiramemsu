@@ -76,7 +76,7 @@ Format 1 SHALL reserve, and SHALL NOT create, the table `seal_key` (crypto-shred
 - **THEN** it contains no table, index, view or trigger named `seal_key` or `term_fts`, and none whose name starts with `vec_`
 
 ### Requirement: Planner statistics are part of the store
-Planner statistics SHALL be kept current by the engine, not left to the caller. Every open SHALL run `PRAGMA optimize=0x10002` after initialisation or migration, which analyses tables that were never analysed. The writer SHALL run `PRAGMA optimize` after a bulk load and at most once every `OpenOptions.optimize_every` commits (default 1000). `Db::optimize()` SHALL run a full `ANALYZE`. Statistics SHALL live only in SQLite's own `sqlite_stat1` (and `sqlite_stat4` when the host declares `stat4`), outside the graph and outside never-forget, and SHALL only ever change a plan's speed, never a result.
+Planner statistics SHALL be kept current by the engine, not left to the caller. Every open SHALL run `PRAGMA optimize=0x10002` after initialisation or migration, which analyses tables that were never analysed, and, when the host declares `stat4` and the file holds data but no `sqlite_stat4` samples, a full `ANALYZE`, because `PRAGMA optimize` alone writes no STAT4 samples and the planner then cannot tell a rare predicate from a common one. After a bulk load and at most once every `OpenOptions.optimize_every` commits (default 1000), the writer SHALL run a full `ANALYZE` followed by `PRAGMA optimize`, and SHALL bump the schema cookie so that pooled readers reload the statistics. `Db::optimize()` SHALL run a full `ANALYZE`. Statistics SHALL live only in SQLite's own `sqlite_stat1` (and `sqlite_stat4` when the host declares `stat4`), outside the graph and outside never-forget, and SHALL only ever change a plan's speed, never a result.
 
 #### Scenario: Statistics exist without an explicit optimize
 - **WHEN** a database is opened, loaded with a skewed data set through the ordinary write API, closed and reopened, without any call to `Db::optimize()`
@@ -84,7 +84,7 @@ Planner statistics SHALL be kept current by the engine, not left to the caller. 
 
 #### Scenario: Periodic optimize
 - **WHEN** a database is opened with `optimize_every = 10` and 25 small transactions commit
-- **THEN** the writer has run `PRAGMA optimize` exactly twice after opening
+- **THEN** the writer has run its statistics upkeep exactly twice after opening, and a reader opened before the upkeep sees the new statistics
 
 #### Scenario: Stale statistics never change results
 - **WHEN** heavy churn is committed without re-analysis, a set of lookups over every view runs, then `Db::optimize()` runs and the same lookups run again

@@ -184,6 +184,99 @@ pub trait Executor: Send {
 
     /// `RELEASE name`.
     fn release(&mut self, name: &str) -> Result<()>;
+
+    /// The host's registration hooks for user functions and virtual tables on this
+    /// connection, when the host declares `functions` or `vtab`. The default is
+    /// `None` (a host without either capability).
+    fn registry(&mut self) -> Option<&mut dyn HostRegistry> {
+        None
+    }
+}
+
+/// The body of a scalar SQL function: arguments in, one value out; an `Err`
+/// becomes a SQLite error with that message.
+pub type ScalarImpl =
+    std::sync::Arc<dyn Fn(&[SqlValue]) -> std::result::Result<SqlValue, String> + Send + Sync>;
+
+/// A pure scalar SQL function registered on every connection.
+#[derive(Clone)]
+pub struct ScalarFunction {
+    /// SQL name.
+    pub name: String,
+    /// Number of arguments (`-1` for any).
+    pub n_args: i32,
+    /// Deterministic (and innocuous: no side effects, safe in any context).
+    pub deterministic: bool,
+    /// The body.
+    pub func: ScalarImpl,
+}
+
+impl fmt::Debug for ScalarFunction {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "ScalarFunction({}/{})", self.name, self.n_args)
+    }
+}
+
+/// The running state of one aggregate evaluation.
+pub trait AggregateState: Send {
+    /// Adds one row's arguments.
+    fn step(&mut self, args: &[SqlValue]) -> std::result::Result<(), String>;
+    /// The final value (also called for an empty group).
+    fn finish(&mut self) -> std::result::Result<SqlValue, String>;
+}
+
+/// A deterministic aggregate SQL function.
+#[derive(Clone)]
+pub struct AggregateFunction {
+    /// SQL name.
+    pub name: String,
+    /// Number of arguments.
+    pub n_args: i32,
+    /// Creates the state of one group.
+    pub init: std::sync::Arc<dyn Fn() -> Box<dyn AggregateState> + Send + Sync>,
+}
+
+impl fmt::Debug for AggregateFunction {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "AggregateFunction({}/{})", self.name, self.n_args)
+    }
+}
+
+/// The body of a table-valued function: the argument values in, all rows out.
+pub type TableImpl = std::sync::Arc<
+    dyn Fn(&[SqlValue]) -> std::result::Result<Vec<Vec<SqlValue>>, String> + Send + Sync,
+>;
+
+/// A table-valued function, registered as an eponymous virtual table: SQL calls it
+/// as `name(arg, …)` in a FROM clause and reads its `columns`.
+#[derive(Clone)]
+pub struct TableFunction {
+    /// SQL name (the eponymous table).
+    pub name: String,
+    /// The argument (hidden column) names, in call order.
+    pub args: Vec<String>,
+    /// The output column names.
+    pub columns: Vec<String>,
+    /// The body.
+    pub func: TableImpl,
+}
+
+impl fmt::Debug for TableFunction {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "TableFunction({}{:?})", self.name, self.args)
+    }
+}
+
+/// Registration hooks of a host connection (capabilities `functions` and `vtab`).
+/// Host-specific glue (for `rusqlite`: `create_scalar_function`, eponymous
+/// modules) stays in the host crate.
+pub trait HostRegistry {
+    /// Registers a scalar function (capability `functions`).
+    fn register_scalar(&mut self, f: ScalarFunction) -> Result<()>;
+    /// Registers an aggregate function (capability `functions`).
+    fn register_aggregate(&mut self, f: AggregateFunction) -> Result<()>;
+    /// Registers a table-valued function (capability `vtab`).
+    fn register_table(&mut self, f: TableFunction) -> Result<()>;
 }
 
 impl dyn Executor + '_ {

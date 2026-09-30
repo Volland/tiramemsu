@@ -1,0 +1,6 @@
+---
+source: crates/tm-exec/tests/golden_sql.rs
+expression: text
+---
+SELECT t0.s AS c0, t0.o AS c1, t0.eid AS c2, ((t0.t_add << 4) | 4) AS c3 FROM triple AS t0 WHERE t0.p = ?1 AND t0.t_ret IS NULL
+-- params: 1

@@ -208,6 +208,7 @@ const ALLOWED_CALLS: &[&str] = &[
     "pred_multi",
 ];
 const ALLOWED_FROM: &[&str] = &[
+    "sqlite_stat4",
     "triple",
     "term",
     "tx",

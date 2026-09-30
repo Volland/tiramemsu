@@ -87,6 +87,18 @@ pub enum Error {
         /// The feature name, including its milestone.
         feature: String,
     },
+    /// A structurally invalid query IR or plan, or a missing parameter.
+    #[error("invalid query: {msg}")]
+    InvalidQuery {
+        /// What is wrong.
+        msg: String,
+    },
+    /// The host lacks a capability the query engine requires (`functions`, `vtab`).
+    #[error("the host lacks the `{capability}` capability required by the query engine")]
+    MissingCapability {
+        /// The missing capability name.
+        capability: String,
+    },
     /// A value of the wrong kind in a position, or an unknown term id.
     #[error("invalid term in {position:?} position: {reason}")]
     InvalidTerm {
@@ -124,6 +136,18 @@ impl Error {
     /// Wraps a caller error as [`Error::Custom`].
     pub fn custom(e: impl Into<Box<dyn std::error::Error + Send + Sync>>) -> Error {
         Error::Custom(e.into())
+    }
+
+    /// An [`Error::InvalidQuery`] with `msg`.
+    pub fn invalid_query(msg: impl Into<String>) -> Error {
+        Error::InvalidQuery { msg: msg.into() }
+    }
+
+    /// An [`Error::Unsupported`] naming `feature`.
+    pub fn unsupported(feature: impl Into<String>) -> Error {
+        Error::Unsupported {
+            feature: feature.into(),
+        }
     }
 
     /// The host error, if this is one.

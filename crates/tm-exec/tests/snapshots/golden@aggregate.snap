@@ -1,0 +1,6 @@
+---
+source: crates/tm-exec/tests/golden_sql.rs
+expression: text
+---
+SELECT q0.c0 AS c0, q0.c1 AS c1, q0.c2 AS c2 FROM (SELECT t0.o AS c0, count(*) AS c1, tm_max_by(t0.s, CASE WHEN (t0.s & 15) IN (0, 10, 11, 12, 13, 14) THEN (SELECT tm_sortkey(t0.s, d0.lex, d0.num, d0.lang) FROM term AS d0 WHERE d0.id = (t0.s >> 4)) ELSE tm_sortkey(t0.s, NULL, NULL, NULL) END) AS c2 FROM triple AS t0 WHERE t0.p = ?1 AND t0.t_ret IS NULL GROUP BY t0.o) AS q0
+-- params: 1

@@ -18,3 +18,5 @@ all = { level = "warn", priority = -1 }
 tm-core = { path = "crates/tm-core" }
 tm-rusqlite = { path = "crates/tm-rusqlite" }
 tiramemsu = { path = "crates/tiramemsu" }
+tm-ir = { path = "crates/tm-ir" }
+tm-exec = { path = "crates/tm-exec" }

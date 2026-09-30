@@ -9,6 +9,8 @@ rust-version.workspace = true
 [dependencies]
 tm-core = { workspace = true }
 tm-rusqlite = { workspace = true }
+tm-ir = { workspace = true }
+tm-exec = { workspace = true }
 lru = "0.18"
 
 [dev-dependencies]

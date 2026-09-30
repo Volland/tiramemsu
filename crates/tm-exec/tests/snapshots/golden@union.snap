@@ -1,0 +1,6 @@
+---
+source: crates/tm-exec/tests/golden_sql.rs
+expression: text
+---
+SELECT q0.c0 AS c0, q0.c1 AS c1, q0.c2 AS c2 FROM (SELECT t0.s AS c0, t0.o AS c1, NULL AS c2 FROM triple AS t0 WHERE t0.p = ?1 AND t0.t_ret IS NULL UNION ALL SELECT t1.s AS c0, NULL AS c1, t1.o AS c2 FROM triple AS t1 WHERE t1.p = ?2 AND t1.t_ret IS NULL) AS q0
+-- params: 2

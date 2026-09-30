@@ -106,6 +106,7 @@ PathPattern --> View
 - Every `TriplePattern` and `PathPattern` has its own `View`. A query-level time clause sets the default, and a per-pattern clause overrides it. See [[query#Temporal Syntax]].
 - `eid` binds the statement id. SPARQL binds it with `~ ?r` or `<<( )>>` reifier syntax, Cypher with a relationship variable. See [[query#Front Ends#Cypher Dual View]].
 - Expressions include `Exists`/`NotExists` (SPARQL `EXISTS`/`MINUS`, Cypher pattern predicates) and `Lookup` (Cypher `x.k`: a per-row property lookup that never multiplies rows). Joins can mark variables null-safe.
+- The Rust types are [[crates/tm-ir/src/op.rs#Op]] and [[crates/tm-ir/src/op.rs#IrQuery]]. The IR also has `Unnest`, `RowNumber`, `Lookup` and null-safe join variables for Cypher.
 - Constants are encoded to ObjectIds at plan time. A constant IRI or string missing from the dictionary makes its pattern empty, so the plan short-circuits.
 
 ## Views and Scans
@@ -119,13 +120,13 @@ A view is a pair: a transaction-time selector and a valid-time selector. One fun
 | `tx = History` | none | `hist_*` |
 | `valid = At(d)` | `(v_from IS NULL OR v_from <= d) AND (v_to IS NULL OR v_to > d)` | `valid_p`, or filtered from the above |
 
-The exact shapes and verified plans are in [[storage#Query Shapes]]. The function is [[crates/tm-core/src/view.rs#scan_predicates]].
+The exact shapes and verified plans are in [[storage#Query Shapes]]. The function is [[crates/tm-core/src/view.rs#scan_predicates]]; the query executor resolves `AsOf(Instant)` to a `t` at plan time and calls it through [[crates/tm-exec/src/scan.rs#view_predicates]].
 
 - `asOf(instant)` resolves `t` inside the read's own statement, as `(SELECT coalesce(max(t), 0) FROM tx WHERE instant <= ?)` bound to one shared parameter, so it sees the read's snapshot. A future `t` is taken literally.
 
 ### Virtual Predicates
 
-Some predicates are computed from the triple row instead of stored. The scan expands them into column references, so they cost no joins.
+Some predicates are computed from the triple row instead of stored, by [[crates/tm-exec/src/virtual_pred.rs#VirtualPred]]. The scan expands them into column references, so they cost no joins.
 
 | Predicate | Value | Used by |
 |---|---|---|
@@ -137,7 +138,7 @@ Some predicates are computed from the triple row instead of stored. The scan exp
 
 ## Physical Planning
 
-The planner splits the IR into regions and routes each region to the engine that handles its shape best. Regions compose because native operators are exposed to SQL as table-valued functions.
+The planner (routing in [[crates/tm-exec/src/plan/route.rs#route_bgp]]) splits the IR into regions and routes each region to the engine that handles its shape best. Regions compose because native operators are exposed to SQL as table-valued functions.
 
 ```plantuml
 @startuml routing
@@ -166,6 +167,7 @@ stop
 
 Acyclic patterns, filters, optionals, unions, aggregates and ordering become one SQL statement, with one `triple` alias per triple pattern. SQLite's planner orders the joins and picks the indexes, from statistics the engine keeps current.
 
+- The generator is [[crates/tm-exec/src/sqlgen/mod.rs#Gen]].
 - A pattern becomes `triple AS tN` plus equality constraints for constants and shared variables, plus its view predicates.
 - `LeftJoin` → `LEFT JOIN … ON`, `Union` → `UNION ALL`, `Aggregate` → `GROUP BY`, `Project{distinct}` → `DISTINCT`, `OrderLimit` → `ORDER BY/LIMIT/OFFSET`.
 - `RelIsomorphism` adds `tI.eid <> tJ.eid` for every pair of relationship patterns in one `MATCH`.
@@ -178,7 +180,8 @@ Constants are bound parameters, so SQLite cannot see which predicate is rare. It
 
 Measured on SQLite 3.53 with 1.1 million statements and a four-pattern BGP with bound parameters: without statistics the planner starts from the 500 000-row `knows` pattern and takes 272 ms. With `ANALYZE` it starts from the 50-row pattern and takes 1 ms. With statistics, it also chose the best order for every skewed shape tried, including predicate-only patterns. The bundled SQLite of `rusqlite` enables `STAT4`.
 
-- **Always present:** `Db::open` runs `PRAGMA optimize=0x10002`, which analyses tables that were never analysed. The writer runs `PRAGMA optimize` after bulk loads and at most once every `OpenOptions.optimize_every` commits (default 1000). `Db::optimize()` runs a full `ANALYZE`.
+- **Always present:** `Db::open` runs `PRAGMA optimize=0x10002` and, on a populated file without STAT4 samples, a full `ANALYZE`. After bulk loads and at most once every `OpenOptions.optimize_every` commits (default 1000) the writer runs a full `ANALYZE` and then `PRAGMA optimize`. `Db::optimize()` runs a full `ANALYZE`.
+- **STAT4 and readers:** `PRAGMA optimize` alone analyses with a limit and writes no STAT4 samples, so the planner could not tell a 50-row predicate from an 18 000-row one. Pooled readers also keep the statistics they loaded when they opened, so the writer bumps the schema cookie after each analysis and readers reload the statistics at their next read.
 - **Only plans degrade:** stale statistics change a plan's speed, never its results. `sqlite_stat1` and `sqlite_stat4` are SQLite's own tables, outside the graph and outside [[time-model#Never Forget]].
 - **Index family:** with statistics, SQLite may use a `hist_*` index for a `Now` pattern whose predicate has no retracted rows, because the cost is the same. Once a predicate has churn, the statistics steer it to `live_*`. Plan tests assert the family on a churned fixture.
 - **Explain:** `explain()` returns SQLite's `EXPLAIN QUERY PLAN` for every SQL region. Golden plan tests run the skewed fixture with bound parameters.

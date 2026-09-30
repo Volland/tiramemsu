@@ -7,9 +7,10 @@ use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::Duration;
 
 use tm_core::{
-    storage, Capabilities, Clock, Error, Event, Executor, Host, HostOptions, Result, Store,
-    StoreOptions, SystemClock, TermReader, TimeRef, Tx, TxOptions, TxReport, ViewSpec,
+    storage, Capabilities, Clock, Error, Event, Executor, Host, HostOptions, ObjectId, Result,
+    Store, StoreOptions, SystemClock, TermReader, TimeRef, Tx, TxOptions, TxReport, ViewSpec,
 };
+use tm_exec::{NativeOperator, OperatorRegistry, PlannerOptions, QueryEngine};
 use tm_rusqlite::RusqliteHost;
 
 use crate::pool::ReaderPool;
@@ -30,6 +31,25 @@ pub struct OpenOptions {
     /// Run `PRAGMA optimize` every this many commits, and after a commit that
     /// inserted at least this many statements (default 1000).
     pub optimize_every: u64,
+    /// Query planner options (default: SQL routing, LFTJ off).
+    pub planner: PlannerOptions,
+    /// Open the query engine (default true). It needs the host capabilities
+    /// `functions` and `vtab`; opening fails with `MissingCapability` on a host
+    /// without them. `false` opens the `tm-core` tier only (no `execute_ir`).
+    pub query_engine: bool,
+    /// Native operators registered on every connection (tests and M3).
+    #[doc(hidden)]
+    pub native_operators: Vec<Arc<dyn NativeOperator>>,
+}
+
+impl OpenOptions {
+    /// Registers a native operator (the `tm_path` path operator of M3, or a test
+    /// operator).
+    #[doc(hidden)]
+    pub fn with_native_operator(mut self, op: Arc<dyn NativeOperator>) -> OpenOptions {
+        self.native_operators.push(op);
+        self
+    }
 }
 
 impl Default for OpenOptions {
@@ -40,6 +60,9 @@ impl Default for OpenOptions {
             busy_timeout: Duration::from_secs(5),
             term_cache_capacity: 16_384,
             optimize_every: 1000,
+            planner: PlannerOptions::default(),
+            query_engine: true,
+            native_operators: Vec::new(),
         }
     }
 }
@@ -51,6 +74,8 @@ impl std::fmt::Debug for OpenOptions {
             .field("busy_timeout", &self.busy_timeout)
             .field("term_cache_capacity", &self.term_cache_capacity)
             .field("optimize_every", &self.optimize_every)
+            .field("planner", &self.planner)
+            .field("query_engine", &self.query_engine)
             .finish()
     }
 }
@@ -95,6 +120,7 @@ pub struct Db {
     writer: Mutex<Store>,
     pool: Option<ReaderPool>,
     terms: TermReader,
+    engine: Option<QueryEngine>,
     caps: Capabilities,
     path: PathBuf,
 }
@@ -118,7 +144,23 @@ impl Db {
         opts: OpenOptions,
     ) -> Result<Db> {
         let path = path.as_ref();
-        let store = Store::open(
+        let engine = if opts.query_engine {
+            // refuse before touching the file: no query is ever planned on a host
+            // without `functions` and `vtab` (decision D22)
+            tm_exec::host::check_capabilities(host.capabilities())?;
+            let mut reg = OperatorRegistry::new();
+            for op in &opts.native_operators {
+                reg.add(op.clone());
+            }
+            Some(QueryEngine::new(
+                opts.planner,
+                reg,
+                opts.term_cache_capacity,
+            ))
+        } else {
+            None
+        };
+        let mut store = Store::open(
             &host,
             path,
             StoreOptions {
@@ -129,6 +171,9 @@ impl Db {
             },
         )?;
         let caps = store.capabilities();
+        if let Some(e) = &engine {
+            e.install(store.executor())?;
+        }
         let pool = if caps.reader_pool && opts.readers > 0 {
             let hopts = HostOptions {
                 busy_timeout: opts.busy_timeout,
@@ -137,6 +182,9 @@ impl Db {
             for _ in 0..opts.readers {
                 let mut r = host.open_reader(path, &hopts)?;
                 storage::configure_reader(r.as_mut())?;
+                if let Some(e) = &engine {
+                    e.install(r.as_mut())?;
+                }
                 readers.push(r);
             }
             Some(ReaderPool::new(readers))
@@ -148,6 +196,7 @@ impl Db {
             writer: Mutex::new(store),
             pool,
             terms: TermReader::new(opts.term_cache_capacity),
+            engine,
             caps,
             path: path.to_path_buf(),
         })
@@ -180,6 +229,33 @@ impl Db {
 
     pub(crate) fn term_reader(&self) -> &TermReader {
         &self.terms
+    }
+
+    pub(crate) fn engine(&self) -> Option<&QueryEngine> {
+        self.engine.as_ref()
+    }
+
+    /// Number of terms in the query engine's shared term cache (tests).
+    #[doc(hidden)]
+    pub fn term_cache_len(&self) -> usize {
+        self.engine.as_ref().map_or(0, |e| e.term_cache().len())
+    }
+
+    /// True when the query engine's shared term cache holds `id` (tests).
+    #[doc(hidden)]
+    pub fn term_cache_contains(&self, id: ObjectId) -> bool {
+        self.engine
+            .as_ref()
+            .is_some_and(|e| e.term_cache().contains(id))
+    }
+
+    /// Sets a hook run by every query between planning and its SQL statement
+    /// (snapshot tests).
+    #[doc(hidden)]
+    pub fn set_query_hook(&self, f: Option<Arc<dyn Fn() + Send + Sync>>) {
+        if let Some(e) = &self.engine {
+            e.set_test_hook(f);
+        }
     }
 
     /// Runs a read in one committed snapshot: on a reader, or on the writer (under
@@ -234,9 +310,10 @@ impl Db {
         G: FnOnce(&View<'_>) -> Result<R>,
     {
         let _held = HeldGuard::acquire(self.id)?;
+        let engine = self.engine.as_ref();
         self.lock()?.speculate(ops, |exec| {
             let cell: RefCell<&mut dyn Executor> = RefCell::new(exec);
-            let view = View::on_writer(&cell, ViewSpec::NOW);
+            let view = View::on_writer(&cell, ViewSpec::NOW, engine);
             query(&view)
         })
     }

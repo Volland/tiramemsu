@@ -1,0 +1,6 @@
+---
+source: crates/tm-exec/tests/golden_sql.rs
+expression: text
+---
+SELECT t0.s AS c0, t0.o AS c1, p0."end" AS c2 FROM triple AS t0, tm_path(t0.o, ?2, ?3, ?4, ?5) AS p0 WHERE t0.p = ?1 AND t0.t_ret IS NULL
+-- params: 5

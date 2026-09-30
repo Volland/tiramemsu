@@ -1,0 +1,6 @@
+---
+source: crates/tm-exec/tests/golden_sql.rs
+expression: text
+---
+SELECT t0.s AS c0, t0.o AS c1, t1.o AS c2 FROM triple AS t0 LEFT JOIN triple AS t1 ON t1.p = ?2 AND t1.t_ret IS NULL AND t0.s = t1.s AND CASE WHEN tm_kind(t1.o) = 5 THEN CASE WHEN (t1.o & 15) IN (0, 10, 11, 12, 13, 14) THEN (SELECT tm_sortkey(t1.o, d0.lex, d0.num, d0.lang) FROM term AS d0 WHERE d0.id = (t1.o >> 4)) ELSE tm_sortkey(t1.o, NULL, NULL, NULL) END > ?3 END WHERE t0.p = ?1 AND t0.t_ret IS NULL
+-- params: 3

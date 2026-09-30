@@ -1,0 +1,6 @@
+---
+source: crates/tm-exec/tests/golden_sql.rs
+expression: text
+---
+SELECT t0.o AS c0 FROM triple AS t0 WHERE t0.s = ?1 AND t0.p = ?2 AND t0.t_add <= ?3 AND (t0.t_ret IS NULL OR t0.t_ret > ?3) AND (t0.v_from IS NULL OR t0.v_from <= ?4) AND (t0.v_to IS NULL OR t0.v_to > ?4)
+-- params: 4

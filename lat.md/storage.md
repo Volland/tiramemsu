@@ -76,7 +76,7 @@ CREATE TABLE pred_multi (
 ) STRICT;
 
 -- planner statistics: SQLite's own sqlite_stat1 / sqlite_stat4, created by
--- PRAGMA optimize at open (see query.md#Join Ordering)
+-- PRAGMA optimize at open, plus a full ANALYZE when STAT4 samples are missing (see query.md#Join Ordering)
 PRAGMA optimize = 0x10002;
 ```
 

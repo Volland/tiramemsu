@@ -10,5 +10,11 @@ rust-version.workspace = true
 tm-core = { workspace = true }
 rusqlite = { version = "0.40", features = ["bundled", "functions", "vtab", "array"] }
 
-[lints]
-workspace = true
+# The workspace forbids unsafe code; this host crate only denies it, so that the
+# virtual-table glue in `table_fn.rs` (rusqlite's vtab traits are `unsafe` to
+# implement) can opt out locally.
+[lints.rust]
+unsafe_code = "deny"
+
+[lints.clippy]
+all = { level = "warn", priority = -1 }

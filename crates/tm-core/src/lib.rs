@@ -25,7 +25,10 @@ pub use clock::{Clock, ManualClock, SystemClock};
 pub use engine::{IntoObject, PredicateSchema, Store, StoreOptions, Tx};
 pub use error::{Error, Position, Result};
 pub use event::{Event, Op};
-pub use exec::{Capabilities, Executor, Host, HostOptions, Params, SqlError, SqlValue};
+pub use exec::{
+    AggregateFunction, AggregateState, Capabilities, Executor, Host, HostOptions, HostRegistry,
+    Params, ScalarFunction, SqlError, SqlValue, TableFunction,
+};
 pub use id::{Eid, ObjectId, Tag, TxId};
 pub use report::{
     AssertOpts, Asserted, OnExisting, Patch, PatchField, RetKind, Triple, TxOptions, TxReport,

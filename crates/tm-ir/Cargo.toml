@@ -1,0 +1,16 @@
+[package]
+name = "tm-ir"
+description = "Tiramemsu logical query IR: operators, views, semantic flags and validation"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+tm-core = { workspace = true }
+
+[dev-dependencies]
+insta = "1"
+
+[lints]
+workspace = true

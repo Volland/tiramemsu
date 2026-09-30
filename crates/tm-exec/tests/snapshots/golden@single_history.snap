@@ -1,0 +1,6 @@
+---
+source: crates/tm-exec/tests/golden_sql.rs
+expression: text
+---
+SELECT t0.o AS c0 FROM triple AS t0 WHERE t0.s = ?1 AND t0.p = ?2
+-- params: 2

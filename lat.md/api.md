@@ -87,6 +87,7 @@ The error enum is `#[non_exhaustive]`. Each OpenSpec change adds the variants it
 | `term_cache_capacity` | 16 384 | `add-core-store` / `add-query-ir-and-sql-planner` |
 | `optimize_every` | 1000 commits (also after a commit inserting that many statements) | `add-core-store` |
 | `planner` | default routing (LFTJ off) | `add-query-ir-and-sql-planner` |
+| `query_engine` | true; false opens the `tm-core` tier only, for hosts without `functions` or `vtab` | `add-query-ir-and-sql-planner` |
 | `path_max_hops` | 15 | `add-path-engine` |
 | `path_max_states` | 1 000 000 | `add-path-engine` |
 

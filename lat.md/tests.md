@@ -146,6 +146,22 @@ With bound parameters on a skewed fixture, every golden BGP's plan starts from i
 
 The fixture has one class holding 90 % of the nodes, a 50-row predicate and churned properties. It is loaded through the ordinary API, so the test also checks that statistics appear automatically. See [[query#Physical Planning#Join Ordering]].
 
+### Unknown Constant Short Circuits
+
+A pattern with a constant that is missing from the term dictionary empties its join, and the query runs no SQL statement and inserts no term. See [[query#Logical IR]].
+
+### Set Semantics Dedupes Eids
+
+Under `SetOfTriples`, parallel eids for one `(s, p, o)` match once unless the eid is bound, and duplicate removal is skipped for a predicate absent from `pred_multi`. See [[storage#Multi-Eid Predicates]].
+
+### Isomorphism Excludes Reused Eids
+
+Under `RelIsomorphism`, two relationship patterns of one match group never bind the same eid in a row, while `Homomorphism` and different match groups allow it. See [[query#Physical Planning#SQL Codegen]].
+
+### Order By Decoded Value
+
+`ORDER BY` sorts by decoded value across numeric kinds, dictionary and inline strings, and datetimes, with missing values first under `Unbound` and last under `Null3VL`. See [[data-model#ObjectId#Range Scans]].
+
 ### Paths Cross Layers
 
 A path using `sys:subject` hops finds the entities behind a statement that a belief references.

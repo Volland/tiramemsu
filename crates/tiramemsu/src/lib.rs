@@ -33,4 +33,10 @@ pub use tm_core::{
     PatchField, Position, PredicateSchema, Result, RetKind, SqlError, SqlValue, SystemClock, Tag,
     TimeRef, Triple, Tx, TxId, TxOptions, TxReport, TxSel, Valid, ValidSel, Value, ViewSpec,
 };
+pub use tm_exec::{
+    ExecStats, Explain, LftjConfig, NativeKind, NativeOperator, PlannerOptions, QueryResult,
+    RegionInfo, RegionKind, ResultValue, RouteNote,
+};
+pub use tm_ir as ir;
+pub use tm_ir::{IrQuery, Params};
 pub use tm_rusqlite::RusqliteHost;

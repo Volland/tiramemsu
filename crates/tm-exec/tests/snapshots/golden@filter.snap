@@ -1,0 +1,6 @@
+---
+source: crates/tm-exec/tests/golden_sql.rs
+expression: text
+---
+SELECT t0.s AS c0, t0.o AS c1 FROM triple AS t0 WHERE t0.p = ?1 AND t0.t_ret IS NULL AND CASE WHEN tm_kind(t0.o) = 5 THEN CASE WHEN (t0.o & 15) IN (0, 10, 11, 12, 13, 14) THEN (SELECT tm_sortkey(t0.o, d0.lex, d0.num, d0.lang) FROM term AS d0 WHERE d0.id = (t0.o >> 4)) ELSE tm_sortkey(t0.o, NULL, NULL, NULL) END > ?2 END AND NOT (CASE WHEN t0.o IS NULL THEN NULL WHEN tm_kind(t0.o) = 5 THEN CASE WHEN (t0.o & 15) = 5 THEN (t0.o >> 4) WHEN (t0.o & 15) IN (13, 14) THEN (SELECT d1.num FROM term AS d1 WHERE d1.id = (t0.o >> 4)) END = ?3 ELSE 0 END)
+-- params: 3

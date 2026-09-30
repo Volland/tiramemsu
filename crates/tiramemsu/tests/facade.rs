@@ -61,7 +61,12 @@ fn host_without_reader_pool() {
     let (_d, p) = tmp();
     let host = minimal::MinimalHost::new();
     let probe = host.probe.clone();
-    let db = Db::open_with_host(host, &p, OpenOptions::default()).unwrap();
+    // the minimal host has no `functions`/`vtab`: open the tm-core tier only
+    let opts = OpenOptions {
+        query_engine: false,
+        ..OpenOptions::default()
+    };
+    let db = Db::open_with_host(host, &p, opts).unwrap();
     assert_eq!(db.capabilities(), Capabilities::default());
     assert_eq!(db.reader_count(), 0);
     db.transact(TxOptions::default(), |tx| {

@@ -1,0 +1,24 @@
+[package]
+name = "tm-exec"
+description = "Tiramemsu query executor: planner, router, SQL codegen, decoding and the native-operator interface"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+tm-core = { workspace = true }
+tm-ir = { workspace = true }
+lru = "0.18"
+regex = "1"
+
+[dev-dependencies]
+insta = "1"
+proptest = "1"
+tempfile = "3"
+tm-rusqlite = { workspace = true }
+tiramemsu = { workspace = true }
+rusqlite = { version = "0.40", features = ["bundled"] }
+
+[lints]
+workspace = true

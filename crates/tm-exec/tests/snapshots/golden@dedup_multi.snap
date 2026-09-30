@@ -1,0 +1,6 @@
+---
+source: crates/tm-exec/tests/golden_sql.rs
+expression: text
+---
+SELECT t0.o AS c0 FROM triple AS t0 WHERE t0.s = ?1 AND t0.p = ?2 AND t0.t_ret IS NULL AND t0.eid = (SELECT min(x0.eid) FROM triple AS x0 WHERE x0.s = t0.s AND x0.p = t0.p AND x0.o = t0.o AND x0.t_ret IS NULL)
+-- params: 2

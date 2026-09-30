@@ -1,0 +1,24 @@
+---
+source: crates/tm-ir/src/display.rs
+expression: "text.join(\"\\n\\n\")"
+---
+(join
+  (triple ?a <urn:tiramemsu:v:worksAt> ?c :view now)
+  (triple ?c <urn:tiramemsu:v:name> ?n :view now))
+
+(leftJoin :cond (> ?a 30)
+  (triple ?p <urn:tiramemsu:v:name> ?n :view now)
+  (triple ?p <urn:tiramemsu:v:age> ?a :view asOf/tx:150 :eid ?r))
+
+(projectDistinct [?x ?n]
+  (orderLimit [(desc ?n)] :skip 2 :limit 10
+    (aggregate [?x] [(?n count *) (?c collect distinct ?y) (?g group_concat ?y :sep ", ")]
+      (filter (or (bound ?y) (notExists (triple ?x <urn:tiramemsu:v:r> ?z :view now)))
+        (union
+          (triple ?x <urn:tiramemsu:v:p> ?y :view now)
+          (triple ?x <urn:tiramemsu:v:q> $param :view now))))))
+
+(path ?r ?x "v:supportedBy/sys:subject*" :mode TRAIL :view history;validAt/5 :maxHops 15 :bind ?p)
+
+(extend ?x (<= 1 $k)
+  (join))

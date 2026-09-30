@@ -35,17 +35,61 @@ impl Stats {
         if self.since >= self.every || inserted as u64 >= self.every {
             self.since = 0;
             self.runs += 1;
-            let _ = exec.execute_batch("PRAGMA optimize");
+            optimize(exec);
+            refresh_readers(exec);
         }
+    }
+}
+
+/// Makes other connections reload the planner statistics. SQLite reads
+/// `sqlite_stat1` / `sqlite_stat4` only when a connection loads the schema, and
+/// `ANALYZE` does not bump the schema cookie, so pooled readers opened before the
+/// first analysis would plan without statistics forever. Bumping the cookie makes
+/// every reader reload the schema, and the statistics with it, at its next read.
+/// Errors are ignored: statistics never change results.
+pub fn refresh_readers(exec: &mut dyn Executor) {
+    if let Ok(Some(v)) = exec.query_i64("PRAGMA schema_version", &[]) {
+        let _ = exec.execute_batch(&format!("PRAGMA schema_version = {}", v + 1));
     }
 }
 
 /// Runs a full `ANALYZE`.
 pub fn analyze(exec: &mut dyn Executor) -> crate::error::Result<()> {
-    exec.execute_batch("ANALYZE")
+    exec.execute_batch("ANALYZE")?;
+    refresh_readers(exec);
+    Ok(())
 }
 
-/// Runs `PRAGMA optimize=0x10002` (analyse tables that were never analysed).
+/// Runs `PRAGMA optimize=0x10002` (analyse tables that were never analysed) and,
+/// when the file holds statements but no STAT4 samples yet, a full `ANALYZE`.
 pub fn optimize_at_open(exec: &mut dyn Executor) -> crate::error::Result<()> {
-    exec.execute_batch("PRAGMA optimize=0x10002")
+    let _ = exec.execute_batch("PRAGMA optimize=0x10002");
+    let has_rows = exec
+        .query_i64("SELECT 1 FROM triple LIMIT 1", &[])
+        .ok()
+        .flatten()
+        .is_some();
+    let sampled = exec
+        .query_i64(
+            "SELECT 1 FROM sqlite_stat4 WHERE tbl = 'triple' LIMIT 1",
+            &[],
+        )
+        .ok()
+        .flatten()
+        .is_some();
+    if has_rows && !sampled {
+        let _ = exec.execute_batch("ANALYZE");
+    }
+    Ok(())
+}
+
+/// Statistics upkeep at the trigger points: `PRAGMA optimize` decides which
+/// tables are due, but it analyses with an analysis limit and leaves out the STAT4
+/// samples that let the planner tell a 50-row predicate from an 18 000-row one
+/// (measured: without them the plan started from the big pattern). So the trigger
+/// runs a full `ANALYZE` (with STAT4), then the cheap `PRAGMA optimize`. Errors are
+/// ignored: statistics never change results.
+fn optimize(exec: &mut dyn Executor) {
+    let _ = exec.execute_batch("ANALYZE");
+    let _ = exec.execute_batch("PRAGMA optimize");
 }
