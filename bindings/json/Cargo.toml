@@ -1,0 +1,21 @@
+[package]
+name = "tiramemsu-json"
+description = "The JSON bridge shared by the tiramemsu Node.js and Python bindings"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+rust-version.workspace = true
+publish = false
+
+[dependencies]
+tiramemsu = { workspace = true }
+serde_json = "1"
+
+[dev-dependencies]
+tempfile = "3"
+
+# No `[lints] workspace = true`: the binding crates above this one expand napi and
+# pyo3 macros, which generate `unsafe`, and the workspace forbids it.

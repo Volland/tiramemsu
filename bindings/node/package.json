@@ -1,0 +1,56 @@
+{
+  "name": "@tiramemsu/node",
+  "version": "0.1.0",
+  "description": "tiramemsu for Node.js: a bitemporal, never-forget triple store on SQLite — SPARQL + openCypher, layered statements",
+  "license": "MIT OR Apache-2.0",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "tiramemsu.*-*.node",
+    "LICENSE-MIT",
+    "LICENSE-APACHE"
+  ],
+  "scripts": {
+    "build:native": "node scripts/build-native.mjs",
+    "build": "tsc -p .",
+    "test": "vitest run --reporter=default --reporter=json --outputFile=test-results.json; node scripts/check-results.mjs test-results.json"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^5.0.0",
+    "vitest": "^2.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Volland/tiramemsu.git",
+    "directory": "bindings/node"
+  },
+  "bugs": "https://github.com/Volland/tiramemsu/issues",
+  "homepage": "https://github.com/Volland/tiramemsu",
+  "author": "Volodymyr Pavlyshyn",
+  "keywords": [
+    "rdf",
+    "sparql",
+    "cypher",
+    "opencypher",
+    "bitemporal",
+    "sqlite",
+    "knowledge-graph",
+    "triple-store",
+    "agent-memory"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

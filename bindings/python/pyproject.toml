@@ -1,0 +1,51 @@
+[build-system]
+requires = ["maturin>=1.9,<2"]
+build-backend = "maturin"
+
+[project]
+name = "tiramemsu"
+description = "A bitemporal, never-forget triple store on SQLite with SPARQL and openCypher"
+readme = "README.md"
+requires-python = ">=3.9"
+license = "MIT OR Apache-2.0"
+license-files = ["LICENSE-MIT", "LICENSE-APACHE"]
+authors = [{ name = "Volodymyr Pavlyshyn" }]
+keywords = ["rdf", "sparql", "sqlite", "cypher", "knowledge-graph", "bitemporal", "agent-memory"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "Operating System :: MacOS",
+    "Operating System :: Microsoft :: Windows",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Rust",
+    "Topic :: Database",
+    "Topic :: Database :: Database Engines/Servers",
+    "Topic :: Software Development :: Libraries",
+    "Typing :: Typed",
+]
+dynamic = ["version"]
+
+[project.urls]
+Homepage = "https://github.com/Volland/tiramemsu"
+Documentation = "https://github.com/Volland/tiramemsu/blob/main/bindings/python/README.md"
+Repository = "https://github.com/Volland/tiramemsu"
+Issues = "https://github.com/Volland/tiramemsu/issues"
+
+[project.optional-dependencies]
+test = ["pytest>=7"]
+
+[tool.maturin]
+python-source = "python"
+module-name = "tiramemsu._native"
+features = ["pyo3/extension-module"]
+include = [{ path = "python/tiramemsu/py.typed", format = ["sdist", "wheel"] }]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.mypy]
+strict = true
+files = ["python/tiramemsu"]

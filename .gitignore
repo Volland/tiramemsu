@@ -5,3 +5,13 @@ target/
 *.db-wal
 *.db-shm
 .omc/
+node_modules/
+dist/
+*.node
+.venv/
+__pycache__/
+.pytest_cache/
+.mypy_cache/
+*.so
+*.pyd
+bindings/node/test-results.json

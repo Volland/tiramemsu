@@ -7,6 +7,7 @@ This directory defines the high-level concepts, business logic, and architecture
 - [[storage]] — The SQLite schema, indexes, query shapes, event view, invariant triggers, and the volatile table
 - [[query]] — The IR, views and scans, physical planning, the path engine, the SPARQL and Cypher front ends, and temporal syntax
 - [[api]] — The Rust facade, errors, bindings, and MCP tools
+- [[bindings]] — The JSON bridge shared by the Node.js and Python packages: operations, views, terms, errors, and how each wrapper is tested
 - [[prior-art]] — Systems studied, and what was taken from or avoided in each
 - [[tests]] — Test specifications for the core invariants
 - [[roadmap]] — Milestones mapped to OpenSpec changes, and benchmarks

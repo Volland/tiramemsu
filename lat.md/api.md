@@ -100,12 +100,12 @@ The error enum is `#[non_exhaustive]`. Each OpenSpec change adds the variants it
 
 ## Bindings
 
-Bindings wrap the facade crate one to one. Which binding ships first is an open input, so all of them are designed now and ordered later. See [[overview#Open Inputs]].
+Bindings wrap the facade crate one to one. Python and Node are implemented over a shared JSON bridge ([[bindings]]); the others are designed and ordered later. See [[overview#Open Inputs]].
 
 | Binding | Crate | Notes |
 |---|---|---|
-| Python | `tiramemsu-py` (PyO3, maturin wheel) | Transactions take a list of op dicts, or a context manager |
-| Node | `tiramemsu-node` (napi-rs) | Sync API; queries return plain JS objects |
+| Python | `tiramemsu-python`, package `tiramemsu` (PyO3, maturin wheel) | Done. Transactions take a list of op dicts, or a context manager |
+| Node | `tiramemsu-node`, package `@tiramemsu/node` (napi-rs) | Done. Sync API; queries return plain JS objects |
 | WASM | `tiramemsu-wasm` | SQLite compiled to WASM with an OPFS VFS; single-threaded, reader = writer |
 | MCP | `tiramemsu-mcp` (stdio JSON-RPC server) | Tools: `cypher`, `sparql`, `assert`, `retract`, `supersede`, `history`, `as_of`, `schema` |
 | SQLite extension | later | Only the `tm_path` table function and time helpers; no write API |
