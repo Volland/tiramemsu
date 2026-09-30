@@ -100,3 +100,17 @@ footer .wrap { display: flex; flex-wrap: wrap; gap: 8px 24px; justify-content: s
 footer a { color: var(--muted); }
 article.legal h2 { font-size: 21px; margin-top: 30px; }
 article.legal p { margin: 0 0 12px; }
+
+/* Quick start tabs: radio buttons and labels, so the page stays free of scripts. */
+.tabs > input { position: absolute; opacity: 0; pointer-events: none; }
+.tabs > label { display: inline-block; padding: 8px 18px; margin: 0 6px 0 0; border: 2px solid var(--cocoa); border-bottom: 0;
+  border-radius: 12px 12px 0 0; background: var(--cream); color: var(--cocoa); font-weight: 600; cursor: pointer; }
+.tabs > input:checked + label { background: var(--pink); color: #2a1018; }
+.tabs > input:focus-visible + label { outline: 3px solid var(--sponge); outline-offset: 2px; }
+.tabs .panel { display: none; border-top: 2px solid var(--cocoa); padding-top: 14px; }
+#tab-py:checked ~ .p-py, #tab-js:checked ~ .p-js, #tab-rs:checked ~ .p-rs { display: block; }
+.tabs .install { margin: 0 0 10px; color: var(--muted); font-size: 15px; }
+.tabs .panel > .sub { margin: 10px 0 0; color: var(--muted); font-size: 15px; }
+@media (prefers-color-scheme: dark) { .tabs > label { border-color: var(--sponge); } .tabs .panel { border-top-color: var(--sponge); } }
+@media (max-width: 520px) { .tabs > label { padding: 8px 12px; } }
+.tabs + .sub { margin-top: 18px; }

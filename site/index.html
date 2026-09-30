@@ -69,7 +69,69 @@
 
 <section id="start"><div class="wrap">
   <h2>Quick start</h2>
-  <p class="sub">This is <code>crates/tiramemsu/examples/quickstart.rs</code>, which you can run with <code>cargo run -p tiramemsu --example quickstart</code>. Setup lines are trimmed here.</p>
+  <p class="sub">The same story in three languages: a fact with a layer, a correction that keeps the layer, and the question “what did we believe before the correction?”. Pick a language.</p>
+  <div class="tabs">
+    <input type="radio" name="lang" id="tab-py" checked><label for="tab-py">Python</label>
+    <input type="radio" name="lang" id="tab-js" ><label for="tab-js">Node.js</label>
+    <input type="radio" name="lang" id="tab-rs" ><label for="tab-rs">Rust</label>
+    <div class="panel p-py">
+      <p class="install"><code>pip install tiramemsu</code> · Python 3.9 or later · <a href="https://pypi.org/project/tiramemsu/">PyPI</a></p>
+<pre><code><span class="k">from</span> tiramemsu <span class="k">import</span> Database, Iri
+
+V = <span class="s">"urn:tiramemsu:v:"</span>  <span class="c"># written `v:` in queries</span>
+alice, works_at, acme, globex, confidence = (
+    Iri(V + name) for name in (<span class="s">"alice"</span>, <span class="s">"worksAt"</span>, <span class="s">"acme"</span>, <span class="s">"globex"</span>, <span class="s">"confidence"</span>)
+)
+db = Database(<span class="s">"memory.db"</span>)
+
+<span class="c"># 1. A fact is a statement with its own id, so it can carry layers.</span>
+<span class="k">with</span> db.transact() <span class="k">as</span> tx:
+    job = tx.assert_(alice, works_at, acme)
+    tx.assert_(job, confidence, 0.8)
+fact = tx.report.asserted[0]
+
+<span class="c"># 2. Correct it: the layers are replayed on the new fact, nothing is deleted.</span>
+<span class="k">with</span> db.transact() <span class="k">as</span> tx:
+    tx.supersede(fact, o=globex)
+
+<span class="c"># 3. What is believed now, and what was believed before the correction?</span>
+q = <span class="s">"SELECT ?org WHERE { v:alice v:worksAt ?org }"</span>
+db.as_of(tx=1).sparql(q)   <span class="c"># acme</span>
+db.now().sparql(q)         <span class="c"># globex</span>
+
+<span class="c"># 4. The same store in Cypher: the confidence layer is a relationship property.</span>
+db.now().cypher(<span class="s">"MATCH (p)-[r:worksAt]-&gt;(o) RETURN p, o, r.confidence AS conf"</span>)  <span class="c"># conf = 0.8</span>
+</code></pre>
+    </div>
+    <div class="panel p-js">
+      <p class="install"><code>npm install @tiramemsu/node</code> · Node 18 or later · <a href="https://www.npmjs.com/package/@tiramemsu/node">npm</a></p>
+<pre><code><span class="k">import</span> { Database, iri } <span class="k">from</span> <span class="s">"@tiramemsu/node"</span>;
+
+<span class="k">const</span> v = (name) =&gt; iri(<span class="s">`urn:tiramemsu:v:${name}`</span>); <span class="c">// written `v:` in queries</span>
+<span class="k">const</span> [alice, worksAt, acme, globex, confidence] =
+  [<span class="s">"alice"</span>, <span class="s">"worksAt"</span>, <span class="s">"acme"</span>, <span class="s">"globex"</span>, <span class="s">"confidence"</span>].map(v);
+<span class="k">const</span> db = Database.open(<span class="s">"memory.db"</span>);
+
+<span class="c">// 1. A fact is a statement with its own id, so it can carry layers.</span>
+<span class="k">const</span> first = db.transact((tx) =&gt; {
+  <span class="k">const</span> job = tx.assert(alice, worksAt, acme);
+  tx.assert(job, confidence, 0.8);
+});
+
+<span class="c">// 2. Correct it: the layers are replayed on the new fact, nothing is deleted.</span>
+db.transact((tx) =&gt; { tx.supersede(first.asserted[0], { o: globex }); });
+
+<span class="c">// 3. What is believed now, and what was believed before the correction?</span>
+<span class="k">const</span> q = <span class="s">"SELECT ?org WHERE { v:alice v:worksAt ?org }"</span>;
+db.asOf({ tx: 1 }).sparql(q);   <span class="c">// acme</span>
+db.now().sparql(q);             <span class="c">// globex</span>
+
+<span class="c">// 4. The same store in Cypher: the confidence layer is a relationship property.</span>
+db.now().cypher(<span class="s">"MATCH (p)-[r:worksAt]-&gt;(o) RETURN p, o, r.confidence AS conf"</span>); <span class="c">// conf = 0.8</span>
+</code></pre>
+    </div>
+    <div class="panel p-rs">
+      <p class="install"><code>cargo add --git https://github.com/Volland/tiramemsu tiramemsu</code> · not on crates.io yet</p>
 <pre><code><span class="k">let</span> db = Db::open(dir.join(<span class="s">"memory.db"</span>), OpenOptions::default())?;
 
 <span class="c">// 1. A fact is a statement with its own id, so it can carry layers.</span>
@@ -94,6 +156,10 @@ db.now().sparql(q)?;                                        <span class="c">// a
 
 <span class="c">// 4. The same store in Cypher: the confidence layer is a relationship property.</span>
 db.now().cypher(<span class="s">"MATCH (p)-[r:worksAt]-&gt;(o) RETURN p, o, r.confidence"</span>, &amp;CypherParams::default())?; <span class="c">// 0.8</span></code></pre>
+      <p class="sub">This is <code>crates/tiramemsu/examples/quickstart.rs</code>; run it with <code>cargo run -p tiramemsu --example quickstart</code>. Setup lines are trimmed here.</p>
+    </div>
+  </div>
+  <p class="sub">Every binding wraps the same core, so all three see the same past. See the <a href="https://github.com/Volland/tiramemsu/tree/main/bindings">bindings</a> for the full API.</p>
 </div></section>
 
 <section id="numbers"><div class="wrap">
