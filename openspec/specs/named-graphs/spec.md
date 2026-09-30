@@ -247,11 +247,11 @@ The facade error set SHALL gain `InvalidGraphName { term }`, `GraphNotFound { gr
 
 ### Requirement: Unsupported combinations fail before execution
 
-A property path, a `shortestPath` or `allShortestPaths` pattern, or a `tm_path` call inside a `GRAPH` block or under a `FROM <g>` default graph SHALL fail with `Unsupported { feature: "named graph path" }` until the path engine supports a graph filter. Cypher SHALL keep its single graph: a Cypher `USE` clause naming a graph SHALL fail with `Unsupported { feature: "USE GRAPH" }`.
+Cypher SHALL keep its single graph: a Cypher `USE` clause naming a graph SHALL fail with `Unsupported { feature: "USE GRAPH" }`. A property path inside a `GRAPH` block or under a `FROM <g>` default graph is not an unsupported combination: it SHALL be evaluated with the graph set of its block, as the `path-lowering` capability specifies ("SPARQL paths inside named graphs").
 
 #### Scenario: Path inside GRAPH
-- **WHEN** `SELECT ?x WHERE { GRAPH <g1> { v:a v:knows+ ?x } }` is submitted
-- **THEN** the request fails with `Unsupported { feature: "named graph path" }`
+- **WHEN** `(v:a v:knows v:b)` is in `<g1>`, `(v:b v:knows v:c)` is in no graph, and `SELECT ?x WHERE { GRAPH <g1> { v:a v:knows+ ?x } }` is submitted
+- **THEN** the only solution is `?x = v:b`, and no error is raised
 
 #### Scenario: Cypher USE GRAPH
 - **WHEN** `USE GRAPH g1 MATCH (n) RETURN n` is submitted through Cypher

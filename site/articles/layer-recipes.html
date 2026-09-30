@@ -91,7 +91,16 @@ agent_b.transact(TxOptions::default(), |tx| {
 <h2>9. Can I stop layers from rotting?</h2>
 <p>A schema flag says what a layer predicate may annotate. With <code>(v:confidence sys:subjectType sys:STMT)</code>, a confidence written on a node by mistake is rejected with <code>SubjectTypeMismatch</code> on every write path, API, SPARQL and Cypher alike, and a flag that live data already violates is refused with the list of violating ids.</p>
 
-<!-- paths -->
+<h2>10. What can I reach inside one session?</h2>
+<p>A graph is a tag on statements, so a recursive path under <code>GRAPH</code> only crosses statements tagged with it. A session's reasoning can be walked without the rest of memory leaking in, and under <code>asOf</code> the walk follows the graph as it was:</p>
+<pre><code>SELECT ?x WHERE { GRAPH v:session12 { v:belief9 v:supportedBy/(sys:subject|sys:object)+ ?x } }
+SELECT ?g ?x WHERE { GRAPH ?g { v:alice v:knows+ ?x } }   <span class="c"># per graph</span></code></pre>
+
+<h2>11. Could this have reached B, and when?</h2>
+<p>A time-respecting path never goes back in valid time: each fact it crosses must still hold when the walk gets there. If A met B between days 1 and 5 and B met C between days 3 and 9, something could pass from A to C, arriving at day 3 at the earliest. If C had met D only between days 0 and 2, it could not have reached D, although an ordinary path says it could:</p>
+<pre><code>let args = PathArgs { time_respecting: Some(TimeRespecting { after: None }), ..PathArgs::default() };
+let rows = view.path_with(a, "met+", &amp;args)?;   <span class="c">// each row carries its earliest arrival</span></code></pre>
+<p>It works with every path mode and with graphs, and <code>tm_path</code> takes it as a <code>timeRespecting</code> part of its view text. A property test compares all four modes with a brute-force enumeration of walks.</p>
 
 <h2>What is not new, and what is still missing</h2>
 <p>Each recipe could be built elsewhere with enough glue: a side table for statement ids, a history table per relation, a job that recomputes impact. The point is that here they are the same row and one query, and they stay exact under time travel because nothing is deleted.</p>

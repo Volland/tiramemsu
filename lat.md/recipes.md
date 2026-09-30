@@ -139,3 +139,26 @@ agent_b.transact(TxOptions::default(), |tx| {
 ```
 
 Import asserts, so importing twice changes nothing, and a fact the target already holds gains the layers on its existing eid. Transaction ids and confirmations stay behind, because they are local to one file; anonymous nodes get fresh ids. `to_ntriples()` writes the same bundle as RDF 1.2 N-Triples with reifiers for other RDF tools.
+
+## Reasoning Inside One Graph
+
+A recursive path under `GRAPH <g>` only crosses statements that are members of `g`, so a session's or an agent's beliefs can be walked without the rest of memory leaking in ([[data-model#Named Graphs]]).
+
+```sparql
+SELECT ?x WHERE { GRAPH v:session12 { v:belief9 v:supportedBy/(sys:subject|sys:object)+ ?x } }
+SELECT ?g ?x WHERE { GRAPH ?g { v:alice v:knows+ ?x } }   # one row set per graph
+```
+
+Membership is read in the path's own view, so under `asOf` the walk follows the graph as it was. `View::path_with` takes `PathArgs { graphs: Some(vec![g]), .. }`, and `tm_path` a sixth `graphs` argument. See [[query#Physical Planning#Path Engine]].
+
+## Journeys Through Time
+
+A time-respecting path never goes back in valid time: each fact it crosses must still hold when the walk reaches it. It answers "could this have reached B?", and each row says the earliest instant it could have.
+
+```rust
+let args = PathArgs { time_respecting: Some(TimeRespecting { after: None }), ..PathArgs::default() };
+let rows = view.path_with(a, "met+", &args)?;   // A met B in [1, 5), B met C in [3, 9)
+// B arrives at 1, C at 3; had C met D only in [0, 2), D would not be reached
+```
+
+`tm_path` takes the same option as a `timeRespecting` or `timeRespecting/<instant>` part of its view text and returns an `arrival` column. Every mode works, and a property test compares all four with brute-force enumeration of walks. See [[query#Physical Planning#Path Engine#Time-Respecting Search]].

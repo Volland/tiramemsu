@@ -26,7 +26,7 @@ These are explicitly out of scope, so the design can stay small and exact.
 
 ## Decision Record
 
-Every row is a decision taken in the design interview of 2026-09-29, with the section that specifies it.
+Every row is a decision taken in the design interview of 2026-09-29, with the section that specifies it. Rows D29–D34 were added on 2026-09-30 with the layer features collected in [[recipes]].
 
 Rows D19–D25 were added the same day, after a comparison with oxilite ([[prior-art#oxilite]]) and after measuring SQLite 3.53 plans on the schema ([[query#Physical Planning#Join Ordering]], [[storage#Measured Footprint]]). D26 follows a SQLite versus DuckDB benchmark on the same workload ([[prior-art#DuckDB]]).
 
@@ -63,6 +63,12 @@ Rows D19–D25 were added the same day, after a comparison with oxilite ([[prior
 | D27 | SPARQL removes duplicate `(s, p, o)` only for predicates recorded in `pred_multi`; the eid stays as the statement identity | [[storage#Multi-Eid Predicates]] |
 | D28 | Named graphs are tags: a graph is a node and membership is a layer statement `(e sys:inGraph g)`, so there is no quad column; the default graph is the union | [[data-model#Named Graphs]] |
 | D26 | SQLite stays the engine. DuckDB was benchmarked on the workload and is only an optional read-only analytics tool over the SQLite file | [[prior-art#DuckDB]] |
+| D29 | `tm:addedAt` / `tm:retractedAt` expose the commit instants of a statement as virtual predicates; Cypher reads them as `r.addedAt` / `r.retractedAt` | [[query#Views and Scans#Virtual Predicates]] |
+| D30 | `sys:subjectType` constrains the subject kind of a predicate (typed layers); several values mean any of them | [[data-model#Predicate Schema]] |
+| D31 | SPARQL provenance is opt-in per query and never changes the rows; it cites what matched, not what a filter tested | [[query#Front Ends#SPARQL#Query Provenance]] |
+| D32 | `dependents` is the cascade walk as an untruncated read on any view; fact bundles build on it and import by assert | [[time-model#Cascade#Dependents]], [[data-model#Fact Bundles]] |
+| D33 | Recursive paths filter by graph membership on every traversed statement, in the path's own view | [[query#Physical Planning#Path Engine]] |
+| D34 | Time-respecting paths use earliest-arrival semantics: a hop needs its fact to hold at the walk's time, which only moves forward | [[query#Physical Planning#Path Engine#Time-Respecting Search]] |
 
 ## Open Inputs
 

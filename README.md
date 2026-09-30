@@ -24,7 +24,7 @@ A knowledge graph stores facts. An agent also needs to say *how sure am I*, *whe
 - **Never forget.** SQLite triggers reject `DELETE` and any second change to a row, inside the file. Forgetting means retracting. Erasure for legal reasons is planned as crypto-shredding (destroy a key, keep the rows).
 - **Memory verbs.** Idempotent `assert`, `create` for parallel edges, `supersede` (correct a fact and replay its layers), `confirm` (another source agrees), cardinality-one and unique predicates, and `with` / `dry_run` for changes that leave no trace.
 - **SPARQL and Cypher, one store.** SPARQL 1.1 with RDF 1.2 annotations, and openCypher, share one logical IR and one semantics table. A relationship is also a `:Statement` node, so Cypher can reach layers.
-- **Paths.** Reachability, trails and shortest paths through a native automaton search, also as a SQL table function (`tm_path`). Paths can cross layers.
+- **Paths.** Reachability, trails and shortest paths through a native automaton search, also as a SQL table function (`tm_path`). Paths can cross layers, stay inside named graphs, and be time-respecting (valid time never goes backwards along the walk).
 - **Named graphs as tags.** A graph is a node and membership is one more layer statement. `GRAPH`, `FROM`, `FROM NAMED` and `WITH` work with no new column or table.
 - **Embedded.** One SQLite file (WAL, STRICT). The core reaches SQLite through a small synchronous executor trait.
 
@@ -59,6 +59,8 @@ Every statement and every layer on it has an id, both clocks, a structural link 
 | Which of my answers are stale? | `View::sparql_with(q, &SparqlOptions { provenance: true })` cites the statement ids behind every row |
 | Can I hand this fact to another agent? | `View::bundle(eid)` exports it with its layers and evidence; `Tx::import_bundle` asserts it idempotently |
 | Can I stop layers from rotting? | `(v:confidence sys:subjectType sys:STMT)` rejects a confidence on anything but a statement |
+| What can I reach inside one session? | Recursive paths under `GRAPH <g>` / `GRAPH ?g` only cross the graph's statements |
+| Could this have reached B, and when? | Time-respecting paths: valid time never goes backwards along the walk, and each row carries its earliest arrival |
 
 ## Architecture
 
@@ -137,7 +139,7 @@ Rust 1.91.1 is pinned in `rust-toolchain.toml`. If your shell finds another `rus
 ```sh
 export PATH="$HOME/.cargo/bin:$PATH"
 cargo build --workspace
-cargo test --workspace                 # 927 tests; PROPTEST_CASES=64 to speed up property tests
+cargo test --workspace                 # 1 109 tests; PROPTEST_CASES=64 to speed up property tests
 cargo clippy --workspace --all-targets -- -D warnings
 lat check                              # design graph and code refs stay in sync
 ```
@@ -146,12 +148,12 @@ lat check                              # design graph and code refs stay in sync
 
 | | |
 |---|---|
-| Size | About 58 000 lines of Rust in 7 crates, 927 tests, 30 capability specs |
+| Size | About 68 000 lines of Rust in 7 crates, 1 109 tests, 38 capability specs |
 | SPARQL | 634 of 781 in-scope W3C tests pass (66 more are skipped: named-graph data and unsupported formats). Every failing one is listed with a reason in `crates/tm-sparql/tests/w3c/expected-deviations.toml`, and an unexpected result fails the build |
 | Cypher | 2 615 of 3 880 openCypher TCK scenarios (67 %). Temporal types, `CALL`, and a few dual-view cases are deferred and listed in `crates/tm-cypher/tests/tck/allowlist.txt` |
 | Speed | Raw SQLite lookups on the schema take about 4 µs at 11 million statements; about 150 bytes per statement with all indexes. See [`bench/`](bench/) |
 
-**Known limits.** As-of lookups slow down as one key collects many updates. A membership per statement roughly doubles the file. SPARQL decimals come back as doubles. Path patterns inside `GRAPH` are unsupported. There is no MCP server, WASM binding or network server yet. The comparison with oxilite's change-log approach to history is not benchmarked head to head.
+**Known limits.** As-of lookups slow down as one key collects many updates. A membership per statement roughly doubles the file. SPARQL decimals come back as doubles. Time-respecting paths have no SPARQL or Cypher syntax yet (API and `tm_path` only), and recursive paths add no statement ids to query provenance. There is no MCP server, WASM binding or network server yet. The comparison with oxilite's change-log approach to history is not benchmarked head to head.
 
 ## How it differs from oxilite
 

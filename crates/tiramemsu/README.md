@@ -410,6 +410,51 @@ assert_eq!(db.now().sparql("ASK { v:alice v:worksAt v:acme }")?, SparqlResult::B
 
 A graph name that is a literal, statement or transaction fails with `InvalidGraphName`. A `GRAPH` block inside `SERVICE <urn:tiramemsu:tm:asOf/…>` is read in the group's time, so time and graphs combine.
 
+### 13. Impact, citations, hand-offs and journeys
+
+`dependents` lists what retracting a fact would take with it, on any view and without the write lock. `sparql_with` can cite the statements behind every row. `bundle` packs a fact with its layers and evidence for another database, and `path_with` walks only forward in valid time. More in the [recipes](https://github.com/Volland/tiramemsu/blob/main/lat.md/recipes.md).
+
+```rust
+# use tiramemsu::*;
+# let dir = tempfile::tempdir().unwrap();
+# let db = Db::open(dir.path().join("m.db"), OpenOptions::default())?;
+# let other = Db::open(dir.path().join("other.db"), OpenOptions::default())?;
+# let v = |s: &str| Value::iri(format!("urn:tiramemsu:v:{s}"));
+let mut job = None;
+db.transact(TxOptions::default(), |tx| {
+    let e = tx.assert(v("alice"), v("worksAt"), v("acme"), Valid::ALWAYS)?.eid();
+    tx.assert(e, v("confidence"), Value::Double(0.8), Valid::ALWAYS)?;
+    tx.assert(v("belief9"), v("supportedBy"), e, Valid::ALWAYS)?;
+    tx.assert(v("a"), v("met"), v("b"), Valid::between(1, 5))?;
+    tx.assert(v("b"), v("met"), v("c"), Valid::between(0, 2))?; // still true when the walk reaches b at 1
+    job = Some(e);
+    Ok(())
+})?;
+let job = job.unwrap();
+
+// impact: the fact, its confidence and the belief resting on it
+assert_eq!(db.now().dependents(job)?.len(), 3);
+
+// citations: the statement ids behind each row
+let r = db.now().sparql_with(
+    "SELECT ?c WHERE { v:alice v:worksAt ?c }",
+    &SparqlOptions { provenance: true },
+)?;
+assert_eq!(r.solutions().unwrap().provenance(0), Some(&[job][..]));
+
+// hand-off: the fact and everything about it, into another database
+let bundle = db.now().bundle(job)?;
+other.transact(TxOptions::default(), |tx| tx.import_bundle(&bundle).map(|_| ()))?;
+assert_eq!(other.now().sparql("ASK { v:alice v:worksAt v:acme {| v:confidence ?c |} }")?,
+           SparqlResult::Boolean(true));
+
+// journeys: b is reached at 1, and b met c until 2, so c is reachable
+let a = db.now().encode(&v("a"))?.unwrap();
+let args = PathArgs { time_respecting: Some(TimeRespecting { after: None }), ..PathArgs::default() };
+assert_eq!(db.now().path_with(a, "met+", &args)?.len(), 2);
+# Ok::<(), Error>(())
+```
+
 ### Predicate schema
 
 A predicate carries optional flags, written as ordinary statements about it, so the schema itself is versioned:

@@ -12,5 +12,5 @@
 
 ## 2. Documentation
 
-- [ ] 2.1 `lat.md/data-model.md#ObjectId`: document the origin split and the bound; add decision row D29 to `lat.md/overview.md`.
+- [ ] 2.1 `lat.md/data-model.md#ObjectId`: document the origin split and the bound; add a decision row (the next free D number) to `lat.md/overview.md`.
 - [ ] 2.2 `lat.md/tests.md`: spec sections for the bound and the origin rejection, referenced from the tests.

@@ -21,12 +21,13 @@ The system SHALL make the table-valued function `tm_path` available, with no `CR
 - **THEN** the statement fails and the database is unchanged
 
 ### Requirement: tm_path arguments
-`tm_path(start, path, mode, max_hops, view)` SHALL accept its arguments positionally:
+`tm_path(start, path, mode, max_hops, view, graphs)` SHALL accept its arguments positionally:
 - `start` (required): an ObjectId integer. The path is evaluated from this start.
 - `path` (required): the path expression text. See "Path expression text".
 - `mode` (optional): one of `REACH`, `TRAIL`, `ANY_SHORTEST`, `ALL_SHORTEST`, compared case-insensitively. Default `REACH`.
 - `max_hops` (optional): a non-negative integer. When NULL or omitted, the default is no hop bound for `REACH`, `ANY_SHORTEST` and `ALL_SHORTEST`, and the database's path hop cap (default 15) for `TRAIL`.
 - `view` (optional): the view text. See "View argument text". When NULL or omitted, the default is `now`.
+- `graphs` (optional): the graph set of graph-scoped evaluation. NULL or omitted means no graph filter; an INTEGER is the ObjectId of one graph; a TEXT is a JSON array of integer ObjectIds (`'[]'` is the empty set). It MAY be a column of a preceding table, so a call can be correlated with a graph.
 
 Trailing optional arguments MAY be omitted.
 
@@ -45,6 +46,18 @@ Trailing optional arguments MAY be omitted.
 #### Scenario: Explicit max_hops
 - **WHEN** `tm_path(:n0, 'next+', 'TRAIL', 18)` is run over the same chain
 - **THEN** 18 rows are returned
+
+#### Scenario: One graph as an integer
+- **WHEN** `(a knows b)` is a member of `g1`, `(b knows c)` is in no graph, and `tm_path(:a, 'knows+', 'REACH', NULL, NULL, :g1)` is run
+- **THEN** the only end is `b`
+
+#### Scenario: Several graphs as JSON text
+- **WHEN** `(b knows c)` is a member of `g2` and `tm_path(:a, 'knows+', 'REACH', NULL, NULL, '[' || :g1 || ',' || :g2 || ']')` is run
+- **THEN** the ends are `b` and `c`
+
+#### Scenario: Graph correlated with a column
+- **WHEN** a statement runs `SELECT m.o, p."end" FROM (SELECT DISTINCT o FROM triple WHERE p = :inGraph) m, tm_path(:a, 'knows+', 'REACH', NULL, NULL, m.o) p`
+- **THEN** each row pairs a graph with an end reachable from `a` inside that graph
 
 ### Requirement: Path expression text
 The `path` argument, and the path text of `View::path`, SHALL use SPARQL 1.1 property path syntax: `/`, `|`, `*`, `+`, `?`, `^` and parentheses. It SHALL also accept a bounded repetition suffix `{m,n}`, `{m,}` or `{n}`, meaning Cypher `*m..n`, `*m..` or `*n`. A predicate atom SHALL be one of:
@@ -85,7 +98,8 @@ The `view` argument SHALL accept:
 - `asOf/<instant>`, where `<instant>` is an RFC 3339 date-time and is resolved as in `asOf(instant)`;
 - `history`;
 - any of the above followed by `;validAt/<d>`, where `<d>` is an RFC 3339 date or date-time;
-- `validAt/<d>` alone, meaning `now;validAt/<d>`.
+- `validAt/<d>` alone, meaning `now;validAt/<d>`;
+- any of the above with a further part `timeRespecting` or `timeRespecting/<t>`, where `<t>` is an RFC 3339 date or date-time or an integer of epoch milliseconds, which makes the evaluation time-respecting from `<t>` (from −∞ without it). The parts are separated by `;` in any order, each at most once; `timeRespecting` alone means `now;timeRespecting`.
 
 Each form SHALL also be accepted with the full `urn:tiramemsu:tm:` IRI prefix on each part.
 
@@ -101,18 +115,23 @@ Each form SHALL also be accepted with the full `urn:tiramemsu:tm:` IRI prefix on
 - **WHEN** the view argument is `urn:tiramemsu:tm:asOf/15`
 - **THEN** it behaves exactly as `asOf/15`
 
+#### Scenario: Time-respecting view parts
+- **WHEN** the view argument is `timeRespecting`, `now;timeRespecting/2024-06-01`, `timeRespecting/1717200000000;asOf/15` or `urn:tiramemsu:tm:timeRespecting`
+- **THEN** each is accepted, with the start instant −∞, 2024-06-01T00:00Z, 1717200000000 ms and −∞, and `timeRespecting;timeRespecting` or `timeRespecting/soon` fails with an error that starts with `tm_path: view:`
+
 ### Requirement: tm_path output columns
-`tm_path` SHALL return exactly the visible columns `start`, `end`, `hops`, `path_json`, in this order, so `SELECT *` yields these four:
+`tm_path` SHALL return exactly the visible columns `start`, `end`, `hops`, `path_json`, `arrival`, in this order, so `SELECT *` yields these five:
 - `start`: the start ObjectId.
 - `end`: the end ObjectId.
 - `hops`: an integer hop count.
 - `path_json`: NULL in `REACH` mode, and otherwise a JSON text of the form `{"nodes":[<ObjectId>,…],"edges":[{"eid":<ObjectId>,"p":<ObjectId>,"dir":"out"|"in"},…]}`.
+- `arrival`: NULL unless the view text makes the evaluation time-respecting; then the row's arrival as an INTEGER of epoch milliseconds, or NULL when the arrival is −∞.
 
 In `path_json`, `nodes` lists hops + 1 node ids, from start to end. `edges` lists hops entries in traversal order. `dir` is `"out"` for a forward hop and `"in"` for an inverse hop. `p` is the virtual predicate's IRI id for virtual hops. The row order SHALL be the deterministic order of the path evaluation when the statement has no `ORDER BY`.
 
 #### Scenario: Select star columns
 - **WHEN** `SELECT * FROM tm_path(:a, 'p', 'TRAIL')` is run
-- **THEN** the result has exactly the columns `start`, `end`, `hops`, `path_json`
+- **THEN** the result has exactly the columns `start`, `end`, `hops`, `path_json`, `arrival`
 
 #### Scenario: path_json for a trail
 - **WHEN** `(a knows b)` has eid `e1` and `SELECT path_json FROM tm_path(:a, 'knows', 'TRAIL')` is run
@@ -125,6 +144,10 @@ In `path_json`, `nodes` lists hops + 1 node ids, from start to end. `edges` list
 #### Scenario: Zero-length row
 - **WHEN** `tm_path(:a, 'knows*', 'TRAIL')` is run
 - **THEN** one row has `start = :a`, `end = :a`, `hops = 0` and `path_json = {"nodes":[:a],"edges":[]}`
+
+#### Scenario: Arrival of a time-respecting call
+- **WHEN** `(a p b)` is valid `[1, 5)`, `(b p c)` is valid `[3, 9)`, and `SELECT "end", arrival FROM tm_path(:a, 'p+', 'REACH', NULL, 'timeRespecting')` is run
+- **THEN** the rows are `(b, 1)` and `(c, 3)`, and without `timeRespecting` both arrivals are NULL
 
 ### Requirement: tm_path composes with SQL
 `tm_path` SHALL be usable as a `FROM`-clause item in any SQL statement. This includes a correlated call whose `start` comes from a column of a preceding table, and joins, filters, aggregates and `ORDER BY` over its columns. It SHALL support its SQL-level JSON functions over `path_json`. An equality constraint on `end` in the same statement SHALL restrict the rows to that end, and SHALL give the same rows as filtering afterwards.
@@ -152,7 +175,8 @@ In `path_json`, `nodes` lists hops + 1 node ids, from start to end. `edges` list
 - `path` is not text, or does not parse;
 - `mode` is not one of the four v1 modes;
 - `max_hops` is negative or not an integer;
-- `view` is malformed.
+- `view` is malformed;
+- `graphs` is neither NULL, an integer nor text, or is text that is not a JSON array of integers.
 
 A NULL `start`, as produced by an outer join, SHALL produce zero rows and no error.
 
@@ -176,6 +200,10 @@ A NULL `start`, as produced by an outer join, SHALL produce zero rows and no err
 - **WHEN** `SELECT * FROM tm_path('alice', 'p')` is run
 - **THEN** the statement fails with an error that starts with `tm_path:` and names `start`
 
+#### Scenario: Malformed graphs
+- **WHEN** `tm_path(:a, 'p', 'REACH', NULL, NULL, '[1, "g"]')`, `tm_path(:a, 'p', 'REACH', NULL, NULL, 'g1')` or `tm_path(:a, 'p', 'REACH', NULL, NULL, 1.5)` is run
+- **THEN** the statement fails with an error that starts with `tm_path: graphs:`
+
 #### Scenario: NULL start from an outer join
 - **WHEN** `tm_path` is correlated to the nullable side of a `LEFT JOIN` and receives a NULL start
 - **THEN** it contributes zero rows for that outer row, and the statement succeeds
@@ -188,13 +216,14 @@ All neighbour reads of one `tm_path` evaluation SHALL come from the snapshot of 
 - **THEN** that evaluation does not return `d` through the new statement
 
 ### Requirement: View::path API
-The Rust `View` handle SHALL offer `path(start, path, mode, max_hops)`. It evaluates the path text from `start` under the view's own tx-time and valid-time selection, and returns the rows as values with:
+The Rust `View` handle SHALL offer `path_with(start, path, &PathArgs)`, where `PathArgs` holds the mode, the hop bound, an optional graph set and an optional time-respecting option (`TimeRespecting { after }`) and implements `Default` (`REACH`, no bound, no graph filter, not time-respecting). It evaluates the path text from `start` under the view's own tx-time and valid-time selection, with graph-scoped evaluation when a graph set is given and time-respecting evaluation when the option is given, and returns the rows as values with:
 - `start`;
 - `end`;
 - `hops`;
+- `arrival`;
 - an optional path, with its node sequence and its hop sequence (eid, predicate, direction).
 
-`max_hops` SHALL be a hard upper bound for every mode. A caller who wants no bound passes the largest representable value. The rows SHALL be in the deterministic order of the path evaluation. Errors SHALL be typed:
+`path(start, path, mode, max_hops)` SHALL remain as a shorthand for `path_with` with no graph set and no time-respecting option. `max_hops` SHALL be a hard upper bound for every mode. A caller who wants no bound passes the largest representable value. The rows SHALL be in the deterministic order of the path evaluation. Errors SHALL be typed:
 - a parse error in the `Path` dialect, for malformed path text;
 - `Unsupported`, for an unsupported mode;
 - `PathLimitExceeded { limit }`, when the search-state guard trips.
@@ -218,3 +247,11 @@ The Rust `View` handle SHALL offer `path(start, path, mode, max_hops)`. It evalu
 #### Scenario: API inside speculation
 - **WHEN** `db.with(ops, |view| view.path(...))` is called
 - **THEN** the path sees the speculative statements, and nothing is persisted afterwards
+
+#### Scenario: API with a graph set
+- **WHEN** `db.now().path_with(a, "knows+", &PathArgs { graphs: Some(vec![g1]), ..PathArgs::default() })` is called, and `tm_path(:a, 'knows+', 'REACH', NULL, NULL, :g1)` is run on the same database
+- **THEN** both return the same rows in the same order
+
+#### Scenario: API time-respecting
+- **WHEN** `db.now().path_with(a, "p+", &PathArgs { time_respecting: Some(TimeRespecting { after: Some(2) }), ..PathArgs::default() })` is called, and `tm_path(:a, 'p+', 'REACH', NULL, 'timeRespecting/2')` is run on the same database
+- **THEN** both return the same ends, hops and arrivals in the same order

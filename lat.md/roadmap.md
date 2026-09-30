@@ -18,6 +18,8 @@ The core comes first. After the IR lands, the two front ends and the path engine
 | M6 | future: `add-crypto-shredding` | `sys:sensitive`, `SEALED` terms, `seal_key`, erase transaction. See [[time-model#Erasure]] | M0 |
 | M7 | future: `add-retrieval` | FTS5 over string terms (`term_fts`) and, on hosts with vector support, k-nearest-neighbour indexes defined as `sys:` triples, both usable from SPARQL, Cypher and paths | M1, M2 |
 
+Six smaller changes built on M0–M3 add the layer features of [[recipes]]: `add-statement-instants`, `add-typed-layers`, `add-query-provenance`, `add-fact-bundles`, `add-graph-scoped-paths` and `add-time-respecting-paths` (all archived). `reserve-replica-id` is a proposal only: it reserves origin bits in allocated ids so that agent memories can merge later, and waits for a decision.
+
 M7 exists because recall by text or embedding, not by graph pattern, is how agents usually query their memory. Ranking by support is part of it: a hit can be ordered by its confidence layers, its `sys:confirmedBy` count, the number of distinct transaction authors behind it and its `tm:addedAt`, all of which the store already holds ([[recipes]]). oxilite's design (index definitions stored as data, tables kept current by triggers, one k-NN statement per query) is the template ([[prior-art#oxilite]]).
 
 ```plantuml
