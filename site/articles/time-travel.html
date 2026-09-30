@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Time travel and bitemporality: tiramemsu</title>
+<meta name="description" content="How tiramemsu remembers when it learned a fact and when the fact was true, how to query the past in Rust, SPARQL and Cypher, and what bitemporal means.">
+<link rel="icon" href="../assets/logo.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+<header class="top"><div class="wrap">
+  <a class="brand" href="../"><img src="../assets/logo.svg" alt="">Tiramemsu</a>
+  <nav class="menu"><a href="../#features">Features</a><a href="../#start">Quick start</a><a href="./" aria-current="page">Articles</a><a href="https://github.com/Volland/tiramemsu">GitHub</a></nav>
+</div></header>
+
+<article class="post">
+<h1>Time travel and bitemporality, explained</h1>
+<p class="meta">Tiramemsu articles · 30 September 2026</p>
+
+<p>An agent that remembers is useful. An agent that can say <em>what did I believe last Tuesday?</em> and <em>what was actually true back then?</em> is much harder to fool, including by its own past mistakes. Those are two different questions, and tiramemsu keeps a separate clock for each. This article shows how the clocks work, how to query them, and why you want both.</p>
+
+<h2>Two clocks, two questions</h2>
+<p>Take the sentence <em>Alice works at Acme</em>. There are two times attached to it, and people mix them up constantly.</p>
+<ul>
+  <li><strong>Transaction time</strong> is when the database learned the fact, and when it stopped believing it. It belongs to the database. Nobody can change it after the fact, because it is the record of what happened.</li>
+  <li><strong>Valid time</strong> is when the fact held in the world. Alice started at Acme in 2020 and left at the end of 2023. That belongs to reality, and we may learn it late, or get it wrong and fix it.</li>
+</ul>
+<p>A store that has only transaction time can replay what it believed, but cannot say when things were true. A store that has only valid time can say when things were true, but forgets that it once believed something else. A <strong>bitemporal</strong> store has both, so it can answer all four combinations:</p>
+<table>
+<thead><tr><th></th><th>Believed now</th><th>Believed then</th></tr></thead>
+<tbody>
+<tr><th>True now</th><td>What do we think is true today?</td><td>What did we think was true today, back then?</td></tr>
+<tr><th>True then</th><td>What do we now think was true in 2024?</td><td>What did we think about 2024, back then?</td></tr>
+</tbody>
+</table>
+<p>The bottom right cell is the one that audits, incident reviews and “why did the agent say that?” need.</p>
+
+<h2>How it is stored</h2>
+<p>Every statement is one row. It has its own id (see <a href="layered-graphs.html">layered graphs</a>) and four time columns. Nothing else about time is stored.</p>
+<ul>
+  <li><code>t_add</code>: the transaction that asserted it.</li>
+  <li><code>t_ret</code>: the transaction that retracted it, empty while it is live.</li>
+  <li><code>v_from</code> and <code>v_to</code>: the valid interval, half-open, so <code>[v_from, v_to)</code>. An empty end means unbounded, and both empty means “valid for all time”.</li>
+</ul>
+<p>A row is <em>believed</em> during <code>[t_add, t_ret)</code>. That is all “time travel” is: a filter on those columns. No snapshots, no copies, no replay at read time.</p>
+
+<p>Every committed transaction gets a number <code>t</code> that starts at 1 and never skips or repeats, plus a wall-clock <code>instant</code> that only moves forward (if the system clock jumps backwards, the instant is bumped so the mapping from time to <code>t</code> stays monotonic). Asking for the state at a wall-clock time resolves to the largest <code>t</code> whose instant is not later. Before the first transaction, the answer is the empty database, which is correct and a little sad.</p>
+
+<h3>A worked example</h3>
+<p>Three things happen to what we know about Alice:</p>
+<ol>
+  <li><strong>Transaction 1.</strong> We learn <code>alice worksAt acme</code>, valid from 2020-01-01, no end.</li>
+  <li><strong>Transaction 2.</strong> We learn she actually left Acme at the end of 2023. We <code>supersede</code> the fact with <code>v_to = 2024-01-01</code>.</li>
+  <li><strong>Transaction 3.</strong> We learn she joined Globex on 2024-03-01.</li>
+</ol>
+<p>The table after all three, with nothing deleted:</p>
+<table>
+<thead><tr><th>Row</th><th>Statement</th><th>t_add</th><th>t_ret</th><th>Valid</th></tr></thead>
+<tbody>
+<tr><td>e1</td><td>alice worksAt acme</td><td>1</td><td>2 (supersede)</td><td>2020-01-01 → open</td></tr>
+<tr><td>e2</td><td>alice worksAt acme</td><td>2</td><td>live</td><td>2020-01-01 → 2024-01-01</td></tr>
+<tr><td>e3</td><td>alice worksAt globex</td><td>3</td><td>live</td><td>2024-03-01 → open</td></tr>
+</tbody>
+</table>
+<p>Correcting the end date did not edit e1. It retracted e1 and inserted e2, and it replayed any confidence or source layers hanging on e1 onto e2, in the same transaction. That is why valid time never changes in place: the fact that we once believed she was still at Acme is itself part of the history.</p>
+
+<figure>
+<svg viewBox="0 0 640 380" role="img" aria-label="Rectangles on a plane: valid time across, transaction time up. e1 is a wide low rectangle, e2 a tall rectangle ending at 2024, e3 a rectangle starting in March 2024." width="640" height="380" style="max-width:100%;height:auto;font-family:var(--sans);font-size:13px">
+  <g stroke="var(--muted)" stroke-width="1.5" fill="none">
+    <path d="M90 330 H610"/><path d="M90 330 V30"/>
+  </g>
+  <g fill="var(--muted)"><path d="M610 330 l-8 -4 v8z"/><path d="M90 30 l-4 8 h8z"/></g>
+  <rect x="100" y="200" width="490" height="70" fill="var(--pink-soft)" stroke="var(--pink)" stroke-width="2"/>
+  <rect x="100" y="40" width="220" height="160" fill="var(--bg-soft)" stroke="var(--sponge)" stroke-width="2"/>
+  <rect x="329" y="40" width="261" height="90" fill="var(--bg-soft)" stroke="var(--cocoa)" stroke-width="2" style="stroke:var(--sponge)"/>
+  <g fill="var(--ink)">
+    <text x="110" y="240">e1 alice worksAt acme (believed at t=1 only)</text>
+    <text x="110" y="122">e2 alice worksAt acme</text>
+    <text x="110" y="142" fill="var(--muted)">valid until 2024-01-01</text>
+    <text x="339" y="90">e3 alice worksAt globex</text>
+  </g>
+  <g stroke="var(--pink)" stroke-width="2" stroke-dasharray="5 4">
+    <path d="M90 235 H590"/><path d="M430 330 V30"/>
+  </g>
+  <g fill="var(--pink)" font-weight="700">
+    <text x="436" y="322">valid at 2026-01-01</text>
+  </g>
+  <g fill="var(--muted)" text-anchor="end">
+    <text x="82" y="274">t=1</text><text x="82" y="204">t=2</text><text x="82" y="134">t=3</text><text x="82" y="44">now</text>
+  </g>
+  <g fill="var(--muted)" text-anchor="middle">
+    <text x="100" y="350">2020</text><text x="210" y="350">2022</text><text x="320" y="350">2024</text><text x="430" y="350">2026</text><text x="580" y="350">open</text>
+  </g>
+  <text x="350" y="372" text-anchor="middle" fill="var(--muted)">valid time (when it was true) →</text>
+  <text x="18" y="180" fill="var(--muted)" transform="rotate(-90 18 180)" text-anchor="middle">transaction time (when we knew) →</text>
+  <text x="596" y="228" text-anchor="end" fill="var(--pink)" font-weight="700">as of t=1</text>
+</svg>
+<figcaption>Each row is a rectangle: valid time across, transaction time up. A query is a horizontal cut (as of some <code>t</code>), a vertical cut (valid at some date), or both. The dashed lines show <em>as of t=1, valid at 2026-01-01</em>: they meet only inside e1.</figcaption>
+</figure>
+
+<h2>Querying the past</h2>
+<p>There are four <em>views</em>. A view is a way of looking at the same rows, and every query, path search and pattern reads through one.</p>
+<table>
+<thead><tr><th>View</th><th>Rust</th><th>SPARQL</th><th>Cypher</th></tr></thead>
+<tbody>
+<tr><td>Now (default)</td><td><code>db.now()</code></td><td>no clause</td><td>no clause</td></tr>
+<tr><td>As of a transaction</td><td><code>db.as_of(TimeRef::Tx(1))</code></td><td><code>FROM &lt;urn:tiramemsu:tm:asOf/1&gt;</code></td><td><code>USE AS OF 1</code></td></tr>
+<tr><td>As of a wall-clock time</td><td><code>db.as_of(TimeRef::Instant(ms))</code></td><td><code>FROM &lt;urn:tiramemsu:tm:asOf/2026-09-01T12:00:00Z&gt;</code></td><td><code>USE AS OF datetime('2026-09-01T12:00:00Z')</code></td></tr>
+<tr><td>Valid at a date</td><td><code>.valid_at(ms)</code></td><td><code>FROM &lt;urn:tiramemsu:tm:validAt/2025-03-01&gt;</code></td><td><code>USE VALID AT date('2025-03-01')</code></td></tr>
+<tr><td>Everything ever</td><td><code>db.history()</code></td><td><code>FROM &lt;urn:tiramemsu:tm:history&gt;</code></td><td><code>USE HISTORY</code></td></tr>
+</tbody>
+</table>
+<p>Transaction time and valid time combine: <code>db.as_of(TimeRef::Tx(1)).valid_at(ms)</code>, or two <code>FROM</code> IRIs, or <code>USE AS OF 1 VALID AT date('2026-01-01')</code>.</p>
+
+<p><strong>Valid time is opt-in.</strong> With no clause the view is “believed now” and valid time is not filtered. An implicit “valid now” would quietly hide every past fact, which is the opposite of what a memory is for.</p>
+
+<h3>What the Alice example returns</h3>
+<p>The question is always <em>who does Alice work for?</em>, only the view changes.</p>
+<table>
+<thead><tr><th>View</th><th>Answer</th><th>Why</th></tr></thead>
+<tbody>
+<tr><td>now</td><td>acme, globex</td><td>e2 and e3 are live. Without a valid-time filter, both episodes show.</td></tr>
+<tr><td>now, valid at 2026-01-01</td><td>globex</td><td>e2 ended in 2024. e3 covers 2026.</td></tr>
+<tr><td>now, valid at 2024-02-01</td><td>nobody</td><td>Acme ended 2024-01-01, Globex began 2024-03-01. Two months between jobs, and the database says so.</td></tr>
+<tr><td>as of t=1</td><td>acme</td><td>Only e1 existed.</td></tr>
+<tr><td>as of t=1, valid at 2026-01-01</td><td>acme</td><td>We believed she was still there. We were wrong, and we remember being wrong.</td></tr>
+<tr><td>history</td><td>acme, acme, globex</td><td>e1, e2 and e3, including the retracted one.</td></tr>
+</tbody>
+</table>
+
+<h3>Rust</h3>
+<pre><code><span class="c">// what do we believe now, and what did we believe after the first transaction?</span>
+<span class="k">let</span> q = <span class="s">"SELECT ?org WHERE { v:alice v:worksAt ?org }"</span>;
+db.now().sparql(q)?;
+db.as_of(TimeRef::Tx(<span class="s">1</span>)).sparql(q)?;
+
+<span class="c">// the same, restricted to what was true on a date</span>
+db.as_of(TimeRef::Tx(<span class="s">1</span>)).valid_at(jan_2026_ms).sparql(q)?;</code></pre>
+
+<h3>SPARQL</h3>
+<pre><code><span class="c"># whole query in the past</span>
+SELECT ?org
+FROM &lt;urn:tiramemsu:tm:asOf/1&gt;
+FROM &lt;urn:tiramemsu:tm:validAt/2026-01-01&gt;
+WHERE { v:alice v:worksAt ?org }</code></pre>
+<p>Time can also be chosen for one pattern with <code>SERVICE</code>, which is what makes “what changed?” a single query:</p>
+<pre><code><span class="c"># what changed about alice's employer between tx 1 and now</span>
+SELECT ?before ?after WHERE {
+  SERVICE &lt;urn:tiramemsu:tm:asOf/1&gt; { v:alice v:worksAt ?before }
+  v:alice v:worksAt ?after .
+  FILTER (?before != ?after)
+}</code></pre>
+
+<h3>Cypher</h3>
+<pre><code><span class="c">// same store, same past</span>
+USE AS OF 1 VALID AT date('2026-01-01')
+MATCH (a)-[:worksAt]-&gt;(c) RETURN a, c
+
+<span class="c">// one part of a query in another time</span>
+MATCH (a {`@id`: 'v:alice'})-[:worksAt]-&gt;(after)
+CALL { WITH a USE AS OF 1 MATCH (a)-[:worksAt]-&gt;(before) RETURN before }
+WITH before, after WHERE before &lt;&gt; after
+RETURN before, after</code></pre>
+
+<h3>Asking a statement about its own time</h3>
+<p>Each statement also exposes its bookkeeping as virtual properties, so time is data you can filter and return. In Cypher they are <code>r.txAdded</code>, <code>r.txRetracted</code>, <code>r.validFrom</code> and <code>r.validTo</code>. In SPARQL they are the <code>tm:txAdded</code> and <code>tm:txRetracted</code> predicates on the statement id, for example <code>v:alice v:worksAt v:acme ~ ?r . ?r tm:txRetracted ?x</code> under the history view returns when Acme was retracted.</p>
+
+<h2>Changing the past without lying about it</h2>
+<p>You never edit history. You add to it, and there are a few verbs for the common cases:</p>
+<ul>
+  <li><code>assert</code> adds a fact, and is idempotent: asserting what is already live does nothing.</li>
+  <li><code>retract</code> ends belief in a fact and in every layer about it, in the same transaction. Nothing is deleted, only marked with <code>t_ret</code>.</li>
+  <li><code>supersede</code> corrects a fact, including its valid interval, and replays its layers onto the new row.</li>
+  <li><code>confirm</code> records that another source agrees, without changing anything else.</li>
+  <li>A <code>with</code> block, or <code>dry_run</code>, applies changes hypothetically, lets you query the result, and discards it. Speculation starts from now: you can ask <em>what if</em> about the present, but you cannot branch the past.</li>
+</ul>
+<p>Who did it, and why, goes on the transaction itself as ordinary metadata (<code>sys:author</code>, <code>sys:source</code>, <code>sys:reason</code>), so an audit query is a join between statements and their transactions.</p>
+
+<h2>Why it can be trusted</h2>
+<ul>
+  <li><strong>The file enforces it.</strong> SQLite triggers reject <code>DELETE</code> and any second change to a row. The only mutation ever allowed is setting <code>t_ret</code> once, from empty.</li>
+  <li><strong>Time is resolved in one place.</strong> A view-aware scan turns a view into conditions on the four columns, and SPARQL, Cypher and the path engine all read through it, so they never disagree about what “as of t” means.</li>
+  <li><strong>The log is a view, not a second copy.</strong> The event log (one row per assertion, one per retraction) is derived from the same table. For every <code>t</code>, the state as of <code>t</code> equals the result of replaying the events up to <code>t</code>, and that is a tested property.</li>
+  <li><strong>Erasure does not break it.</strong> Legal erasure is planned as crypto-shredding: destroy a key, keep the rows. That is designed but not yet built.</li>
+</ul>
+
+<div class="note"><strong>Costs.</strong> Keeping everything means reads on one key slow down as that key collects many updates, because an as-of lookup has to find the right version among them. High-churn state that does not deserve history (a heartbeat, a cursor) belongs in the separate <code>volatile</code> table, which is not part of the graph.</div>
+
+<h2>When to use which clock</h2>
+<ul>
+  <li>Use <strong>as of</strong> to reproduce what the agent knew when it acted: debugging, audits, “why did it say that?”.</li>
+  <li>Use <strong>valid at</strong> to ask about the world: “where did Alice work in 2024?”, using everything we know today.</li>
+  <li>Use <strong>both</strong> to compare belief with reality, and to find the facts we were late to learn.</li>
+  <li>Use <strong>history</strong> to see every version, with the retracted ones, for review.</li>
+</ul>
+<p>Two clocks sound like twice the work, but in practice you set valid time only when you know it, and the transaction clock ticks by itself. The reward is an agent that can say <em>I used to think so, and here is when I found out I was wrong</em>. That is more than most of us manage.</p>
+
+<p><a href="layered-graphs.html">Next: layered graphs, explained →</a></p>
+</article>
+
+<footer><div class="wrap">
+  <span>Tiramemsu · MIT OR Apache-2.0 · <a href="https://github.com/Volland/tiramemsu">github.com/Volland/tiramemsu</a></span>
+  <span><a href="../">Home</a> · <a href="./">All articles</a></span>
+  <span><a href="../impressum.html">Impressum</a> · <a href="../datenschutz.html">Datenschutz</a> · <a href="../agb.html">AGB</a></span>
+</div></footer>
+</body>
+</html>
