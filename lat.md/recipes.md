@@ -6,6 +6,23 @@ Each part exists in some other system: edge annotations in RDF-star, transaction
 
 The tests are in `crates/tiramemsu/tests/recipes.rs` unless noted.
 
+## Impact Analysis
+
+Everything that retracting a statement would take with it, read without the writer lock: `View::dependents(eid)` walks the same cascade as a retraction, on any view ([[time-model#Cascade#Dependents]]).
+
+```rust
+let at_risk = db.now().dependents(e1)?;                  // what a retraction of e1 would take
+let then    = db.as_of(TimeRef::Tx(150)).dependents(e1)?; // what depended on it back then
+```
+
+The same set is a path query, because the inverse virtual hops step from a statement to the statements about it:
+
+```sql
+SELECT "end" FROM tm_path(:e1, '(^sys:subject|^sys:object)*', 'REACH')
+```
+
+A property test checks that the dependents, the `retracted` list of a dry-run retraction and the ends of that path are the same set, over random layered graphs with reference cycles. `dry_run` still gives the exact report of a write, but it holds the single writer.
+
 ## Evidence Chains Through Time
 
 A path that starts at a belief and crosses into the statements it rests on, read as of any earlier transaction. See [[query#Physical Planning#Path Engine]] and [[query#Temporal Syntax]].
@@ -107,3 +124,18 @@ Provenance counts what matched, including `OPTIONAL` parts, the `UNION` branch t
 `(v:confidence sys:subjectType sys:STMT)` declares that a predicate only annotates statements, so a confidence written on a node by mistake is rejected with `SubjectTypeMismatch` instead of silently becoming a property.
 
 Several values mean any of them, and the flag is checked on every assert and create, from the API, SPARQL and Cypher alike. See [[data-model#Predicate Schema]].
+
+## Portable Facts
+
+A fact travels to another agent's file together with its layers, the statements it rests on and its graph memberships: `View::bundle(eid)` exports it and `Tx::import_bundle` asserts it on the other side ([[data-model#Fact Bundles]]).
+
+```rust
+let bundle = agent_a.now().bundle(e1)?.to_json();          // BundleFormat, "tiramemsu-bundle/1"
+agent_b.transact(TxOptions::default(), |tx| {
+    tx.meta(Value::iri(vocab::SYS_SOURCE), v("agentA"))?;  // provenance of the import
+    tx.import_bundle(&Bundle::from_json(&bundle)?)?;
+    Ok(())
+})?;
+```
+
+Import asserts, so importing twice changes nothing, and a fact the target already holds gains the layers on its existing eid. Transaction ids and confirmations stay behind, because they are local to one file; anonymous nodes get fresh ids. `to_ntriples()` writes the same bundle as RDF 1.2 N-Triples with reifiers for other RDF tools.
