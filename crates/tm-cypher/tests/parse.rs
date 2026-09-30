@@ -163,24 +163,41 @@ fn unsupported_constructs() {
     assert!(unsupported("MATCH ((a)-[:X]->(b)){1,3} RETURN a").contains("quantified"));
 }
 
-// cypher-read "Variable-length pattern" / "shortestPath"
+// path-lowering: variable-length and shortest patterns parse (add-path-engine)
 #[test]
-fn path_constructs_are_unsupported_not_parse_errors() {
+fn path_constructs_parse() {
+    let rel = |q: &str| -> RelPat {
+        let Clause::Match { pattern, .. } = &clauses(q)[0] else {
+            panic!()
+        };
+        pattern[0].rels[0].clone()
+    };
+    let vl = |q: &str| rel(q).var_len.map(|v| (v.min, v.max));
     assert_eq!(
-        unsupported("MATCH (a {name:'Alice'})-[:knows*1..3]->(b) RETURN b"),
-        "variable-length relationships"
+        vl("MATCH (a)-[:knows*1..3]->(b) RETURN b"),
+        Some((1, Some(3)))
     );
-    assert_eq!(
-        unsupported("MATCH (a)-[*]-(b) RETURN b"),
-        "variable-length relationships"
-    );
-    assert_eq!(
-        unsupported("MATCH p = shortestPath((a)-[:knows*]-(b)) RETURN p"),
-        "shortestPath"
-    );
-    assert_eq!(
-        unsupported("MATCH p = allShortestPaths((a)-[:knows*]-(b)) RETURN p"),
-        "allShortestPaths"
+    assert_eq!(vl("MATCH (a)-[*]-(b) RETURN b"), Some((1, None)));
+    assert_eq!(vl("MATCH (a)-[*2]->(b) RETURN b"), Some((2, Some(2))));
+    assert_eq!(vl("MATCH (a)-[*..4]->(b) RETURN b"), Some((1, Some(4))));
+    assert_eq!(vl("MATCH (a)-[*0..]->(b) RETURN b"), Some((0, None)));
+    assert_eq!(vl("MATCH (a)-[:knows]->(b) RETURN b"), None);
+    let Clause::Match { pattern, .. } =
+        &clauses("MATCH p = shortestPath((a)-[:knows*]-(b)) RETURN p")[0]
+    else {
+        panic!()
+    };
+    assert_eq!(pattern[0].shortest, Some(false));
+    assert_eq!(pattern[0].binding.as_ref().unwrap().text, "p");
+    let Clause::Match { pattern, .. } =
+        &clauses("MATCH p = allShortestPaths((a)-[:knows*]-(b)) RETURN p")[0]
+    else {
+        panic!()
+    };
+    assert_eq!(pattern[0].shortest, Some(true));
+    assert!(
+        unsupported("MATCH (a)-[:knows*1..3 {since: 1}]->(b) RETURN b")
+            .contains("property maps on variable-length")
     );
 }
 

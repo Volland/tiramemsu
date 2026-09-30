@@ -11,6 +11,7 @@ use super::{Exec, Row};
 use crate::ast::*;
 use crate::error::{CResult, CypherError};
 use crate::value::{cmp3, eq3, order, Val};
+use crate::vocab::VocabExt;
 
 fn type_err(op: &str, a: &Val, b: Option<&Val>) -> CypherError {
     match b {

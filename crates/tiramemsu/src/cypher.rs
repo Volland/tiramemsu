@@ -81,6 +81,14 @@ impl Runner for ViewRunner<'_, '_> {
         self.view.exec(|e, _| volatile_entries(e, s))
     }
 
+    fn path_max_hops(&self) -> u32 {
+        self.view
+            .engine()
+            .ok()
+            .and_then(|e| e.path_engine())
+            .map_or(15, |p| p.options().max_hops)
+    }
+
     fn writable(&self) -> bool {
         false
     }
@@ -117,6 +125,12 @@ impl Runner for TxRunner<'_, '_> {
 
     fn volatile_of(&mut self, s: &Value) -> Result<Vec<(String, Value)>> {
         self.tx.read_with(|e| volatile_entries(e, s))
+    }
+
+    fn path_max_hops(&self) -> u32 {
+        self.engine
+            .path_engine()
+            .map_or(15, |p| p.options().max_hops)
     }
 
     fn writable(&self) -> bool {

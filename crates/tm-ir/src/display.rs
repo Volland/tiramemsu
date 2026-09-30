@@ -320,10 +320,15 @@ impl fmt::Display for Op {
 // ---------------------------------------------------------------------------
 // Path text
 
-fn atom(v: &Value) -> String {
+fn atom(v: &Value, canon: bool) -> String {
     match v {
         Value::Iri(iri) => {
             for (p, ns) in PATH_PREFIXES {
+                // `v:` follows the database `@vocab` when parsed, so the canonical
+                // text spells those IRIs out
+                if canon && p == "v" {
+                    continue;
+                }
                 if let Some(local) = iri.strip_prefix(ns) {
                     if !local.is_empty()
                         && local
@@ -353,8 +358,8 @@ fn prec(p: &PathExpr) -> u8 {
     }
 }
 
-fn wrap(p: &PathExpr, min: u8) -> String {
-    let s = path_text(p);
+fn wrap(p: &PathExpr, min: u8, canon: bool) -> String {
+    let s = text(p, canon);
     if prec(p) < min {
         format!("({s})")
     } else {
@@ -366,24 +371,43 @@ fn wrap(p: &PathExpr, min: u8) -> String {
 /// plus `{m,n}` / `{m,}` / `{n}`. Atoms are `<iri>` or CURIEs of
 /// [`PATH_PREFIXES`] (`sys:anyRelationship` is the Cypher wildcard).
 pub fn path_text(p: &PathExpr) -> String {
+    text(p, false)
+}
+
+/// The canonical `tm_path` text: like [`path_text`], but every IRI outside the
+/// fixed `sys:`, `tm:`, `rdf:` and `xsd:` namespaces is written in full, so it
+/// means the same whatever `@vocab` the database has.
+pub fn path_text_canonical(p: &PathExpr) -> String {
+    text(p, true)
+}
+
+fn text(p: &PathExpr, canon: bool) -> String {
     match p {
-        PathExpr::Pred(v) => atom(v),
+        PathExpr::Pred(v) => atom(v, canon),
         PathExpr::Inverse(x) => {
             // `^` applies to a path element (a primary with an optional modifier)
-            format!("^{}", wrap(x, 3))
+            format!("^{}", wrap(x, 3, canon))
         }
-        PathExpr::Seq(xs) => xs.iter().map(|x| wrap(x, 2)).collect::<Vec<_>>().join("/"),
-        PathExpr::Alt(xs) => xs.iter().map(|x| wrap(x, 1)).collect::<Vec<_>>().join("|"),
-        PathExpr::ZeroOrMore(x) => format!("{}*", wrap(x, 4)),
-        PathExpr::OneOrMore(x) => format!("{}+", wrap(x, 4)),
-        PathExpr::ZeroOrOne(x) => format!("{}?", wrap(x, 4)),
+        PathExpr::Seq(xs) => xs
+            .iter()
+            .map(|x| wrap(x, 2, canon))
+            .collect::<Vec<_>>()
+            .join("/"),
+        PathExpr::Alt(xs) => xs
+            .iter()
+            .map(|x| wrap(x, 1, canon))
+            .collect::<Vec<_>>()
+            .join("|"),
+        PathExpr::ZeroOrMore(x) => format!("{}*", wrap(x, 4, canon)),
+        PathExpr::OneOrMore(x) => format!("{}+", wrap(x, 4, canon)),
+        PathExpr::ZeroOrOne(x) => format!("{}?", wrap(x, 4, canon)),
         PathExpr::Repeat { inner, min, max } => {
             let m = match max {
                 Some(n) if n == min => format!("{{{min}}}"),
                 Some(n) => format!("{{{min},{n}}}"),
                 None => format!("{{{min},}}"),
             };
-            format!("{}{m}", wrap(inner, 4))
+            format!("{}{m}", wrap(inner, 4, canon))
         }
     }
 }

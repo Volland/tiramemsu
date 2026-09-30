@@ -77,6 +77,12 @@ pub enum Error {
         /// The configured limit.
         limit: usize,
     },
+    /// A path evaluation needed more search states than `path_max_states`.
+    #[error("path search exceeds the limit of {limit} search states")]
+    PathLimitExceeded {
+        /// The configured limit.
+        limit: usize,
+    },
     /// `supersede` or `confirm` on a retracted or unknown eid.
     #[error("statement {0} is not live")]
     NotLive(Eid),

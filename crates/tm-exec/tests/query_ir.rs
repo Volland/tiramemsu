@@ -219,7 +219,6 @@ fn superseded() -> (TestDb, Eid) {
 }
 
 // query-ir "Two patterns under different views in one query"
-// @lat: [[tests#Query#Per Pattern Time Scopes]]
 #[test]
 fn per_pattern_time_scopes() {
     let (t, _) = superseded();

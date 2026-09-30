@@ -87,6 +87,8 @@ pub struct PatternPart {
     pub nodes: Vec<NodePat>,
     /// `rels[i]` connects `nodes[i]` and `nodes[i+1]`.
     pub rels: Vec<RelPat>,
+    /// `shortestPath(...)` (`Some(false)`) or `allShortestPaths(...)` (`Some(true)`).
+    pub shortest: Option<bool>,
     /// The whole text.
     pub span: Span,
 }
@@ -126,7 +128,20 @@ pub struct RelPat {
     pub dir: Dir,
     /// The inline property map.
     pub props: Option<Expr>,
+    /// The `*m..n` quantifier of a variable-length relationship.
+    pub var_len: Option<VarLen>,
     /// Text span.
+    pub span: Span,
+}
+
+/// The bounds of a variable-length relationship (`*`, `*n`, `*m..n`, `*m..`, `*..n`).
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub struct VarLen {
+    /// Minimum number of hops.
+    pub min: u32,
+    /// Maximum number of hops; `None` for unbounded.
+    pub max: Option<u32>,
+    /// Text span of the quantifier.
     pub span: Span,
 }
 

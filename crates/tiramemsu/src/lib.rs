@@ -39,12 +39,13 @@ pub use tm_core::{
 };
 pub use tm_cypher as cypher_frontend;
 pub use tm_cypher::{CypherParams, CypherResult, CypherValue};
+pub use tm_exec::path::row::{Dir as PathDir, HopKind};
 pub use tm_exec::{
-    ExecStats, Explain, LftjConfig, NativeKind, NativeOperator, PlannerOptions, QueryResult,
-    RegionInfo, RegionKind, ResultValue, RouteNote,
+    ExecStats, Explain, Hop, LftjConfig, NativeKind, NativeOperator, Path, PathRow, PlannerOptions,
+    QueryResult, RegionInfo, RegionKind, ResultValue, RouteNote,
 };
 pub use tm_ir as ir;
-pub use tm_ir::{IrQuery, Params};
+pub use tm_ir::{IrQuery, Params, PathMode};
 pub use tm_rusqlite::RusqliteHost;
 pub use tm_sparql as sparql_frontend;
 pub use tm_sparql::results::{RdfTerm, RdfTriple, Solutions};

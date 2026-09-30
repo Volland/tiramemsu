@@ -10,8 +10,10 @@ pub const SERVICE: &str = "SERVICE";
 pub const GRAPH_VARIABLE: &str = "GRAPH variable";
 /// A named graph: `FROM`, `GRAPH`, `WITH`, `USING` with a non-time IRI.
 pub const NAMED_GRAPH: &str = "named graph";
-/// Property paths beyond a single IRI or its inverse (interim, M3).
+/// Property paths inside a triple-term position (not a path endpoint).
 pub const PROPERTY_PATH: &str = "property path";
+/// Negated property sets `!p` and `!(p|^q)`.
+pub const NEGATED_PROPERTY_SET: &str = "negated property sets";
 /// Custom aggregate functions.
 pub const CUSTOM_AGGREGATE: &str = "custom aggregate";
 /// `DISTINCT` with a sort key that is not projected.

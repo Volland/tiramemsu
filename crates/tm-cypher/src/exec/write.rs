@@ -9,6 +9,7 @@ use super::{core, Exec, Row};
 use crate::ast::*;
 use crate::error::{CResult, CypherError};
 use crate::value::Val;
+use crate::vocab::VocabExt;
 
 /// State kept across the write clauses of one query.
 #[derive(Default)]

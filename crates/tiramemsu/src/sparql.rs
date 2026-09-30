@@ -1,6 +1,6 @@
 //! `View::sparql`: SPARQL queries and updates through the `tm-sparql` front end.
 
-use tm_core::{read, vocab, Error, Result, TermReader, TxOptions, Value, ViewSpec};
+use tm_core::{Error, Result, TxOptions};
 use tm_exec::{CacheMode, QueryResult};
 use tm_ir::Params;
 use tm_sparql::env::Env;
@@ -130,43 +130,4 @@ impl View<'_> {
     }
 }
 
-/// Reads `(sys:db sys:vocab ?v)` and the prefix layers `(sys:db sys:prefix [name; iri])`.
-/// The `@vocab` IRI and the `(name, iri)` prefix table of a database.
-pub(crate) type Settings = (Option<String>, Vec<(String, String)>);
-
-pub(crate) fn read_settings(e: &mut dyn tm_core::Executor) -> Result<Settings> {
-    let now = ViewSpec::NOW;
-    let reader = TermReader::new(64);
-    let id = |e: &mut dyn tm_core::Executor, iri: &str| TermReader::encode(e, &Value::iri(iri));
-    let Some(db) = id(e, vocab::SYS_DB)? else {
-        return Ok((None, Vec::new()));
-    };
-    let mut vocab_iri = None;
-    if let Some(p) = id(e, vocab::SYS_VOCAB)? {
-        for t in read::triples(e, &now, Some(db), Some(p), None)? {
-            if let Value::Iri(s) = reader.decode(e, t.o, false)? {
-                vocab_iri = Some(s);
-            }
-        }
-    }
-    let mut prefixes = Vec::new();
-    let sys = |n: &str| format!("{}{n}", vocab::SYS);
-    if let (Some(pp), Some(pn), Some(pi)) = (
-        id(e, &sys("prefix"))?,
-        id(e, &sys("prefixName"))?,
-        id(e, &sys("prefixIri"))?,
-    ) {
-        for t in read::triples(e, &now, Some(db), Some(pp), None)? {
-            let names = read::triples(e, &now, Some(t.o), Some(pn), None)?;
-            let iris = read::triples(e, &now, Some(t.o), Some(pi), None)?;
-            if let (Some(n), Some(i)) = (names.first(), iris.first()) {
-                let n = reader.decode(e, n.o, false)?;
-                let i = reader.decode(e, i.o, false)?;
-                if let (Value::Str(n), Value::Iri(i)) = (n, i) {
-                    prefixes.push((n, i));
-                }
-            }
-        }
-    }
-    Ok((vocab_iri, prefixes))
-}
+pub(crate) use tm_core::mapping::{read_settings, Settings};

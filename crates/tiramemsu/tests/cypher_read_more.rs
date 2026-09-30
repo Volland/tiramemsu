@@ -415,8 +415,9 @@ fn unsupported_features() {
         ("MATCH (n) FOREACH (x IN [1] | SET n.a = x)", "FOREACH"),
         ("LOAD CSV FROM 'file:///x.csv' AS row RETURN row", "LOAD CSV"),
         ("MATCH (n:!Person) RETURN n", "label expression"),
-        ("MATCH (a {name:'Alice'})-[:knows*1..3]->(b) RETURN b", "variable-length"),
-        ("MATCH p = shortestPath((a)-[:knows*]-(b)) WHERE a.name = 'A' AND b.name = 'B' RETURN p", "shortestPath"),
+        // a path pattern whose ends are constrained only by WHERE has no bound endpoint
+        ("MATCH (a)-[:knows*1..3]->(b) RETURN b", "bound endpoint"),
+        ("MATCH p = shortestPath((a)-[:knows*]-(b)) WHERE a.name = 'A' AND b.name = 'B' RETURN p", "bound endpoint"),
     ] {
         match t.qerr(q) {
             Error::Unsupported { feature } => assert!(feature.contains(what), "{q}: {feature}"),

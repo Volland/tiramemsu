@@ -54,6 +54,10 @@ A SPARQL property path that contains no `*`, `+` or `?` (only `/`, `|`, `^` and 
 - **WHEN** `SELECT ?x ?y WHERE { ?x :knows|:likes ?y }` is run
 - **THEN** it returns every `:knows` and `:likes` pair, with no error
 
+#### Scenario: Inverse path
+- **WHEN** `(v:alice v:worksAt v:acme)` is live and `SELECT ?p WHERE { v:acme ^v:worksAt ?p }` is run
+- **THEN** one row with `p = v:alice` is returned, and no bound-endpoint error is raised for a query with both ends unbound
+
 ### Requirement: SPARQL endpoint binding
 The subject or object of a recursive SPARQL property path SHALL count as bound when it is:
 - a constant;

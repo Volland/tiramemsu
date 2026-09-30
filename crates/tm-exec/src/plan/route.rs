@@ -107,6 +107,39 @@ pub fn bound_by_non_paths(op: &Op) -> VarSet {
     out
 }
 
+/// The variables bound before path `skip` runs: those of [`bound_by_non_paths`]
+/// plus the far endpoint (and path variable) of every *other* path whose one
+/// endpoint is bound, repeated until nothing changes (a path may start where
+/// another ends).
+pub fn bound_before(base: &VarSet, all: &[PathPattern], skip: &PathPattern) -> VarSet {
+    let mut bound = base.clone();
+    loop {
+        let mut changed = false;
+        for p in all.iter().filter(|p| *p != skip) {
+            if endpoint_bound(&p.start, &bound) || endpoint_bound(&p.end, &bound) {
+                for t in [&p.start, &p.end] {
+                    if let TermOrVar::Var(v) = t {
+                        changed |= bound.insert(v.clone());
+                    }
+                }
+                if let Some(b) = &p.bind_path {
+                    changed |= bound.insert(b.clone());
+                }
+            }
+        }
+        if !changed {
+            return bound;
+        }
+    }
+}
+
+/// Every path pattern of the tree (existence tests included).
+pub fn path_patterns(op: &Op) -> Vec<PathPattern> {
+    let mut ps = Vec::new();
+    paths(op, &mut ps);
+    ps.into_iter().cloned().collect()
+}
+
 fn endpoint_bound(t: &TermOrVar, bound: &VarSet) -> bool {
     match t {
         TermOrVar::Var(v) => bound.contains(v),
@@ -116,15 +149,11 @@ fn endpoint_bound(t: &TermOrVar, bound: &VarSet) -> bool {
 
 /// Orients a path: from its bound start, else from its bound end (inverse path);
 /// no bound endpoint is `Unsupported`.
+// @lat: [[query#Physical Planning#Path Engine#Path Lowering]]
 pub fn orient(p: &PathPattern, bound: &VarSet) -> Result<Orientation> {
     if endpoint_bound(&p.start, bound) {
         Ok(Orientation::Forward)
     } else if endpoint_bound(&p.end, bound) {
-        if p.bind_path.is_some() {
-            return Err(unsupported(
-                "binding the path of an end-bound path pattern (add-path-engine, M3)",
-            ));
-        }
         Ok(Orientation::Inverted)
     } else {
         Err(unsupported(
@@ -156,9 +185,10 @@ pub fn precheck(q: &IrQuery, reg: &OperatorRegistry) -> Result<()> {
     if reg.path().is_none() {
         return Err(unsupported(NO_PATH_OPERATOR));
     }
-    let bound = bound_by_non_paths(&q.root);
-    for p in ps {
-        orient(p, &bound)?;
+    let base = bound_by_non_paths(&q.root);
+    let all = path_patterns(&q.root);
+    for p in &all {
+        orient(p, &bound_before(&base, &all, p))?;
     }
     Ok(())
 }

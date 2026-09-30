@@ -9,6 +9,7 @@ use super::{core, Exec, Row};
 use crate::ast::*;
 use crate::error::{CResult, CypherError};
 use crate::value::Val;
+use crate::vocab::VocabExt;
 
 fn eval_err(msg: impl Into<String>) -> CypherError {
     CypherError::eval(msg.into())

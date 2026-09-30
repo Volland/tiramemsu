@@ -86,15 +86,19 @@ fn interim_property_paths() {
         "inverse_path",
         ir("SELECT ?p WHERE { v:acme ^v:worksAt ?p }")
     );
+    // every path form lowers now (add-path-engine); only negated sets are refused
     for q in [
         "SELECT ?x WHERE { v:alice v:knows+ ?x }",
         "SELECT ?x WHERE { v:alice v:knows* ?x }",
         "SELECT ?x WHERE { v:alice v:knows? ?x }",
         "SELECT ?city WHERE { v:alice v:worksAt/v:locatedIn ?city }",
         "SELECT ?x WHERE { v:alice v:a|v:b ?x }",
-        "SELECT ?x WHERE { v:alice !v:a ?x }",
         "SELECT ?x WHERE { v:alice ^(v:a/v:b) ?x }",
     ] {
-        unsupported(q, "property path");
+        let _ = ir(q);
     }
+    unsupported(
+        "SELECT ?x WHERE { v:alice !v:a ?x }",
+        "negated property sets",
+    );
 }

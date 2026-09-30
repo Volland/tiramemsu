@@ -13,6 +13,7 @@ pub mod error;
 pub mod event;
 pub mod exec;
 pub mod id;
+pub mod mapping;
 pub mod read;
 pub mod report;
 pub mod storage;
@@ -26,10 +27,11 @@ pub use engine::{IntoObject, PredicateSchema, Store, StoreOptions, Tx};
 pub use error::{Dialect, Error, Position, Result, Span};
 pub use event::{Event, Op};
 pub use exec::{
-    AggregateFunction, AggregateState, Capabilities, Executor, Host, HostOptions, HostRegistry,
-    Params, ScalarFunction, SqlError, SqlValue, TableFunction,
+    AggregateFunction, AggregateState, Capabilities, ConnTableFunction, ConnTableImpl, Executor,
+    Host, HostOptions, HostRegistry, Params, ScalarFunction, SqlError, SqlValue, TableFunction,
 };
 pub use id::{Eid, ObjectId, Tag, TxId};
+pub use mapping::Vocab;
 pub use report::{
     AssertOpts, Asserted, OnExisting, Patch, PatchField, RetKind, Triple, TxOptions, TxReport,
     Valid,

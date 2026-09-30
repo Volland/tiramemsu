@@ -23,6 +23,11 @@ pub trait NativeOperator: Send + Sync {
     fn tvf_name(&self) -> &'static str;
     /// Registers the eponymous virtual table through the host's `vtab` hook.
     fn register(&self, host: &mut dyn HostRegistry) -> Result<()>;
+    /// The path engine behind a `Path` operator (`None` for other kinds and for test
+    /// operators), so the facade can serve `View::path` without SQL.
+    fn engine(&self) -> Option<&Arc<crate::path::PathEngine>> {
+        None
+    }
 }
 
 /// The registered native operators of one database.

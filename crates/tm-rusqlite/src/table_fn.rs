@@ -9,7 +9,7 @@
 use std::borrow::Cow;
 use std::ffi::{c_int, CStr, CString};
 use std::marker::PhantomData;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use rusqlite::types::Value as RValue;
 use rusqlite::vtab::{
@@ -17,13 +17,106 @@ use rusqlite::vtab::{
     VTabCursor,
 };
 use rusqlite::{ffi, Connection};
-use tm_core::{SqlValue, TableFunction};
+use tm_core::exec::TableImpl;
+use tm_core::{
+    Capabilities, ConnTableFunction, ConnTableImpl, Error, Executor, SqlValue, TableFunction,
+};
+
+use crate::{ErrorSlot, RusqliteExec};
+
+/// How a table function computes its rows.
+enum Body {
+    /// Argument values in, rows out.
+    Plain(TableImpl),
+    /// Reads through the calling connection.
+    Conn {
+        func: ConnTableImpl,
+        exec: Arc<Mutex<RusqliteExec>>,
+        slot: ErrorSlot,
+    },
+}
+
+/// A table function as the virtual table sees it.
+struct Spec {
+    name: String,
+    args: Vec<String>,
+    columns: Vec<String>,
+    /// Indices of output columns whose `=` constraints are pushed down.
+    pushdown: Vec<usize>,
+    body: Body,
+}
 
 /// Registers `f` as an eponymous-only virtual table on `conn`.
 pub fn register(conn: &Connection, f: TableFunction) -> rusqlite::Result<()> {
-    const MODULE: Module<'static, FnTab> = Module::eponymous_only_module();
     let name = f.name.clone();
-    conn.create_module(name.as_str(), &MODULE, Some(Arc::new(f)))
+    add(
+        conn,
+        name,
+        Spec {
+            name: f.name,
+            args: f.args,
+            columns: f.columns,
+            pushdown: Vec::new(),
+            body: Body::Plain(f.func),
+        },
+    )
+}
+
+/// Registers a connection-aware table function; `exec` is the non-owning handle it
+/// reads through and `slot` receives the typed error of a failed call.
+pub fn register_conn(
+    conn: &Connection,
+    f: ConnTableFunction,
+    exec: Arc<Mutex<RusqliteExec>>,
+    slot: ErrorSlot,
+) -> rusqlite::Result<()> {
+    let pushdown = f
+        .pushdown
+        .iter()
+        .filter_map(|c| f.columns.iter().position(|x| x == c))
+        .collect();
+    let name = f.name.clone();
+    add(
+        conn,
+        name,
+        Spec {
+            name: f.name,
+            args: f.args,
+            columns: f.columns,
+            pushdown,
+            body: Body::Conn {
+                func: f.func,
+                exec,
+                slot,
+            },
+        },
+    )
+}
+
+fn add(conn: &Connection, name: String, spec: Spec) -> rusqlite::Result<()> {
+    const MODULE: Module<'static, FnTab> = Module::eponymous_only_module();
+    conn.create_module(name.as_str(), &MODULE, Some(Arc::new(spec)))
+}
+
+/// A second, non-owning `rusqlite::Connection` on the handle of `conn`: table
+/// functions run their neighbour queries on it, inside the calling statement's
+/// snapshot.
+pub fn borrowed_exec(
+    conn: &Connection,
+    caps: Capabilities,
+    slot: ErrorSlot,
+) -> rusqlite::Result<RusqliteExec> {
+    // SAFETY: the returned connection does not close the handle (`from_handle`), its
+    // statement cache is flushed by the owning `RusqliteExec` before it closes, and
+    // it is only used from inside statements of `conn`, on the thread that runs them.
+    let inner = unsafe { Connection::from_handle(conn.handle())? };
+    inner.set_prepared_statement_cache_capacity(256);
+    Ok(RusqliteExec {
+        conn: inner,
+        caps,
+        slot,
+        borrowed: Vec::new(),
+    })
 }
 
 fn quote(name: &str) -> String {
@@ -35,16 +128,16 @@ fn quote(name: &str) -> String {
 struct FnTab {
     /// Base class. Must be first.
     base: ffi::sqlite3_vtab,
-    f: Arc<TableFunction>,
+    f: Arc<Spec>,
 }
 
 unsafe impl<'vtab> VTab<'vtab> for FnTab {
-    type Aux = Arc<TableFunction>;
+    type Aux = Arc<Spec>;
     type Cursor = FnCursor<'vtab>;
 
     fn connect(
         db: &mut VTabConnection,
-        aux: Option<&Arc<TableFunction>>,
+        aux: Option<&Arc<Spec>>,
         _module_name: &[u8],
         _database_name: &[u8],
         _table_name: &[u8],
@@ -75,10 +168,16 @@ unsafe impl<'vtab> VTab<'vtab> for FnTab {
         let n_cols = self.f.columns.len() as c_int;
         let n_args = self.f.args.len();
         let mut slot: Vec<Option<usize>> = vec![None; n_args];
+        let mut push: Vec<Option<usize>> = vec![None; self.f.pushdown.len()];
         let mut unusable = false;
         for (i, c) in info.constraints().enumerate() {
             let col = c.column();
             if col < n_cols {
+                if c.is_usable() && c.operator() == IndexConstraintOp::SQLITE_INDEX_CONSTRAINT_EQ {
+                    if let Some(k) = self.f.pushdown.iter().position(|x| *x as c_int == col) {
+                        push[k] = Some(i);
+                    }
+                }
                 continue;
             }
             let a = (col - n_cols) as usize;
@@ -111,8 +210,19 @@ unsafe impl<'vtab> VTab<'vtab> for FnTab {
                 u.set_omit(true);
             }
         }
+        let mut pushed = 0;
+        for (k, s) in push.iter().enumerate() {
+            if let Some(i) = s {
+                argv += 1;
+                pushed += 1;
+                mask |= 1 << (n_args + k);
+                // not omitted: SQLite re-checks the constraint, so honouring it in
+                // the body is only an optimisation
+                info.constraint_usage(*i).set_argv_index(argv);
+            }
+        }
         info.set_idx_num(mask);
-        info.set_estimated_cost(10.0);
+        info.set_estimated_cost(if pushed > 0 { 2.0 } else { 10.0 });
         info.set_estimated_rows(10);
         Ok(true)
     }
@@ -133,7 +243,7 @@ unsafe impl<'vtab> VTab<'vtab> for FnTab {
 struct FnCursor<'vtab> {
     /// Base class. Must be first.
     base: ffi::sqlite3_vtab_cursor,
-    f: Arc<TableFunction>,
+    f: Arc<Spec>,
     rows: Vec<Vec<SqlValue>>,
     pos: usize,
     phantom: PhantomData<&'vtab FnTab>,
@@ -156,6 +266,7 @@ fn to_rvalue(v: &SqlValue) -> RValue {
         SqlValue::Real(r) => RValue::Real(*r),
         SqlValue::Text(s) => RValue::Text(s.clone()),
         SqlValue::Blob(b) => RValue::Blob(b.clone()),
+        SqlValue::IntArray(_) => RValue::Null,
     }
 }
 
@@ -166,9 +277,10 @@ unsafe impl VTabCursor for FnCursor<'_> {
         _idx_str: Option<&str>,
         args: &Filters<'_>,
     ) -> rusqlite::Result<()> {
-        let mut vals = Vec::with_capacity(self.f.args.len());
+        let total = self.f.args.len() + self.f.pushdown.len();
+        let mut vals = Vec::with_capacity(total);
         let mut k = 0;
-        for a in 0..self.f.args.len() {
+        for a in 0..total {
             if idx_num & (1 << a) != 0 {
                 vals.push(from_rvalue(args.get::<RValue>(k)?));
                 k += 1;
@@ -176,7 +288,36 @@ unsafe impl VTabCursor for FnCursor<'_> {
                 vals.push(SqlValue::Null);
             }
         }
-        self.rows = (self.f.func)(&vals).map_err(rusqlite::Error::ModuleError)?;
+        self.rows = match &self.f.body {
+            Body::Plain(func) => {
+                func(&vals[..self.f.args.len()]).map_err(rusqlite::Error::ModuleError)?
+            }
+            Body::Conn { func, exec, slot } => {
+                let mut g = exec.try_lock().map_err(|_| {
+                    rusqlite::Error::ModuleError(format!("{}: re-entrant call", self.f.name))
+                })?;
+                let e: &mut dyn Executor = &mut *g;
+                match func(e, &vals) {
+                    Ok(rows) => rows,
+                    Err(err) => {
+                        let msg = match &err {
+                            Error::Sqlite(se) => se.message.clone(),
+                            other => other.to_string(),
+                        };
+                        let prefix = format!("{}:", self.f.name);
+                        let msg = if msg.starts_with(&prefix) {
+                            msg
+                        } else {
+                            format!("{prefix} {msg}")
+                        };
+                        if let Ok(mut s) = slot.lock() {
+                            *s = Some(err);
+                        }
+                        return Err(rusqlite::Error::ModuleError(msg));
+                    }
+                }
+            }
+        };
         self.pos = 0;
         Ok(())
     }

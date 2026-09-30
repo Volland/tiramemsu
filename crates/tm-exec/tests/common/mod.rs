@@ -4,6 +4,7 @@
 #![allow(dead_code)]
 
 pub mod mock;
+pub mod paths;
 pub mod probe;
 pub mod skewed;
 

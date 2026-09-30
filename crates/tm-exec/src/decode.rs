@@ -10,6 +10,7 @@ use tm_core::term::load_term;
 use tm_core::{codec, Executor, ObjectId, Result, SqlValue, Value};
 
 use crate::error::invalid;
+use crate::path::row::{virtual_pred_iri, Path};
 use crate::plan::analyze::{Dom, VClass};
 use crate::result::{ExecStats, ResultValue};
 
@@ -171,12 +172,54 @@ impl<'a> Decoder<'a> {
                 SqlValue::Text(t) => self.list(exec, t, elem)?,
                 other => return Err(invalid(format!("expected a list, got {other:?}"))),
             },
-            Dom::PathJson => ResultValue::Term(Value::Str(match v {
-                SqlValue::Text(t) => t.clone(),
-                other => format!("{other:?}"),
-            })),
+            Dom::PathJson { reversed } => match v {
+                SqlValue::Text(t) => ResultValue::Term(Value::Str(self.path(exec, t, *reversed)?)),
+                other => return Err(invalid(format!("expected path_json, got {other:?}"))),
+            },
             Dom::Computed(c) => return Ok(computed(v, *c).map(ResultValue::Term)),
         }))
+    }
+
+    /// Decodes a `path_json` cell into a self-describing text:
+    /// `{"nodes":[<lexical>,…],"edges":[{"eid":<lexical>,"p":<lexical>,"dir":"out"|"in"},…]}`
+    /// with nodes and statements in their lexical (skolem IRI) forms, virtual hops
+    /// named by their `sys:` IRI, and the path read start to end of the pattern
+    /// (`reversed` calls are flipped back).
+    fn path(&mut self, exec: &mut dyn Executor, text: &str, reversed: bool) -> Result<String> {
+        let mut p =
+            Path::from_json(text).ok_or_else(|| invalid(format!("bad path_json {text:?}")))?;
+        if reversed {
+            p = p.reversed();
+        }
+        let mut out = String::from("{\"nodes\":[");
+        for (i, n) in p.nodes.iter().enumerate() {
+            if i > 0 {
+                out.push(',');
+            }
+            out.push_str(&json_string(&self.term(exec, *n)?.lexical()));
+        }
+        out.push_str("],\"edges\":[");
+        for (i, h) in p.hops.iter().enumerate() {
+            if i > 0 {
+                out.push(',');
+            }
+            let pred = match virtual_pred_iri(h.pred) {
+                Some(iri) => iri.to_string(),
+                None => self.term(exec, h.pred)?.lexical(),
+            };
+            out.push_str(&format!(
+                "{{\"eid\":{},\"p\":{},\"dir\":\"{}\"}}",
+                json_string(&self.term(exec, h.eid)?.lexical()),
+                json_string(&pred),
+                if h.dir == crate::path::row::Dir::Out {
+                    "out"
+                } else {
+                    "in"
+                }
+            ));
+        }
+        out.push_str("]}");
+        Ok(out)
     }
 
     fn list(&mut self, exec: &mut dyn Executor, text: &str, elem: &Dom) -> Result<ResultValue> {
@@ -211,7 +254,7 @@ pub fn computed(v: &SqlValue, c: VClass) -> Option<Value> {
         (_, SqlValue::Integer(i)) => Value::Int(*i),
         (_, SqlValue::Real(x)) => Value::Double(*x),
         (_, SqlValue::Text(s)) => Value::Str(s.clone()),
-        (_, SqlValue::Blob(_)) => return None,
+        (_, SqlValue::Blob(_) | SqlValue::IntArray(_)) => return None,
     })
 }
 
@@ -349,6 +392,22 @@ impl JsonParser<'_> {
             }
         }
     }
+}
+
+/// A JSON string literal.
+pub fn json_string(s: &str) -> String {
+    let mut out = String::with_capacity(s.len() + 2);
+    out.push('"');
+    for c in s.chars() {
+        match c {
+            '"' => out.push_str("\\\""),
+            '\\' => out.push_str("\\\\"),
+            c if (c as u32) < 0x20 => out.push_str(&format!("\\u{:04x}", c as u32)),
+            c => out.push(c),
+        }
+    }
+    out.push('"');
+    out
 }
 
 #[cfg(test)]

@@ -5,16 +5,17 @@
 use std::collections::{HashMap, HashSet};
 
 use tm_core::vocab::SYS;
-use tm_core::Value;
+use tm_core::{Eid, Value};
 use tm_ir::vocab as irv;
 use tm_ir::{Expr, Func, Op, TermOrVar, TriplePattern, Values, Var, View};
 
-use super::access::{is_sys, stmt_of, tv, RDF_TYPE, TEMPORAL};
+use super::access::{is_sys, stmt_of, tv, virtual_eid, RDF_TYPE, TEMPORAL};
 use super::{Exec, Flags, Row};
 use crate::ast::*;
 use crate::error::{CResult, CypherError};
 use crate::runner::Rows;
 use crate::value::Val;
+use crate::vocab::VocabExt;
 
 /// How a variable of the pattern is read back.
 #[derive(Clone, Debug)]
@@ -25,11 +26,44 @@ pub(crate) struct Bind {
     /// Bound by a scan or generator: must be a plain node.
     pub generated: bool,
     pub new: bool,
+    /// A variable-length relationship: the IR column holds the decoded path text.
+    pub path_list: bool,
+}
+
+/// One element of a named path, in pattern order.
+#[derive(Clone, Debug)]
+pub(crate) enum PItem {
+    Node(String),
+    Rel(String),
+    /// A variable-length segment: the column of its decoded path text.
+    Var(String),
+}
+
+impl PItem {
+    pub(crate) fn ir(&self) -> &str {
+        match self {
+            PItem::Node(s) | PItem::Rel(s) | PItem::Var(s) => s,
+        }
+    }
 }
 
 pub(crate) struct PathBind {
     pub name: String,
-    pub items: Vec<(String, bool)>,
+    pub items: Vec<PItem>,
+}
+
+/// A decoded variable-length segment of one result row.
+struct Seg {
+    nodes: Vec<Val>,
+    rels: Vec<Val>,
+    stored: Vec<Eid>,
+}
+
+/// A variable-length relationship waiting for its endpoints to be anchored.
+struct Deferred {
+    left: String,
+    right: String,
+    span: crate::span::Span,
 }
 
 /// A lowered `MATCH` clause.
@@ -42,6 +76,10 @@ pub(crate) struct Plan {
     pub paths: Vec<PathBind>,
     pub impossible: bool,
     pub stmt_irs: Vec<String>,
+    /// Columns of variable-length segments (decoded path text).
+    pub varlens: Vec<String>,
+    /// Relationships must be pairwise distinct across the whole pattern.
+    pub iso: bool,
 }
 
 /// A row-dependent property value: the AST expression, evaluated per input row.
@@ -247,13 +285,15 @@ impl Exec<'_> {
         let mut endpoint: HashSet<String> = HashSet::new();
         let mut dynamic: Vec<(String, Expr2)> = Vec::new();
         let mut paths: Vec<PathBind> = Vec::new();
+        let mut varlens: Vec<String> = Vec::new();
+        let mut deferred: Vec<Deferred> = Vec::new();
         let mut impossible = false;
         let mut eid_vars: HashSet<String> = HashSet::new();
         let mut stmt_irs: Vec<String> = Vec::new();
 
         for part in pattern {
             let mut node_irs: Vec<String> = Vec::new();
-            let mut part_rels: Vec<String> = Vec::new();
+            let mut part_rels: Vec<PItem> = Vec::new();
             for n in &part.nodes {
                 let (ir, cy) = self.ir_for(&mut ir_of, &n.var);
                 let mut info = NodeInfo {
@@ -303,6 +343,7 @@ impl Exec<'_> {
                             ir: ir.clone(),
                             is_rel: false,
                             generated: false,
+                            path_list: false,
                             new: !bound.contains(c),
                         });
                     }
@@ -312,18 +353,51 @@ impl Exec<'_> {
                         ir: ir.clone(),
                         is_rel: false,
                         generated: false,
+                        path_list: false,
                         new: true,
                     });
                 }
                 infos.push(info);
             }
             for (i, r) in part.rels.iter().enumerate() {
+                if let Some(vl) = &r.var_len {
+                    // a variable-length relationship is a path region
+                    let (l, rr) = (node_irs[i].clone(), node_irs[i + 1].clone());
+                    let pv = self.fresh("pp");
+                    let op = self.lower_varlen(
+                        part.shortest,
+                        r,
+                        vl,
+                        (&l, &rr),
+                        &pv,
+                        &flags,
+                        view,
+                        &mut impossible,
+                    )?;
+                    ops.push(op);
+                    binds.push(Bind {
+                        cypher: r.var.as_ref().map(|v| v.text.clone()).unwrap_or_default(),
+                        ir: pv.clone(),
+                        is_rel: false,
+                        generated: false,
+                        path_list: true,
+                        new: r.var.as_ref().is_none_or(|v| !bound.contains(&v.text)),
+                    });
+                    varlens.push(pv.clone());
+                    part_rels.push(PItem::Var(pv));
+                    deferred.push(Deferred {
+                        left: l,
+                        right: rr,
+                        span: r.span,
+                    });
+                    continue;
+                }
                 let (a, b) = match r.dir {
                     Dir::Left => (node_irs[i + 1].clone(), node_irs[i].clone()),
                     _ => (node_irs[i].clone(), node_irs[i + 1].clone()),
                 };
                 let (e, ecy) = self.ir_for(&mut ir_of, &r.var);
-                part_rels.push(e.clone());
+                part_rels.push(PItem::Rel(e.clone()));
                 eid_vars.insert(e.clone());
                 endpoint.insert(a.clone());
                 endpoint.insert(b.clone());
@@ -337,6 +411,7 @@ impl Exec<'_> {
                             ir: e.clone(),
                             is_rel: true,
                             generated: false,
+                            path_list: false,
                             new: !bound.contains(c),
                         });
                     }
@@ -346,6 +421,7 @@ impl Exec<'_> {
                         ir: e.clone(),
                         is_rel: true,
                         generated: false,
+                        path_list: false,
                         new: true,
                     });
                 }
@@ -369,11 +445,11 @@ impl Exec<'_> {
                     }
                 }
             }
-            let mut items_out: Vec<(String, bool)> = Vec::new();
+            let mut items_out: Vec<PItem> = Vec::new();
             for (i, nir) in node_irs.iter().enumerate() {
-                items_out.push((nir.clone(), false));
+                items_out.push(PItem::Node(nir.clone()));
                 if let Some(e) = part_rels.get(i) {
-                    items_out.push((e.clone(), true));
+                    items_out.push(e.clone());
                 }
             }
             if let Some(b) = &part.binding {
@@ -381,6 +457,54 @@ impl Exec<'_> {
                     name: b.text.clone(),
                     items: items_out,
                 });
+            }
+        }
+        // a variable-length pattern needs a bound endpoint: seeded by an earlier clause,
+        // constrained by an identity, label or property, or bound by another pattern
+        // (the resolution repeats, because a path end can anchor the next path)
+        let anchored = |info: &NodeInfo, endpoint: &HashSet<String>| -> bool {
+            info.cypher.as_ref().is_some_and(|c| bound.contains(c))
+                || info.id.is_some()
+                || info.stmt
+                || info.pred
+                || !info.labels.is_empty()
+                || !info.props.is_empty()
+                || endpoint.contains(&info.ir)
+        };
+        let mut pending: Vec<&Deferred> = deferred.iter().collect();
+        while !pending.is_empty() {
+            let before = pending.len();
+            pending.retain(|d| {
+                let is_anchored = |ir: &str, endpoint: &HashSet<String>| {
+                    infos
+                        .iter()
+                        .filter(|i| i.ir == ir)
+                        .any(|i| anchored(i, endpoint))
+                };
+                let (la, ra) = (
+                    is_anchored(&d.left, &endpoint),
+                    is_anchored(&d.right, &endpoint),
+                );
+                if la || ra {
+                    // the far end is bound by the path itself: no scan generates it
+                    for (ir, ok) in [(&d.left, la), (&d.right, ra)] {
+                        if !ok {
+                            endpoint.insert(ir.clone());
+                            filters
+                                .push(Expr::not(Expr::Func(Func::IsLiteral, vec![Expr::var(ir)])));
+                        }
+                    }
+                    false
+                } else {
+                    true
+                }
+            });
+            if pending.len() == before {
+                return Err(CypherError::unsupported(
+                    "path pattern with no bound endpoint (a variable-length or shortest-path \
+                     pattern needs a bound start or end node)",
+                    Some(pending[0].span),
+                ));
             }
         }
         // node constraints and generators
@@ -553,6 +677,8 @@ impl Exec<'_> {
             paths,
             impossible,
             stmt_irs,
+            iso: mode == MatchModeExt::Default && !varlens.is_empty(),
+            varlens,
         })
     }
 
@@ -689,6 +815,82 @@ impl Exec<'_> {
         .filter(and(std::mem::take(&mut conds)))
         .project_distinct(&[n]);
         Op::union(vec![a, b]).project_distinct(&[n])
+    }
+
+    /// A variable-length or shortest-path relationship as a path region
+    /// (`path-lowering`): `TRAIL` for `*`, `ANY_SHORTEST` / `ALL_SHORTEST` for
+    /// `shortestPath` / `allShortestPaths`. An unbounded upper limit is the
+    /// database's hop cap, applied as a search depth bound.
+    #[allow(clippy::too_many_arguments)]
+    // @lat: [[query#Physical Planning#Path Engine#Path Lowering]]
+    fn lower_varlen(
+        &mut self,
+        shortest: Option<bool>,
+        r: &RelPat,
+        vl: &VarLen,
+        (left, right): (&str, &str),
+        pv: &str,
+        flags: &Flags,
+        view: View,
+        impossible: &mut bool,
+    ) -> CResult<Op> {
+        let mode = match shortest {
+            None => tm_ir::PathMode::Trail,
+            Some(false) => tm_ir::PathMode::AnyShortest,
+            Some(true) => tm_ir::PathMode::AllShortest,
+        };
+        if shortest.is_some() && vl.min > 1 {
+            return Err(CypherError::unsupported(
+                "shortest-path minimum length (Cypher allows 0 or 1)",
+                Some(vl.span),
+            ));
+        }
+        let mut atoms: Vec<tm_ir::PathExpr> = Vec::new();
+        if r.types.is_empty() {
+            atoms.push(tm_ir::PathExpr::iri(irv::SYS_ANY_RELATIONSHIP));
+        } else {
+            let mut seen: Vec<String> = Vec::new();
+            for t in &r.types {
+                let iri = self.vocab.resolve(t)?;
+                if iri == RDF_TYPE || flags.edge_false.contains(&iri) || seen.contains(&iri) {
+                    continue;
+                }
+                seen.push(iri.clone());
+                atoms.push(tm_ir::PathExpr::iri(iri));
+            }
+        }
+        let empty_range = vl.max.is_some_and(|m| m < vl.min);
+        if atoms.is_empty() || empty_range {
+            *impossible = true;
+            return Ok(Op::Values(Values {
+                vars: vec![Var::new(left), Var::new(pv), Var::new(right)],
+                rows: Vec::new(),
+            }));
+        }
+        let one = if atoms.len() == 1 {
+            atoms.remove(0)
+        } else {
+            tm_ir::PathExpr::Alt(atoms)
+        };
+        let step = match r.dir {
+            Dir::Right => one,
+            Dir::Left => one.inverse(),
+            Dir::Either => tm_ir::PathExpr::Alt(vec![one.clone(), one.inverse()]),
+        };
+        let cap = self.runner.path_max_hops();
+        Ok(Op::Path(tm_ir::PathPattern {
+            start: TermOrVar::var(left),
+            end: TermOrVar::var(right),
+            path: tm_ir::PathExpr::Repeat {
+                inner: Box::new(step),
+                min: vl.min,
+                max: vl.max,
+            },
+            mode,
+            max_hops: Some(vl.max.unwrap_or(cap)),
+            bind_path: Some(Var::new(pv)),
+            view,
+        }))
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -885,9 +1087,9 @@ impl Exec<'_> {
                 }
             }
             for p in &plan.paths {
-                for (ir, _) in &p.items {
-                    if !cols.contains(ir) {
-                        cols.push(ir.clone());
+                for it in &p.items {
+                    if !cols.iter().any(|c| c == it.ir()) {
+                        cols.push(it.ir().to_string());
                     }
                 }
             }
@@ -976,6 +1178,44 @@ impl Exec<'_> {
         Ok(out)
     }
 
+    /// Reads the decoded path text of a variable-length segment: its nodes, its
+    /// relationships (virtual layer hops as synthetic relationships) and the stored
+    /// eids among them.
+    fn parse_seg(&self, text: &str) -> Option<Seg> {
+        let j: serde_json::Value = serde_json::from_str(text).ok()?;
+        let entity = |s: &str| self.vocab.resolve_id(s).ok();
+        let nodes = j["nodes"]
+            .as_array()?
+            .iter()
+            .map(|n| entity(n.as_str()?).map(|v| Val::from_entity(&v)))
+            .collect::<Option<Vec<_>>>()?;
+        let mut rels = Vec::new();
+        let mut stored = Vec::new();
+        for e in j["edges"].as_array()? {
+            let Some(Value::Stmt(eid)) = entity(e["eid"].as_str()?) else {
+                return None;
+            };
+            let kind = match e["p"].as_str()? {
+                irv::SYS_SUBJECT => Some(0),
+                irv::SYS_OBJECT => Some(1),
+                irv::SYS_PREDICATE => Some(2),
+                _ => None,
+            };
+            match kind {
+                Some(k) => rels.push(Val::Rel(virtual_eid(eid, k))),
+                None => {
+                    stored.push(eid);
+                    rels.push(Val::Rel(eid));
+                }
+            }
+        }
+        Some(Seg {
+            nodes,
+            rels,
+            stored,
+        })
+    }
+
     fn absorb(
         &mut self,
         plan: &Plan,
@@ -996,7 +1236,31 @@ impl Exec<'_> {
             };
             let mut m = Row::new();
             let mut by_ir: HashMap<&str, Val> = HashMap::new();
+            let mut segs: HashMap<&str, Seg> = HashMap::new();
+            for pv in &plan.varlens {
+                let Some(ci) = res.col(pv) else {
+                    continue 'next;
+                };
+                let Some(Value::Str(text)) = &r[ci] else {
+                    continue 'next;
+                };
+                let Some(seg) = self.parse_seg(text) else {
+                    continue 'next;
+                };
+                segs.insert(pv.as_str(), seg);
+            }
             for b in &plan.binds {
+                if b.path_list {
+                    let Some(seg) = segs.get(b.ir.as_str()) else {
+                        continue 'next;
+                    };
+                    let v = Val::List(seg.rels.clone());
+                    if !b.cypher.is_empty() && b.new {
+                        m.insert(b.cypher.clone(), v.clone());
+                    }
+                    by_ir.insert(b.ir.as_str(), v);
+                    continue;
+                }
                 let Some(ci) = res.col(&b.ir) else { continue };
                 let Some(cell) = &r[ci] else { continue 'next };
                 let v = if b.is_rel {
@@ -1017,18 +1281,51 @@ impl Exec<'_> {
                 }
                 by_ir.insert(b.ir.as_str(), v);
             }
+            if plan.iso {
+                // relationships are pairwise distinct across fixed and variable-length
+                // positions (virtual layer hops are not relationships)
+                let mut used: HashSet<Eid> = HashSet::new();
+                let fixed = plan.binds.iter().filter(|b| b.is_rel).filter_map(|b| {
+                    match by_ir.get(b.ir.as_str()) {
+                        Some(Val::Rel(e)) => Some(*e),
+                        _ => None,
+                    }
+                });
+                let in_paths = segs.values().flat_map(|s| s.stored.iter().copied());
+                if !fixed.chain(in_paths).all(|e| used.insert(e)) {
+                    continue 'next;
+                }
+            }
             // a bound variable keeps the form of its first binding
             for p in &plan.paths {
                 let mut items = Vec::new();
-                for (ir, is_rel) in &p.items {
-                    let v = match by_ir.get(ir.as_str()) {
+                let mut skip_node = false;
+                for it in &p.items {
+                    let ir = it.ir();
+                    if let PItem::Var(pv) = it {
+                        let seg = &segs[pv.as_str()];
+                        for (i, rel) in seg.rels.iter().enumerate() {
+                            items.push(rel.clone());
+                            if i + 1 < seg.rels.len() {
+                                items.push(seg.nodes[i + 1].clone());
+                            }
+                        }
+                        // a zero-length segment: its two ends are one node
+                        skip_node = seg.rels.is_empty();
+                        continue;
+                    }
+                    if matches!(it, PItem::Node(_)) && std::mem::take(&mut skip_node) {
+                        continue;
+                    }
+                    let is_rel = matches!(it, PItem::Rel(_));
+                    let v = match by_ir.get(ir) {
                         Some(v) => v.clone(),
                         None => {
                             let Some(ci) = res.col(ir) else {
                                 continue 'next;
                             };
                             let Some(cell) = &r[ci] else { continue 'next };
-                            if *is_rel {
+                            if is_rel {
                                 match cell {
                                     Value::Stmt(e) => Val::Rel(*e),
                                     _ => continue 'next,

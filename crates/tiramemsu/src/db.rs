@@ -10,7 +10,10 @@ use tm_core::{
     storage, Capabilities, Clock, Error, Event, Executor, Host, HostOptions, ObjectId, Result,
     Store, StoreOptions, SystemClock, TermReader, TimeRef, Tx, TxOptions, TxReport, ViewSpec,
 };
-use tm_exec::{NativeOperator, OperatorRegistry, PlannerOptions, QueryEngine};
+use tm_exec::{
+    NativeKind, NativeOperator, OperatorRegistry, PathEngine, PathOperator, PathOptions,
+    PlannerOptions, QueryEngine,
+};
 use tm_rusqlite::RusqliteHost;
 
 use crate::pool::ReaderPool;
@@ -37,7 +40,15 @@ pub struct OpenOptions {
     /// `functions` and `vtab`; opening fails with `MissingCapability` on a host
     /// without them. `false` opens the `tm-core` tier only (no `execute_ir`).
     pub query_engine: bool,
-    /// Native operators registered on every connection (tests and M3).
+    /// The hop cap of unbounded Cypher path patterns and the default `max_hops` of
+    /// `tm_path` in `TRAIL` mode (default 15). Reaching it stops paths without an
+    /// error.
+    pub path_max_hops: u32,
+    /// The bound on the search states of one path evaluation (default 1 000 000).
+    /// Exceeding it fails with `PathLimitExceeded`.
+    pub path_max_states: usize,
+    /// Native operators registered on every connection (tests). A registered
+    /// `Path` operator replaces the built-in `tm_path`.
     #[doc(hidden)]
     pub native_operators: Vec<Arc<dyn NativeOperator>>,
 }
@@ -62,6 +73,8 @@ impl Default for OpenOptions {
             optimize_every: 1000,
             planner: PlannerOptions::default(),
             query_engine: true,
+            path_max_hops: 15,
+            path_max_states: 1_000_000,
             native_operators: Vec::new(),
         }
     }
@@ -76,6 +89,8 @@ impl std::fmt::Debug for OpenOptions {
             .field("optimize_every", &self.optimize_every)
             .field("planner", &self.planner)
             .field("query_engine", &self.query_engine)
+            .field("path_max_hops", &self.path_max_hops)
+            .field("path_max_states", &self.path_max_states)
             .finish()
     }
 }
@@ -122,6 +137,7 @@ pub struct Db {
     terms: TermReader,
     engine: Option<Arc<QueryEngine>>,
     caps: Capabilities,
+    path_max_hops: u32,
     path: PathBuf,
     clock: Arc<dyn Clock>,
 }
@@ -150,6 +166,18 @@ impl Db {
             // without `functions` and `vtab` (decision D22)
             tm_exec::host::check_capabilities(host.capabilities())?;
             let mut reg = OperatorRegistry::new();
+            if !opts
+                .native_operators
+                .iter()
+                .any(|o| o.kind() == NativeKind::Path)
+            {
+                let engine = Arc::new(PathEngine::new(PathOptions {
+                    max_hops: opts.path_max_hops,
+                    max_states: opts.path_max_states,
+                    ..PathOptions::default()
+                }));
+                reg.add(Arc::new(PathOperator::new(engine)));
+            }
             for op in &opts.native_operators {
                 reg.add(op.clone());
             }
@@ -199,6 +227,7 @@ impl Db {
             terms: TermReader::new(opts.term_cache_capacity),
             engine,
             caps,
+            path_max_hops: opts.path_max_hops,
             path: path.to_path_buf(),
             clock: opts.clock.clone(),
         })
@@ -212,6 +241,11 @@ impl Db {
     /// The capabilities declared by the host, for crates that need one.
     pub fn capabilities(&self) -> Capabilities {
         self.caps
+    }
+
+    /// The hop cap of unbounded Cypher path patterns (`OpenOptions::path_max_hops`).
+    pub fn path_max_hops(&self) -> u32 {
+        self.path_max_hops
     }
 
     /// The database file.

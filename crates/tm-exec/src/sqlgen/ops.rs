@@ -186,11 +186,23 @@ impl Gen<'_> {
                     self.merge(&mut acc, r, null_safe)?;
                 }
             }
-            for n in inputs {
-                if let Node::Path(p) = n {
-                    let r = self.path(p, &acc)?;
-                    self.merge(&mut acc, r, null_safe)?;
-                }
+            // a path starts from a bound term or column; one whose start is another
+            // path's end waits for that path
+            let mut pending: Vec<&crate::plan::PPath> = inputs
+                .iter()
+                .filter_map(|n| match n {
+                    Node::Path(p) => Some(p),
+                    _ => None,
+                })
+                .collect();
+            while !pending.is_empty() {
+                let ready = pending.iter().position(|p| match &p.arg {
+                    PTerm::Id(_) => true,
+                    PTerm::Var(v) => acc.col(v).is_some(),
+                });
+                let p = pending.remove(ready.unwrap_or(0));
+                let r = self.path(p, &acc)?;
+                self.merge(&mut acc, r, null_safe)?;
             }
             Ok(())
         })();
@@ -427,7 +439,7 @@ impl Gen<'_> {
             Dom::List(e) => (**e).clone(),
             Dom::TermOrList | Dom::Term => Dom::Term,
             Dom::Computed(c) => Dom::Computed(*c),
-            Dom::PathJson => Dom::Computed(VClass::Dynamic),
+            Dom::PathJson { .. } => Dom::Computed(VClass::Dynamic),
         };
         let sql = self.val_sql(&lv);
         let q = self.alias('q');

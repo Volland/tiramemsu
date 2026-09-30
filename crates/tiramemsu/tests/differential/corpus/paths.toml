@@ -1,0 +1,51 @@
+# SPARQL reachability against Cypher trail ends over a graph with a cycle and a parallel
+# edge (add-path-engine, task 12.1): `DISTINCT` Cypher ends equal SPARQL `+` / `*` ends.
+
+[[pair]]
+name = "one or more equals distinct trail ends"
+category = "paths"
+fixture = "paths"
+sparql = '''SELECT DISTINCT ?y WHERE { v:alice v:knows+ ?y }'''
+cypher = '''MATCH (x {name: 'Alice'})-[:knows*]->(y) RETURN DISTINCT y'''
+columns = { y = "y" }
+
+[[pair]]
+name = "zero or more includes the start"
+category = "paths"
+fixture = "paths"
+sparql = '''SELECT DISTINCT ?y WHERE { v:alice v:knows* ?y }'''
+cypher = '''MATCH (x {name: 'Alice'})-[:knows*0..]->(y) RETURN DISTINCT y'''
+columns = { y = "y" }
+
+[[pair]]
+name = "inverse path from a bound end"
+category = "paths"
+fixture = "paths"
+sparql = '''SELECT DISTINCT ?x WHERE { ?x v:knows+ v:dave }'''
+cypher = '''MATCH (x)-[:knows*]->(y {name: 'Dave'}) RETURN DISTINCT x'''
+columns = { x = "x" }
+
+[[pair]]
+name = "bounded reach"
+category = "paths"
+fixture = "paths"
+sparql = '''SELECT DISTINCT ?y WHERE { v:alice v:knows/v:knows ?y }'''
+cypher = '''MATCH (x {name: 'Alice'})-[:knows*2]->(y) RETURN DISTINCT y'''
+columns = { y = "y" }
+
+[[pair]]
+name = "paths as of an earlier transaction"
+category = "paths"
+fixture = "paths"
+view = "asof:1"
+sparql = '''SELECT DISTINCT ?y WHERE { v:alice v:knows+ ?y }'''
+cypher = '''MATCH (x {name: 'Alice'})-[:knows*]->(y) RETURN DISTINCT y'''
+columns = { y = "y" }
+
+[[pair]]
+name = "paths now include the later edge"
+category = "paths"
+fixture = "paths"
+sparql = '''SELECT DISTINCT ?y WHERE { v:carol v:knows+ ?y }'''
+cypher = '''MATCH (x {name: 'Carol'})-[:knows*]->(y) RETURN DISTINCT y'''
+columns = { y = "y" }

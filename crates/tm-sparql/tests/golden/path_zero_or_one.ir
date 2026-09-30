@@ -1,0 +1,3 @@
+; Homomorphism Unbound SetOfTriples
+(project [?x]
+  (path <urn:tiramemsu:v:alice> ?x "v:knows?" :mode REACH :view now))

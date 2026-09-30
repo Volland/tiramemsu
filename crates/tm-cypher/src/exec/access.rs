@@ -20,6 +20,22 @@ pub const RDF_TYPE: &str = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
 /// The four temporal names that denote statement metadata.
 pub const TEMPORAL: [&str; 4] = ["txAdded", "txRetracted", "validFrom", "validTo"];
 
+/// Payload bit that marks the synthetic eid of a virtual layer hop.
+const VIRTUAL_EID: u64 = 1 << 59;
+
+/// The relationship value of a virtual layer hop (`sys:subject`, `sys:object` or
+/// `sys:predicate`, kind 0, 1, 2) of statement `base`: a synthetic eid that
+/// [`Exec::stmt_parts`] resolves to the statement's part, in the stored direction.
+pub fn virtual_eid(base: Eid, kind: u8) -> Eid {
+    Eid::new(VIRTUAL_EID | (u64::from(kind) << 50) | base.n())
+}
+
+/// The statement and kind of a synthetic virtual-hop eid.
+pub fn virtual_parts(e: Eid) -> Option<(Eid, u8)> {
+    let n = e.n();
+    (n & VIRTUAL_EID != 0).then(|| (Eid::new(n & ((1 << 50) - 1)), ((n >> 50) & 3) as u8))
+}
+
 /// A term as an IR position.
 pub fn tv(v: &Value) -> TermOrVar {
     match v {
@@ -201,6 +217,18 @@ impl Exec<'_> {
 
     /// The subject, predicate IRI and object of a statement.
     pub(crate) fn stmt_parts(&mut self, e: Eid) -> CResult<Option<(Value, String, Value)>> {
+        if let Some((base, kind)) = virtual_parts(e) {
+            // a virtual hop reads as a relationship from the statement to its part
+            let Some((s, p, o)) = self.stmt_parts(base)? else {
+                return Ok(None);
+            };
+            let (iri, part) = match kind {
+                0 => (irv::SYS_SUBJECT, s),
+                1 => (irv::SYS_OBJECT, o),
+                _ => (irv::SYS_PREDICATE, Value::iri(p)),
+            };
+            return Ok(Some((Value::Stmt(base), iri.to_string(), part)));
+        }
         let id = TermOrVar::Id(e.oid());
         let t = |p: &str, v: &str| {
             Op::Triple(TriplePattern::new(

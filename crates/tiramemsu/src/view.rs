@@ -5,8 +5,8 @@ use std::cell::RefCell;
 use tm_core::{
     read, Error, Event, Executor, ObjectId, Result, TermReader, Triple, Value, ViewSpec,
 };
-use tm_exec::{CacheMode, Explain, QueryEngine, QueryResult};
-use tm_ir::{IrQuery, Params};
+use tm_exec::{CacheMode, Explain, PathRequest, PathRow, QueryEngine, QueryResult};
+use tm_ir::{IrQuery, Params, PathMode};
 
 use crate::db::Db;
 
@@ -183,6 +183,42 @@ impl<'a> View<'a> {
         let engine = self.engine()?;
         let p = engine.prepare(q, params)?;
         self.exec(|e, _| engine.explain(e, &p))
+    }
+
+    /// Evaluates a path from `start` under this view's transaction-time and
+    /// valid-time selection, with the engine behind `tm_path`. `path` is SPARQL 1.1
+    /// property-path text plus `{m,n}`; `max_hops` is a hard bound for every mode
+    /// (`u32::MAX` for none). Rows come in the deterministic order of the mode; `REACH`
+    /// rows carry no path value. Inside `Db::with` the path sees the speculative
+    /// statements.
+    pub fn path(
+        &self,
+        start: ObjectId,
+        path: &str,
+        mode: PathMode,
+        max_hops: u32,
+    ) -> Result<Vec<PathRow>> {
+        let engine = self
+            .engine()?
+            .path_engine()
+            .ok_or_else(|| Error::Unsupported {
+                feature: "View::path without the path engine".to_string(),
+            })?
+            .clone();
+        let view = self.spec;
+        self.exec(|e, _| {
+            engine.eval(
+                e,
+                &PathRequest {
+                    start,
+                    path,
+                    mode,
+                    max_hops: Some(max_hops),
+                    view,
+                    end: None,
+                },
+            )
+        })
     }
 
     /// Events with `t > since` visible to this view's snapshot (the whole log).

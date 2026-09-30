@@ -74,7 +74,8 @@ impl Fx {
 }
 
 /// The names of the fixtures.
-pub const NAMES: [&str; 8] = [
+pub const NAMES: [&str; 9] = [
+    "paths",
     "employment",
     "parallel",
     "layers",
@@ -105,6 +106,7 @@ pub fn load(name: &str) -> Fx {
     };
     match name {
         "employment" => employment(&fx),
+        "paths" => paths(&fx),
         "parallel" => parallel(&fx),
         "layers" => layers(&fx),
         "superseded" => superseded(&fx),
@@ -150,6 +152,33 @@ fn employment(fx: &Fx) {
         ] {
             tx.assert(v(a), v(p), v(o), Valid::ALWAYS)?;
         }
+        Ok(())
+    });
+}
+
+/// A cycle with a parallel edge and a tail: alice knows bob, bob knows carol twice,
+/// carol knows alice and dave; later dave knows erin.
+fn paths(fx: &Fx) {
+    fx.tx(BASE, |tx| {
+        for (n, name) in [
+            ("alice", "Alice"),
+            ("bob", "Bob"),
+            ("carol", "Carol"),
+            ("dave", "Dave"),
+            ("erin", "Erin"),
+        ] {
+            tx.assert(v(n), ty(), v("Person"), Valid::ALWAYS)?;
+            tx.assert(v(n), v("name"), s(name), Valid::ALWAYS)?;
+        }
+        tx.create(v("alice"), v("knows"), v("bob"), Valid::ALWAYS)?;
+        tx.create(v("bob"), v("knows"), v("carol"), Valid::ALWAYS)?;
+        tx.create(v("bob"), v("knows"), v("carol"), Valid::ALWAYS)?;
+        tx.create(v("carol"), v("knows"), v("alice"), Valid::ALWAYS)?;
+        tx.create(v("carol"), v("knows"), v("dave"), Valid::ALWAYS)?;
+        Ok(())
+    });
+    fx.tx(BASE + HOUR, |tx| {
+        tx.create(v("dave"), v("knows"), v("erin"), Valid::ALWAYS)?;
         Ok(())
     });
 }

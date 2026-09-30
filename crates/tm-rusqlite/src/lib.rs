@@ -16,9 +16,10 @@ use rusqlite::{Connection, OpenFlags};
 use std::panic::AssertUnwindSafe;
 
 use rusqlite::functions::FunctionFlags;
+use std::sync::Mutex;
 use tm_core::{
-    AggregateFunction, AggregateState, Capabilities, Executor, Host, HostOptions, HostRegistry,
-    Result, ScalarFunction, SqlValue, TableFunction,
+    AggregateFunction, AggregateState, Capabilities, ConnTableFunction, Error, Executor, Host,
+    HostOptions, HostRegistry, Result, ScalarFunction, SqlValue, TableFunction,
 };
 
 pub use error::map_err;
@@ -92,10 +93,7 @@ impl RusqliteHost {
         if let Some(f) = &self.register {
             f(&conn).map_err(map_err)?;
         }
-        Ok(RusqliteExec {
-            conn,
-            caps: self.caps,
-        })
+        Ok(RusqliteExec::from_connection(conn, self.caps))
     }
 }
 
@@ -124,6 +122,24 @@ impl Host for RusqliteHost {
 pub struct RusqliteExec {
     conn: Connection,
     caps: Capabilities,
+    /// The typed error a native table function stored before failing its statement.
+    slot: ErrorSlot,
+    /// Non-owning handles on `conn` that table functions use to read re-entrantly;
+    /// their statement caches are flushed before `conn` closes.
+    borrowed: Vec<Arc<Mutex<RusqliteExec>>>,
+}
+
+/// A per-connection slot for the typed error of a failed native table function.
+pub(crate) type ErrorSlot = Arc<Mutex<Option<Error>>>;
+
+impl Drop for RusqliteExec {
+    fn drop(&mut self) {
+        for b in self.borrowed.drain(..) {
+            if let Ok(g) = b.lock() {
+                g.conn.flush_prepared_statement_cache();
+            }
+        }
+    }
 }
 
 impl std::fmt::Debug for RusqliteExec {
@@ -135,12 +151,54 @@ impl std::fmt::Debug for RusqliteExec {
 impl RusqliteExec {
     /// Wraps an existing connection (declaring `caps`).
     pub fn from_connection(conn: Connection, caps: Capabilities) -> RusqliteExec {
-        RusqliteExec { conn, caps }
+        RusqliteExec {
+            conn,
+            caps,
+            slot: ErrorSlot::default(),
+            borrowed: Vec::new(),
+        }
+    }
+
+    /// The typed error of a failed native table function if there is one, else the
+    /// mapped SQLite error.
+    fn fail(&self, e: rusqlite::Error) -> Error {
+        let typed = self.slot.lock().ok().and_then(|mut g| g.take());
+        typed.unwrap_or_else(|| map_err(e))
+    }
+
+    fn clear_slot(&self) {
+        if let Ok(mut g) = self.slot.lock() {
+            *g = None;
+        }
     }
 
     /// The underlying connection (host-specific uses such as registration).
     pub fn connection(&self) -> &Connection {
         &self.conn
+    }
+}
+
+/// A bound parameter: a plain value or an integer array (`rarray`).
+enum Bind {
+    Val(RValue),
+    Arr(rusqlite::vtab::array::Array),
+}
+
+impl rusqlite::ToSql for Bind {
+    fn to_sql(&self) -> rusqlite::Result<rusqlite::types::ToSqlOutput<'_>> {
+        match self {
+            Bind::Val(v) => v.to_sql(),
+            Bind::Arr(a) => a.to_sql(),
+        }
+    }
+}
+
+fn to_bind(v: &SqlValue) -> Bind {
+    match v {
+        SqlValue::IntArray(xs) => Bind::Arr(std::rc::Rc::new(
+            xs.iter().map(|x| RValue::Integer(*x)).collect(),
+        )),
+        other => Bind::Val(to_rusqlite(other)),
     }
 }
 
@@ -151,6 +209,7 @@ fn to_rusqlite(v: &SqlValue) -> RValue {
         SqlValue::Real(r) => RValue::Real(*r),
         SqlValue::Text(s) => RValue::Text(s.clone()),
         SqlValue::Blob(b) => RValue::Blob(b.clone()),
+        SqlValue::IntArray(_) => RValue::Null,
     }
 }
 
@@ -171,11 +230,12 @@ impl Executor for RusqliteExec {
     }
 
     fn execute(&mut self, sql: &str, params: &[SqlValue]) -> Result<usize> {
-        let mut st = self.conn.prepare_cached(sql).map_err(map_err)?;
+        self.clear_slot();
+        let mut st = self.conn.prepare_cached(sql).map_err(|e| self.fail(e))?;
         let mut rows = st
-            .query(rusqlite::params_from_iter(params.iter().map(to_rusqlite)))
-            .map_err(map_err)?;
-        while rows.next().map_err(map_err)?.is_some() {}
+            .query(rusqlite::params_from_iter(params.iter().map(to_bind)))
+            .map_err(|e| self.fail(e))?;
+        while rows.next().map_err(|e| self.fail(e))?.is_some() {}
         drop(rows);
         Ok(self.conn.changes() as usize)
     }
@@ -186,13 +246,14 @@ impl Executor for RusqliteExec {
         params: &[SqlValue],
         row: &mut dyn FnMut(&[SqlValue]) -> Result<()>,
     ) -> Result<()> {
-        let mut st = self.conn.prepare_cached(sql).map_err(map_err)?;
+        self.clear_slot();
+        let mut st = self.conn.prepare_cached(sql).map_err(|e| self.fail(e))?;
         let n = st.column_count();
         let mut rows = st
-            .query(rusqlite::params_from_iter(params.iter().map(to_rusqlite)))
-            .map_err(map_err)?;
+            .query(rusqlite::params_from_iter(params.iter().map(to_bind)))
+            .map_err(|e| self.fail(e))?;
         let mut buf: Vec<SqlValue> = Vec::with_capacity(n);
-        while let Some(r) = rows.next().map_err(map_err)? {
+        while let Some(r) = rows.next().map_err(|e| self.fail(e))? {
             buf.clear();
             for i in 0..n {
                 buf.push(from_ref(r.get_ref(i).map_err(map_err)?));
@@ -316,5 +377,13 @@ impl HostRegistry for RusqliteExec {
 
     fn register_table(&mut self, f: TableFunction) -> Result<()> {
         table_fn::register(&self.conn, f).map_err(map_err)
+    }
+
+    fn register_conn_table(&mut self, f: ConnTableFunction) -> Result<()> {
+        let inner =
+            table_fn::borrowed_exec(&self.conn, self.caps, self.slot.clone()).map_err(map_err)?;
+        let inner = Arc::new(Mutex::new(inner));
+        self.borrowed.push(inner.clone());
+        table_fn::register_conn(&self.conn, f, inner, self.slot.clone()).map_err(map_err)
     }
 }

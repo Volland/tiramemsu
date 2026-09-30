@@ -203,6 +203,12 @@ fn bind_pattern(p: &Pattern, scope: &mut Scope, opts: &CheckOpts, create: bool) 
             }
         }
         for r in &part.rels {
+            if let (true, Some(vl)) = (create, &r.var_len) {
+                return Err(CypherError::unsupported(
+                    "a variable-length relationship in CREATE or MERGE",
+                    Some(vl.span),
+                ));
+            }
             if let Some(v) = &r.var {
                 if create && scope.get(&v.text).is_some() {
                     return Err(CypherError::parse(
@@ -210,7 +216,18 @@ fn bind_pattern(p: &Pattern, scope: &mut Scope, opts: &CheckOpts, create: bool) 
                         format!("variable `{}` already declared", v.text),
                     ));
                 }
-                scope.bind_rel(v)?;
+                if r.var_len.is_some() {
+                    // a variable-length relationship variable is the list of its relationships
+                    if scope.get(&v.text).is_some() {
+                        return Err(CypherError::parse(
+                            v.span,
+                            format!("variable `{}` is already bound", v.text),
+                        ));
+                    }
+                    scope.set(&v.text, Kind::Value);
+                } else {
+                    scope.bind_rel(v)?;
+                }
             }
             if create {
                 if r.types.len() != 1 {
@@ -249,8 +266,19 @@ fn bind_pattern(p: &Pattern, scope: &mut Scope, opts: &CheckOpts, create: bool) 
 fn check_clause(c: &Clause, scope: &mut Scope, opts: &CheckOpts) -> CResult<Option<Vec<Col>>> {
     match c {
         Clause::Match {
-            pattern, where_, ..
+            pattern,
+            where_,
+            mode,
+            ..
         } => {
+            if *mode == MatchModeExt::Repeatable {
+                if let Some(vl) = pattern.iter().flat_map(|p| &p.rels).find_map(|r| r.var_len) {
+                    return Err(CypherError::unsupported(
+                        "REPEATABLE ELEMENTS with a variable-length pattern (walk semantics)",
+                        Some(vl.span),
+                    ));
+                }
+            }
             bind_pattern(pattern, scope, opts, false)?;
             if let Some(w) = where_ {
                 check_expr(w, scope, opts, Ctx::where_())?;
@@ -270,6 +298,12 @@ fn check_clause(c: &Clause, scope: &mut Scope, opts: &CheckOpts) -> CResult<Opti
             let p = vec![part.clone()];
             bind_pattern(&p, scope, opts, false)?;
             for r in &part.rels {
+                if let Some(vl) = &r.var_len {
+                    return Err(CypherError::unsupported(
+                        "a variable-length relationship in CREATE or MERGE",
+                        Some(vl.span),
+                    ));
+                }
                 if r.types.len() != 1 {
                     return Err(CypherError::parse(
                         r.span,

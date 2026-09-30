@@ -70,6 +70,10 @@ pub enum PathMode {
 }
 
 impl PathMode {
+    /// Short spelling of [`PathMode::Reachability`].
+    #[allow(non_upper_case_globals)]
+    pub const Reach: PathMode = PathMode::Reachability;
+
     /// The `mode` argument text of `tm_path`.
     pub fn sql_name(self) -> &'static str {
         match self {
@@ -77,6 +81,49 @@ impl PathMode {
             PathMode::Trail => "TRAIL",
             PathMode::AnyShortest => "ANY_SHORTEST",
             PathMode::AllShortest => "ALL_SHORTEST",
+        }
+    }
+}
+
+impl std::fmt::Display for PathMode {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.sql_name())
+    }
+}
+
+impl std::str::FromStr for PathMode {
+    type Err = String;
+
+    /// Parses `REACH | TRAIL | ANY_SHORTEST | ALL_SHORTEST` (case-insensitive);
+    /// any other mode (`WALK`, `SIMPLE`, `ACYCLIC`, `SHORTEST`) is rejected.
+    fn from_str(s: &str) -> Result<PathMode, String> {
+        match s.trim().to_ascii_uppercase().as_str() {
+            "REACH" => Ok(PathMode::Reachability),
+            "TRAIL" => Ok(PathMode::Trail),
+            "ANY_SHORTEST" => Ok(PathMode::AnyShortest),
+            "ALL_SHORTEST" => Ok(PathMode::AllShortest),
+            _ => Err(format!("unsupported path mode `{s}`")),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn mode_names_round_trip() {
+        for m in [
+            PathMode::Reachability,
+            PathMode::Trail,
+            PathMode::AnyShortest,
+            PathMode::AllShortest,
+        ] {
+            assert_eq!(m.to_string().parse::<PathMode>().unwrap(), m);
+            assert_eq!(m.to_string().to_lowercase().parse::<PathMode>().unwrap(), m);
+        }
+        for bad in ["WALK", "SIMPLE", "ACYCLIC", "SHORTEST", ""] {
+            assert!(bad.parse::<PathMode>().is_err(), "{bad}");
         }
     }
 }

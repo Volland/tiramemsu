@@ -5,7 +5,6 @@ mod common;
 use std::sync::Arc;
 
 use common::mock::MockPath;
-use common::probe::ProbeHost;
 use common::*;
 use tiramemsu::ir::builder::IrBuilder;
 use tiramemsu::ir::{Op, PathExpr, PathMode, PathPattern, TermOrVar, View};
@@ -30,33 +29,40 @@ fn supported_by_path(bb: &IrBuilder) -> Op {
     )
 }
 
-// sql-execution "No path operator registered"
+// sql-execution "No path operator registered": a bare engine (an embedder that
+// registered no operator) still refuses before running any SQL. A `Db` always
+// registers the real `tm_path` operator now (add-path-engine).
 #[test]
 fn no_operator_is_unsupported_without_sql() {
-    let d = tempfile::tempdir().unwrap();
-    let host = ProbeHost::new();
-    let db =
-        Db::open_with_host(host.clone(), d.path().join("p.db"), OpenOptions::default()).unwrap();
-    db.transact(TxOptions::default(), |tx| {
-        tx.assert(v("a"), v("p"), v("b"), Valid::ALWAYS).map(|_| ())
-    })
-    .unwrap();
+    let engine = tm_exec::QueryEngine::new(
+        tm_exec::PlannerOptions::default(),
+        tm_exec::OperatorRegistry::new(),
+        16,
+    );
     let q = b().query(Op::join(vec![
         b().triple("?b", "v:p", "?r"),
         supported_by_path(&b()),
     ]));
-    host.log.clear();
-    match db.now().execute_ir(&q, &Params::new()) {
+    match engine.prepare(&q, &Params::new()) {
         Err(Error::Unsupported { feature }) => {
             assert!(feature.contains("path patterns"), "{feature}")
         }
         other => panic!("{other:?}"),
     }
-    assert!(host
-        .log
-        .statements()
-        .iter()
-        .all(|s| !s.contains("FROM triple")));
+}
+
+// the default database routes the same query to the real operator (task 10.4)
+#[test]
+fn default_database_routes_paths_to_tm_path() {
+    let t = TestDb::new();
+    t.tx(|tx| tx.assert(v("a"), v("p"), v("b"), Valid::ALWAYS).map(|_| ()));
+    let q = b().query(Op::join(vec![
+        b().triple("?b", "v:p", "?r"),
+        supported_by_path(&b()),
+    ]));
+    let ex = explain(&t.db.now(), &q);
+    assert!(ex.regions.iter().any(|r| r.kind == RegionKind::NativePath));
+    assert!(ex.sql.unwrap().contains("tm_path("));
 }
 
 // sql-execution "Path composes as a table-valued function"
@@ -130,7 +136,8 @@ fn end_bound_path_is_inverted() {
     let ex = explain(&t.db.now(), &q);
     assert!(ex.regions.iter().any(|r| r.note == RouteNote::PathInverted));
     assert!(
-        ex.params.contains(&SqlValue::Text("^v:worksAt+".into())),
+        ex.params
+            .contains(&SqlValue::Text("^<urn:tiramemsu:v:worksAt>+".into())),
         "{:?}",
         ex.params
     );
@@ -204,4 +211,197 @@ fn explain_normal_and_short_circuit() {
     let q = b().query(b().triple("?s", "urn:never-seen", "?o"));
     let ex = explain(&t.db.now(), &q);
     assert!(ex.short_circuit && ex.sql.is_none());
+}
+
+fn path_nodes(text: &str) -> Vec<String> {
+    // the decoded path text is `{"nodes":["urn:…",…],"edges":[…]}`
+    let nodes = text
+        .split("\"nodes\":[")
+        .nth(1)
+        .unwrap()
+        .split(']')
+        .next()
+        .unwrap();
+    nodes
+        .split(',')
+        .map(|n| {
+            n.trim_matches('"')
+                .strip_prefix("urn:tiramemsu:v:")
+                .unwrap()
+                .to_string()
+        })
+        .collect()
+}
+
+// path-evaluation "Only the end is bound" (through the IR) / task 10.2: the far end,
+// `"end" = ?` pushdown, and the path of an end-bound pattern in start-to-end order
+#[test]
+fn end_bound_pattern_binds_the_path_forwards() {
+    let t = TestDb::new();
+    t.tx(|tx| {
+        tx.assert(v("a"), v("knows"), v("b"), Valid::ALWAYS)?;
+        tx.assert(v("b"), v("knows"), v("c"), Valid::ALWAYS)?;
+        Ok(())
+    });
+    let mut pat = PathPattern {
+        start: TermOrVar::var("s"),
+        end: TermOrVar::iri(vi("c")),
+        path: PathExpr::iri(vi("knows")).plus(),
+        mode: PathMode::Trail,
+        max_hops: Some(15),
+        bind_path: Some("p".into()),
+        view: View::NOW,
+    };
+    let q = b().query(Op::Path(pat.clone()));
+    let ex = explain(&t.db.now(), &q);
+    assert!(ex.regions.iter().any(|r| r.note == RouteNote::PathInverted));
+    assert!(ex
+        .params
+        .contains(&SqlValue::Text("^<urn:tiramemsu:v:knows>+".into())));
+    let r = run(&t.db.now(), &q);
+    let mut got: Vec<(String, Vec<String>)> = (0..r.len())
+        .map(|i| {
+            let Some(Value::Str(p)) = r.get(i, "p") else {
+                panic!("path text")
+            };
+            (short(r.get(i, "s").unwrap()), path_nodes(p))
+        })
+        .collect();
+    got.sort();
+    assert_eq!(
+        got,
+        vec![
+            ("a".to_string(), vec!["a".into(), "b".into(), "c".into()]),
+            ("b".to_string(), vec!["b".into(), "c".into()]),
+        ]
+    );
+    // both endpoints constant and the same variable at both ends
+    pat.start = TermOrVar::iri(vi("a"));
+    pat.bind_path = None;
+    pat.mode = PathMode::Reachability;
+    let both = b().query(Op::Path(pat.clone()));
+    let sql = explain(&t.db.now(), &both).sql.unwrap();
+    assert!(
+        sql.contains("\"end\" = ?"),
+        "the end constraint is pushed down: {sql}"
+    );
+    assert_eq!(run(&t.db.now(), &both).len(), 1);
+    t.tx(|tx| {
+        tx.assert(v("c"), v("knows"), v("a"), Valid::ALWAYS)
+            .map(|_| ())
+    });
+    let same = b().query(Op::join(vec![
+        Op::Values(tiramemsu::ir::Values {
+            vars: vec!["x".into()],
+            rows: vec![vec![Some(TermOrVar::iri(vi("a")))]],
+        }),
+        Op::Path(PathPattern {
+            start: TermOrVar::var("x"),
+            end: TermOrVar::var("x"),
+            path: PathExpr::iri(vi("knows")).plus(),
+            mode: PathMode::Reachability,
+            max_hops: None,
+            bind_path: None,
+            view: View::NOW,
+        }),
+    ]));
+    assert_eq!(run(&t.db.now(), &same).len(), 1);
+}
+
+// task 10.3: a nullable path from a term that is in no statement
+#[test]
+fn zero_length_match_of_an_unknown_constant() {
+    let t = TestDb::new();
+    t.tx(|tx| {
+        tx.assert(v("a"), v("knows"), v("b"), Valid::ALWAYS)
+            .map(|_| ())
+    });
+    let star = |s: TermOrVar, e: TermOrVar, p: PathExpr| {
+        b().query(Op::Path(PathPattern {
+            start: s,
+            end: e,
+            path: p,
+            mode: PathMode::Reachability,
+            max_hops: None,
+            bind_path: None,
+            view: View::NOW,
+        }))
+    };
+    let nobody = || TermOrVar::iri(vi("nobody"));
+    let knows = || PathExpr::iri(vi("knows"));
+    let r = run(
+        &t.db.now(),
+        &star(nobody(), TermOrVar::var("x"), knows().star()),
+    );
+    assert_eq!(rows(&r), expect(&[&["nobody"]]));
+    let r = run(
+        &t.db.now(),
+        &star(TermOrVar::var("x"), nobody(), knows().star()),
+    );
+    assert_eq!(rows(&r), expect(&[&["nobody"]]));
+    assert!(run(
+        &t.db.now(),
+        &star(nobody(), TermOrVar::var("x"), knows().plus())
+    )
+    .is_empty());
+    let both = run(&t.db.now(), &star(nobody(), nobody(), knows().star()));
+    assert_eq!(both.len(), 1);
+    assert!(run(
+        &t.db.now(),
+        &star(nobody(), TermOrVar::iri(vi("other")), knows().star())
+    )
+    .is_empty());
+}
+
+// task 10.1: golden `explain_ir` output of the four anchor shapes
+#[test]
+fn anchor_shapes_golden() {
+    let t = TestDb::new();
+    t.tx(|tx| {
+        tx.assert(v("a"), v("knows"), v("b"), Valid::ALWAYS)
+            .map(|_| ())
+    });
+    let pat = |s: TermOrVar, e: TermOrVar, max: Option<u32>| {
+        Op::Path(PathPattern {
+            start: s,
+            end: e,
+            path: PathExpr::iri(vi("knows")).plus(),
+            mode: PathMode::Trail,
+            max_hops: max,
+            bind_path: None,
+            view: View::as_of_tx(1),
+        })
+    };
+    let a = || TermOrVar::iri(vi("a"));
+    let bb = || TermOrVar::iri(vi("b"));
+    let x = || TermOrVar::var("x");
+    let cases = [
+        ("start bound", pat(a(), x(), None)),
+        ("end bound", pat(x(), bb(), Some(15))),
+        ("both bound", pat(a(), bb(), None)),
+        (
+            "same variable",
+            Op::join(vec![
+                Op::Values(tiramemsu::ir::Values {
+                    vars: vec!["x".into()],
+                    rows: vec![vec![Some(a())]],
+                }),
+                pat(x(), x(), None),
+            ]),
+        ),
+    ];
+    let mut out = String::new();
+    for (name, op) in cases {
+        let ex = explain(&t.db.now(), &b().query(op));
+        out.push_str(&format!(
+            "## {name}\n{}\n{:?}\n{:?}\n\n",
+            ex.sql.unwrap(),
+            ex.params,
+            ex.regions
+                .iter()
+                .map(|r| (r.kind, r.note))
+                .collect::<Vec<_>>()
+        ));
+    }
+    insta::assert_snapshot!(out);
 }

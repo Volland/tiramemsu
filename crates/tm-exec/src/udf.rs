@@ -260,7 +260,7 @@ pub fn vkind(v: &SqlValue, class: i64) -> Option<i64> {
         _ if class != class::DYNAMIC => Some(class),
         SqlValue::Integer(_) | SqlValue::Real(_) => Some(K_NUM),
         SqlValue::Text(_) => Some(K_STR),
-        SqlValue::Blob(_) => None,
+        SqlValue::Blob(_) | SqlValue::IntArray(_) => None,
     }
 }
 

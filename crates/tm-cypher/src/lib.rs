@@ -19,4 +19,4 @@ pub use program::{compile, CompileCtx, CypherParams, CypherProgram};
 pub use runner::{Rows, Runner};
 pub use span::Span;
 pub use value::{CypherResult, CypherValue, NodeValue, PathValue, RelValue};
-pub use vocab::Vocab;
+pub use vocab::{Vocab, VocabExt};

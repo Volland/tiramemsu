@@ -1,0 +1,5 @@
+@prefix v: <urn:tiramemsu:v:> .
+v:alice v:knows v:bob ; v:a v:x .
+v:bob v:knows v:carol ; v:b v:y .
+v:carol v:knows v:alice ; v:worksAt v:acme .
+v:acme v:locatedIn v:berlin .

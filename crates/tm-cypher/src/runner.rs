@@ -36,6 +36,12 @@ pub trait Runner {
     /// Volatile entries `(key iri, value)` of subject `s`.
     fn volatile_of(&mut self, s: &Value) -> Result<Vec<(String, Value)>>;
 
+    /// The hop cap of unbounded variable-length and shortest-path patterns
+    /// (`OpenOptions::path_max_hops`).
+    fn path_max_hops(&self) -> u32 {
+        15
+    }
+
     /// True when write operations are available.
     fn writable(&self) -> bool;
 

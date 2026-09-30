@@ -34,6 +34,7 @@ pub mod error;
 pub mod exec;
 pub mod host;
 pub mod native;
+pub mod path;
 pub mod plan;
 pub mod result;
 pub mod scan;
@@ -51,6 +52,7 @@ use tm_ir::{IrQuery, Params};
 pub use decode::{CacheMode, TermCache};
 pub use exec::{ExecContext, Prepared};
 pub use native::{LftjConfig, NativeKind, NativeOperator, OperatorRegistry, PlannerOptions};
+pub use path::{Hop, Path, PathEngine, PathOperator, PathOptions, PathRequest, PathRow};
 pub use result::{ExecStats, Explain, QueryResult, RegionInfo, RegionKind, ResultValue, RouteNote};
 
 type Hook = Arc<dyn Fn() + Send + Sync>;
@@ -126,6 +128,11 @@ impl QueryEngine {
     /// The registered native operators.
     pub fn registry(&self) -> &OperatorRegistry {
         &self.registry
+    }
+
+    /// The path engine, when the registered path operator has one.
+    pub fn path_engine(&self) -> Option<&Arc<PathEngine>> {
+        self.registry.path().and_then(|o| o.engine())
     }
 
     /// The planner options.

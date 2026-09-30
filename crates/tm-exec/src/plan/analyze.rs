@@ -58,8 +58,12 @@ pub enum Dom {
     List(Box<Dom>),
     /// An ObjectId, or a JSON array of ObjectIds (a multi-valued lookup).
     TermOrList,
-    /// The `path_json` column of `tm_path`.
-    PathJson,
+    /// The `path_json` column of `tm_path`; `reversed` when the call started from
+    /// the pattern's end, so the decoded path is read backwards.
+    PathJson {
+        /// Reverse nodes and hops (and flip directions) when decoding.
+        reversed: bool,
+    },
 }
 
 /// GYO reduction: true when the hypergraph whose hyperedges are the variable sets

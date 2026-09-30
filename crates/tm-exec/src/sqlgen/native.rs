@@ -6,6 +6,7 @@ use tm_core::{Result, SqlValue};
 use super::{Col, Gen, Item, Rel};
 use crate::plan::analyze::Dom;
 use crate::plan::{PPath, PTerm};
+use crate::result::RouteNote;
 
 impl Gen<'_> {
     /// Compiles a path pattern; its start is a constant or a column of `acc`.
@@ -49,7 +50,9 @@ impl Gen<'_> {
                 b,
                 Col {
                     sql: format!("{a}.path_json"),
-                    dom: Dom::PathJson,
+                    dom: Dom::PathJson {
+                        reversed: p.note == RouteNote::PathInverted,
+                    },
                     mm: false,
                     eid_of: None,
                 },

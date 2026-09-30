@@ -49,7 +49,8 @@ struct File {
 }
 
 /// Every category the corpus must cover.
-pub const CATEGORIES: [&str; 22] = [
+pub const CATEGORIES: [&str; 23] = [
+    "paths",
     "single-hop",
     "multi-hop",
     "labels",
@@ -82,6 +83,7 @@ pub fn corpus() -> Vec<Pair> {
         include_str!("corpus/temporal.toml"),
         include_str!("corpus/dual.toml"),
         include_str!("corpus/divergence.toml"),
+        include_str!("corpus/paths.toml"),
     ] {
         let f: File = toml::from_str(text).expect("corpus file");
         out.extend(f.pair);

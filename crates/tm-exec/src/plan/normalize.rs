@@ -14,21 +14,22 @@
 use std::collections::HashMap;
 
 use tm_core::{codec, Executor, ObjectId, Result, SqlValue, Tag, Value};
-use tm_ir::display::path_text;
+use tm_ir::display::path_text_canonical;
 use tm_ir::validate::scope;
 use tm_ir::{
-    AggFunc, Expr, GraphSet, IrQuery, Op, Semantics, TermOrVar, TriplePattern, TxSel, ValidSel,
-    Var, VarSet, View,
+    AggFunc, Expr, GraphSet, IrQuery, Op, PathPattern, Semantics, TermOrVar, TriplePattern, TxSel,
+    ValidSel, Var, VarSet, View,
 };
 
 use super::encode::{encode_value, position_ok, value_position_ok, Enc, Pos};
 use super::resolve::resolve;
-use super::route::{bound_by_non_paths, orient, Orientation};
+use super::route::{bound_before, bound_by_non_paths, orient, path_patterns, Orientation};
 use super::{
     Cell, Node, PAgg, PConst, PExpr, PKey, PLookup, PObj, PPath, PTerm, PTriple, PValues, PVirtual,
     PVolatile,
 };
 use crate::error::invalid;
+use crate::path::ast::nullable;
 use crate::result::RouteNote;
 use crate::scan::{view_text, ResolvedView};
 use crate::virtual_pred::VirtualPred;
@@ -46,6 +47,7 @@ pub struct Planner<'e> {
     pred_multi: HashMap<i64, bool>,
     elide_all: bool,
     bound: VarSet,
+    all_paths: Vec<PathPattern>,
     /// Plan-local ids of constants missing from the dictionary.
     pub synthetic: HashMap<i64, Value>,
 }
@@ -65,6 +67,15 @@ fn distinct_over_bgp(root: &Op) -> bool {
     matches!(root, Op::Project(p) if p.distinct && only_bgp(&p.input))
 }
 
+/// A classified path endpoint.
+enum Ep {
+    Term(PTerm),
+    /// A constant that is not in the dictionary.
+    Missing(Value),
+    /// A term that cannot appear in a statement position.
+    Never,
+}
+
 impl<'e> Planner<'e> {
     /// A planner for `q` reading through `exec`.
     pub fn new(exec: &'e mut dyn Executor, q: &IrQuery) -> Planner<'e> {
@@ -76,6 +87,7 @@ impl<'e> Planner<'e> {
             pred_multi: HashMap::new(),
             elide_all: distinct_over_bgp(&q.root),
             bound: bound_by_non_paths(&q.root),
+            all_paths: path_patterns(&q.root),
             synthetic: HashMap::new(),
         }
     }
@@ -145,6 +157,44 @@ impl<'e> Planner<'e> {
         })
     }
 
+    /// Classifies a path endpoint.
+    fn endpoint(&mut self, t: &TermOrVar) -> Result<Ep> {
+        Ok(match t {
+            TermOrVar::Const(v) if value_position_ok(v, Pos::Object) => match self.encode(v)? {
+                Enc::Id(id) if position_ok(id, Pos::Object) => Ep::Term(PTerm::Id(id)),
+                Enc::Missing(m) => Ep::Missing(m),
+                _ => Ep::Never,
+            },
+            other => match self.pterm(other, Pos::Object)? {
+                Some(t) => Ep::Term(t),
+                None => Ep::Never,
+            },
+        })
+    }
+
+    /// A path with an endpoint constant that is in no statement: only a nullable
+    /// expression can match, by the zero-length path, so the other endpoint is
+    /// bound to that very term (`:nobody :p* ?x` gives `?x = :nobody`). Paths whose
+    /// value is asked for (`bind_path`) stay empty.
+    fn absent_endpoints(&mut self, p: &PathPattern, s: Ep, e: Ep, empty: Node) -> Result<Node> {
+        if !nullable(&p.path) || p.bind_path.is_some() {
+            return Ok(empty);
+        }
+        let bind = |this: &mut Self, var: &Var, term: &Value| -> Node {
+            let id = this.synthetic_id(&term.canonical());
+            Node::Values(PValues {
+                vars: vec![var.clone()],
+                rows: vec![vec![Some(Cell::Id(id))]],
+            })
+        };
+        Ok(match (s, e) {
+            (Ep::Missing(a), Ep::Missing(b)) if a == b => Node::Join(Vec::new(), Vec::new()),
+            (Ep::Missing(c), Ep::Term(PTerm::Var(v)))
+            | (Ep::Term(PTerm::Var(v)), Ep::Missing(c)) => bind(self, &v, &c),
+            _ => empty,
+        })
+    }
+
     /// Plans the whole tree.
     pub fn plan(&mut self, op: &Op) -> Result<Node> {
         let empty = || Node::Empty(scope(op).vars);
@@ -154,23 +204,25 @@ impl<'e> Planner<'e> {
                 let Some(view) = self.view(&p.view)? else {
                     return Ok(empty());
                 };
-                let (Some(start), Some(end)) = (
-                    self.pterm(&p.start, Pos::Object)?,
-                    self.pterm(&p.end, Pos::Object)?,
-                ) else {
-                    return Ok(empty());
+                let (start, end) = match (self.endpoint(&p.start)?, self.endpoint(&p.end)?) {
+                    (Ep::Term(s), Ep::Term(e)) => (s, e),
+                    (s, e) => return self.absent_endpoints(p, s, e, empty()),
                 };
-                let (arg, other, text, note) = match orient(p, &self.bound)? {
-                    Orientation::Forward => {
-                        (start, end, path_text(&p.path), RouteNote::PathForward)
-                    }
-                    Orientation::Inverted => (
-                        end,
-                        start,
-                        path_text(&p.path.clone().inverse()),
-                        RouteNote::PathInverted,
-                    ),
-                };
+                let (arg, other, text, note) =
+                    match orient(p, &bound_before(&self.bound, &self.all_paths, p))? {
+                        Orientation::Forward => (
+                            start,
+                            end,
+                            path_text_canonical(&p.path),
+                            RouteNote::PathForward,
+                        ),
+                        Orientation::Inverted => (
+                            end,
+                            start,
+                            path_text_canonical(&p.path.clone().inverse()),
+                            RouteNote::PathInverted,
+                        ),
+                    };
                 Node::Path(PPath {
                     arg,
                     other,

@@ -22,6 +22,9 @@ pub enum SqlValue {
     Text(String),
     /// BLOB.
     Blob(Vec<u8>),
+    /// A list of integers bound as one parameter and read in SQL as
+    /// `rarray(?N)` (capability `vtab`): `x IN rarray(?1)`.
+    IntArray(Vec<i64>),
 }
 
 impl SqlValue {
@@ -267,6 +270,42 @@ impl fmt::Debug for TableFunction {
     }
 }
 
+/// The body of a connection-aware table-valued function: it gets the executor of
+/// the connection that runs the calling statement (same snapshot, including an
+/// open speculation), the argument values, and returns all rows.
+pub type ConnTableImpl = std::sync::Arc<
+    dyn Fn(&mut dyn Executor, &[SqlValue]) -> Result<Vec<Vec<SqlValue>>> + Send + Sync,
+>;
+
+/// A table-valued function whose body reads the database through the calling
+/// connection (the native path operator behind `tm_path`). Arguments are hidden
+/// columns (`arg_<name>`), in call order.
+///
+/// `pushdown` names output columns whose equality constraints (`WHERE "end" = ?`)
+/// are passed to the body as extra trailing arguments, after `args`
+/// (`NULL` when absent). SQLite still re-checks them, so honouring a pushdown is
+/// only an optimisation.
+#[derive(Clone)]
+pub struct ConnTableFunction {
+    /// SQL name (the eponymous table).
+    pub name: String,
+    /// The argument (hidden column) names, in call order.
+    pub args: Vec<String>,
+    /// The output column names.
+    pub columns: Vec<String>,
+    /// Output columns whose `=` constraints are pushed into the body.
+    pub pushdown: Vec<String>,
+    /// The body. An `Err` fails the SQL statement; hosts keep the typed error and
+    /// re-raise it from the executor call that ran the statement.
+    pub func: ConnTableImpl,
+}
+
+impl fmt::Debug for ConnTableFunction {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "ConnTableFunction({}{:?})", self.name, self.args)
+    }
+}
+
 /// Registration hooks of a host connection (capabilities `functions` and `vtab`).
 /// Host-specific glue (for `rusqlite`: `create_scalar_function`, eponymous
 /// modules) stays in the host crate.
@@ -277,6 +316,13 @@ pub trait HostRegistry {
     fn register_aggregate(&mut self, f: AggregateFunction) -> Result<()>;
     /// Registers a table-valued function (capability `vtab`).
     fn register_table(&mut self, f: TableFunction) -> Result<()>;
+    /// Registers a connection-aware table-valued function (capability `vtab`).
+    fn register_conn_table(&mut self, f: ConnTableFunction) -> Result<()> {
+        Err(crate::error::Error::unsupported(format!(
+            "connection-aware table function {} on this host",
+            f.name
+        )))
+    }
 }
 
 impl dyn Executor + '_ {

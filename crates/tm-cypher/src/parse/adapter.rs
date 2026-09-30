@@ -243,12 +243,10 @@ fn convert_node(ctx: &Ctx, n: &up::NodePattern, span: Span) -> CResult<NodePat> 
 }
 
 fn convert_rel(ctx: &Ctx, r: &up::RelationshipPattern, span: Span) -> CResult<RelPat> {
-    if let Some(q) = &r.legacy_quantifier {
-        return Err(CypherError::unsupported(
-            "variable-length relationships",
-            Some(q.span.into()),
-        ));
-    }
+    let var_len = match &r.legacy_quantifier {
+        Some(q) => Some(convert_quantifier(q)?),
+        None => None,
+    };
     if let Some(q) = &r.graph_quantifier {
         return Err(CypherError::unsupported(
             "quantified relationship patterns",
@@ -285,6 +283,12 @@ fn convert_rel(ctx: &Ctx, r: &up::RelationshipPattern, span: Span) -> CResult<Re
         }
         _ => Dir::Either,
     };
+    if let (Some(vl), Some(_)) = (&var_len, &r.properties) {
+        return Err(CypherError::unsupported(
+            "property maps on variable-length relationships",
+            Some(vl.span),
+        ));
+    }
     Ok(RelPat {
         var: r.variable.as_ref().map(|v| ctx.name(v)),
         types,
@@ -293,8 +297,41 @@ fn convert_rel(ctx: &Ctx, r: &up::RelationshipPattern, span: Span) -> CResult<Re
             Some(p) => Some(super::adapter_expr::convert_expr(ctx, p)?),
             None => None,
         },
+        var_len,
         span,
     })
+}
+
+/// A legacy `*` quantifier: `*` is 1.., `*n` exactly n, `*m..n`, `*m..`, `*..n` is 1..n.
+fn convert_quantifier(q: &up::Quantifier) -> CResult<VarLen> {
+    let span: Span = q.span.into();
+    let num = |t: &str| -> CResult<u32> {
+        t.parse::<u32>().map_err(|_| {
+            CypherError::parse(span, format!("`{t}` is out of range for a path length"))
+        })
+    };
+    let (min, max) = match &q.kind {
+        up::QuantifierKind::ZeroOrMore => (1, None),
+        up::QuantifierKind::Fixed(n) => (num(n)?, Some(num(n)?)),
+        up::QuantifierKind::Range { lower, upper } => (
+            match lower {
+                Some(l) => num(l)?,
+                None => 1,
+            },
+            match upper {
+                Some(u) => Some(num(u)?),
+                None => None,
+            },
+        ),
+        _ => {
+            return Err(CypherError::unsupported(
+                "quantified relationship patterns",
+                Some(span),
+            ))
+        }
+    };
+    // an empty range (`*3..1`) is kept: it matches nothing
+    Ok(VarLen { min, max, span })
 }
 
 pub(super) fn convert_part(ctx: &Ctx, p: &up::PatternPart) -> CResult<PatternPart> {
@@ -308,7 +345,15 @@ pub(super) fn convert_part(ctx: &Ctx, p: &up::PatternPart) -> CResult<PatternPar
     let mut nodes = Vec::new();
     let mut rels = Vec::new();
     let mut expect_node = true;
-    for f in &k.path.kind.factors {
+    let mut shortest = None;
+    let mut factors: &[up::PathFactor] = &k.path.kind.factors;
+    if let [f] = factors {
+        if let up::PathFactorKind::LegacyShortest { all, pattern } = &f.kind {
+            shortest = Some(*all);
+            factors = &pattern.kind.factors;
+        }
+    }
+    for f in factors {
         let sp: Span = f.span.into();
         match &f.kind {
             up::PathFactorKind::Node(n) if expect_node => {
@@ -319,13 +364,9 @@ pub(super) fn convert_part(ctx: &Ctx, p: &up::PatternPart) -> CResult<PatternPar
                 rels.push(convert_rel(ctx, r, sp)?);
                 expect_node = true;
             }
-            up::PathFactorKind::LegacyShortest { all, .. } => {
+            up::PathFactorKind::LegacyShortest { .. } => {
                 return Err(CypherError::unsupported(
-                    if *all {
-                        "allShortestPaths"
-                    } else {
-                        "shortestPath"
-                    },
+                    "shortestPath inside a longer path pattern",
                     Some(sp),
                 ))
             }
@@ -343,10 +384,29 @@ pub(super) fn convert_part(ctx: &Ctx, p: &up::PatternPart) -> CResult<PatternPar
     if nodes.len() != rels.len() + 1 {
         return Err(CypherError::parse(p.span.into(), "malformed path pattern"));
     }
+    if shortest.is_some() && rels.len() != 1 {
+        return Err(CypherError::unsupported(
+            "shortestPath over more than one relationship pattern",
+            Some(p.span.into()),
+        ));
+    }
+    if shortest.is_some() {
+        // a fixed-length relationship inside shortestPath is a one-hop variable pattern
+        for r in &mut rels {
+            if r.var_len.is_none() {
+                r.var_len = Some(VarLen {
+                    min: 1,
+                    max: Some(1),
+                    span: r.span,
+                });
+            }
+        }
+    }
     Ok(PatternPart {
         binding: k.binding.as_ref().map(|b| ctx.name(b)),
         nodes,
         rels,
+        shortest,
         span: p.span.into(),
     })
 }

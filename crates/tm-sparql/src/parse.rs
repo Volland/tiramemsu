@@ -202,96 +202,6 @@ fn syntax_error(e: &SparqlSyntaxError, text: &str, env: &Env) -> Error {
     parse_error(span_of(e, text), e.to_string())
 }
 
-/// True when the text contains a sequence property path (`p1/p2`) between IRIs.
-///
-/// spargebra desugars a sequence of plain IRIs into a basic graph pattern with a
-/// generated blank node, which the algebra cannot tell from a written `[]`. The
-/// interim path requirement (M3 replaces it) says every sequence fails, so it is
-/// detected on the text: a `/` whose previous token is an IRI or prefixed name
-/// (or `a`) and whose next token starts an IRI, prefixed name, `^` or `(`.
-pub fn has_sequence_path(text: &str) -> bool {
-    let b = text.as_bytes();
-    let mut i = 0;
-    let mut last_iri = false;
-    let starts_step = |from: usize| -> bool {
-        let rest = text[from..].trim_start();
-        match rest.chars().next() {
-            Some('^') | Some('(') => true,
-            Some('<') => rest[1..]
-                .find(['>', ' ', '\n', '\t'])
-                .is_some_and(|e| rest.as_bytes()[1 + e] == b'>'),
-            Some(c) if c.is_ascii_alphabetic() || c == '_' || c == ':' => {
-                let w: String = rest
-                    .chars()
-                    .take_while(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '-' | ':' | '.'))
-                    .collect();
-                w.contains(':') || w == "a"
-            }
-            _ => false,
-        }
-    };
-    while i < b.len() {
-        match b[i] {
-            b'#' => {
-                while i < b.len() && b[i] != b'\n' {
-                    i += 1;
-                }
-            }
-            b'<' => match text[i + 1..].find(['>', ' ', '\n', '\t']) {
-                Some(e) if b[i + 1 + e] == b'>' => {
-                    i += e + 2;
-                    last_iri = true;
-                }
-                _ => {
-                    i += 1;
-                    last_iri = false;
-                }
-            },
-            q @ (b'"' | b'\'') => {
-                i += 1;
-                while i < b.len() && b[i] != q {
-                    if b[i] == b'\\' {
-                        i += 1;
-                    }
-                    i += 1;
-                }
-                i += 1;
-                last_iri = false;
-            }
-            b'?' | b'$' => {
-                i += 1;
-                while i < b.len() && (b[i].is_ascii_alphanumeric() || b[i] == b'_') {
-                    i += 1;
-                }
-                last_iri = false;
-            }
-            b'/' => {
-                if last_iri && starts_step(i + 1) {
-                    return true;
-                }
-                i += 1;
-                last_iri = false;
-            }
-            c if c.is_ascii_alphabetic() || c == b'_' || c == b':' => {
-                let st = i;
-                while i < b.len()
-                    && (b[i].is_ascii_alphanumeric() || matches!(b[i], b'_' | b'-' | b':' | b'.'))
-                {
-                    i += 1;
-                }
-                let w = &text[st..i];
-                last_iri = w.contains(':') || w == "a";
-            }
-            c if c.is_ascii_whitespace() => i += 1,
-            _ => {
-                i += 1;
-                last_iri = false;
-            }
-        }
-    }
-    false
-}
-
 /// Which operator classes of the text have no parenthesised right operand, so that
 /// a right-nested chain in the algebra can only come from an unparenthesised
 /// chain (see [`crate::lower::expr`]: spargebra 0.4.7 parses `a - b - c` as
@@ -398,11 +308,7 @@ pub fn parse_update_only(text: &str, env: &Env) -> Result<Update> {
 
 /// Parses `text` as a query, else as an update (design D2).
 pub fn parse(text: &str, env: &Env) -> Result<Parsed> {
-    let parsed = parse_inner(text, env)?;
-    if has_sequence_path(text) {
-        return Err(crate::error::unsupported(crate::error::PROPERTY_PATH));
-    }
-    Ok(parsed)
+    parse_inner(text, env)
 }
 
 fn parse_inner(text: &str, env: &Env) -> Result<Parsed> {
@@ -519,26 +425,6 @@ mod tests {
         };
         assert_eq!((s.line, s.column), (4, 1));
         assert_eq!(&text[s.offset..], "}");
-    }
-
-    #[test]
-    fn sequence_paths_are_found_on_the_text() {
-        for yes in [
-            "SELECT ?c WHERE { v:alice v:worksAt/v:locatedIn ?c }",
-            "SELECT ?c WHERE { ?a <http://x/p> / <http://x/q> ?c }",
-            "SELECT ?c WHERE { ?a v:p/^v:q ?c }",
-            "SELECT ?c WHERE { ?a a/v:sub ?c }",
-        ] {
-            assert!(has_sequence_path(yes), "{yes}");
-        }
-        for no in [
-            "SELECT ?c WHERE { ?a v:p ?c FILTER(?c / 2 > 1) }",
-            "SELECT ?c WHERE { ?a v:p \"x/y\" }",
-            "SELECT ?c WHERE { ?a <http://x/y/z> ?c } # a/b",
-            "SELECT ?c WHERE { ?a v:p ?c FILTER(STR(?c) = \"v:a/v:b\") }",
-        ] {
-            assert!(!has_sequence_path(no), "{no}");
-        }
     }
 
     #[test]

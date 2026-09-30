@@ -294,26 +294,6 @@ fn inverse_single_predicate() {
     );
 }
 
-// sparql-query "Property paths before the path engine": Transitive path is unsupported for now
-#[test]
-fn transitive_path_is_unsupported() {
-    let t = T::new();
-    assert_unsupported(
-        t.err("SELECT ?x WHERE { v:alice v:knows+ ?x }"),
-        "property path",
-    );
-}
-
-// sparql-query "Property paths before the path engine": Sequence path is unsupported for now
-#[test]
-fn sequence_path_is_unsupported() {
-    let t = T::new();
-    assert_unsupported(
-        t.err("SELECT ?city WHERE { v:alice v:worksAt/v:locatedIn ?city }"),
-        "property path",
-    );
-}
-
 // sparql-query "Parse errors report position": Syntax error location
 #[test]
 fn syntax_error_location() {

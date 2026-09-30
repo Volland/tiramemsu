@@ -32,6 +32,10 @@ harness = false
 name = "sparql"
 harness = false
 
+[[bench]]
+name = "path"
+harness = false
+
 [features]
 default = ["sparql"]
 # The SPARQL side of the differential suite (`tests/differential`); without it the

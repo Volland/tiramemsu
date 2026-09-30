@@ -1,0 +1,23 @@
+---
+source: crates/tm-exec/tests/path_region.rs
+expression: out
+---
+## start bound
+SELECT p0."end" AS c0 FROM tm_path(?1, ?2, ?3, ?4, ?5) AS p0
+[Integer(16), Text("<urn:tiramemsu:v:knows>+"), Text("TRAIL"), Null, Text("asOf/1")]
+[(Sql, None), (NativePath, PathForward)]
+
+## end bound
+SELECT p0."end" AS c0 FROM tm_path(?1, ?2, ?3, ?4, ?5) AS p0
+[Integer(48), Text("^<urn:tiramemsu:v:knows>+"), Text("TRAIL"), Integer(15), Text("asOf/1")]
+[(Sql, None), (NativePath, PathInverted)]
+
+## both bound
+SELECT 1 AS c0 FROM tm_path(?1, ?2, ?3, ?4, ?5) AS p0 WHERE p0."end" = ?6
+[Integer(16), Text("<urn:tiramemsu:v:knows>+"), Text("TRAIL"), Null, Text("asOf/1"), Integer(48)]
+[(Sql, None), (NativePath, PathForward)]
+
+## same variable
+SELECT q0.c0 AS c0 FROM (SELECT column1 AS c0 FROM (VALUES (?1))) AS q0, tm_path(q0.c0, ?2, ?3, ?4, ?5) AS p0 WHERE q0.c0 = p0."end"
+[Integer(16), Text("<urn:tiramemsu:v:knows>+"), Text("TRAIL"), Null, Text("asOf/1")]
+[(Sql, None), (NativePath, PathForward)]
