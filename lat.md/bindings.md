@@ -14,9 +14,9 @@ The bridge is [[bindings/json/src/lib.rs#Database]]. `call_text(op, args)` retur
 
 Reads take a view and return rows; writes are one transaction each; anything that would surprise a caller is an error, never a silent default.
 
-- **Reads:** `sparql`, `cypher`, `triples`, `path`, `events`, `graphs`, `graphMembers`, `values` and `dependents` (`eid`, see [[time-model#Cascade#Dependents]]), each with `{"view": …}` plus its own arguments. They are [[bindings/json/src/read.rs#run]].
+- **Reads:** `sparql`, `cypher`, `triples`, `path`, `events`, `graphs`, `graphMembers`, `values`, `dependents` (`eid`, see [[time-model#Cascade#Dependents]]) and `bundle` (`eid`, returns the `tiramemsu-bundle/1` JSON of [[data-model#Fact Bundles#Bundle Formats]]), each with `{"view": …}` plus its own arguments. They are [[bindings/json/src/read.rs#run]].
 - **Writes:** `transact` (a list of op objects in one transaction), `cypherWrite`, and `with` (speculation: ops applied hypothetically, then queries run on the result, then everything discarded). They are in [[bindings/json/src/tx.rs#transact]].
-- **Transaction ops:** `assert`, `create`, `retract`, `retractMatching`, `supersede`, `confirm`, `meta`, `upsert`, `newNode`, the five graph ops and `cypher`. An op may carry `"as": name`, and a later op may use `{"ref": name}` as a statement id or as a subject or object, which is how a layer is written on a statement created earlier in the same transaction.
+- **Transaction ops:** `assert`, `create`, `retract`, `retractMatching`, `supersede`, `confirm`, `meta`, `upsert`, `newNode`, the five graph ops, `importBundle` (`bundle`; returns `{"root", "statements": [{"id", "eid", "new"}]}`, and `as` names the imported root) and `cypher`. An op may carry `"as": name`, and a later op may use `{"ref": name}` as a statement id or as a subject or object, which is how a layer is written on a statement created earlier in the same transaction.
 - **Housekeeping:** `optimize` and `info`.
 
 ### Views

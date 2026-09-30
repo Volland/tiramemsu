@@ -84,6 +84,7 @@ Local ids are the positions `0..n` of the statements in the bundle. The order is
 `Tx::import_bundle(&Bundle)` validates the whole bundle first (local ids, references, the predicate is an IRI, values are not skolem ids, the order is acyclic), then walks it in order: each statement's positions are mapped (value → encode, local statement → its mapped eid, anonymous label → minted node), a `sys:inGraph` statement goes through `add_to_graph(member, graph, valid)`, and every other statement through `assert(s, p, o, valid)`. So:
 - Importing twice asserts `Existing` everywhere the second time and changes nothing.
 - Importing onto a database that already holds the root fact (same `(s, p, o)`, overlapping valid time) returns that eid, and the layers are asserted onto it. The existing statement's valid time is not widened (assert semantics).
+- Parallel edges (two statements made with `create` that share `(s, p, o)` and overlapping valid time) collapse into one statement on import, because assert matches the second to the first. Their layers then stand on the one eid.
 - Valid time is carried; transaction time is the importing transaction's.
 - Schema applies: `sys:valueType`, `sys:unique` and `sys:cardinality one` in the *target* database. A violation fails the operation, and the caller's transaction rolls back as a whole. A `sys:one` predicate in the target retracts the target's overlapping value, as any assert does.
 - Reserved-namespace checks apply as for any user write.

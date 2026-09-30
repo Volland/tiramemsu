@@ -22,28 +22,38 @@
 
 ## 3. Bundle value and export in `tm-core`
 
-- [ ] 3.1 Module `bundle`: `Bundle`, `BundleStatement`, `BTerm`, `ImportReport`, `ImportedStatement`, re-exported from the crate root, with doc comments and a doctest.
-- [ ] 3.2 `read::bundle(exec, spec, root) -> Result<Bundle>`: dependents, downward closure, the three exclusions with propagation to a fixpoint and a recomputed closure, root errors (`NotLive`, `Unsupported`), term decoding, anonymous labels, topological order with eid ties and cycle members last.
-- [ ] 3.3 Tests: members, evidence carried downward, confirmation / supersede link / tx metadata exclusions, layer on an excluded statement, order, stability.
+- [x] 3.1 Module `bundle`: `Bundle`, `BundleStatement`, `BTerm`, `ImportReport`, `ImportedStatement`, re-exported from the crate root, with doc comments and a doctest.
+- [x] 3.2 `read::bundle(exec, spec, root) -> Result<Bundle>`: dependents, downward closure, the three exclusions with propagation to a fixpoint and a recomputed closure, root errors (`NotLive`, `Unsupported`), term decoding, anonymous labels, topological order with eid ties and cycle members last.
+- [x] 3.3 Tests: members, evidence carried downward, confirmation / supersede link / tx metadata exclusions, layer on an excluded statement, order, stability.
+
+> Notes (group 3): the module is `crates/tm-core/src/bundle.rs` (types, `Bundle::check`, the crate-private `export` and `import_order`); `read::bundle` is a thin public wrapper so the reads stay together. `engine::reserved` became `pub(crate)` so the export applies exactly the user-write predicate rule (`check_predicate`), with `sys:inGraph` as the one exception. A root that falls under an exclusion fails with `Unsupported { feature }` carrying the reason ("bundle root that references a transaction", "... with the engine predicate ...", "... which is not in the view"). A bundle is built in one read snapshot and decodes terms through a per-call `TermReader`, so it also works inside `Db::with`. Tests: `crates/tm-core/tests/fact_bundles.rs` (`members_order_and_stability`, `exclusions`, both hosts).
 
 ## 4. Import in `tm-core`
 
-- [ ] 4.1 `Tx::import_bundle(&Bundle) -> Result<ImportReport>` in `engine/bundle.rs`: validate (ids, references, predicate IRIs, skolem values, root), reject cycles before writing, then assert / `add_to_graph` in order with fresh nodes per anonymous label.
-- [ ] 4.2 Tests: round trip between two databases (layers, nested layers, a belief pointing at the root, a membership, valid times), idempotent re-import, existing root fact, anonymous nodes, skolem value rejected, cycle rejected, schema violation atomic, as-of bundle of a since-retracted structure.
+- [x] 4.1 `Tx::import_bundle(&Bundle) -> Result<ImportReport>` in `engine/bundle.rs`: validate (ids, references, predicate IRIs, skolem values, root), reject cycles before writing, then assert / `add_to_graph` in order with fresh nodes per anonymous label.
+- [x] 4.2 Tests: round trip between two databases (layers, nested layers, a belief pointing at the root, a membership, valid times), idempotent re-import, existing root fact, anonymous nodes, skolem value rejected, cycle rejected, schema violation atomic, as-of bundle of a since-retracted structure.
+
+> Notes (group 4): import re-sorts topologically (ties by position), so a hand-written bundle in any order imports, and a bundle built by `read::bundle` imports in its own order; a self-reference counts as a cycle of one. Memberships go through `add_to_graph`, so a membership on a `sys:` statement or a non-node graph fails as it does anywhere. Found while testing: statements with equal content and overlapping valid time (parallel edges made with `create`) collapse into one eid on import, because assert matches them; this is now stated in design.md (Decision 8), the spec and `lat.md`. Beyond the listed tests, a property test (`random::prop_bundles_round_trip`, both hosts, 24 cases by default, 300 ran clean) checks that export, import into an empty file and export again give the same bundle, and that a second import is a no-op, for every live statement of random layered graphs. The round-trip test compares the target's own bundle of the imported root with the source bundle, which checks contents, layer structure, membership and valid times at once.
 
 ## 5. Serialization in the facade
 
-- [ ] 5.1 `BundleFormat` extension trait: `to_json`, `from_json` (format `tiramemsu-bundle/1`), `to_ntriples` over the `tm-sparql` term renderer and N-Triples writer.
-- [ ] 5.2 `View::bundle(root)` in the facade block, with a doctest.
-- [ ] 5.3 Tests: JSON round trip stable over every term kind, unknown version rejected, malformed statements rejected, N-Triples parses as RDF 1.2 (`oxttl`) and carries the reifier and annotation triples.
+- [x] 5.1 `BundleFormat` extension trait: `to_json`, `from_json` (format `tiramemsu-bundle/1`), `to_ntriples` over the `tm-sparql` term renderer and N-Triples writer.
+- [x] 5.2 `View::bundle(root)` in the facade block, with a doctest.
+- [x] 5.3 Tests: JSON round trip stable over every term kind, unknown version rejected, malformed statements rejected, N-Triples parses as RDF 1.2 (`oxttl`) and carries the reifier and annotation triples.
+
+> Notes (group 5): `tm-core` depends only on `thiserror` and `lru`, so the forms are the facade trait `BundleFormat` (`crates/tiramemsu/src/bundle.rs`, implemented for `tm_core::Bundle`) plus the constant `BUNDLE_FORMAT`. The facade gains `serde_json` (already in the tree through `tm-cypher`) and the dev-dependency `oxttl` for the parse test. `to_json` returns a `serde_json::Value`, as `CypherResult::to_json` does. N-Triples reuses `tm_sparql::results::{term::render, nt::write}`; valid-time bounds are UTC `xsd:dateTime` literals on `tm:validFrom` / `tm:validTo`. `View::bundle` sits in the same separate `impl` block as `View::dependents`. Tests: `crates/tiramemsu/tests/fact_bundles.rs`; the JSON test's fixture had to use canonical literals (`12.5`, not `12.50`), which is what a bundle read from a database always holds.
 
 ## 6. Bundles in the JSON bridge
 
-- [ ] 6.1 Read op `bundle` (`eid`, `view`) and transaction op `importBundle` (`bundle`, `as`), documented in `Database::call`.
-- [ ] 6.2 Bridge test: read a bundle from one database, import it into another in a `transact` call, check the mapping and the `as` reference.
+- [x] 6.1 Read op `bundle` (`eid`, `view`) and transaction op `importBundle` (`bundle`, `as`), documented in `Database::call`.
+- [x] 6.2 Bridge test: read a bundle from one database, import it into another in a `transact` call, check the mapping and the `as` reference.
+
+> Notes (group 6): `importBundle` reuses `Bundle::from_json`, so a malformed bundle fails with code `InvalidTerm` (a database error, not `InvalidArgument`). `as` on `importBundle` names the imported root. The Node and Python packages reach both ops through their generic `call`; typed wrapper methods are a follow-up, because their sources are outside this change.
 
 ## 7. Documentation and checks
 
-- [ ] 7.1 `lat.md/time-model.md` Cascade (read-only preview), `lat.md/data-model.md` (Fact Bundles section), `lat.md/api.md` (Rust surface, bindings).
-- [ ] 7.2 `lat.md/tests.md` sections for the new tests, each referenced by exactly one `@lat:` comment; `lat check` clean.
-- [ ] 7.3 `cargo fmt --check`, `cargo clippy --all-targets -- -D warnings`, `cargo test --workspace`, `openspec validate add-fact-bundles --strict`.
+- [x] 7.1 `lat.md/time-model.md` Cascade (read-only preview), `lat.md/data-model.md` (Fact Bundles section), `lat.md/api.md` (Rust surface, bindings).
+- [x] 7.2 `lat.md/tests.md` sections for the new tests, each referenced by exactly one `@lat:` comment; `lat check` clean.
+- [x] 7.3 `cargo fmt --check`, `cargo clippy --all-targets -- -D warnings`, `cargo test --workspace`, `openspec validate add-fact-bundles --strict`.
+
+> Notes (group 7): `lat.md/time-model.md` gained `Cascade#Dependents`, `lat.md/data-model.md` a `Fact Bundles` section with `Bundle Formats`, and `lat.md/api.md` and `lat.md/bindings.md` list the new methods and ops. `lat.md/tests.md` has a `Dependents` section (7 leaves) and a `Fact Bundles` section (14 leaves), each leaf referenced by one `@lat:` comment. `lat check` passes. Final run: `cargo fmt --check` and `cargo clippy --all-targets -- -D warnings` are clean, and `cargo test --workspace` passes 1047 tests with 0 failures (1019 after part A). The change is not archived.

@@ -3,7 +3,8 @@
 use std::cell::RefCell;
 
 use tm_core::{
-    read, Eid, Error, Event, Executor, ObjectId, Result, TermReader, Triple, Value, ViewSpec,
+    read, Bundle, Eid, Error, Event, Executor, ObjectId, Result, TermReader, Triple, Value,
+    ViewSpec,
 };
 use tm_exec::{CacheMode, Explain, PathRequest, PathRow, QueryEngine, QueryResult};
 use tm_ir::{IrQuery, Params, PathMode};
@@ -346,5 +347,46 @@ impl View<'_> {
     pub fn dependents(&self, eid: Eid) -> Result<Vec<Eid>> {
         let spec = self.spec;
         self.exec(|e, _| read::dependents(e, &spec, eid))
+    }
+
+    /// The fact bundle of `root` in this view: the statements that stand on `root`
+    /// ([`View::dependents`]) plus every visible statement they reference,
+    /// transitively, as a portable [`Bundle`] that [`Tx::import_bundle`] writes into
+    /// another database. Write it as JSON or N-Triples with [`BundleFormat`].
+    ///
+    /// Left out, with whatever references them: statements about transactions
+    /// (transaction numbers are local to a file), engine bookkeeping such as
+    /// `sys:supersedes` and `sys:confirmedBy` (memberships are kept), and statements
+    /// that reference a statement outside the view. Anonymous nodes become
+    /// bundle-local labels.
+    ///
+    /// # Errors
+    ///
+    /// `NotLive(root)` when `root` is not visible in this view, and `Unsupported`
+    /// when `root` itself is one of the statements left out.
+    ///
+    /// ```
+    /// # use tiramemsu::*;
+    /// # let dir = tempfile::tempdir().unwrap();
+    /// let a = Db::open(dir.path().join("a.db"), OpenOptions::default())?;
+    /// let b = Db::open(dir.path().join("b.db"), OpenOptions::default())?;
+    /// let v = |s: &str| Value::iri(format!("urn:tiramemsu:v:{s}"));
+    /// let r = a.transact(TxOptions::default(), |tx| {
+    ///     let job = tx.assert(v("alice"), v("worksAt"), v("acme"), Valid::ALWAYS)?.eid();
+    ///     tx.assert(job, v("confidence"), Value::Double(0.8), Valid::ALWAYS)?;
+    ///     Ok(())
+    /// })?;
+    /// let bundle = a.now().bundle(r.asserted[0])?;
+    /// let report = b.transact(TxOptions::default(), |tx| tx.import_bundle(&bundle).map(|_| ()))?;
+    /// assert_eq!(report.asserted.len(), 2);
+    /// # Ok::<(), Error>(())
+    /// ```
+    ///
+    /// [`Tx::import_bundle`]: tm_core::Tx::import_bundle
+    /// [`BundleFormat`]: crate::BundleFormat
+    // @lat: [[data-model#Fact Bundles]]
+    pub fn bundle(&self, root: Eid) -> Result<Bundle> {
+        let spec = self.spec;
+        self.exec(|e, _| read::bundle(e, &spec, root))
     }
 }

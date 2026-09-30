@@ -34,6 +34,7 @@ impl View {
     pub fn graphs(&self) -> Result<Vec<ObjectId>>;                             // graphs with a visible membership, or declared
     pub fn graph_members(&self, graph: ObjectId) -> Result<Vec<Eid>>;          // member statements in this view
     pub fn dependents(&self, eid: Eid) -> Result<Vec<Eid>>;                    // what stands on eid (the cascade set on now)
+    pub fn bundle(&self, root: Eid) -> Result<Bundle>;                         // root, its dependents and their evidence
     pub fn values(&self, s: ObjectId, key: ObjectId) -> Result<Vec<ObjectId>>; // statements, else volatile (Now only)
     pub fn encode(&self, v: &Value) -> Result<Option<ObjectId>>;              // lookup only, never inserts
     pub fn decode(&self, id: ObjectId) -> Result<Value>;
@@ -44,6 +45,7 @@ impl View {
 `Tx` is the core write handle, re-exported by the facade. The `TxCypher` extension trait adds `cypher(q, params)`, which runs a Cypher query with reads and writes inside the caller's `transact` closure ([[crates/tiramemsu/src/cypher.rs#TxCypher]]); `Tx::set_vocab` and `Tx::set_prefix` change the vocabulary configuration ([[data-model#Vocabulary Mapping]]). Besides the operations of [[time-model#Operations]] it offers `assert_with` (with `OnExisting::Confirm`), `new_bnode`, `clear_volatile`, `encode`, `lookup`, `decode`, `schema`, `t` and `instant`. Positions take any `IntoObject`: an `ObjectId`, `Eid`, `TxId` or `Value`.
 
 - Named graphs ([[data-model#Named Graphs]]): `Tx::add_to_graph(eid, graph, opts) -> (membership_eid, is_new)` (idempotent, `opts.valid` bounds the membership), `remove_from_graph(eid, graph) -> bool`, `clear_graph(graph) -> Vec<Eid>`, `create_graph(graph)`, and the helpers `drop_graph`, `graph_declared`, `graph_has_members` and `live_graphs`. All reject a non-node graph with `InvalidGraphName`. `TxReport` lists new memberships in `memberships` and retracted ones in `memberships_retracted`, and no longer in `asserted` and `retracted`.
+- Fact bundles ([[data-model#Fact Bundles]]): `View::bundle(root) -> Bundle` and `Tx::import_bundle(&Bundle) -> ImportReport` (`root` and one `{local, eid, new}` per statement). The facade trait `BundleFormat` adds `to_json`, `from_json` (`tiramemsu-bundle/1`) and `to_ntriples`. `View::dependents(eid)` is the read-only cascade preview of [[time-model#Cascade#Dependents]].
 - A `View` is a pure value: creating or deriving one does no I/O. Rows from an as-of view report `t_ret` and `ret_kind` as absent, so each row shows what was believed then; `history()` gives real lifetimes.
 - `SparqlResult` is `Solutions`, `Boolean`, `Graph` or `Update(TxReport)`, with `write_sparql_json` (SELECT, ASK) and `write_ntriples` (CONSTRUCT). A SPARQL update is one transaction on the writer and returns its `TxReport`. See [[query#Front Ends#SPARQL]].
 - `values(s, key)` is how M0 exposes volatile state before a query language exists. See [[storage#Volatile Table]].

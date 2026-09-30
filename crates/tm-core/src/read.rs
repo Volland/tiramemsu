@@ -266,6 +266,49 @@ pub fn dependents(exec: &mut dyn Executor, spec: &ViewSpec, root: Eid) -> Result
     Ok(order)
 }
 
+/// The [`Bundle`](crate::Bundle) of `root` in `spec`: the statements that stand on
+/// `root` ([`dependents`]) plus every visible statement they reference in subject or
+/// object position, transitively, so that no imported statement dangles.
+///
+/// Left out, with everything that references them: statements whose subject or
+/// object is a transaction (transaction numbers are local to a file), statements
+/// whose predicate is engine bookkeeping a user write cannot repeat
+/// (`sys:supersedes`, `sys:confirmedBy`; `sys:inGraph` memberships are kept), and
+/// statements that reference a statement not visible in the view. Statements come
+/// references first (ties by eid), local ids are positions, and `NODE` / `BNODE` ids
+/// become bundle-local anonymous labels, so the same view of the same data always
+/// gives an equal bundle.
+///
+/// # Errors
+///
+/// [`crate::Error::NotLive`] when `root` is not visible in the view, and
+/// [`crate::Error::Unsupported`] when `root` itself is one of the statements left out.
+///
+/// # Example
+///
+/// ```
+/// use tm_core::{read, vocab::v, BTerm, Store, StoreOptions, TxOptions, Valid, Value, ViewSpec};
+/// use tm_rusqlite as host;
+///
+/// # let dir = tempfile::tempdir().unwrap();
+/// # let path = dir.path().join("db");
+/// let mut store = Store::open(&host::RusqliteHost::new(), &path, StoreOptions::default())?;
+/// let r = store.transact(TxOptions::default(), |tx| {
+///     let job = tx.assert(Value::iri(v("alice")), Value::iri(v("worksAt")), Value::iri(v("acme")), Valid::ALWAYS)?.eid();
+///     tx.assert(Value::iri(v("belief9")), Value::iri(v("supportedBy")), job, Valid::ALWAYS)?;
+///     Ok(())
+/// })?;
+/// // the belief brings the fact it relies on, and the fact comes first
+/// let b = store.read(|e| read::bundle(e, &ViewSpec::now(), r.asserted[1]))?;
+/// assert_eq!(b.statements.len(), 2);
+/// assert_eq!(b.root, 1);
+/// assert_eq!(b.statements[1].o, BTerm::Stmt(0));
+/// # Ok::<(), tm_core::Error>(())
+/// ```
+pub fn bundle(exec: &mut dyn Executor, spec: &ViewSpec, root: Eid) -> Result<crate::Bundle> {
+    crate::bundle::export(exec, spec, root)
+}
+
 /// The ids of `sys:inGraph`, `rdf:type` and `sys:Graph`; `None` for one that is not
 /// interned yet (a store that never used graphs has none of them).
 fn graph_terms(exec: &mut dyn Executor) -> Result<[Option<ObjectId>; 3]> {

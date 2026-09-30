@@ -213,6 +213,7 @@ Retracting a statement retracts, in the same transaction and recursively, every 
 - **Time:** the root check and every expansion take their predicates from [[crates/tm-core/src/view.rs#scan_predicates]], so `asOf(t)` gives the structure as it was (also after it was retracted), `history` every statement that ever stood on the root, including ones retracted before it, and `validAt` keeps only statements valid at the instant.
 - **Equivalence:** under the now view the set equals the retracted statements and memberships of a dry-run `retract(eid)`, and the ends of the path `(^sys:subject|^sys:object)*` from `eid` ([[query#Physical Planning#Path Engine]]). The path engine is not used, because `tm-core` must run on a host without virtual tables.
 - **Unbounded:** the read is never truncated and never fails for size. An under-reported impact list is the worst answer to "what would this take with it", so `max_cascade` stays a guard on retractions only; a caller compares `len()` with its own limit.
+- **Fact bundles** start from the same walk. See [[data-model#Fact Bundles]].
 
 ## Event Log
 

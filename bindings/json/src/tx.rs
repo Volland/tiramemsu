@@ -3,8 +3,8 @@
 use serde_json::{json, Value as J};
 use std::collections::HashMap;
 use tiramemsu::{
-    AssertOpts, Asserted, Db, Eid, Error, ObjectId, OnExisting, Patch, PatchField, Tx, TxCypher,
-    Valid,
+    AssertOpts, Asserted, Bundle, BundleFormat, Db, Eid, Error, ObjectId, OnExisting, Patch,
+    PatchField, Tx, TxCypher, Valid,
 };
 
 use crate::read::{report_json, run};
@@ -252,6 +252,19 @@ fn apply(tx: &mut Tx<'_>, ops: &[J]) -> Res<(Vec<J>, HashMap<String, Eid>)> {
             "dropGraph" => {
                 let g = term(tx, op, "graph", &refs)?;
                 json!(tx.drop_graph(g)?.iter().map(|e| e.n()).collect::<Vec<_>>())
+            }
+            "importBundle" => {
+                let j = op
+                    .get("bundle")
+                    .ok_or_else(|| arg("`bundle` is required"))?;
+                let r = tx.import_bundle(&Bundle::from_json(j)?)?;
+                named = Some(r.root);
+                json!({
+                    "root": r.root.n(),
+                    "statements": r.statements.iter().map(|s| json!({
+                        "id": s.local, "eid": s.eid.n(), "new": s.new,
+                    })).collect::<Vec<_>>(),
+                })
             }
             "cypher" => {
                 let text = op

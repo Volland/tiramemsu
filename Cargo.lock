@@ -1265,9 +1265,11 @@ version = "0.1.0"
 dependencies = [
  "criterion",
  "lru",
+ "oxttl",
  "proptest",
  "rusqlite",
  "serde",
+ "serde_json",
  "sparesults",
  "tempfile",
  "tm-core",

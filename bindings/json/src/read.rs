@@ -4,8 +4,8 @@ use std::collections::HashMap;
 
 use serde_json::{json, Map, Value as J};
 use tiramemsu::{
-    Db, Eid, Event, ObjectId, Op, PathDir, PathMode, PathRow, RdfTerm, RdfTriple, SparqlResult,
-    TimeRef, Triple, TxReport, View,
+    BundleFormat, Db, Eid, Event, ObjectId, Op, PathDir, PathMode, PathRow, RdfTerm, RdfTriple,
+    SparqlResult, TimeRef, Triple, TxReport, View,
 };
 
 use crate::value::{eid_from_json, params_from_json, value_from_json, value_to_json};
@@ -131,6 +131,7 @@ pub fn run(view: &View<'_>, op: &str, args: &J) -> Res<J> {
                 .map(|e| e.n())
                 .collect::<Vec<_>>()))
         }
+        "bundle" => Ok(view.bundle(eid_arg(args)?)?.to_json()),
         other => Err(arg(format!("unknown read operation {other:?}"))),
     }
 }

@@ -2,12 +2,14 @@
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
 
+mod bundle;
 mod cypher;
 mod db;
 mod pool;
 mod sparql;
 mod view;
 
+pub use bundle::{BundleFormat, BUNDLE_FORMAT};
 pub use cypher::TxCypher;
 pub use db::{Db, OpenOptions};
 pub use sparql::SparqlResult;
@@ -19,6 +21,7 @@ pub use tm_core::{
     PatchField, Position, PredicateSchema, Result, RetKind, Span, SqlError, SqlValue, SystemClock,
     Tag, TimeRef, Triple, Tx, TxId, TxOptions, TxReport, TxSel, Valid, ValidSel, Value, ViewSpec,
 };
+pub use tm_core::{BTerm, Bundle, BundleStatement, ImportReport, ImportedStatement};
 pub use tm_cypher as cypher_frontend;
 pub use tm_cypher::{CypherParams, CypherResult, CypherValue};
 pub use tm_exec::path::row::{Dir as PathDir, HopKind};

@@ -132,6 +132,31 @@ INSERT DATA { v:session12 v:startedBy v:agent7 }                  # metadata: an
 
 Implementation: `crates/tm-core/src/engine/graph.rs` holds the `Tx` operations, [[crates/tm-core/src/read.rs#graph_members]] the reads behind `View::graphs` and `View::graph_members`, and the graph selector on `TriplePattern` lowers to a membership join in `tm-exec`.
 
+## Fact Bundles
+
+A fact bundle moves a belief with its evidence from one database file to another (one file per agent). `View::bundle(root)` builds it from a view; `Tx::import_bundle` writes it with assert semantics.
+
+Eids, node ids and transaction numbers are local to a file, so a bundle names its statements by bundle-local ids and travels as values. The type is [[crates/tm-core/src/bundle.rs#Bundle]]: ordered statements `{local, s, p, o, valid}` where a position is a `Value`, a local statement id or a local anonymous-node label, plus the root's local id.
+
+- **Members:** the root's [[time-model#Cascade#Dependents]] in the view (its layers, the beliefs that cite it, its memberships), plus the downward closure: every visible statement a member references in `s` or `o`, transitively, so no imported layer dangles. The dependents of that evidence are not taken, or the bundle would grow into the whole connected component.
+- **Left out, with whatever references them:** statements whose `s` or `o` is a transaction (numbers are local to a file: `sys:confirmedBy`, tx metadata); predicates a user write cannot repeat, i.e. engine bookkeeping such as `sys:supersedes` (`sys:inGraph` is kept, import writes it through `add_to_graph`); statements that reference a statement outside the view. A root that falls under these rules is `Unsupported`; an invisible root is `NotLive`.
+- **Order:** references first, ties by source eid, reference-cycle members last; local ids are positions. The same view of the same data gives an equal bundle, so output is stable.
+- **Anonymous nodes:** `NODE` and `BNODE` ids become bundle-local labels, never skolem IRIs (`urn:tiramemsu:node:5` would name node 5 of the target). Import mints one fresh `NODE` per label, so a node shared by two statements stays shared. As with RDF blank nodes, importing twice mints twice; the `NODE`/`BNODE` distinction is not carried.
+- **Import:** references first, `sys:inGraph` through `add_to_graph`, everything else through `assert` with its valid time, in the caller's transaction. So a second import changes nothing, a root fact already present (same content, overlapping valid time) takes the layers on its existing eid, parallel edges with equal content collapse into one statement, schema checks of the target apply, and any failure rolls the whole transaction back. The report maps each local id to `(eid, new)`.
+- **Cycles:** a reference cycle (e7 about e8 about e7) is exported but import fails with `Unsupported("bundle with a reference cycle")` before writing. Supersede replays cycles by pre-allocating eids, but that is create semantics, and finding an equal cycle in the target is a subgraph-isomorphism question.
+- **Not carried:** transaction time (imported statements get the importing transaction), lifetimes and history, and transaction metadata.
+
+The walk and exclusions are [[crates/tm-core/src/bundle.rs#export]]; import is `crates/tm-core/src/engine/bundle.rs`. The JSON bridge has the read `bundle` and the transaction op `importBundle` ([[bindings#JSON Bridge#Operations]]).
+
+### Bundle Formats
+
+The facade trait `BundleFormat` gives a bundle a versioned JSON form and an RDF 1.2 N-Triples export; `tm-core` stays free of a JSON dependency.
+
+- **JSON** (`tiramemsu-bundle/1`): `{"format", "root", "statements": [{"id", "s", "p", "o", "validFrom"?, "validTo"?}]}` with terms `{"iri"}`, `{"ref": id}`, `{"blank": label}`, `{"lex", "datatype"}` or `{"lex", "lang"}`, and times in epoch ms. Literals always carry their datatype, so `from_json(to_json(b)) == b`. `from_json` refuses another version and checks the structure (`InvalidTerm`).
+- **N-Triples** (export only): per statement its triple, `_:s<id> rdf:reifies <<( s p o )>>`, and `tm:validFrom` / `tm:validTo` on the reifier; a statement in a position is its reifier, so a layer reads as an RDF 1.2 annotation. Written by the `tm-sparql` N-Triples writer.
+
+See [[crates/tiramemsu/src/bundle.rs#BundleFormat]].
+
 ## ObjectId
 
 Every value in `s`, `p`, `o` and `eid` is a signed 64-bit integer: a 60-bit payload shifted left by 4, OR-ed with a 4-bit tag in the low bits.
