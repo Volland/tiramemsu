@@ -238,6 +238,7 @@ fn chunk_sizes(c: &mut Criterion) {
                             view: ViewSpec::NOW,
                             end: None,
                             graphs: None,
+                            time_respecting: None,
                         },
                     )
                     .unwrap()

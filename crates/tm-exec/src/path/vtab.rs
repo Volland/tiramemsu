@@ -1,5 +1,5 @@
 //! The `tm_path` table-valued function: `tm_path(start, path, mode, max_hops, view,
-//! graphs)` returning `(start, "end", hops, path_json)`. The host binds this body to its
+//! graphs)` returning `(start, "end", hops, path_json, arrival)`. The host binds this body to its
 //! virtual-table API (`tm_core::ConnTableFunction`); the body reads through the
 //! calling connection, so it sees the calling statement's snapshot.
 
@@ -11,7 +11,7 @@ use tm_core::{
 use tm_ir::PathMode;
 
 use super::engine::{PathEngine, PathRequest};
-use super::view::parse_view;
+use super::view::parse_view_arg;
 use crate::native::{NativeKind, NativeOperator};
 
 /// The SQL name.
@@ -78,9 +78,9 @@ pub fn call(
         SqlValue::Integer(n) if *n >= 0 => Some(u32::try_from(*n).unwrap_or(u32::MAX)),
         _ => return Err(arg_err("max_hops", "expected a non-negative integer")),
     };
-    let view = match get(4) {
-        SqlValue::Null => tm_core::ViewSpec::NOW,
-        SqlValue::Text(t) => parse_view(t).map_err(|m| arg_err("view", m))?,
+    let (view, time_respecting) = match get(4) {
+        SqlValue::Null => (tm_core::ViewSpec::NOW, None),
+        SqlValue::Text(t) => parse_view_arg(t).map_err(|m| arg_err("view", m))?,
         _ => return Err(arg_err("view", "expected text")),
     };
     let graphs = parse_graphs(get(5))?;
@@ -103,6 +103,7 @@ pub fn call(
         view,
         end,
         graphs,
+        time_respecting,
     };
     let with_path = mode != PathMode::Reachability;
     let mut rows = Vec::new();
@@ -116,6 +117,7 @@ pub fn call(
                     (Some(p), true) => SqlValue::Text(p.to_json()),
                     _ => SqlValue::Null,
                 },
+                r.arrival.map_or(SqlValue::Null, SqlValue::Integer),
             ]);
             Ok(true)
         })
@@ -178,7 +180,7 @@ impl NativeOperator for PathOperator {
             args: ["start", "path", "mode", "max_hops", "view", "graphs"]
                 .map(String::from)
                 .to_vec(),
-            columns: ["start", "end", "hops", "path_json"]
+            columns: ["start", "end", "hops", "path_json", "arrival"]
                 .map(String::from)
                 .to_vec(),
             pushdown: vec!["end".to_string()],

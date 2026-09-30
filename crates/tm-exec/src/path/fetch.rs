@@ -32,12 +32,30 @@ pub struct Nb {
     pub kind: HopKind,
     /// The direction of the hop.
     pub dir: Dir,
+    /// The statement's valid-time start (`None` = unbounded).
+    pub v_from: Option<i64>,
+    /// The statement's valid-time end, exclusive (`None` = unbounded).
+    pub v_to: Option<i64>,
 }
 
 impl Nb {
     /// The ordering key of the hop: eid, then kind, then direction.
     pub fn key(&self) -> (i64, u8, Dir) {
         (self.eid, self.kind as u8, self.dir)
+    }
+
+    /// The time after this hop on a time-respecting walk that is at `tau` before it
+    /// (`i64::MIN` is −∞), or `None` when the hop is not allowed: a stored statement
+    /// valid `[v_from, v_to)` needs `v_to > tau` and moves the time to
+    /// `max(tau, v_from)`; a virtual hop is structural and keeps `tau`.
+    pub fn step_time(&self, tau: i64) -> Option<i64> {
+        if self.kind != HopKind::Stored {
+            return Some(tau);
+        }
+        if self.v_to.is_some_and(|to| to <= tau) {
+            return None;
+        }
+        Some(self.v_from.map_or(tau, |from| from.max(tau)))
     }
 }
 
@@ -204,7 +222,7 @@ impl<'a> Fetcher<'a> {
             if let Scope::Graphs { in_graph, ids } = &self.scope {
                 // the statement row `t` is the one traversed, also for a virtual hop
                 // (the statement whose part is stepped to or from); the membership is
-                // read in the same view, one seek on `(s, p)` of the spo index
+                // read in the same view, a covering-index seek with the key bound
                 let ig = pa.push(SqlValue::Integer(*in_graph));
                 let gs = pa.push(SqlValue::IntArray(ids.clone()));
                 let mut member = vec![
@@ -219,9 +237,11 @@ impl<'a> Fetcher<'a> {
                 ));
             }
             // the array drives the join: SQLite then probes the index of `t` once per
-            // node instead of scanning `t` against an `IN` list
+            // node instead of scanning `t` against an `IN` list. The valid interval is
+            // in every covering index, so reading it for time respect is free.
             let sql = format!(
-                "SELECT {cols} FROM rarray({arr}) AS r CROSS JOIN triple AS t WHERE {}",
+                "SELECT {cols}, t.v_from, t.v_to FROM rarray({arr}) AS r CROSS JOIN triple AS t \
+                 WHERE {}",
                 conds.join(" AND ")
             );
             self.built.insert(
@@ -367,6 +387,8 @@ impl<'a> Fetcher<'a> {
                     p,
                     kind,
                     dir,
+                    v_from: r[4].as_i64(),
+                    v_to: r[5].as_i64(),
                 });
                 Ok(())
             })?;

@@ -42,15 +42,16 @@ fn callable_everywhere_and_read_only() {
         &format!("SELECT * FROM tm_path({a}, 'knows+', 'REACH')"),
     );
     assert_eq!(rows.len(), 1);
-    assert_eq!(rows[0].len(), 4, "start, end, hops, path_json");
+    assert_eq!(rows[0].len(), 5, "start, end, hops, path_json, arrival");
     assert_eq!(rows[0][1].as_i64(), Some(g.id("bob").raw()));
     assert!(rows[0][3].is_null());
+    assert!(rows[0][4].is_null(), "no arrival without timeRespecting");
     let cols = q(&g, "SELECT name FROM pragma_table_info('tm_path')");
     let names: Vec<_> = cols
         .iter()
         .map(|r| r[0].as_str().unwrap().to_string())
         .collect();
-    assert_eq!(names, ["start", "end", "hops", "path_json"]);
+    assert_eq!(names, ["start", "end", "hops", "path_json", "arrival"]);
     let minimal = q(&g, &format!("SELECT \"end\" FROM tm_path({a}, 'knows')"));
     assert_eq!(ints(&minimal, 0), vec![g.id("bob").raw()]);
     assert!(g

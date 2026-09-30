@@ -24,7 +24,7 @@ pub use tm_cypher::{CypherParams, CypherResult, CypherValue};
 pub use tm_exec::path::row::{Dir as PathDir, HopKind};
 pub use tm_exec::{
     ExecStats, Explain, Hop, LftjConfig, NativeKind, NativeOperator, Path, PathRow, PlannerOptions,
-    QueryResult, RegionInfo, RegionKind, ResultValue, RouteNote,
+    QueryResult, RegionInfo, RegionKind, ResultValue, RouteNote, TimeRespecting,
 };
 pub use tm_ir as ir;
 pub use tm_ir::{IrQuery, Params, PathMode};

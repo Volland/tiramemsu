@@ -186,6 +186,30 @@ A path using `sys:subject` hops finds the entities behind a statement that a bel
 
 A Cypher `-[*]->` pattern without an upper bound stops at `max_hops` and does not fail.
 
+### Time Respecting Paths Match Brute Force
+
+For random small graphs with random valid intervals and a random start instant, every mode equals an enumeration of all time-respecting walks within the hop bound.
+
+`REACH` gives each end once with its shortest length and earliest arrival, `TRAIL` the edge-distinct walks with their arrivals, `ALL_SHORTEST` the minimal-length walks, and `ANY_SHORTEST` the lexicographically smallest of them per end. A property test.
+
+### Time Respecting Scenarios
+
+Hand cases of the hop rule, with the arrival each one expects in the modes it names.
+
+An infection chain, a start instant that cuts early facts, same-instant chaining and its exclusive boundary, unbounded intervals, a longer walk that arrives earlier, a pair re-expanded with an earlier time, and shortest paths that avoid going back in time.
+
+### Time Respecting Combines With Graphs And Layers
+
+Virtual hops through layers keep the time, a stored hop after them still needs its fact to hold, a graph set and the view's `validAt` still filter every hop, and the arrival is the same through every surface.
+
+### tm_path Arrival Column
+
+`tm_path` makes a call time-respecting through a `timeRespecting` view part, returns `arrival` for `REACH` and `TRAIL` rows (NULL without the option), matches `View::path_with`, and rejects a malformed or repeated part with `tm_path: view:`.
+
+### Time Respecting View Text
+
+The `view` text parser accepts `timeRespecting` alone, with an RFC 3339 date or date-time or epoch milliseconds, in any order with the other parts and with the `tm:` prefix, and rejects a repeated or malformed part.
+
 ## Named Graphs
 
 Checks of [[data-model#Named Graphs]] across the core, the planner, SPARQL query and update, and Cypher.

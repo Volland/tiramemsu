@@ -118,6 +118,7 @@ impl Fixture {
                     view: ViewSpec::NOW,
                     end: None,
                     graphs: None,
+                    time_respecting: None,
                 },
             )
             .unwrap()

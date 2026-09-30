@@ -25,7 +25,9 @@ use tm_ir::{IrQuery, Params};
 pub use decode::{CacheMode, TermCache};
 pub use exec::{ExecContext, Prepared};
 pub use native::{LftjConfig, NativeKind, NativeOperator, OperatorRegistry, PlannerOptions};
-pub use path::{Hop, Path, PathEngine, PathOperator, PathOptions, PathRequest, PathRow};
+pub use path::{
+    Hop, Path, PathEngine, PathOperator, PathOptions, PathRequest, PathRow, TimeRespecting,
+};
 pub use result::{ExecStats, Explain, QueryResult, RegionInfo, RegionKind, ResultValue, RouteNote};
 
 type Hook = Arc<dyn Fn() + Send + Sync>;

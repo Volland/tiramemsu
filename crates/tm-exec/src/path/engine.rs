@@ -58,6 +58,29 @@ pub struct PathRequest<'a> {
     /// least one of these graphs in the view. `None` = no graph filter; an empty set
     /// leaves only zero-hop rows.
     pub graphs: Option<Vec<ObjectId>>,
+    /// Time-respecting evaluation: valid time never goes backwards along a path.
+    /// `None` = ordinary evaluation.
+    pub time_respecting: Option<TimeRespecting>,
+}
+
+/// The option of a time-respecting (causal) search, a "journey" in a temporal
+/// graph: a search time τ starts at `after` (−∞ when `None`); a stored hop over a
+/// statement valid `[v_from, v_to)` is taken only when `v_to` is unbounded or
+/// `v_to > τ`, and moves τ to `max(τ, v_from)`; virtual hops keep τ. Rows report
+/// the arrival (`PathRow::arrival`), the earliest one in `REACH` mode.
+///
+/// ```
+/// use tm_exec::path::engine::TimeRespecting;
+///
+/// let from_start = TimeRespecting::default(); // from −∞
+/// assert_eq!(from_start.after, None);
+/// let after_june = TimeRespecting { after: Some(1_717_200_000_000) };
+/// assert!(after_june.after > from_start.after);
+/// ```
+#[derive(Copy, Clone, Debug, Default, PartialEq, Eq, Hash)]
+pub struct TimeRespecting {
+    /// The start instant in epoch ms; `None` = −∞.
+    pub after: Option<i64>,
 }
 
 /// Reads the vocabulary from the database the first time a name needs it.
@@ -165,6 +188,7 @@ impl PathEngine {
             max_hops: req.max_hops,
             end_filter: req.end,
             start: req.start,
+            time: req.time_respecting.map(|t| t.after.unwrap_or(i64::MIN)),
         };
         search(req.mode, &mut ctx, sink)
     }

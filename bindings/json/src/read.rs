@@ -3,7 +3,7 @@
 use serde_json::{json, Map, Value as J};
 use tiramemsu::{
     Db, Event, ObjectId, Op, PathArgs, PathDir, PathMode, PathRow, RdfTerm, RdfTriple,
-    SparqlResult, TimeRef, Triple, TxReport, View,
+    SparqlResult, TimeRef, TimeRespecting, Triple, TxReport, View,
 };
 
 use crate::value::{params_from_json, value_from_json, value_to_json};
@@ -96,10 +96,28 @@ pub fn run(view: &View<'_>, op: &str, args: &J) -> Res<J> {
                 }
                 Some(_) => return Err(arg("`graphs` must be a list of terms")),
             };
+            let time_respecting = match args.get("timeRespecting") {
+                None | Some(J::Null) | Some(J::Bool(false)) => None,
+                Some(J::Bool(true)) => Some(TimeRespecting::default()),
+                Some(J::Object(o)) => {
+                    if let Some(k) = o.keys().find(|k| *k != "after") {
+                        return Err(arg(format!("unknown timeRespecting option {k:?}")));
+                    }
+                    Some(TimeRespecting {
+                        after: crate::value::time_from_json(o.get("after").unwrap_or(&J::Null))?,
+                    })
+                }
+                Some(_) => {
+                    return Err(arg(
+                        "`timeRespecting` must be a boolean or {\"after\": time}",
+                    ))
+                }
+            };
             let opts = PathArgs {
                 mode,
                 max_hops: max,
                 graphs,
+                time_respecting,
             };
             let rows = view.path_with(start, str_arg(args, "path")?, &opts)?;
             Ok(J::Array(
@@ -224,6 +242,7 @@ fn path_row_json(view: &View<'_>, r: &PathRow) -> Res<J> {
         "end": value_to_json(&view.decode(r.end)?),
         "hops": r.hops,
         "path": path,
+        "arrival": r.arrival.map_or(J::Null, |a| json!(a)),
     }))
 }
 

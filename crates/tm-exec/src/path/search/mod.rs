@@ -1,5 +1,7 @@
 //! The search modes: breadth-first search over `(node, DFA state)`, one layer per
-//! hop count, one batched fetch round per layer. Every mode shares `expand`.
+//! hop count, one batched fetch round per layer. Every mode shares `expand`. A
+//! time-respecting search also carries a time per entry and takes a hop only when
+//! `Nb::step_time` allows it (`lat.md/query#Physical Planning#Path Engine#Time-Respecting Search`).
 
 mod reach;
 mod shortest;
@@ -54,6 +56,9 @@ pub struct Ctx<'a, 'b> {
     pub end_filter: Option<ObjectId>,
     /// The start node.
     pub start: ObjectId,
+    /// The start time of a time-respecting search (`i64::MIN` is −∞); `None` for
+    /// an ordinary one.
+    pub time: Option<i64>,
 }
 
 /// A row consumer; returns `false` to stop the search.
@@ -67,16 +72,26 @@ impl Ctx<'_, '_> {
     pub(super) fn wants(&self, end: i64) -> bool {
         self.end_filter.is_none_or(|e| e.raw() == end)
     }
+
+    /// The `arrival` of a row whose final search time is `tau`: `None` for an
+    /// ordinary search and for −∞.
+    pub(super) fn arrival(&self, tau: i64) -> Option<i64> {
+        self.time.and((tau != i64::MIN).then_some(tau))
+    }
 }
 
-/// Runs the search of `mode`, feeding `sink` layer by layer.
+/// Runs the search of `mode`, feeding `sink` layer by layer (a time-respecting
+/// `REACH` feeds it once the search is complete, see `reach::run_timed`).
 // @lat: [[query#Physical Planning#Path Engine]]
 pub fn search(mode: PathMode, ctx: &mut Ctx<'_, '_>, sink: Sink<'_>) -> Result<()> {
-    match mode {
-        PathMode::Reachability => reach::run(ctx, sink),
-        PathMode::Trail => trail::run(ctx, sink),
-        PathMode::AnyShortest => shortest::run(ctx, sink, false),
-        PathMode::AllShortest => shortest::run(ctx, sink, true),
+    match (mode, ctx.time) {
+        (PathMode::Reachability, None) => reach::run(ctx, sink),
+        (PathMode::Reachability, Some(tau)) => reach::run_timed(ctx, sink, tau),
+        (PathMode::Trail, _) => trail::run(ctx, sink),
+        (PathMode::AnyShortest, None) => shortest::run(ctx, sink, false),
+        (PathMode::AllShortest, None) => shortest::run(ctx, sink, true),
+        (PathMode::AnyShortest, Some(tau)) => shortest::run_timed(ctx, sink, false, tau),
+        (PathMode::AllShortest, Some(tau)) => shortest::run_timed(ctx, sink, true, tau),
     }
 }
 
@@ -129,8 +144,14 @@ pub(super) fn hop_of(nb: &Nb) -> Hop {
     }
 }
 
-/// A row for a path given as start node plus `(hop, node reached)` steps.
-pub(super) fn row_of(start: ObjectId, steps: &[(Hop, i64)], with_path: bool) -> PathRow {
+/// A row for a path given as start node plus `(hop, node reached)` steps, arriving
+/// at `arrival` (see [`Ctx::arrival`]).
+pub(super) fn row_of(
+    start: ObjectId,
+    steps: &[(Hop, i64)],
+    with_path: bool,
+    arrival: Option<i64>,
+) -> PathRow {
     let end = steps.last().map_or(start, |(_, n)| ObjectId::from_raw(*n));
     PathRow {
         start,
@@ -142,5 +163,6 @@ pub(super) fn row_of(start: ObjectId, steps: &[(Hop, i64)], with_path: bool) -> 
                 .collect(),
             hops: steps.iter().map(|(h, _)| *h).collect(),
         }),
+        arrival,
     }
 }

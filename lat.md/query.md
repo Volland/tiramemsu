@@ -198,16 +198,28 @@ Paths run as a native breadth-first search over the product of a path DFA and th
 - **Limits:** a recursive path needs a bound endpoint, otherwise `Unsupported`. An unbounded Cypher pattern, including `shortestPath`, stops at `OpenOptions.path_max_hops` (default 15) without an error; an explicit Cypher upper bound is honoured; SPARQL paths are uncapped. The search-state guard `path_max_states` (default 1 000 000) fails with `PathLimitExceeded { limit }` and never returns a truncated result.
 - **Wildcard:** the reserved atom `sys:anyRelationship` (Cypher `[*]`) steps over relationship-view statements only: not literal properties unless `sys:isEdge true`, not `rdf:type`, not `sys:` statements.
 - **Graphs:** a request may carry a graph set (`PathRequest.graphs`). Every statement a path traverses must then be a member of one of the graphs, the membership `(e sys:inGraph g)` visible in the hop's view: the statement stepped over, or for a virtual hop the statement whose part is stepped to or from. Each fetch shape gains one `EXISTS` on `t.eid`, a covering-index seek, with `sys:inGraph` and the graph ids as parameters ([[crates/tm-exec/src/path/fetch.rs#Fetcher]]). Zero-hop rows ignore the set; an empty set or a store without `sys:inGraph` leaves only them.
-- **Later:** `SIMPLE`, `ACYCLIC`, `SHORTEST k`, negated property sets, quantified path patterns and time-respecting paths.
+- **Time-respecting:** with `PathRequest.time_respecting` ([[crates/tm-exec/src/path/engine.rs#TimeRespecting]]) valid time never goes backwards along a path, a journey in a temporal graph. A time τ starts at `after` or −∞; a stored hop over `[v_from, v_to)` needs `v_to > τ` (or no `v_to`) and moves τ to `max(τ, v_from)`; virtual hops keep τ. The view's `validAt` and a graph set still apply. Rows carry `arrival` (epoch ms; `None` for −∞ and for ordinary searches). See [[query#Physical Planning#Path Engine#Time-Respecting Search]].
+- **Later:** `SIMPLE`, `ACYCLIC`, `SHORTEST k`, negated property sets, quantified path patterns, and SPARQL or Cypher syntax for time-respecting paths.
 
 #### tm_path
 
-The eponymous read-only table function `tm_path(start, path, mode, max_hops, view, graphs)` is registered on every connection and returns `(start, "end", hops, path_json)`; [[crates/tm-exec/src/path/vtab.rs#call]] is its body.
+The eponymous read-only table function `tm_path(start, path, mode, max_hops, view, graphs)` is registered on every connection and returns `(start, "end", hops, path_json, arrival)`; [[crates/tm-exec/src/path/vtab.rs#call]] is its body.
 
 - **Arguments:** `start` is an ObjectId (NULL gives no rows). `path` is SPARQL 1.1 property-path text plus `{m,n}`, `{m,}` and `{n}`, with atoms `<iri>`, CURIEs (declared prefixes, `sys:`, `tm:`, `rdf:`, `xsd:`) and bare names through `@vocab`. `mode` is `REACH`, `TRAIL`, `ANY_SHORTEST` or `ALL_SHORTEST`, case-insensitive, default `REACH`. `max_hops` defaults to none, except `TRAIL`, which defaults to `path_max_hops`. `view` is `now`, `asOf/<t or RFC 3339>`, `history`, optionally followed by `;validAt/<d>`, or `validAt/<d>` alone, also with the `urn:tiramemsu:tm:` prefix. `graphs` is NULL (no filter), the INTEGER ObjectId of one graph, or TEXT with a JSON array of ids (`'[]'` is the empty set); it may be a column, so a call can follow a graph per row.
-- **Output:** `path_json` is NULL for `REACH` and otherwise `{"nodes":[ids],"edges":[{"eid":id,"p":id,"dir":"out"|"in"}]}` with raw ObjectIds as integers.
+- **Output:** `path_json` is NULL for `REACH` and otherwise `{"nodes":[ids],"edges":[{"eid":id,"p":id,"dir":"out"|"in"}]}` with raw ObjectIds as integers. `arrival` is the INTEGER epoch-ms arrival of a time-respecting call, else NULL.
+- **Time respect:** a `timeRespecting` or `timeRespecting/<RFC 3339 or epoch ms>` part of the `view` text (any order, at most once, e.g. `now;validAt/2025-01-01;timeRespecting/2024-06-01`) makes the call time-respecting.
 - **Errors:** a bad argument fails the statement with a message that starts with `tm_path: <argument>:`. A `PathLimitExceeded` or `Unsupported` inside SQL is kept in a per-connection slot and re-raised as the typed error by the executor.
 - **Snapshot:** the function reads through the calling statement's own connection (a non-owning handle, [[crates/tm-rusqlite/src/table_fn.rs#borrowed_exec]]), so it sees that statement's snapshot, or the speculative state inside `with`.
+
+#### Time-Respecting Search
+
+A time-respecting search answers "could something travel along these facts in time order" with earliest-arrival semantics; each mode keeps the rows of a plain search that respect time.
+
+- **`REACH`** is label-correcting ([[crates/tm-exec/src/path/search/reach.rs#run_timed]]): it keeps the earliest time per `(node, DFA state)` and expands a pair again when it is reached with a strictly earlier time, because a longer walk can arrive earlier. The hop rule is monotone (an earlier time allows every hop a later one does, and never ends later), so when no pair improves every end has its earliest arrival over all walks within the hop bound, and its first layer is its shortest time-respecting walk. Rows are emitted once the search is complete, ordered by hops, then raw id; a pushed-down `"end"` filters them but cannot stop the search early.
+- **`TRAIL`** keeps each arena entry's time and skips hops it does not allow; every row is a time-respecting trail with its own arrival.
+- **`ANY_SHORTEST` / `ALL_SHORTEST`** ([[crates/tm-exec/src/path/search/shortest.rs#run_timed]]) key a layer's entries by `(node, state, time)` and keep an entry only if its time is strictly earlier than the pair's best time in every earlier layer (Pareto pruning per layer). A dropped entry lies on no shortest path, and every shortest time-respecting walk stays a path of the layered DAG, so the rows are the minimal-length time-respecting paths, ordered by hop key as usual.
+- **Reading the interval** costs nothing: every fetch selects `t.v_from, t.v_to`, which are in every covering index.
+- **Checked** against a brute-force enumeration of every time-respecting walk ([[tests#Query#Time Respecting Paths Match Brute Force]]).
 
 #### Path Lowering
 
