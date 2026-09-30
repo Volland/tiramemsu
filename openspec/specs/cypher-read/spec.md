@@ -411,17 +411,6 @@ The system SHALL parse the full openCypher grammar, and it MUST reject construct
 - **WHEN** `MATCH (n:!Person) RETURN n` is compiled
 - **THEN** it fails with `Unsupported` naming the label expression
 
-### Requirement: Variable-length and shortest paths pending the path engine
-Variable-length relationship patterns (`-[:T*]->`, `-[:T*1..3]->`, `-[*]-`), `shortestPath(…)` and `allShortestPaths(…)` SHALL parse successfully, and until the path engine capability lands they MUST fail with `Unsupported` naming the construct.
-
-#### Scenario: Variable-length pattern
-- **WHEN** `MATCH (a {name:'Alice'})-[:knows*1..3]->(b) RETURN b` is compiled
-- **THEN** it fails with `Unsupported` naming variable-length relationships, not with a `Parse` error
-
-#### Scenario: shortestPath
-- **WHEN** `MATCH p = shortestPath((a)-[:knows*]-(b)) WHERE a.name = 'A' AND b.name = 'B' RETURN p` is compiled
-- **THEN** it fails with `Unsupported` naming `shortestPath`
-
 ### Requirement: Parse errors with spans
 Text that is not valid openCypher, or not valid in a Tiramemsu extension, MUST fail with a `Parse` error that carries the Cypher dialect, the byte span of the offending input in the original query text, and a message. Nothing SHALL be executed.
 
