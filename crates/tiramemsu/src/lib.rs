@@ -10,7 +10,7 @@ mod view;
 
 pub use cypher::TxCypher;
 pub use db::{Db, OpenOptions};
-pub use sparql::SparqlResult;
+pub use sparql::{SparqlOptions, SparqlResult};
 pub use view::View;
 
 pub use tm_core::{

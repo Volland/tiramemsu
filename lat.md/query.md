@@ -266,6 +266,20 @@ SPARQL is parsed by `spargebra` (Oxigraph's parser and algebra) and lowered to t
 - **Known deviations:** `spargebra` 0.4.7 parses `a - b - c` as `a - (b - c)`, so chains are re-associated when the text has no parenthesised operand of that class. `xsd:decimal` results of arithmetic and aggregates are `xsd:double`, string functions drop language tags, and `AVG` over an empty group is unbound. The W3C subset lists every deviation with its reason in `tests/w3c/expected-deviations.toml`, and the runner fails on any unlisted difference.
 - **Duplicate removal only where needed:** removing duplicate `(s, p, o)` costs one covering seek per row, which doubled a 2-hop join in a benchmark. It is skipped for predicates that have never held two eids with the same `(s, p, o)`, which [[storage#Multi-Eid Predicates]] records. Idempotent assert never creates such pairs; only `create` and repeated episodes do.
 
+#### Query Provenance
+
+With `SparqlOptions { provenance: true }`, each `SELECT` row carries the sorted eids of the stored statements that matched to produce it, so an agent can cite its facts and later find answers that relied on a retracted one.
+
+- **Pipeline:** [[crates/tm-sparql/src/provenance.rs#instrument]] rewrites the lowered IR, the facade runs it, and [[crates/tm-sparql/src/provenance.rs#ProvenancePlan#assemble]] builds the rows. The main query and the sibling lookups run in one read, so both see the same state. Off by default: plans, rows and JSON are unchanged.
+- **Hidden eids:** every stored triple pattern binds its eid. An unbound eid becomes `~prov<N>`; [[crates/tm-ir/src/var.rs#is_provenance]] tells the planner to keep the canonical-eid predicate for it, so the rows are exactly those without provenance. A reifier's variable is reused, and a user eid that leaves a subquery is aliased so the outer scope is unchanged.
+- **One triple, all its eids:** the canonical eid stands for its `(s, p, o)`. One sibling lookup per view (batches of 500) maps it to every visible eid with the same `(s, p, o)`, and the row lists them all.
+- **Counts:** matched `OPTIONAL` parts, the `UNION` branch taken, annotations, fixed-length paths, and `SERVICE` time scopes (the eid seen then, even if retracted now). `GRAPH <g>`, `GRAPH ?g` and a single `FROM <g>` also list the `sys:inGraph` membership statement, joined in the pass instead of in `tm-exec`'s graph lowering.
+- **Does not count:** expressions are never walked, so statements tested by `FILTER EXISTS`, `NOT EXISTS` or `MINUS` are not listed. Virtual predicates add no eid. Recursive path regions (`*`, `+`, `?`) contribute nothing, because `REACH` carries no eids. With several `FROM` graphs the membership is an `EXISTS` test and only the statement counts.
+- **Modifiers:** top-level `DISTINCT` is merged in Rust: rows equal on the projected cells merge into the first one and union their eids, then `OFFSET`/`LIMIT` apply, so a `DISTINCT … LIMIT` query reads every row. `ORDER BY` stays in SQL. `REDUCED` keeps duplicates.
+- **Groups and subqueries:** each provenance column entering an `Aggregate` becomes `GROUP_CONCAT` of statement IRIs, parsed back when rows are assembled, so groups and nested groups union their rows. A `DISTINCT` subquery becomes a group over its projected variables.
+- **Errors:** `ASK`, `CONSTRUCT` and updates with provenance are `Unsupported` (`"provenance for ASK"`, `"… CONSTRUCT"`, `"… updates"`), as is `SELECT DISTINCT` of no variable in a subquery. Cypher needs none: relationship variables are eids already.
+- **Output:** `Solutions::provenance(row)`. SPARQL JSON gains a non-standard `"provenance"` member between `head` and `results`, because streaming parsers reject anything after the bindings. The JSON bridge takes `provenance: true` on `sparql` and returns `"provenance"` beside `"rows"`.
+
 ### Cypher
 
 Cypher parses an openCypher subset plus a few documented extensions and runs it over the same statements as SPARQL. The crate is `tm-cypher`; the parser is `open-cypher`, pinned behind an adapter.

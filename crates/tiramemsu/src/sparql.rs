@@ -70,7 +70,31 @@ fn to_solutions(r: &QueryResult) -> Result<Solutions> {
         }
         rows.push(out);
     }
-    Ok(Solutions { vars, rows })
+    Ok(Solutions {
+        vars,
+        rows,
+        provenance: None,
+    })
+}
+
+/// Options of [`View::sparql_with`]. Build it with `..Default::default()` so that
+/// options added later keep their defaults.
+///
+/// ```
+/// use tiramemsu::SparqlOptions;
+///
+/// let opts = SparqlOptions {
+///     provenance: true,
+///     ..Default::default()
+/// };
+/// assert!(opts.provenance);
+/// assert!(!SparqlOptions::default().provenance);
+/// ```
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct SparqlOptions {
+    /// Attach to each `SELECT` row the eids of the stored statements that matched
+    /// to produce it ([`Solutions::provenance`]). Off by default.
+    pub provenance: bool,
 }
 
 impl View<'_> {
@@ -118,11 +142,75 @@ impl View<'_> {
     /// # Ok::<(), Error>(())
     /// ```
     pub fn sparql(&self, text: &str) -> Result<SparqlResult> {
+        self.sparql_with(text, &SparqlOptions::default())
+    }
+
+    /// Runs SPARQL text like [`View::sparql`], with options.
+    ///
+    /// With `provenance`, each row of a `SELECT` carries the eids of the stored
+    /// statements that matched to produce it, read with [`Solutions::provenance`]:
+    /// the patterns of the group, matched `OPTIONAL` parts, the `UNION` branch
+    /// taken, annotations, `GRAPH` memberships and `SERVICE` time scopes (an eid
+    /// matched in an as-of scope may be retracted now). Statements only tested by
+    /// `FILTER EXISTS`, `NOT EXISTS` or `MINUS`, virtual predicates and recursive
+    /// property paths add none. The rows themselves are those of [`View::sparql`];
+    /// several eids with the same `(s, p, o)` are one SPARQL triple and are all
+    /// listed. `DISTINCT` merges rows and unions their provenance, and a group's
+    /// provenance is the union over its rows.
+    ///
+    /// # Errors
+    ///
+    /// The errors of [`View::sparql`], and with `provenance`:
+    /// `Unsupported("provenance for ASK")`, `("provenance for CONSTRUCT")` and
+    /// `("provenance for updates")`, before anything runs.
+    ///
+    /// ```
+    /// # use tiramemsu::*;
+    /// # let dir = tempfile::tempdir().unwrap();
+    /// # let db = Db::open(dir.path().join("m.db"), OpenOptions::default())?;
+    /// db.now().sparql("INSERT DATA { v:alice v:worksAt v:acme . v:acme v:in v:paris }")?;
+    /// let opts = SparqlOptions { provenance: true, ..Default::default() };
+    /// let r = db.now().sparql_with("SELECT ?c WHERE { v:alice v:worksAt ?o . ?o v:in ?c }", &opts)?;
+    /// let s = r.solutions().unwrap();
+    /// let cited = s.provenance(0).unwrap();
+    /// assert_eq!(cited.len(), 2); // both statements, ascending
+    /// assert!(cited[0] < cited[1]);
+    /// // without the option there is no provenance
+    /// let plain = db.now().sparql("SELECT ?c WHERE { v:alice v:worksAt ?o . ?o v:in ?c }")?;
+    /// assert_eq!(plain.solutions().unwrap().provenance(0), None);
+    /// # Ok::<(), Error>(())
+    /// ```
+    pub fn sparql_with(&self, text: &str, opts: &SparqlOptions) -> Result<SparqlResult> {
         let env = self.sparql_env()?;
         match tm_sparql::prepare(text, &env)? {
+            Prepared::Query(plan) if opts.provenance => self.run_provenance(&plan),
             Prepared::Query(plan) => self.run_plan(&plan),
+            Prepared::Update(_) if opts.provenance => {
+                Err(Error::unsupported(tm_sparql::error::PROVENANCE_UPDATE))
+            }
             Prepared::Update(plan) => self.run_update(&plan),
         }
+    }
+
+    /// Runs a `SELECT` with provenance: the instrumented query and its sibling
+    /// lookups in one read, so both see the same state.
+    fn run_provenance(&self, plan: &QueryPlan) -> Result<SparqlResult> {
+        let p = tm_sparql::provenance::instrument(plan)?;
+        let engine = self.engine()?;
+        let mode = if self.db().is_some() {
+            CacheMode::Shared
+        } else {
+            CacheMode::Scoped
+        };
+        let main = engine.prepare(&p.query, &Params::new())?;
+        let sol = self.exec(|e, _| {
+            let raw = to_solutions(&engine.execute(&mut *e, mode, &main)?)?;
+            p.assemble(raw, &mut |q| {
+                let lookup = engine.prepare(q, &Params::new())?;
+                to_solutions(&engine.execute(&mut *e, mode, &lookup)?)
+            })
+        })?;
+        Ok(SparqlResult::Solutions(sol))
     }
 
     /// Runs a checked update: the whole request is one transaction on the writer.

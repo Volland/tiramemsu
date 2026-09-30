@@ -353,3 +353,34 @@ fn open_options_are_checked() {
     let db = Database::open(path.to_str().unwrap(), &json!({ "readers": 2 })).unwrap();
     assert_eq!(db.call("info", &J::Null).unwrap()["readers"], 2);
 }
+
+// json-bridge "Query results": SPARQL rows with provenance
+// @lat: [[tests#Query Provenance#Bridge Returns Provenance]]
+#[test]
+fn sparql_rows_can_carry_provenance() {
+    let (_d, db) = open();
+    db.call(
+        "transact",
+        &json!({ "ops": [{ "op": "assert", "s": v("a"), "p": v("p"), "o": v("b") }] }),
+    )
+    .unwrap();
+    let text = "SELECT ?o WHERE { v:a v:p ?o }";
+    let r = db
+        .call("sparql", &json!({ "text": text, "provenance": true }))
+        .unwrap();
+    assert_eq!(r["rows"], json!([{ "o": v("b") }]));
+    assert_eq!(r["provenance"], json!([[{ "stmt": 1 }]]));
+    let plain = db.call("sparql", &json!({ "text": text })).unwrap();
+    assert!(plain.get("provenance").is_none());
+    let e = db
+        .call(
+            "sparql",
+            &json!({ "text": "ASK { ?s ?p ?o }", "provenance": true }),
+        )
+        .unwrap_err();
+    assert_eq!(e.code(), "Unsupported");
+    let e = db
+        .call("sparql", &json!({ "text": text, "provenance": "yes" }))
+        .unwrap_err();
+    assert_eq!(e.code(), "InvalidArgument");
+}

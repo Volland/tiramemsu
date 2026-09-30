@@ -8,6 +8,7 @@ pub mod env;
 pub mod error;
 pub mod lower;
 pub mod parse;
+pub mod provenance;
 pub mod results;
 pub mod terms;
 pub mod update;

@@ -463,8 +463,9 @@ impl<'e> Planner<'e> {
                 return Ok(Some(Node::Volatile(PVolatile { s, p: pid, o })));
             }
         }
+        // a provenance eid is bound but keeps the set semantics of an unbound one
         let canonical = self.sem.graph_set == GraphSet::SetOfTriples
-            && t.eid.is_none()
+            && t.eid.as_ref().is_none_or(tm_ir::var::is_provenance)
             && !self.elide_all
             && match &p {
                 PTerm::Id(pid) => self.is_multi(*pid)?,

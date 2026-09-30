@@ -275,6 +275,35 @@ fn set_versus_bag_parallel_edges() {
     assert_eq!(run(&t.db.now(), &d).len(), 1);
 }
 
+// query-provenance "One SPARQL triple lists all its eids": a provenance eid binds
+// the canonical eid and keeps set semantics, a user eid does not
+// @lat: [[tests#Query Provenance#Provenance Eids Keep Set Semantics]]
+#[test]
+fn provenance_eid_keeps_set_semantics() {
+    let t = TestDb::new();
+    let mut eids = Vec::new();
+    t.tx(|tx| {
+        eids.push(tx.create(v("alice"), v("called"), v("bob"), Valid::ALWAYS)?);
+        eids.push(tx.create(v("alice"), v("called"), v("bob"), Valid::ALWAYS)?);
+        Ok(())
+    });
+    let prov = b().query(Op::Triple(
+        b().t("v:alice", "v:called", "?x").with_eid("~prov0"),
+    ));
+    let r = run(&t.db.now(), &prov);
+    assert_eq!(r.len(), 1);
+    let min = eids.iter().min().copied().unwrap();
+    assert_eq!(r.get(0, "~prov0"), Some(&Value::Stmt(min)));
+    assert!(explain(&t.db.now(), &prov)
+        .sql
+        .unwrap()
+        .contains("min(x0.eid)"));
+    let user = b().query(Op::Triple(
+        b().t("v:alice", "v:called", "?x").with_eid("?prov0"),
+    ));
+    assert_eq!(run(&t.db.now(), &user).len(), 2);
+}
+
 // sql-execution "Episodes under set semantics"
 #[test]
 fn set_semantics_episodes() {

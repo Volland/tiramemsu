@@ -28,6 +28,7 @@ impl Db {
 impl View {
     pub fn valid_at(self, epoch_ms: i64) -> View;
     pub fn sparql(&self, q: &str) -> Result<SparqlResult>;        // SELECT | ASK | CONSTRUCT | update (current view only)
+    pub fn sparql_with(&self, q: &str, opts: &SparqlOptions) -> Result<SparqlResult>; // opts.provenance: per-row eids
     pub fn cypher(&self, q: &str, params: &CypherParams) -> Result<CypherResult>;   // read-only; a write clause is Unsupported
     pub fn path(&self, start: ObjectId, path: &str, mode: PathMode, max_hops: u32) -> Result<Vec<PathRow>>;
     pub fn triples(&self, s: Option<ObjectId>, p: Option<ObjectId>, o: Option<ObjectId>) -> Result<Vec<Triple>>;
@@ -45,6 +46,7 @@ impl View {
 - Named graphs ([[data-model#Named Graphs]]): `Tx::add_to_graph(eid, graph, opts) -> (membership_eid, is_new)` (idempotent, `opts.valid` bounds the membership), `remove_from_graph(eid, graph) -> bool`, `clear_graph(graph) -> Vec<Eid>`, `create_graph(graph)`, and the helpers `drop_graph`, `graph_declared`, `graph_has_members` and `live_graphs`. All reject a non-node graph with `InvalidGraphName`. `TxReport` lists new memberships in `memberships` and retracted ones in `memberships_retracted`, and no longer in `asserted` and `retracted`.
 - A `View` is a pure value: creating or deriving one does no I/O. Rows from an as-of view report `t_ret` and `ret_kind` as absent, so each row shows what was believed then; `history()` gives real lifetimes.
 - `SparqlResult` is `Solutions`, `Boolean`, `Graph` or `Update(TxReport)`, with `write_sparql_json` (SELECT, ASK) and `write_ntriples` (CONSTRUCT). A SPARQL update is one transaction on the writer and returns its `TxReport`. See [[query#Front Ends#SPARQL]].
+- `sparql(q)` is `sparql_with(q, &SparqlOptions::default())`. `SparqlOptions { provenance: true }` makes each `SELECT` row carry the eids of the statements that produced it: `Solutions::provenance(row) -> Option<&[Eid]>`, a `"provenance"` member in SPARQL JSON, and `provenance: true` on the JSON bridge's `sparql`. `ASK`, `CONSTRUCT` and updates with it are `Unsupported`. See [[query#Front Ends#SPARQL#Query Provenance]].
 - `values(s, key)` is how M0 exposes volatile state before a query language exists. See [[storage#Volatile Table]].
 - `Patch::from_fields` builds a patch from named fields for bindings and rejects `s` and `p` with `InvalidPatch`.
 
