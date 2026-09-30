@@ -15,6 +15,6 @@ pub mod syntax;
 pub mod view;
 pub mod vtab;
 
-pub use engine::{PathEngine, PathOptions, PathRequest};
+pub use engine::{PathEngine, PathOptions, PathRequest, TimeRespecting};
 pub use row::{Hop, Path, PathRow};
 pub use vtab::PathOperator;

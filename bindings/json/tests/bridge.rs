@@ -226,6 +226,93 @@ fn paths_reach_through_a_chain() {
     assert!(r[0]["path"]["hops"].is_array());
 }
 
+// json-bridge "Time-respecting path"
+#[test]
+fn time_respecting_paths_report_arrival() {
+    let (_d, db) = open();
+    db.call(
+        "transact",
+        &json!({ "ops": [
+            { "op": "assert", "s": v("a"), "p": v("met"), "o": v("b"), "validFrom": 1, "validTo": 5 },
+            { "op": "assert", "s": v("b"), "p": v("met"), "o": v("c"), "validFrom": 3, "validTo": 9 },
+        ]}),
+    )
+    .unwrap();
+    let arrivals = |tr: J| {
+        let r = db
+            .call(
+                "path",
+                &json!({ "start": v("a"), "path": "met+", "timeRespecting": tr }),
+            )
+            .unwrap();
+        r.as_array()
+            .unwrap()
+            .iter()
+            .map(|row| (row["end"].clone(), row["arrival"].clone()))
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(
+        arrivals(json!(true)),
+        vec![(v("b"), json!(1)), (v("c"), json!(3))]
+    );
+    assert!(arrivals(json!({ "after": 6 })).is_empty());
+    assert_eq!(
+        arrivals(json!({ "after": 2 })),
+        vec![(v("b"), json!(2)), (v("c"), json!(3))]
+    );
+    // without the option the rows carry a null arrival
+    assert_eq!(
+        arrivals(json!(null)),
+        vec![(v("b"), J::Null), (v("c"), J::Null)]
+    );
+    for bad in [json!("yes"), json!({ "before": 1 })] {
+        assert!(db
+            .call(
+                "path",
+                &json!({ "start": v("a"), "path": "met+", "timeRespecting": bad })
+            )
+            .is_err());
+    }
+}
+
+// json-bridge "Path inside a graph"
+#[test]
+fn paths_stay_inside_the_listed_graphs() {
+    let (_d, db) = open();
+    db.call(
+        "transact",
+        &json!({ "ops": [
+            { "op": "assert", "s": v("a"), "p": v("knows"), "o": v("b"), "as": "ab" },
+            { "op": "assert", "s": v("b"), "p": v("knows"), "o": v("c") },
+            { "op": "addToGraph", "eid": {"ref": "ab"}, "graph": v("session12") },
+        ]}),
+    )
+    .unwrap();
+    let ends = |graphs: J| {
+        let r = db
+            .call(
+                "path",
+                &json!({ "start": v("a"), "path": "knows+", "graphs": graphs }),
+            )
+            .unwrap();
+        r.as_array()
+            .unwrap()
+            .iter()
+            .map(|row| row["end"].clone())
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(ends(json!([v("session12")])), vec![v("b")]);
+    assert_eq!(ends(json!(null)).len(), 2, "no filter");
+    // a graph that was never written names no graph: no hop is taken
+    assert!(ends(json!([v("nowhere")])).is_empty());
+    assert!(db
+        .call(
+            "path",
+            &json!({ "start": v("a"), "path": "knows+", "graphs": "session12" })
+        )
+        .is_err());
+}
+
 #[test]
 fn named_graphs_hold_statements_as_tags() {
     let (_d, db) = open();

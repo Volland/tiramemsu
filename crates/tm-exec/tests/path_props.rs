@@ -117,6 +117,8 @@ impl Fixture {
                     max_hops: Some(BOUND),
                     view: ViewSpec::NOW,
                     end: None,
+                    graphs: None,
+                    time_respecting: None,
                 },
             )
             .unwrap()

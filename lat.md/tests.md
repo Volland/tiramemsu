@@ -280,6 +280,7 @@ A path using `sys:subject` hops finds the entities behind a statement that a bel
 
 A Cypher `-[*]->` pattern without an upper bound stops at `max_hops` and does not fail.
 
+
 ### Statement Instants Come From The Tx Table
 
 `tm:addedAt` and `tm:retractedAt` return the commit instants of `t_add` and `t_ret` as UTC date-times, under Now, History and `asOf` (which shows a later retraction), with one triple alias for a bound eid.
@@ -303,6 +304,30 @@ With a manual clock, "learned late" (`addedAt > validFrom`) and "recorded after 
 ### Bitemporal Recipes In Cypher
 
 `r.addedAt.epochMillis - r.validFrom.epochMillis > $days * 86400000` finds statements learned more than N days late, and `r.addedAt > r.validTo` finds statements recorded after they stopped being true.
+
+### Time Respecting Paths Match Brute Force
+
+For random small graphs with random valid intervals and a random start instant, every mode equals an enumeration of all time-respecting walks within the hop bound.
+
+`REACH` gives each end once with its shortest length and earliest arrival, `TRAIL` the edge-distinct walks with their arrivals, `ALL_SHORTEST` the minimal-length walks, and `ANY_SHORTEST` the lexicographically smallest of them per end. A property test.
+
+### Time Respecting Scenarios
+
+Hand cases of the hop rule, with the arrival each one expects in the modes it names.
+
+An infection chain, a start instant that cuts early facts, same-instant chaining and its exclusive boundary, unbounded intervals, a longer walk that arrives earlier, a pair re-expanded with an earlier time, and shortest paths that avoid going back in time.
+
+### Time Respecting Combines With Graphs And Layers
+
+Virtual hops through layers keep the time, a stored hop after them still needs its fact to hold, a graph set and the view's `validAt` still filter every hop, and the arrival is the same through every surface.
+
+### tm_path Arrival Column
+
+`tm_path` makes a call time-respecting through a `timeRespecting` view part, returns `arrival` for `REACH` and `TRAIL` rows (NULL without the option), matches `View::path_with`, and rejects a malformed or repeated part with `tm_path: view:`.
+
+### Time Respecting View Text
+
+The `view` text parser accepts `timeRespecting` alone, with an RFC 3339 date or date-time or epoch milliseconds, in any order with the other parts and with the `tm:` prefix, and rejects a repeated or malformed part.
 
 ## Named Graphs
 
@@ -394,9 +419,47 @@ A statement in two graphs appears once in the default graph and once per members
 
 `asOf` shows a past membership, `history` lists a removed one, `validAt` honours a bounded membership, and a plain delete retracts a statement together with its memberships.
 
-### Property Paths Inside Graphs Are Rejected
+### Property Paths Run Inside Graphs
 
-A property path under `GRAPH` or a `FROM <g>` default graph, also inside an update `WHERE`, fails with `Unsupported("named graph path")` before any SQL runs, and the same path outside a graph still runs.
+A recursive path under `GRAPH <g>`, `GRAPH ?g` (enumerated, bound by a triple pattern, or bound outside the block), `FROM` and `FROM NAMED` follows only member statements, also in an update `WHERE`.
+
+A non-recursive path puts the graph on each triple of its translation, and the same path outside a graph reads the union.
+
+### Zero Length Paths Per Graph
+
+A nullable path gives its zero-length match once per graph in scope: once per graph under `GRAPH ?g` (also for a term in no statement), once under `GRAPH <g>` even for a graph with no member, and once for a `FROM` default graph.
+
+### Graph Paths Under asOf
+
+After a membership is removed, `GRAPH <g>` paths stop at it now, `SERVICE <tm:asOf/t>` still follows it, and `GRAPH ?g` enumerates the graphs of the view it runs in.
+
+### Paths Cross Layers Inside Graphs
+
+Virtual `sys:subject` and `sys:object` hops inside `GRAPH <g>`, forward and inverse, step only from and to statements that are members of `g`, and `GRAPH ?g` binds the one graph the whole path lies in.
+
+### Graph Scoped Paths Follow Membership
+
+Through `View::path_with`, a graph set confines every mode to member statements. A statement in two listed graphs is one hop, zero-hop rows ignore the set, and memberships are read in the hop's view (`asOf`, `history`).
+
+### Graph Scoped Virtual Hops
+
+A virtual hop needs the statement whose part it steps to or from in the graph set, in both directions, and a store that never wrote `sys:inGraph` gives only zero-hop rows.
+
+### Graph Filter Fetch Uses An Index Seek
+
+With a graph set, every fetch shape under `now`, `asOf` and `history` holds the membership `EXISTS` with no data in its text, and `EXPLAIN QUERY PLAN` shows a covering-index seek for the membership. The SQL and plans match `insta` snapshots.
+
+### tm_path Graphs Argument
+
+`tm_path` takes one graph as an integer, several as JSON text, NULL as no filter, `'[]'` as the empty set and a column as a correlated graph, keeps the pushed-down end, and rejects a malformed `graphs` with `tm_path: graphs:`.
+
+### Path Graph Selector Text And Validation
+
+The IR text form of a path prints `:graph` for a set or a variable and nothing for `Any`, the variable is in scope, and an empty set or a variable in a set is invalid.
+
+### Path Graph Selector SQL Snapshots
+
+The planner passes a set of one graph as an integer and several as JSON text, correlates a variable bound by a joined pattern and enumerates an unbound one, matching `insta` snapshots, and a path without a selector keeps its five-argument call.
 
 ### Graph Names Are Rejected When Invalid
 

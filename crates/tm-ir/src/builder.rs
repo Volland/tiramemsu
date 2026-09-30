@@ -177,6 +177,7 @@ impl IrBuilder {
             max_hops: None,
             bind_path: None,
             view: self.view,
+            graph: crate::op::GraphSel::Any,
         })
     }
 

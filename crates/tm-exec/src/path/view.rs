@@ -1,9 +1,11 @@
-//! The `view` argument text of `tm_path` and its resolution.
+//! The `view` argument text of `tm_path` (with its `timeRespecting` part) and its
+//! resolution.
 
 use tm_core::value::{parse_date, parse_datetime};
 use tm_core::vocab::TM;
 use tm_core::{Executor, Result, TimeRef, TxSel, ValidSel, ViewSpec};
 
+use super::engine::TimeRespecting;
 use crate::plan::resolve::resolve;
 use crate::scan::ResolvedView;
 
@@ -15,16 +17,52 @@ fn instant_ms(text: &str) -> Option<i64> {
     }
 }
 
+/// An integer of epoch milliseconds, else an RFC 3339 date or date-time.
+fn epoch_or_instant(text: &str) -> Option<i64> {
+    let digits = text.strip_prefix('-').unwrap_or(text);
+    if !digits.is_empty() && digits.bytes().all(|b| b.is_ascii_digit()) {
+        text.parse().ok()
+    } else {
+        instant_ms(text)
+    }
+}
+
 /// Parses `now | asOf/<t> | asOf/<instant> | history`, optionally followed by
 /// `;validAt/<d>`, or `validAt/<d>` alone; every part may carry the `tm:` IRI prefix.
+/// A `timeRespecting` part is not a view: use [`parse_view_arg`].
 pub fn parse_view(text: &str) -> std::result::Result<ViewSpec, String> {
+    match parse_view_arg(text)? {
+        (spec, None) => Ok(spec),
+        (_, Some(_)) => Err(format!(
+            "malformed view `{text}`: timeRespecting is not a view"
+        )),
+    }
+}
+
+/// Parses the `view` argument of `tm_path`: the parts of [`parse_view`] plus an
+/// optional `timeRespecting` or `timeRespecting/<t>` part (`t` an RFC 3339 date or
+/// date-time, or an integer of epoch milliseconds), in any order, each part at
+/// most once. `timeRespecting` alone means `now;timeRespecting`.
+pub fn parse_view_arg(
+    text: &str,
+) -> std::result::Result<(ViewSpec, Option<TimeRespecting>), String> {
     let mut spec = ViewSpec::NOW;
     let (mut tx_set, mut valid_set) = (false, false);
+    let mut time_respecting = None;
     for part in text.split(';') {
         let part = part.trim();
         let part = part.strip_prefix(TM).unwrap_or(part);
         let bad = || format!("malformed view `{text}`");
-        if part == "now" || part == "history" || part.starts_with("asOf/") {
+        if part == "timeRespecting" || part.starts_with("timeRespecting/") {
+            if time_respecting.is_some() {
+                return Err(bad());
+            }
+            let after = match part.strip_prefix("timeRespecting/") {
+                None => None,
+                Some(a) => Some(epoch_or_instant(a).ok_or_else(bad)?),
+            };
+            time_respecting = Some(TimeRespecting { after });
+        } else if part == "now" || part == "history" || part.starts_with("asOf/") {
             if tx_set {
                 return Err(bad());
             }
@@ -51,7 +89,7 @@ pub fn parse_view(text: &str) -> std::result::Result<ViewSpec, String> {
             return Err(bad());
         }
     }
-    Ok(spec)
+    Ok((spec, time_respecting))
 }
 
 /// Resolves a view on `exec`; `None` when it selects a point before transaction 1.
@@ -97,6 +135,50 @@ mod tests {
             "",
         ] {
             assert!(parse_view(bad).is_err(), "{bad}");
+        }
+        // a time-respecting part is not a view
+        assert!(parse_view("timeRespecting").is_err());
+    }
+
+    // @lat: [[tests#Query#Time Respecting View Text]]
+    #[test]
+    fn time_respecting_view_parts() {
+        let tr = |after| Some(TimeRespecting { after });
+        assert_eq!(parse_view_arg("now").unwrap(), (ViewSpec::NOW, None));
+        assert_eq!(
+            parse_view_arg("timeRespecting").unwrap(),
+            (ViewSpec::NOW, tr(None))
+        );
+        assert_eq!(
+            parse_view_arg("now;timeRespecting/2024-06-01").unwrap(),
+            (ViewSpec::NOW, tr(Some(1_717_200_000_000)))
+        );
+        assert_eq!(
+            parse_view_arg("timeRespecting/1717200000000;asOf/15").unwrap(),
+            (
+                ViewSpec::as_of(TimeRef::Tx(15)),
+                tr(Some(1_717_200_000_000))
+            )
+        );
+        assert_eq!(
+            parse_view_arg("history;validAt/2021-06-01;timeRespecting/-5").unwrap(),
+            (
+                ViewSpec::history().valid_at(1_622_505_600_000),
+                tr(Some(-5))
+            )
+        );
+        assert_eq!(
+            parse_view_arg("urn:tiramemsu:tm:timeRespecting/2024-06-01T12:00:00Z").unwrap(),
+            (ViewSpec::NOW, tr(Some(1_717_243_200_000)))
+        );
+        for bad in [
+            "timeRespecting;timeRespecting",
+            "timeRespecting/soon",
+            "timeRespecting/",
+            "timeRespectingly",
+            "now;timeRespecting/1;now",
+        ] {
+            assert!(parse_view_arg(bad).is_err(), "{bad}");
         }
     }
 }

@@ -2,7 +2,8 @@
 //! lives in an arena of `(node, state, parent, hop)` entries, so trails that share
 //! a prefix share memory; the identity check walks the parent chain (at most the
 //! hop bound). Layers come out in hop-key order because each layer expands its
-//! parent in arena order over hop-key-sorted neighbours.
+//! parent in arena order over hop-key-sorted neighbours. A time-respecting search
+//! keeps each entry's time and does not take a hop its time does not allow.
 
 use std::ops::Range;
 
@@ -16,6 +17,8 @@ struct TNode {
     state: u32,
     parent: u32,
     hop: Option<Hop>,
+    /// The search time after this entry (time-respecting searches only).
+    tau: i64,
 }
 
 const ROOT: u32 = u32::MAX;
@@ -47,14 +50,18 @@ fn steps_of(arena: &[TNode], mut at: u32) -> Vec<(Hop, i64)> {
 pub(super) fn run(ctx: &mut Ctx<'_, '_>, sink: Sink<'_>) -> Result<()> {
     let start = ctx.start;
     let q0 = ctx.dfa.start;
+    let tau0 = ctx.time.unwrap_or(i64::MIN);
     let mut arena = vec![TNode {
         node: start.raw(),
         state: q0,
         parent: ROOT,
         hop: None,
+        tau: tau0,
     }];
     ctx.budget.charge(1)?;
-    if ctx.dfa.accepting[q0 as usize] && ctx.wants(start.raw()) && !sink(row_of(start, &[], true))?
+    if ctx.dfa.accepting[q0 as usize]
+        && ctx.wants(start.raw())
+        && !sink(row_of(start, &[], true, ctx.arrival(tau0)))?
     {
         return Ok(());
     }
@@ -70,6 +77,13 @@ pub(super) fn run(ctx: &mut Ctx<'_, '_>, sink: Sink<'_>) -> Result<()> {
         for (k, list) in exp.iter().enumerate() {
             let parent = (layer.start + k) as u32;
             for (nb, t) in list {
+                let tau = match ctx.time {
+                    None => tau0,
+                    Some(_) => match nb.step_time(arena[parent as usize].tau) {
+                        Some(tau) => tau,
+                        None => continue,
+                    },
+                };
                 let h = hop_of(nb);
                 if on_chain(&arena, parent, h.identity()) {
                     continue;
@@ -80,6 +94,7 @@ pub(super) fn run(ctx: &mut Ctx<'_, '_>, sink: Sink<'_>) -> Result<()> {
                     state: *t,
                     parent,
                     hop: Some(h),
+                    tau,
                 });
             }
         }
@@ -88,7 +103,13 @@ pub(super) fn run(ctx: &mut Ctx<'_, '_>, sink: Sink<'_>) -> Result<()> {
             let n = &arena[i];
             if ctx.dfa.accepting[n.state as usize] && ctx.wants(n.node) {
                 let steps = steps_of(&arena, i as u32);
-                if !sink(row_of(ObjectId::from_raw(start.raw()), &steps, true))? {
+                let arrival = ctx.arrival(n.tau);
+                if !sink(row_of(
+                    ObjectId::from_raw(start.raw()),
+                    &steps,
+                    true,
+                    arrival,
+                ))? {
                     return Ok(());
                 }
             }

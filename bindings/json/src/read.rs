@@ -4,8 +4,8 @@ use std::collections::HashMap;
 
 use serde_json::{json, Map, Value as J};
 use tiramemsu::{
-    BundleFormat, Db, Eid, Event, ObjectId, Op, PathDir, PathMode, PathRow, RdfTerm, RdfTriple,
-    SparqlOptions, SparqlResult, TimeRef, Triple, TxReport, View,
+    BundleFormat, Db, Eid, Event, ObjectId, Op, PathArgs, PathDir, PathMode, PathRow, RdfTerm,
+    RdfTriple, SparqlOptions, SparqlResult, TimeRef, TimeRespecting, Triple, TxReport, View,
 };
 
 use crate::value::{eid_from_json, params_from_json, value_from_json, value_to_json};
@@ -91,7 +91,44 @@ pub fn run(view: &View<'_>, op: &str, args: &J) -> Res<J> {
                 .get("maxHops")
                 .and_then(J::as_u64)
                 .map_or(u32::MAX, |n| n.min(u32::MAX as u64) as u32);
-            let rows = view.path(start, str_arg(args, "path")?, mode, max)?;
+            let graphs = match args.get("graphs") {
+                None | Some(J::Null) => None,
+                Some(J::Array(gs)) => {
+                    let mut ids = Vec::with_capacity(gs.len());
+                    for g in gs {
+                        // a term that is not stored names no graph
+                        if let Some(id) = view.encode(&value_from_json(g)?)? {
+                            ids.push(id);
+                        }
+                    }
+                    Some(ids)
+                }
+                Some(_) => return Err(arg("`graphs` must be a list of terms")),
+            };
+            let time_respecting = match args.get("timeRespecting") {
+                None | Some(J::Null) | Some(J::Bool(false)) => None,
+                Some(J::Bool(true)) => Some(TimeRespecting::default()),
+                Some(J::Object(o)) => {
+                    if let Some(k) = o.keys().find(|k| *k != "after") {
+                        return Err(arg(format!("unknown timeRespecting option {k:?}")));
+                    }
+                    Some(TimeRespecting {
+                        after: crate::value::time_from_json(o.get("after").unwrap_or(&J::Null))?,
+                    })
+                }
+                Some(_) => {
+                    return Err(arg(
+                        "`timeRespecting` must be a boolean or {\"after\": time}",
+                    ))
+                }
+            };
+            let opts = PathArgs {
+                mode,
+                max_hops: max,
+                graphs,
+                time_respecting,
+            };
+            let rows = view.path_with(start, str_arg(args, "path")?, &opts)?;
             Ok(J::Array(
                 rows.iter()
                     .map(|r| path_row_json(view, r))
@@ -232,6 +269,7 @@ fn path_row_json(view: &View<'_>, r: &PathRow) -> Res<J> {
         "end": value_to_json(&view.decode(r.end)?),
         "hops": r.hops,
         "path": path,
+        "arrival": r.arrival.map_or(J::Null, |a| json!(a)),
     }))
 }
 

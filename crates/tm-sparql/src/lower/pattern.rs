@@ -12,8 +12,8 @@ use super::vars::is_internal;
 use super::Lowerer;
 use crate::dataset::{graph_name, is_tm_iri, ViewScope};
 use crate::error::{
-    time_iri_in_graph, unsupported, GRAPH_SUBQUERY, GRAPH_WITHOUT_PATTERN, NAMED_GRAPH_PATH,
-    ORDER_BY_DISTINCT, SERVICE,
+    time_iri_in_graph, unsupported, GRAPH_SUBQUERY, GRAPH_WITHOUT_PATTERN, ORDER_BY_DISTINCT,
+    SERVICE,
 };
 use crate::terms;
 
@@ -81,13 +81,7 @@ impl Lowerer<'_> {
                 subject,
                 path,
                 object,
-            } => {
-                // the path engine takes a view, not a graph selection (named-graphs)
-                if !self.active.is_any() {
-                    return Err(unsupported(NAMED_GRAPH_PATH));
-                }
-                self.path(subject, path, object, view)
-            }
+            } => self.path(subject, path, object, view),
             GraphPattern::Join { .. } => {
                 let mut operands = Vec::new();
                 flatten_join(gp, &mut operands);

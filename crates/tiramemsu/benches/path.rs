@@ -237,6 +237,8 @@ fn chunk_sizes(c: &mut Criterion) {
                             max_hops: Some(4),
                             view: ViewSpec::NOW,
                             end: None,
+                            graphs: None,
+                            time_respecting: None,
                         },
                     )
                     .unwrap()

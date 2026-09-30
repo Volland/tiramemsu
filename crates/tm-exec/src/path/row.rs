@@ -170,6 +170,11 @@ pub struct PathRow {
     pub hops: u32,
     /// The path value; `None` in `REACH` mode.
     pub path: Option<Path>,
+    /// The arrival of a time-respecting search, in epoch ms: the row's final time
+    /// (in `REACH` mode the earliest over every time-respecting walk to the end).
+    /// `None` when the search is not time-respecting, and when the arrival is −∞
+    /// (no start instant and no traversed statement with a valid-time start).
+    pub arrival: Option<i64>,
 }
 
 #[cfg(test)]

@@ -119,6 +119,19 @@ pub struct PathPattern {
     pub bind_path: Option<Var>,
     /// The pattern's own time selection.
     pub view: View,
+    /// The graphs every traversed statement must be a member of (`Any` by default).
+    /// `Set` restricts the path to statements in at least one listed graph; `Var`
+    /// binds the graph the whole path lies in (one graph per solution). Membership is
+    /// read in the pattern's own view.
+    pub graph: GraphSel,
+}
+
+impl PathPattern {
+    /// Restricts the path to a graph selection.
+    pub fn in_graph(mut self, graph: GraphSel) -> PathPattern {
+        self.graph = graph;
+        self
+    }
 }
 
 /// Inline bindings; a `None` cell is UNDEF.

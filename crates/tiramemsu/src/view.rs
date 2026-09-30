@@ -6,7 +6,7 @@ use tm_core::{
     read, Bundle, Eid, Error, Event, Executor, ObjectId, Result, TermReader, Triple, Value,
     ViewSpec,
 };
-use tm_exec::{CacheMode, Explain, PathRequest, PathRow, QueryEngine, QueryResult};
+use tm_exec::{CacheMode, Explain, PathRequest, PathRow, QueryEngine, QueryResult, TimeRespecting};
 use tm_ir::{IrQuery, Params, PathMode};
 
 use crate::db::Db;
@@ -248,7 +248,7 @@ impl<'a> View<'a> {
     /// property-path text plus `{m,n}`; `max_hops` is a hard bound for every mode
     /// (`u32::MAX` for none). Rows come in the deterministic order of the mode; `REACH`
     /// rows carry no path value. Inside `Db::with` the path sees the speculative
-    /// statements.
+    /// statements. [`View::path_with`] adds a graph filter.
     ///
     /// Path steps can cross layers through the virtual hops `sys:subject` and
     /// `sys:object` of a fact id, for example `supportedBy/(sys:subject|sys:object)`.
@@ -282,6 +282,75 @@ impl<'a> View<'a> {
         mode: PathMode,
         max_hops: u32,
     ) -> Result<Vec<PathRow>> {
+        self.path_with(
+            start,
+            path,
+            &PathArgs {
+                mode,
+                max_hops,
+                ..PathArgs::default()
+            },
+        )
+    }
+
+    /// Evaluates a path from `start` with the options of `args`: the mode, the hop
+    /// bound, an optional graph set and optional time respect. Otherwise as
+    /// [`View::path`], which is the shorthand with neither.
+    ///
+    /// - With `args.graphs`, every statement the path traverses (the statement
+    ///   stepped over, or for `sys:subject`, `sys:object` and `sys:predicate` the
+    ///   statement whose part is stepped to or from) must be a member of at least one
+    ///   of the graphs, the membership being visible in this view; zero-hop rows are
+    ///   kept.
+    /// - With `args.time_respecting`, valid time never goes backwards along a path:
+    ///   from `after` (or −∞), a stored hop over a statement valid `[from, to)` needs
+    ///   `to > τ` and moves τ to `max(τ, from)`; virtual hops keep τ. Each row
+    ///   carries its `arrival` (in `REACH` mode the earliest over every such walk),
+    ///   `None` for −∞.
+    ///
+    /// # Errors
+    ///
+    /// As [`View::path`].
+    ///
+    /// ```
+    /// # use tiramemsu::*;
+    /// # let dir = tempfile::tempdir().unwrap();
+    /// # let db = Db::open(dir.path().join("m.db"), OpenOptions::default())?;
+    /// let v = |s: &str| Value::iri(format!("urn:tiramemsu:v:{s}"));
+    /// db.transact(TxOptions::default(), |tx| {
+    ///     let ab = tx.assert(v("a"), v("knows"), v("b"), Valid::ALWAYS)?;
+    ///     tx.assert(v("b"), v("knows"), v("c"), Valid::ALWAYS)?; // in no graph
+    ///     tx.add_to_graph(ab.eid(), v("session12"), AssertOpts::default())?;
+    ///     Ok(())
+    /// })?;
+    /// let view = db.now();
+    /// let a = view.encode(&v("a"))?.unwrap();
+    /// let g = view.encode(&v("session12"))?.unwrap();
+    /// let args = PathArgs { graphs: Some(vec![g]), ..PathArgs::default() };
+    /// let rows = view.path_with(a, "knows+", &args)?;
+    /// assert_eq!(rows.len(), 1); // only b: `b knows c` is in no graph
+    ///
+    /// // a contact chain in time order: a met b in [1, 5), b met c in [3, 9)
+    /// db.transact(TxOptions::default(), |tx| {
+    ///     tx.assert(v("a"), v("met"), v("b"), Valid::between(1, 5))?;
+    ///     tx.assert(v("b"), v("met"), v("c"), Valid::between(3, 9))?;
+    ///     Ok(())
+    /// })?;
+    /// let view = db.now();
+    /// let args = PathArgs {
+    ///     time_respecting: Some(TimeRespecting::default()),
+    ///     ..PathArgs::default()
+    /// };
+    /// let arrivals: Vec<_> = view.path_with(a, "met+", &args)?.iter().map(|r| r.arrival).collect();
+    /// assert_eq!(arrivals, [Some(1), Some(3)]); // b at 1, c at 3
+    /// let late = PathArgs {
+    ///     time_respecting: Some(TimeRespecting { after: Some(6) }),
+    ///     ..PathArgs::default()
+    /// };
+    /// assert!(view.path_with(a, "met+", &late)?.is_empty()); // a met b before 6
+    /// # Ok::<(), Error>(())
+    /// ```
+    pub fn path_with(&self, start: ObjectId, path: &str, args: &PathArgs) -> Result<Vec<PathRow>> {
         let engine = self
             .engine()?
             .path_engine()
@@ -296,10 +365,12 @@ impl<'a> View<'a> {
                 &PathRequest {
                     start,
                     path,
-                    mode,
-                    max_hops: Some(max_hops),
+                    mode: args.mode,
+                    max_hops: Some(args.max_hops),
                     view,
                     end: None,
+                    graphs: args.graphs.clone(),
+                    time_respecting: args.time_respecting,
                 },
             )
         })
@@ -388,5 +459,33 @@ impl View<'_> {
     pub fn bundle(&self, root: Eid) -> Result<Bundle> {
         let spec = self.spec;
         self.exec(|e, _| read::bundle(e, &spec, root))
+    }
+}
+
+/// The options of [`View::path_with`]. `PathArgs::default()` is `REACH` with no hop
+/// bound, no graph filter and no time respect.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PathArgs {
+    /// The path mode.
+    pub mode: PathMode,
+    /// A hard bound on the hop count for every mode (`u32::MAX` for none).
+    pub max_hops: u32,
+    /// Graph-scoped evaluation: every traversed statement must be a member of at
+    /// least one of these graphs. `None` = no graph filter; `Some(vec![])` leaves
+    /// only zero-hop rows.
+    pub graphs: Option<Vec<ObjectId>>,
+    /// Time-respecting evaluation: valid time never goes backwards along a path, and
+    /// rows carry their `arrival`. `None` = ordinary evaluation.
+    pub time_respecting: Option<TimeRespecting>,
+}
+
+impl Default for PathArgs {
+    fn default() -> PathArgs {
+        PathArgs {
+            mode: PathMode::Reachability,
+            max_hops: u32::MAX,
+            graphs: None,
+            time_respecting: None,
+        }
     }
 }

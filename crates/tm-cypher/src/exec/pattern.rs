@@ -892,6 +892,7 @@ impl Exec<'_> {
             max_hops: Some(vl.max.unwrap_or(cap)),
             bind_path: Some(Var::new(pv)),
             view,
+            graph: tm_ir::GraphSel::Any,
         }))
     }
 

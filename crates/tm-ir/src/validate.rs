@@ -62,6 +62,9 @@ pub fn scope(op: &Op) -> Scope {
             if let Some(b) = &p.bind_path {
                 s.push(b);
             }
+            if let crate::op::GraphSel::Var(g) = &p.graph {
+                s.push(g);
+            }
         }
         Op::Values(v) => {
             for (i, var) in v.vars.iter().enumerate() {
@@ -222,26 +225,29 @@ fn check_expr(e: &Expr) -> Result<()> {
     }
 }
 
+/// A graph set names at least one graph, by constants and parameters only.
+fn check_graph(g: &crate::op::GraphSel) -> Result<()> {
+    match g {
+        crate::op::GraphSel::Set(gs) if gs.is_empty() => Err(invalid(
+            "a graph set must name at least one graph".to_string(),
+        )),
+        crate::op::GraphSel::Set(gs)
+            if gs
+                .iter()
+                .any(|g| !matches!(g, TermOrVar::Const(_) | TermOrVar::Param(_))) =>
+        {
+            Err(invalid(
+                "a graph set holds constants and parameters only".to_string(),
+            ))
+        }
+        _ => Ok(()),
+    }
+}
+
 fn check_op(op: &Op) -> Result<()> {
     match op {
         Op::Triple(t) => {
-            match &t.graph {
-                crate::op::GraphSel::Set(gs) if gs.is_empty() => {
-                    return Err(invalid(
-                        "a graph set must name at least one graph".to_string(),
-                    ));
-                }
-                crate::op::GraphSel::Set(gs)
-                    if gs
-                        .iter()
-                        .any(|g| !matches!(g, TermOrVar::Const(_) | TermOrVar::Param(_))) =>
-                {
-                    return Err(invalid(
-                        "a graph set holds constants and parameters only".to_string(),
-                    ));
-                }
-                _ => {}
-            }
+            check_graph(&t.graph)?;
             if let (TermOrVar::Const(Value::Iri(p)), true) = (&t.p, !t.graph.is_any()) {
                 if is_virtual(p) {
                     return Err(invalid(format!(
@@ -257,7 +263,7 @@ fn check_op(op: &Op) -> Result<()> {
                 }
             }
         }
-        Op::Path(_) => {}
+        Op::Path(p) => check_graph(&p.graph)?,
         Op::Values(v) => {
             for (i, r) in v.rows.iter().enumerate() {
                 if r.len() != v.vars.len() {
@@ -443,6 +449,33 @@ mod tests {
             .in_graph(GraphSel::Set(vec![TermOrVar::iri("urn:g1")]));
         assert!(is_invalid(Op::Triple(virt)));
         assert!(!is_invalid(set(vec![TermOrVar::iri("urn:g1")])));
+    }
+
+    // @lat: [[tests#Named Graphs#Path Graph Selector Text And Validation]]
+    #[test]
+    fn path_graph_selector_text_and_validation() {
+        use crate::op::GraphSel;
+        let path = |g: GraphSel| match b().path(
+            "v:a",
+            crate::path::PathExpr::iri("v:knows").plus(),
+            "?x",
+            crate::path::PathMode::Reachability,
+        ) {
+            Op::Path(p) => Op::Path(p.in_graph(g)),
+            _ => unreachable!("a path"),
+        };
+        let any = crate::display::sexpr_line(&path(GraphSel::Any));
+        assert!(!any.contains(":graph"), "Any prints nothing: {any}");
+        let set = path(GraphSel::Set(vec![TermOrVar::iri("urn:g1"), "$g".into()]));
+        let text = crate::display::sexpr_line(&set);
+        assert!(text.ends_with(":graph (<urn:g1> $g))"), "{text}");
+        assert!(!is_invalid(set));
+        let var = path(GraphSel::Var("g".into()));
+        assert!(crate::display::sexpr_line(&var).ends_with(":graph ?g)"));
+        assert!(scope(&var).binds(&"g".into()));
+        assert!(!is_invalid(var));
+        assert!(is_invalid(path(GraphSel::Set(vec![]))));
+        assert!(is_invalid(path(GraphSel::Set(vec!["?x".into()]))));
     }
 
     // virtual-predicates "Eid on a virtual pattern" (validation half)
