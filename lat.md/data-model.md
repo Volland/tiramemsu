@@ -164,6 +164,7 @@ Cypher and SPARQL share one id space. A node is an `IRI`, an anonymous `NODE`, o
 - A blank node from RDF input gets a `BNODE` id. It is exported as `urn:tiramemsu:bnode:<n>` (skolemised), including in SPARQL JSON results.
 - Statement eids and transactions render as `urn:tiramemsu:stmt:<n>` and `urn:tiramemsu:tx:<t>`. All four skolem forms round-trip to the same ObjectId.
 - Nodes have no lifetime. A node exists while any triple mentions it. Only statements are asserted and retracted.
+- Cypher `@id` accepts a declared CURIE, an absolute IRI or one of the skolem forms ([[crates/tm-cypher/src/vocab.rs#Vocab#resolve_id]]); `elementId()` renders them back and `id()` returns the raw ObjectId.
 
 ## Vocabulary Mapping
 
@@ -171,7 +172,10 @@ Cypher names and RDF IRIs map through one configurable `@vocab` base plus a pref
 
 - **Cypher → IRI:** a bare name (label, relationship type, property key) resolves to `@vocab` + name, verbatim with no case change. A backticked CURIE such as `` `schema:name` `` resolves through the prefix table.
 - **IRI → Cypher:** an IRI under `@vocab` shows as its local name. Otherwise it shows as a CURIE if a prefix matches, else as the full IRI in backticks.
-- **Labels:** a Cypher label is an `rdf:type` triple. `labels(n)` returns the objects of `rdf:type` for `n`.
+- **Labels:** a Cypher label is an `rdf:type` triple. `labels(n)` returns the objects of `rdf:type` for `n`, without duplicates, in ascending order. `Statement` and `Predicate` are implicit labels: `:Statement` matches statements, `:Predicate` matches subjects of a schema flag, and a user class of the same local name is reachable through its CURIE or full IRI.
+- **Resolution:** a name with `:` is a declared CURIE (`sys`, `tm`, `rdf`, `rdfs`, `xsd`, `v` and the table) or an absolute IRI, else a `Parse` error. Characters not allowed in an IRI are percent-encoded. See [[crates/tm-cypher/src/vocab.rs#Vocab#resolve_text]].
+- **Rendering:** an IRI under `@vocab` whose local name has no `:` shows percent-decoded; otherwise the longest matching prefix wins (ties: smallest prefix name); otherwise the full IRI. Rendered names round-trip. See [[crates/tm-cypher/src/vocab.rs#Vocab#render]].
+- **Configuration:** `Tx::set_vocab` replaces the live vocab statement, and `Tx::set_prefix` declares or redeclares a prefix; redeclaring a built-in name fails with `ReservedNamespace`. See [[crates/tm-core/src/engine/config.rs#BUILTIN_PREFIXES]].
 - SPARQL predeclares `rdf`, `rdfs`, `xsd`, `sys`, `tm`, `v` (the `@vocab`) and every prefix of the table, so `v:name` needs no `PREFIX`. A `PREFIX` in the query overrides a predeclared one.
 - The default `@vocab` is `urn:tiramemsu:v:`. It is set per database as `(sys:db sys:vocab <iri>)`. Prefixes are `(sys:db sys:prefix [sys:prefixName "schema"; sys:prefixIri <https://schema.org/>])`, stored as a small layer.
 
@@ -187,7 +191,7 @@ These namespaces belong to the engine. User data cannot assert `sys:` predicates
 | — | `urn:tiramemsu:node:` / `urn:tiramemsu:bnode:` | Skolem IRIs for anonymous nodes |
 | — | `urn:tiramemsu:stmt:<n>` / `urn:tiramemsu:tx:<t>` | Skolem IRIs for statement eids and transactions in query results. They parse back to the same `STMT`/`TX` id |
 
-`sys:` triples are hidden from Cypher `labels()`, `keys()` and `properties()` by default.
+`sys:` triples are hidden from Cypher `labels()`, `keys()`, `properties()`, node and relationship values, untyped relationship patterns, the unlabelled node scan, `:Statement` enumeration and the name procedures. Explicit access by CURIE (``n.`sys:reason` ``, ``-[:`sys:supersedes`]->``) still matches them.
 
 ## Predicate Schema
 

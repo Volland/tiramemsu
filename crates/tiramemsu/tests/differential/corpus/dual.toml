@@ -1,0 +1,33 @@
+# The dual view versus reifiers (task 13.5), over the layers fixture.
+
+[[pair]]
+name = "supporting belief"
+category = "dual-view"
+fixture = "layers"
+sparql = '''SELECT ?r ?b WHERE { ?a v:WORKS_AT ?c ~ ?r . ?b a v:Belief ; v:SUPPORTED_BY ?r }'''
+cypher = '''MATCH (a)-[r:WORKS_AT]->(c), (b:Belief)-[:SUPPORTED_BY]->(r) RETURN r, b'''
+columns = { r = "r", b = "b" }
+
+[[pair]]
+name = "annotation value"
+category = "dual-view"
+fixture = "layers"
+sparql = '''SELECT ?r ?conf WHERE { ?a v:WORKS_AT ?c ~ ?r . ?r v:confidence ?conf }'''
+cypher = '''MATCH ()-[r:WORKS_AT]->() RETURN r, r.confidence AS conf'''
+columns = { r = "r", conf = "conf" }
+
+[[pair]]
+name = "two levels deep"
+category = "dual-view"
+fixture = "layers"
+sparql = '''SELECT ?s ?m WHERE { ?a v:WORKS_AT ?c ~ ?r . ?b v:SUPPORTED_BY ?r ~ ?s . ?s v:method ?m }'''
+cypher = '''MATCH ()-[r:WORKS_AT]->(), ()-[s:SUPPORTED_BY]->(r) RETURN s, s.method AS m'''
+columns = { s = "s", m = "m" }
+
+[[pair]]
+name = "statement of a statement"
+category = "dual-view"
+fixture = "layers"
+sparql = '''SELECT ?b ?r WHERE { ?b v:SUPPORTED_BY ?r . ?r v:confidence ?c }'''
+cypher = '''MATCH (b)-[:SUPPORTED_BY]->(r) WHERE r.confidence IS NOT NULL RETURN b, r'''
+columns = { b = "b", r = "r" }

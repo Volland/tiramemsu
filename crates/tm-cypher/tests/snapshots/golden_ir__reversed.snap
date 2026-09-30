@@ -1,0 +1,10 @@
+---
+source: crates/tm-cypher/tests/golden_ir.rs
+expression: "ir_of(\"MATCH (a)<-[r:worksAt]-(b) RETURN r\")"
+---
+; RelIsomorphism Null3VL BagOfEids
+(project [?x1 ?x2 ?x3]
+  (join
+    (project [?x2 ?x3 ?x1]
+      (filter (not (isLiteral ?x1))
+        (triple ?x2 <urn:tiramemsu:v:worksAt> ?x1 :view now :eid ?x3)))))

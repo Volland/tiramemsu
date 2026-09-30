@@ -1,0 +1,10 @@
+---
+source: crates/tm-cypher/tests/golden_ir.rs
+expression: "ir_of(\"USE HISTORY VALID AT date('2026-03-01') MATCH (a)-[:worksAt]->(b) RETURN b\")"
+---
+; RelIsomorphism Null3VL BagOfEids
+(project [?x1 ?x2 ?a3]
+  (join
+    (project [?x1 ?a3 ?x2]
+      (filter (not (isLiteral ?x2))
+        (triple ?x1 <urn:tiramemsu:v:worksAt> ?x2 :view history;validAt/1772323200000 :eid ?a3)))))

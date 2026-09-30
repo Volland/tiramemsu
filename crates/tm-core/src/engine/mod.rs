@@ -4,6 +4,7 @@
 //! speculation. [`Tx`] is the write handle passed to a transaction body.
 
 mod cascade;
+mod config;
 mod ops;
 mod reserved;
 pub mod schema;
@@ -285,6 +286,7 @@ pub struct Tx<'a> {
     superseded: Vec<(Eid, Eid)>,
     schema_cache: HashMap<ObjectId, PredicateSchema>,
     multi_seen: HashSet<ObjectId>,
+    ext: Option<std::sync::Arc<dyn std::any::Any + Send + Sync>>,
 }
 
 impl std::fmt::Debug for Tx<'_> {
@@ -360,6 +362,7 @@ impl<'a> Tx<'a> {
             superseded: Vec::new(),
             schema_cache: HashMap::new(),
             multi_seen: HashSet::new(),
+            ext: None,
         })
     }
 
@@ -377,6 +380,17 @@ impl<'a> Tx<'a> {
         c.last_instant = self.instant;
         c.store(&self.c0, self.exec)?;
         Ok(self.report())
+    }
+
+    /// Attaches a host object to this transaction (the facade attaches its query
+    /// engine so that front ends can run queries inside the transaction).
+    pub fn set_extension(&mut self, ext: std::sync::Arc<dyn std::any::Any + Send + Sync>) {
+        self.ext = Some(ext);
+    }
+
+    /// The host object attached with [`Tx::set_extension`], if it has type `T`.
+    pub fn extension<T: Send + Sync + 'static>(&self) -> Option<std::sync::Arc<T>> {
+        self.ext.clone()?.downcast::<T>().ok()
     }
 
     /// This transaction's number.

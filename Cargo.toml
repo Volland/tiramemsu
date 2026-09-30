@@ -21,3 +21,4 @@ tiramemsu = { path = "crates/tiramemsu" }
 tm-ir = { path = "crates/tm-ir" }
 tm-exec = { path = "crates/tm-exec" }
 tm-sparql = { path = "crates/tm-sparql" }
+tm-cypher = { path = "crates/tm-cypher" }

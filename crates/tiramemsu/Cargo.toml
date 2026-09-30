@@ -12,9 +12,12 @@ tm-rusqlite = { workspace = true }
 tm-ir = { workspace = true }
 tm-exec = { workspace = true }
 tm-sparql = { workspace = true }
+tm-cypher = { workspace = true }
 lru = "0.18"
 
 [dev-dependencies]
+serde = { version = "1", features = ["derive"] }
+toml = "0.8"
 sparesults = { version = "0.3", features = ["sparql-12"] }
 proptest = "1"
 tempfile = "3"
@@ -28,6 +31,12 @@ harness = false
 [[bench]]
 name = "sparql"
 harness = false
+
+[features]
+default = ["sparql"]
+# The SPARQL side of the differential suite (`tests/differential`); without it the
+# pairs are only compiled on the Cypher side and reported as pending.
+sparql = []
 
 [lints]
 workspace = true

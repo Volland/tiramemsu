@@ -1,0 +1,204 @@
+# Equivalent SPARQL / Cypher pairs over the employment fixture (task 13.4).
+
+[[pair]]
+name = "worksAt pairs"
+category = "single-hop"
+fixture = "employment"
+sparql = '''SELECT ?p ?c WHERE { ?p v:worksAt ?c }'''
+cypher = '''MATCH (p)-[:worksAt]->(c) RETURN p, c'''
+columns = { p = "p", c = "c" }
+
+[[pair]]
+name = "typed single hop"
+category = "single-hop"
+fixture = "employment"
+sparql = '''SELECT ?c WHERE { ?a a v:Person ; v:worksAt ?c }'''
+cypher = '''MATCH (a:Person)-[:worksAt]->(c) RETURN c'''
+columns = { c = "c" }
+
+[[pair]]
+name = "reverse direction"
+category = "single-hop"
+fixture = "employment"
+sparql = '''SELECT ?p WHERE { ?c v:name "Acme" . ?p v:worksAt ?c }'''
+cypher = '''MATCH (c {name: 'Acme'})<-[:worksAt]-(p) RETURN p'''
+columns = { p = "p" }
+
+[[pair]]
+name = "employee city"
+category = "multi-hop"
+fixture = "employment"
+sparql = '''SELECT ?p ?city WHERE { ?p v:worksAt ?c . ?c v:locatedIn ?city }'''
+cypher = '''MATCH (p)-[:worksAt]->(c)-[:locatedIn]->(city) RETURN p, city'''
+columns = { p = "p", city = "city" }
+
+[[pair]]
+name = "friend of a friend"
+category = "multi-hop"
+fixture = "employment"
+sparql = '''SELECT ?a ?c WHERE { ?a v:knows ?b . ?b v:knows ?c }'''
+cypher = '''MATCH (a)-[:knows]->(b)-[:knows]->(c) RETURN a, c'''
+columns = { a = "a", c = "c" }
+
+[[pair]]
+name = "colleagues"
+category = "multi-hop"
+fixture = "employment"
+sparql = '''SELECT ?a ?b WHERE { ?a v:worksAt ?c . ?b v:worksAt ?c FILTER(?a != ?b) }'''
+cypher = '''MATCH (a)-[:worksAt]->(c)<-[:worksAt]-(b) RETURN a, b'''
+columns = { a = "a", b = "b" }
+
+[[pair]]
+name = "label is rdf:type"
+category = "labels"
+fixture = "employment"
+sparql = '''SELECT ?p WHERE { ?p a v:Person }'''
+cypher = '''MATCH (p:Person) RETURN p'''
+columns = { p = "p" }
+
+[[pair]]
+name = "two labels"
+category = "labels"
+fixture = "employment"
+sparql = '''SELECT ?p WHERE { ?p a v:Person, v:Employee }'''
+cypher = '''MATCH (p:Person:Employee) RETURN p'''
+columns = { p = "p" }
+
+[[pair]]
+name = "company labels"
+category = "labels"
+fixture = "employment"
+sparql = '''SELECT ?c ?n WHERE { ?c a v:Company ; v:name ?n }'''
+cypher = '''MATCH (c:Company) RETURN c, c.name AS n'''
+columns = { c = "c", n = "n" }
+
+[[pair]]
+name = "name equals"
+category = "literal-filter"
+fixture = "employment"
+sparql = '''SELECT ?p WHERE { ?p v:name "Alice" }'''
+cypher = '''MATCH (p {name: 'Alice'}) RETURN p'''
+columns = { p = "p" }
+
+[[pair]]
+name = "string prefix"
+category = "literal-filter"
+fixture = "employment"
+sparql = '''SELECT ?p WHERE { ?p a v:Person ; v:name ?n FILTER(STRSTARTS(?n, "Al")) }'''
+cypher = '''MATCH (p:Person) WHERE p.name STARTS WITH 'Al' RETURN p'''
+columns = { p = "p" }
+
+[[pair]]
+name = "age greater"
+category = "comparison"
+fixture = "employment"
+sparql = '''SELECT ?p ?a WHERE { ?p v:age ?a FILTER(?a > 28) }'''
+cypher = '''MATCH (p) WHERE p.age > 28 RETURN p, p.age AS a'''
+columns = { p = "p", a = "a" }
+
+[[pair]]
+name = "age range"
+category = "comparison"
+fixture = "employment"
+sparql = '''SELECT ?p WHERE { ?p v:age ?a FILTER(?a >= 25 && ?a < 41) }'''
+cypher = '''MATCH (p) WHERE p.age >= 25 AND p.age < 41 RETURN p'''
+columns = { p = "p" }
+
+[[pair]]
+name = "optional relationship"
+category = "optional"
+fixture = "employment"
+sparql = '''SELECT ?p ?k WHERE { ?p a v:Person OPTIONAL { ?p v:knows ?k } }'''
+cypher = '''MATCH (p:Person) OPTIONAL MATCH (p)-[:knows]->(k) RETURN p, k'''
+columns = { p = "p", k = "k" }
+
+[[pair]]
+name = "optional age is missing for dave"
+category = "optional"
+fixture = "employment"
+sparql = '''SELECT ?p ?age WHERE { ?p a v:Person OPTIONAL { ?p v:age ?age } }'''
+cypher = '''MATCH (p:Person) OPTIONAL MATCH (p) WHERE p.age IS NOT NULL RETURN p, p.age AS age'''
+columns = { p = "p", age = "age" }
+
+[[pair]]
+name = "exists"
+category = "exists"
+fixture = "employment"
+sparql = '''SELECT ?p WHERE { ?p a v:Person FILTER EXISTS { ?p v:knows ?k } }'''
+cypher = '''MATCH (p:Person) WHERE EXISTS { (p)-[:knows]->() } RETURN p'''
+columns = { p = "p" }
+
+[[pair]]
+name = "not exists"
+category = "not-exists"
+fixture = "employment"
+sparql = '''SELECT ?p WHERE { ?p a v:Person FILTER NOT EXISTS { ?p v:worksAt ?c } }'''
+cypher = '''MATCH (p:Person) WHERE NOT EXISTS { (p)-[:worksAt]->() } RETURN p'''
+columns = { p = "p" }
+
+[[pair]]
+name = "union of relationships"
+category = "union"
+fixture = "employment"
+sparql = '''SELECT ?x WHERE { { v:alice v:knows ?x } UNION { v:alice v:worksAt ?x } }'''
+cypher = '''MATCH (a {name: 'Alice'})-[:knows]->(x) RETURN x UNION MATCH (a {name: 'Alice'})-[:worksAt]->(x) RETURN x'''
+mode = "set"
+columns = { x = "x" }
+
+[[pair]]
+name = "count per company"
+category = "aggregation"
+fixture = "employment"
+sparql = '''SELECT ?c (COUNT(?p) AS ?n) WHERE { ?p v:worksAt ?c } GROUP BY ?c'''
+cypher = '''MATCH (p)-[:worksAt]->(c) RETURN c, count(p) AS n'''
+columns = { c = "c", n = "n" }
+
+[[pair]]
+name = "sum and max of ages"
+category = "aggregation"
+fixture = "employment"
+sparql = '''SELECT (SUM(?a) AS ?s) (MAX(?a) AS ?m) WHERE { ?p v:age ?a }'''
+cypher = '''MATCH (p) WHERE p.age IS NOT NULL RETURN sum(p.age) AS s, max(p.age) AS m'''
+columns = { s = "s", m = "m" }
+
+[[pair]]
+name = "distinct companies"
+category = "aggregation"
+fixture = "employment"
+sparql = '''SELECT DISTINCT ?c WHERE { ?p v:worksAt ?c }'''
+cypher = '''MATCH (p)-[:worksAt]->(c) RETURN DISTINCT c'''
+columns = { c = "c" }
+
+[[pair]]
+name = "top two by age"
+category = "order-limit"
+fixture = "employment"
+sparql = '''SELECT ?p WHERE { ?p v:age ?a } ORDER BY DESC(?a) LIMIT 2'''
+cypher = '''MATCH (p) WHERE p.age IS NOT NULL RETURN p ORDER BY p.age DESC LIMIT 2'''
+order = "ordered"
+columns = { p = "p" }
+
+[[pair]]
+name = "skip and limit"
+category = "order-limit"
+fixture = "employment"
+sparql = '''SELECT ?p WHERE { ?p v:age ?a } ORDER BY ?a OFFSET 1 LIMIT 1'''
+cypher = '''MATCH (p) WHERE p.age IS NOT NULL RETURN p ORDER BY p.age SKIP 1 LIMIT 1'''
+order = "ordered"
+columns = { p = "p" }
+
+[[pair]]
+name = "aggregate then filter"
+category = "subquery"
+fixture = "employment"
+sparql = '''SELECT ?c ?n WHERE { { SELECT ?c (COUNT(?p) AS ?n) WHERE { ?p v:worksAt ?c } GROUP BY ?c } FILTER(?n > 1) }'''
+cypher = '''MATCH (p)-[:worksAt]->(c) WITH c, count(p) AS n WHERE n > 1 RETURN c, n'''
+columns = { c = "c", n = "n" }
+
+[[pair]]
+name = "correlated subquery count"
+category = "subquery"
+fixture = "employment"
+sparql = '''SELECT ?c (COUNT(?p) AS ?staff) WHERE { ?c a v:Company OPTIONAL { ?p v:worksAt ?c } } GROUP BY ?c'''
+cypher = '''MATCH (c:Company) CALL { WITH c OPTIONAL MATCH (p)-[:worksAt]->(c) RETURN count(p) AS staff } RETURN c, staff'''
+columns = { c = "c", staff = "staff" }

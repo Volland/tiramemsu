@@ -132,6 +132,10 @@ Checks of [[query#Front Ends]] and [[query#Physical Planning#Path Engine]].
 
 A corpus of equivalent SPARQL/Cypher query pairs over shared fixtures returns identical result multisets, after normalising for set-versus-bag semantics.
 
+### openCypher TCK
+
+The openCypher TCK (2024.3) runs end to end on `tm-cypher`. Scenarios expected to fail are listed with a reason in `crates/tm-cypher/tests/tck/allowlist.txt`, and the run fails on an unexpected failure and on an unexpected pass.
+
 ### Dual View Binds Same Eid
 
 A Cypher relationship variable used in node position and a SPARQL `~ ?r` reifier bind the same eid for the same fact.

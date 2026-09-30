@@ -1,0 +1,13 @@
+---
+source: crates/tm-cypher/tests/golden_ir.rs
+expression: "ir_of(\"MATCH REPEATABLE ELEMENTS (x)-[r1:knows]->(y)-[r2:knows]->(z) RETURN x\")"
+---
+; RelIsomorphism Null3VL BagOfEids
+(project [?x1 ?x2 ?x3 ?x4 ?x5]
+  (join
+    (project [?x1 ?x4 ?x2]
+      (filter (not (isLiteral ?x2))
+        (triple ?x1 <urn:tiramemsu:v:knows> ?x2 :view now :eid ?x4)))
+    (project [?x2 ?x5 ?x3]
+      (filter (not (isLiteral ?x3))
+        (triple ?x2 <urn:tiramemsu:v:knows> ?x3 :view now :eid ?x5)))))

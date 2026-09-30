@@ -20,11 +20,13 @@
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
 
+mod cypher;
 mod db;
 mod pool;
 mod sparql;
 mod view;
 
+pub use cypher::TxCypher;
 pub use db::{Db, OpenOptions};
 pub use sparql::SparqlResult;
 pub use view::View;
@@ -35,6 +37,8 @@ pub use tm_core::{
     PatchField, Position, PredicateSchema, Result, RetKind, Span, SqlError, SqlValue, SystemClock,
     Tag, TimeRef, Triple, Tx, TxId, TxOptions, TxReport, TxSel, Valid, ValidSel, Value, ViewSpec,
 };
+pub use tm_cypher as cypher_frontend;
+pub use tm_cypher::{CypherParams, CypherResult, CypherValue};
 pub use tm_exec::{
     ExecStats, Explain, LftjConfig, NativeKind, NativeOperator, PlannerOptions, QueryResult,
     RegionInfo, RegionKind, ResultValue, RouteNote,

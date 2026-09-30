@@ -127,3 +127,7 @@ pub const CASES: &[Case] = &[
         rows: &[&["1"]],
     },
 ];
+
+pub mod fixtures;
+pub mod normalise;
+pub mod runner;

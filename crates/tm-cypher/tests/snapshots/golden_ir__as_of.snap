@@ -1,0 +1,11 @@
+---
+source: crates/tm-cypher/tests/golden_ir.rs
+expression: "ir_of(\"USE AS OF 150 MATCH (a {`@id`: 'v:alice'})-[:worksAt]->(before) RETURN before\")"
+---
+; RelIsomorphism Null3VL BagOfEids
+(project [?x1 ?x2 ?a3]
+  (filter (= ?x1 <urn:tiramemsu:v:alice>)
+    (join
+      (project [?x1 ?a3 ?x2]
+        (filter (not (isLiteral ?x2))
+          (triple ?x1 <urn:tiramemsu:v:worksAt> ?x2 :view asOf/tx:150 :eid ?a3))))))

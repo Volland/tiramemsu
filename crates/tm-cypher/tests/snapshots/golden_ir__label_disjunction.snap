@@ -1,0 +1,13 @@
+---
+source: crates/tm-cypher/tests/golden_ir.rs
+expression: "ir_of(\"MATCH (n:Person|Company) RETURN n\")"
+---
+; RelIsomorphism Null3VL BagOfEids
+(project [?x1]
+  (join
+    (projectDistinct [?x1]
+      (union
+        (projectDistinct [?x1]
+          (triple ?x1 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <urn:tiramemsu:v:Person> :view now))
+        (projectDistinct [?x1]
+          (triple ?x1 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <urn:tiramemsu:v:Company> :view now))))))

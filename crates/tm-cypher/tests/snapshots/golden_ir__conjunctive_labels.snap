@@ -1,0 +1,10 @@
+---
+source: crates/tm-cypher/tests/golden_ir.rs
+expression: "ir_of(\"MATCH (n:Person:Employee) RETURN n\")"
+---
+; RelIsomorphism Null3VL BagOfEids
+(project [?x1]
+  (filter (exists (triple ?x1 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <urn:tiramemsu:v:Employee> :view now))
+    (join
+      (projectDistinct [?x1]
+        (triple ?x1 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <urn:tiramemsu:v:Person> :view now)))))

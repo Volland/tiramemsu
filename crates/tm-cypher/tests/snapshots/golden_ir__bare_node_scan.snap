@@ -1,0 +1,15 @@
+---
+source: crates/tm-cypher/tests/golden_ir.rs
+expression: "ir_of(\"MATCH (n) RETURN n\")"
+---
+; RelIsomorphism Null3VL BagOfEids
+(project [?x1]
+  (join
+    (projectDistinct [?x1]
+      (union
+        (projectDistinct [?x1]
+          (filter (not (STRSTARTS (STR ?p2) "urn:tiramemsu:sys:"))
+            (triple ?x1 ?p2 ?o3 :view now)))
+        (projectDistinct [?x1]
+          (filter (and (not (STRSTARTS (STR ?p5) "urn:tiramemsu:sys:")) (!= ?p5 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type>) (not (isLiteral ?x1)))
+            (triple ?s4 ?p5 ?x1 :view now)))))))

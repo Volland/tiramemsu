@@ -1,0 +1,10 @@
+---
+source: crates/tm-cypher/tests/golden_ir.rs
+expression: "ir_of(\"MATCH (n:Person {name: 'Alice', score: 30.0}) RETURN n\")"
+---
+; RelIsomorphism Null3VL BagOfEids
+(project [?x1]
+  (filter (and (exists (filter (= ?o2 "Alice") (filter (isLiteral ?o2) (triple ?x1 <urn:tiramemsu:v:name> ?o2 :view now)))) (exists (filter (= ?o3 "3.0E1"^^<http://www.w3.org/2001/XMLSchema#double>) (filter (isLiteral ?o3) (triple ?x1 <urn:tiramemsu:v:score> ?o3 :view now)))))
+    (join
+      (projectDistinct [?x1]
+        (triple ?x1 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <urn:tiramemsu:v:Person> :view now)))))

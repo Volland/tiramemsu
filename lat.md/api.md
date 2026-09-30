@@ -22,12 +22,13 @@ impl Db {
     pub fn as_of(&self, at: TimeRef) -> View;                     // TimeRef::Tx(t) | TimeRef::Instant(ms)
     pub fn history(&self) -> View;
     pub fn events_since(&self, t: u64) -> Result<Vec<Event>>;
+    pub fn cypher_write(&self, opts: TxOptions, q: &str, params: &CypherParams) -> Result<CypherResult>; // one transaction; rows + TxReport
 }
 
 impl View {
     pub fn valid_at(self, epoch_ms: i64) -> View;
     pub fn sparql(&self, q: &str) -> Result<SparqlResult>;        // SELECT | ASK | CONSTRUCT | update (current view only)
-    pub fn cypher(&self, q: &str, params: &Params) -> Result<QueryResult>;
+    pub fn cypher(&self, q: &str, params: &CypherParams) -> Result<CypherResult>;   // read-only; a write clause is Unsupported
     pub fn path(&self, start: ObjectId, path: &str, mode: PathMode, max_hops: u32) -> Result<Vec<PathRow>>;
     pub fn triples(&self, s: Option<ObjectId>, p: Option<ObjectId>, o: Option<ObjectId>) -> Result<Vec<Triple>>;
     pub fn values(&self, s: ObjectId, key: ObjectId) -> Result<Vec<ObjectId>>; // statements, else volatile (Now only)
@@ -37,7 +38,7 @@ impl View {
 }
 ```
 
-`Tx` is the core write handle, re-exported by the facade. Besides the operations of [[time-model#Operations]] it offers `assert_with` (with `OnExisting::Confirm`), `new_bnode`, `clear_volatile`, `encode`, `lookup`, `decode`, `schema`, `t` and `instant`. Positions take any `IntoObject`: an `ObjectId`, `Eid`, `TxId` or `Value`.
+`Tx` is the core write handle, re-exported by the facade. The `TxCypher` extension trait adds `cypher(q, params)`, which runs a Cypher query with reads and writes inside the caller's `transact` closure ([[crates/tiramemsu/src/cypher.rs#TxCypher]]); `Tx::set_vocab` and `Tx::set_prefix` change the vocabulary configuration ([[data-model#Vocabulary Mapping]]). Besides the operations of [[time-model#Operations]] it offers `assert_with` (with `OnExisting::Confirm`), `new_bnode`, `clear_volatile`, `encode`, `lookup`, `decode`, `schema`, `t` and `instant`. Positions take any `IntoObject`: an `ObjectId`, `Eid`, `TxId` or `Value`.
 
 - A `View` is a pure value: creating or deriving one does no I/O. Rows from an as-of view report `t_ret` and `ret_kind` as absent, so each row shows what was believed then; `history()` gives real lifetimes.
 - `SparqlResult` is `Solutions`, `Boolean`, `Graph` or `Update(TxReport)`, with `write_sparql_json` (SELECT, ASK) and `write_ntriples` (CONSTRUCT). A SPARQL update is one transaction on the writer and returns its `TxReport`. See [[query#Front Ends#SPARQL]].
@@ -70,8 +71,8 @@ Every failure is a typed error, and a failed transaction leaves no trace: no tx 
 | `InvalidInterval` | `assert`/`create` with an empty valid interval (`v_from ≥ v_to`); `InvalidPatch` covers supersede |
 | `NotUniquePredicate(p)` | `upsert` on a predicate without `sys:unique` |
 | `Reentrant` | A write is started from inside a running transaction on the same `Db` |
-| `DeleteConnectedNode(node)` | Cypher `DELETE n` while `n` still has relationships (use `DETACH DELETE`) |
-| `Eval { msg }` | A runtime expression error during query evaluation |
+| `DeleteConnectedNode { node, relationships }` | Cypher `DELETE n` while `n` still has live relationships at the end of the query (use `DETACH DELETE`); it lists their eids |
+| `Eval { dialect, msg }` | A runtime expression error during query evaluation: a type error, integer division by zero, an unstorable property value or an invalid `@id` |
 | `Sqlite(e)` / `Custom(msg)` | A host-neutral SQLite error carrying the result code (busy, I/O, corruption), or the caller aborting the transaction body |
 
 The error enum is `#[non_exhaustive]`. Each OpenSpec change adds the variants it owns.

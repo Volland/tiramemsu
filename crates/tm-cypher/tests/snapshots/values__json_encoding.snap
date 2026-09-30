@@ -1,0 +1,46 @@
+---
+source: crates/tm-cypher/tests/values.rs
+expression: res.to_json()
+---
+{
+  "columns": [
+    "a",
+    "r",
+    "d",
+    "t",
+    "l",
+    "big",
+    "f"
+  ],
+  "rows": [
+    [
+      {
+        "elementId": "urn:tiramemsu:v:alice",
+        "labels": [
+          "Person"
+        ],
+        "properties": {
+          "name": "Alice"
+        }
+      },
+      {
+        "elementId": "urn:tiramemsu:stmt:1",
+        "endNodeElementId": "urn:tiramemsu:v:acme",
+        "properties": {},
+        "startNodeElementId": "urn:tiramemsu:v:alice",
+        "type": "worksAt"
+      },
+      "2025-03-01",
+      "2026-03-01T10:20:00.000+02:00",
+      "2026-03-01T08:20:00.000",
+      {
+        "$int": "9007199254740993"
+      },
+      [
+        1.5,
+        null,
+        true
+      ]
+    ]
+  ]
+}

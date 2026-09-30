@@ -1,0 +1,70 @@
+# Documented semantic divergences (task 13.6): the exact result of each side is pinned.
+
+[[pair]]
+name = "isomorphism versus homomorphism"
+category = "iso-divergence"
+fixture = "parallel"
+sparql = '''SELECT ?x ?y ?z WHERE { ?x v:knows ?y . ?z v:knows ?y }'''
+cypher = '''MATCH (x)-[:knows]->(y)<-[:knows]-(z) RETURN x, y, z'''
+columns = { x = "x", y = "y", z = "z" }
+expect_sparql_rows = 1
+expect_cypher_rows = 0
+
+[[pair]]
+name = "REPEATABLE ELEMENTS converges"
+category = "iso-divergence"
+fixture = "parallel"
+sparql = '''SELECT ?x ?y ?z WHERE { ?x v:knows ?y . ?z v:knows ?y }'''
+cypher = '''MATCH REPEATABLE ELEMENTS (x)-[:knows]->(y)<-[:knows]-(z) RETURN x, y, z'''
+columns = { x = "x", y = "y", z = "z" }
+expect_sparql_rows = 1
+expect_cypher_rows = 1
+
+[[pair]]
+name = "FILTER on reifiers converges"
+category = "iso-divergence"
+fixture = "parallel"
+sparql = '''SELECT ?x ?y ?z WHERE { ?x v:knows ?y ~ ?r1 . ?z v:knows ?y ~ ?r2 FILTER(?r1 != ?r2) }'''
+cypher = '''MATCH (x)-[:knows]->(y)<-[:knows]-(z) RETURN x, y, z'''
+columns = { x = "x", y = "y", z = "z" }
+expect_sparql_rows = 0
+expect_cypher_rows = 0
+
+[[pair]]
+name = "parallel edges are a bag of eids"
+category = "parallel-divergence"
+fixture = "parallel"
+sparql = '''SELECT ?a ?b WHERE { ?a v:called ?b }'''
+cypher = '''MATCH (a)-[:called]->(b) RETURN a, b'''
+columns = { a = "a", b = "b" }
+expect_sparql_rows = 1
+expect_cypher_rows = 2
+
+[[pair]]
+name = "parallel edges converge in set mode"
+category = "parallel-divergence"
+fixture = "parallel"
+sparql = '''SELECT ?a ?b WHERE { ?a v:called ?b }'''
+cypher = '''MATCH (a)-[:called]->(b) RETURN a, b'''
+mode = "set"
+columns = { a = "a", b = "b" }
+
+[[pair]]
+name = "multi-valued property is a list"
+category = "multi-valued"
+fixture = "parallel"
+sparql = '''SELECT ?n WHERE { v:alice v:nick ?n }'''
+cypher = '''MATCH (a {`@id`: 'v:alice'}) RETURN a.nick AS n'''
+columns = { n = "n" }
+expect_sparql_rows = 2
+expect_cypher_rows = 1
+
+[[pair]]
+name = "unwinding the list converges"
+category = "multi-valued"
+fixture = "parallel"
+sparql = '''SELECT ?n WHERE { v:alice v:nick ?n }'''
+cypher = '''MATCH (a {`@id`: 'v:alice'}) UNWIND a.nick AS n RETURN n'''
+columns = { n = "n" }
+expect_sparql_rows = 2
+expect_cypher_rows = 2

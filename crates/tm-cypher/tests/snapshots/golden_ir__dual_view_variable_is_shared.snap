@@ -1,0 +1,14 @@
+---
+source: crates/tm-cypher/tests/golden_ir.rs
+expression: "ir_of(\"MATCH (a)-[r:WORKS_AT]->(c), (b:Belief)-[:SUPPORTED_BY]->(r) RETURN a\")"
+---
+; RelIsomorphism Null3VL BagOfEids
+(project [?x1 ?x2 ?x3 ?x4 ?a5]
+  (filter (and (exists (triple ?x4 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <urn:tiramemsu:v:Belief> :view now)) (!= ?x3 ?a5))
+    (join
+      (project [?x1 ?x3 ?x2]
+        (filter (not (isLiteral ?x2))
+          (triple ?x1 <urn:tiramemsu:v:WORKS_AT> ?x2 :view now :eid ?x3)))
+      (project [?x4 ?a5 ?x3]
+        (filter (not (isLiteral ?x3))
+          (triple ?x4 <urn:tiramemsu:v:SUPPORTED_BY> ?x3 :view now :eid ?a5))))))

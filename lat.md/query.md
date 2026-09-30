@@ -249,17 +249,23 @@ SPARQL is parsed by `spargebra` (Oxigraph's parser and algebra) and lowered to t
 
 ### Cypher
 
-Cypher parses an openCypher subset plus a few documented extensions. The parser is `open-cypher`, chosen by evaluation against `opencypher`, `decypher` and `cypher_parser`.
+Cypher parses an openCypher subset plus a few documented extensions and runs it over the same statements as SPARQL. The crate is `tm-cypher`; the parser is `open-cypher`, pinned behind an adapter.
 
-- **v1 read:** `MATCH`, `OPTIONAL MATCH`, `WHERE`, `WITH`, `RETURN`, `ORDER BY/SKIP/LIMIT`, `UNWIND`, aggregates, `CALL { … }` subqueries (uncorrelated, or importing `WITH`), variable-length relationships, `shortestPath`, `allShortestPaths`.
-- **v1 write:** `CREATE` → create; `MERGE` → upsert or an atomic pattern match; `SET` → assert or supersede; `REMOVE` and `DELETE` → retract; `DETACH DELETE` → retract every statement mentioning the node.
-- **Not in v1:** `FOREACH`, `LOAD CSV`, procedures other than built-ins, full list comprehension.
-- **Semantics:** `graph_set = BagOfEids`, `match_mode = RelIsomorphism` (Cypher 25 default; `REPEATABLE ELEMENTS` opts out), `missing = Null3VL`.
-- **Names:** labels, types and keys map to IRIs through [[data-model#Vocabulary Mapping]].
-- **Parser:** `open-cypher` (pinned, behind an adapter). If it has to be replaced, the fallback is to vendor oxilite's hand-written Cypher lexer and parser (MIT/Apache, about 1 900 lines, used for 96 % of the openCypher TCK), then `decypher`. This replaces the earlier plan of writing a `chumsky` parser. See [[prior-art#oxilite]]. The time clauses and `REPEATABLE ELEMENTS` are stripped by a span-preserving token pass before parsing.
+- **v1 read:** `MATCH`, `OPTIONAL MATCH`, `WHERE`, `WITH`, `RETURN`, `ORDER BY/SKIP/LIMIT`, `UNWIND`, aggregates, `UNION`, `EXISTS {}` and pattern predicates, `CALL { … }` subqueries (uncorrelated, or importing `WITH`), fixed-length named paths, and `CALL db.labels()`, `db.relationshipTypes()`, `db.propertyKeys()`. Variable-length relationships, `shortestPath` and `allShortestPaths` parse but fail with `Unsupported` until the path engine (M3).
+- **v1 write:** `CREATE` → create; `MERGE` → upsert or an atomic pattern match; `SET` → assert or supersede; `REMOVE` and `DELETE` → retract; `DETACH DELETE` → retract every statement mentioning the node. The whole query is one transaction: [[crates/tiramemsu/src/cypher.rs#Db#cypher_write]] or [[crates/tiramemsu/src/cypher.rs#TxCypher]] inside a caller's `transact`.
+- **Not in v1:** `FOREACH`, `LOAD CSV`, `CALL … IN TRANSACTIONS`, schema commands, quantified path patterns, GQL path modes, `!`/`&`/`%` label expressions, pattern comprehension, user-defined procedures, durations and `time`/`localtime`.
+- **Semantics:** `graph_set = BagOfEids`, `match_mode = RelIsomorphism` (Cypher 25 default; `REPEATABLE ELEMENTS` opts out, `DIFFERENT RELATIONSHIPS` is the default), `missing = Null3VL`.
+- **Pipeline:** [[crates/tm-cypher/src/program.rs#compile]] parses ([[crates/tm-cypher/src/parse/adapter.rs#parse]]), checks scopes, kinds, aggregates, parameters and writes ([[crates/tm-cypher/src/sema/check.rs#check]]), and keeps the checked AST. [[crates/tm-cypher/src/exec/mod.rs#run]] interprets it clause by clause over rows of Cypher values.
+- **IR versus interpreter:** graph patterns, label and property-map existence tests, relationship isomorphism and every time view lower to the IR ([[crates/tm-cypher/src/exec/pattern.rs#Plan]]). Expressions, functions, projection, aggregation, ordering, `UNWIND`, `UNION`, `CALL` and write clauses run in Rust, because the IR has only SPARQL scalar functions and no list or map values. `tm-cypher` reaches the store only through the [[crates/tm-cypher/src/runner.rs#Runner]] trait, which the facade implements over a view or a transaction.
+- **Names:** labels, types and keys map to IRIs through [[data-model#Vocabulary Mapping]], always with the vocabulary current at compile time, even under `USE AS OF`.
+- **Parser:** `open-cypher` has no `CALL { }` clause, `FOREACH` or `LOAD CSV`. [[crates/tm-cypher/src/parse/subq.rs#extract]] cuts each outermost `CALL { }` out of the token stream, parses its body over the same byte offsets and leaves a placeholder call of equal length, and `FOREACH`, `LOAD CSV` and schema commands are recognised when parsing fails. The time clauses and `REPEATABLE ELEMENTS` are blanked by the span-preserving token pass [[crates/tm-cypher/src/parse/prepass.rs#run]]. The fallback, if `open-cypher` has to be replaced, is oxilite's hand-written parser, then `decypher`. See [[prior-art#oxilite]].
+- **Statement classification:** a literal object is a property and a node, blank node or statement object is a relationship; `sys:isEdge` overrides this, read in each pattern's view. `rdf:type` is only a label. The unlabelled node scan excludes statements, transactions, class IRIs that are only `rdf:type` objects, and nodes that only `sys:` statements mention.
 - **Node identity:** the reserved map key `` `@id` `` sets or matches a node's IRI. `elementId()` returns the IRI or skolem IRI, and `id()` returns the raw ObjectId.
-- **`SET x.k = v`:** no value → assert; same value → no-op; `sys:one` → cardinality replacement (annotations dropped); one different value → supersede (annotations kept); several values → retract all, then assert. A list writes one statement per element, and a multi-valued property reads back as a list.
+- **`SET x.k = v`:** no value → assert; same value → no-op; `sys:one` → cardinality replacement (annotations dropped); one different value → supersede (annotations kept); several values → retract all, then assert. A list writes one statement per element, and a multi-valued property reads back as a list of distinct values in eid order. `null` or `[]` removes the property.
+- **Values:** datetimes keep their offset: `datetime()` round-trips it, a named zone is stored as its offset at that instant, `localdatetime()` is a date-time without timezone, and `=` and ordering compare the instant. Integers beyond 60 bits are stored as `xsd:integer` and read back as Integers.
 - **Deletes:** `DELETE n` retracts the node's properties and labels, and fails with `DeleteConnectedNode` if relationships remain at the end of the query. `CREATE (n)` with nothing attached writes nothing, because nodes exist only through statements.
+- **Volatile values:** under `Now` with valid time unfiltered, `n.key` also reads the volatile table, and a stored statement wins. Cypher never writes volatile values.
+- **Errors:** compile-time problems are `Parse` with the byte span in the original text (extensions included), constructs outside the subset are `Unsupported`, and runtime type errors, division by zero and unstorable values are `Eval`.
 
 ### Cypher Dual View
 
@@ -273,7 +279,8 @@ RETURN a, c, r.confidence, r.txAdded, b
 - A statement used as a node has the implicit label `:Statement`, which exposes `txAdded`, `txRetracted`, `validFrom` and `validTo` as properties.
 - `startNode(r)`, `endNode(r)` and `type(r)` work on either form.
 - Property or relationship: a literal-valued triple about `r` is a property, and a node- or statement-valued triple is a relationship. `sys:isEdge` overrides this. See [[data-model#Statements]].
-- Every standard Cypher query means the same as in Neo4j. The extension only accepts queries that Neo4j would reject.
+- Every standard Cypher query means the same as in Neo4j, except that a relationship variable may stand in node position, which Neo4j rejects. A variable first bound as a node still cannot be used as a relationship.
+- Both forms bind the same eid, so a relationship and its `:Statement` node compare equal, and a variable is returned in the form of its first binding. The lowering is in [[crates/tm-cypher/src/exec/pattern.rs#Plan]] (one IR variable for both positions), and the statement helpers are in [[crates/tm-cypher/src/exec/access.rs#stmt_of]].
 
 ### Semantic Differences
 
@@ -304,7 +311,8 @@ Time can be chosen from the API or inside queries in both dialects, either for t
 - The default, with no clause, is tx `Now` and valid time unfiltered. Valid-time filtering is always opt-in, because an implicit "valid now" would silently hide past facts.
 - The `tm:` IRIs are recognised only in `FROM` (whole query) and `SERVICE` (one group). Anywhere else they are ordinary IRIs. Nested `SERVICE` groups override per part, innermost first.
 - `SERVICE` is used instead of `GRAPH` so that time and a named graph can be combined later (`SERVICE <tm:asOf/150> { GRAPH <g> { … } }`). v1 has no named graphs: `GRAPH` fails with `Unsupported("named graph")`, and a `tm:` IRI inside `GRAPH` fails with a `Parse` error that names `SERVICE`. oxilite takes the same route for version scoping ([[prior-art#oxilite]]).
-- In Cypher, `USE` takes only time clauses in v1. There is one graph per database file.
+- In Cypher, `USE` takes only time clauses in v1. There is one graph per database file. A `USE` is accepted at the start of a query, of a `UNION` branch or of a `CALL { }` body (after an importing `WITH`); each selector overrides the inherited one independently ([[crates/tm-cypher/src/exec/time.rs#resolve]]). A write query with a non-`Now` top-level `USE` is `Unsupported`; a historical `CALL { USE … }` inside a write query is allowed.
+- The statement time properties `txAdded`, `txRetracted` (Integers), `validFrom` and `validTo` (DateTimes) and ``tm:retractKind`` denote metadata on statements even when a stored property has the same name (which stays reachable as `` `v:txAdded` ``); on ordinary nodes they are ordinary keys, and they are never listed by `keys()`. `SET r.validFrom` or `r.validTo` supersedes the statement and rebinds the variable.
 
 ```sparql
 # what changed about alice's employer between tx 150 and now

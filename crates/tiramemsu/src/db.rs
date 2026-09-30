@@ -120,7 +120,7 @@ pub struct Db {
     writer: Mutex<Store>,
     pool: Option<ReaderPool>,
     terms: TermReader,
-    engine: Option<QueryEngine>,
+    engine: Option<Arc<QueryEngine>>,
     caps: Capabilities,
     path: PathBuf,
     clock: Arc<dyn Clock>,
@@ -153,11 +153,11 @@ impl Db {
             for op in &opts.native_operators {
                 reg.add(op.clone());
             }
-            Some(QueryEngine::new(
+            Some(Arc::new(QueryEngine::new(
                 opts.planner,
                 reg,
                 opts.term_cache_capacity,
-            ))
+            )))
         } else {
             None
         };
@@ -239,7 +239,7 @@ impl Db {
     }
 
     pub(crate) fn engine(&self) -> Option<&QueryEngine> {
-        self.engine.as_ref()
+        self.engine.as_deref()
     }
 
     /// Number of terms in the query engine's shared term cache (tests).
@@ -303,7 +303,13 @@ impl Db {
         F: FnOnce(&mut Tx<'_>) -> Result<()>,
     {
         let _held = HeldGuard::acquire(self.id)?;
-        self.lock()?.transact(opts, f)
+        let engine = self.engine.clone();
+        self.lock()?.transact(opts, move |tx| {
+            if let Some(e) = engine {
+                tx.set_extension(e);
+            }
+            f(tx)
+        })
     }
 
     /// Speculation: applies `ops` hypothetically on the single writer, calls `query`
@@ -317,7 +323,7 @@ impl Db {
         G: FnOnce(&View<'_>) -> Result<R>,
     {
         let _held = HeldGuard::acquire(self.id)?;
-        let engine = self.engine.as_ref();
+        let engine = self.engine.as_deref();
         self.lock()?.speculate(ops, |exec| {
             let cell: RefCell<&mut dyn Executor> = RefCell::new(exec);
             let view = View::on_writer(&cell, ViewSpec::NOW, engine);

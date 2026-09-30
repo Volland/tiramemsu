@@ -1,0 +1,109 @@
+# Time syntax of both dialects (task 13.6). `superseded`: alice worksAt acme from tx 3
+# (2026-09-01T10:00Z), replaced by globex in tx 7 (12:00Z); her name changed in tx 8.
+
+[[pair]]
+name = "as of tx 5"
+category = "as-of-tx"
+fixture = "superseded"
+sparql = '''SELECT ?c FROM <urn:tiramemsu:tm:asOf/5> WHERE { v:alice v:worksAt ?c }'''
+cypher = '''USE AS OF 5 MATCH (a {`@id`: 'v:alice'})-[:worksAt]->(c) RETURN c'''
+columns = { c = "c" }
+
+[[pair]]
+name = "as of tx 7"
+category = "as-of-tx"
+fixture = "superseded"
+sparql = '''SELECT ?c FROM <urn:tiramemsu:tm:asOf/7> WHERE { v:alice v:worksAt ?c }'''
+cypher = '''USE AS OF 7 MATCH (a {`@id`: 'v:alice'})-[:worksAt]->(c) RETURN c'''
+columns = { c = "c" }
+
+[[pair]]
+name = "as of tx 5 on an as-of handle"
+category = "as-of-tx"
+fixture = "superseded"
+view = "asof:4"
+sparql = '''SELECT ?c WHERE { v:alice v:worksAt ?c }'''
+cypher = '''MATCH (a {`@id`: 'v:alice'})-[:worksAt]->(c) RETURN c'''
+columns = { c = "c" }
+
+[[pair]]
+name = "as of an instant"
+category = "as-of-instant"
+fixture = "superseded"
+sparql = '''SELECT ?c FROM <urn:tiramemsu:tm:asOf/2026-09-01T11:00:00Z> WHERE { v:alice v:worksAt ?c }'''
+cypher = '''USE AS OF datetime('2026-09-01T11:00:00Z') MATCH (a {`@id`: 'v:alice'})-[:worksAt]->(c) RETURN c'''
+columns = { c = "c" }
+
+[[pair]]
+name = "as of an instant with an offset"
+category = "as-of-instant"
+fixture = "superseded"
+sparql = '''SELECT ?c FROM <urn:tiramemsu:tm:asOf/2026-09-01T14:00:00+02:00> WHERE { v:alice v:worksAt ?c }'''
+cypher = '''USE AS OF datetime('2026-09-01T14:00:00+02:00') MATCH (a {`@id`: 'v:alice'})-[:worksAt]->(c) RETURN c'''
+columns = { c = "c" }
+
+[[pair]]
+name = "valid at before the boundary"
+category = "valid-at"
+fixture = "episodes"
+sparql = '''SELECT ?p ?c FROM <urn:tiramemsu:tm:validAt/2026-02-28> WHERE { ?p v:worksAt ?c }'''
+cypher = '''USE VALID AT date('2026-02-28') MATCH (p)-[:worksAt]->(c) RETURN p, c'''
+columns = { p = "p", c = "c" }
+
+[[pair]]
+name = "valid at the boundary"
+category = "valid-at"
+fixture = "episodes"
+sparql = '''SELECT ?p ?c FROM <urn:tiramemsu:tm:validAt/2026-03-01> WHERE { ?p v:worksAt ?c }'''
+cypher = '''USE VALID AT date('2026-03-01') MATCH (p)-[:worksAt]->(c) RETURN p, c'''
+columns = { p = "p", c = "c" }
+
+[[pair]]
+name = "history of alice's job"
+category = "history"
+fixture = "superseded"
+sparql = '''SELECT ?c FROM <urn:tiramemsu:tm:history> WHERE { v:alice v:worksAt ?c }'''
+cypher = '''USE HISTORY MATCH (a {`@id`: 'v:alice'})-[:worksAt]->(c) RETURN c'''
+columns = { c = "c" }
+
+[[pair]]
+name = "history with transaction numbers"
+category = "history"
+fixture = "superseded"
+sparql = '''SELECT ?c ?t FROM <urn:tiramemsu:tm:history> WHERE { v:alice v:worksAt ?c ~ ?r . ?r <urn:tiramemsu:tm:txAdded> ?t }'''
+cypher = '''USE HISTORY MATCH (a)-[r:worksAt]->(c) WHERE elementId(a) = 'urn:tiramemsu:v:alice' RETURN c, r.txAdded AS t'''
+columns = { c = "c", t = "t" }
+tx_columns = ["t"]
+
+[[pair]]
+name = "per pattern before and after"
+category = "per-pattern"
+fixture = "superseded"
+sparql = '''SELECT ?before ?after WHERE { SERVICE <urn:tiramemsu:tm:asOf/3> { v:alice v:worksAt ?before } v:alice v:worksAt ?after . FILTER (?before != ?after) }'''
+cypher = '''MATCH (a {`@id`: 'v:alice'})-[:worksAt]->(after) CALL { WITH a USE AS OF 3 MATCH (a)-[:worksAt]->(before) RETURN before } WITH before, after WHERE before <> after RETURN before, after'''
+columns = { before = "before", after = "after" }
+
+[[pair]]
+name = "per pattern property read"
+category = "per-pattern"
+fixture = "superseded"
+sparql = '''SELECT ?old ?now WHERE { v:alice v:name ?now . SERVICE <urn:tiramemsu:tm:asOf/3> { v:alice v:name ?old } }'''
+cypher = '''MATCH (a {`@id`: 'v:alice'}) CALL { WITH a USE AS OF 3 RETURN a.name AS old } RETURN old, a.name AS now'''
+columns = { old = "old", now = "now" }
+
+[[pair]]
+name = "statement add time"
+category = "time-props"
+fixture = "superseded"
+sparql = '''SELECT ?c ?t WHERE { v:alice v:worksAt ?c ~ ?r . ?r <urn:tiramemsu:tm:txAdded> ?t }'''
+cypher = '''MATCH (a {`@id`: 'v:alice'})-[r:worksAt]->(c) RETURN c, r.txAdded AS t'''
+columns = { c = "c", t = "t" }
+tx_columns = ["t"]
+
+[[pair]]
+name = "statement valid from"
+category = "time-props"
+fixture = "layers"
+sparql = '''SELECT ?f WHERE { v:alice v:WORKS_AT ?c ~ ?r . ?r <urn:tiramemsu:tm:validFrom> ?f }'''
+cypher = '''MATCH (a {`@id`: 'v:alice'})-[r:WORKS_AT]->() RETURN r.validFrom AS f'''
+columns = { f = "f" }

@@ -119,6 +119,22 @@ pub enum Error {
         /// The feature name, including its milestone.
         feature: String,
     },
+    /// A runtime expression error: a type error, a division by zero, an unstorable value.
+    #[error("{dialect:?} evaluation error: {msg}")]
+    Eval {
+        /// The query language.
+        dialect: Dialect,
+        /// What went wrong.
+        msg: String,
+    },
+    /// `DELETE` of a node that still has live relationships (Cypher).
+    #[error("cannot delete node {node}: it still has {} relationship(s)", relationships.len())]
+    DeleteConnectedNode {
+        /// The node.
+        node: ObjectId,
+        /// The live relationship statements that mention it.
+        relationships: Vec<Eid>,
+    },
     /// A structurally invalid query IR or plan, or a missing parameter.
     #[error("invalid query: {msg}")]
     InvalidQuery {

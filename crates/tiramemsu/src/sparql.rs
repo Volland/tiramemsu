@@ -132,9 +132,9 @@ impl View<'_> {
 
 /// Reads `(sys:db sys:vocab ?v)` and the prefix layers `(sys:db sys:prefix [name; iri])`.
 /// The `@vocab` IRI and the `(name, iri)` prefix table of a database.
-type Settings = (Option<String>, Vec<(String, String)>);
+pub(crate) type Settings = (Option<String>, Vec<(String, String)>);
 
-fn read_settings(e: &mut dyn tm_core::Executor) -> Result<Settings> {
+pub(crate) fn read_settings(e: &mut dyn tm_core::Executor) -> Result<Settings> {
     let now = ViewSpec::NOW;
     let reader = TermReader::new(64);
     let id = |e: &mut dyn tm_core::Executor, iri: &str| TermReader::encode(e, &Value::iri(iri));
