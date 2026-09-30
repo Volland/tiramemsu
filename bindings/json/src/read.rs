@@ -2,8 +2,8 @@
 
 use serde_json::{json, Map, Value as J};
 use tiramemsu::{
-    Db, Event, ObjectId, Op, PathDir, PathMode, PathRow, RdfTerm, RdfTriple, SparqlResult, TimeRef,
-    Triple, TxReport, View,
+    Db, Event, ObjectId, Op, PathDir, PathMode, PathRow, RdfTerm, RdfTriple, SparqlOptions,
+    SparqlResult, TimeRef, Triple, TxReport, View,
 };
 
 use crate::value::{params_from_json, value_from_json, value_to_json};
@@ -41,7 +41,14 @@ pub fn run(view: &View<'_>, op: &str, args: &J) -> Res<J> {
     match op {
         "sparql" => {
             let text = str_arg(args, "text")?;
-            Ok(sparql_json(&view.sparql(text)?))
+            let provenance = match args.get("provenance") {
+                None | Some(J::Null) => false,
+                Some(J::Bool(b)) => *b,
+                Some(_) => return Err(arg("provenance must be a boolean")),
+            };
+            Ok(sparql_json(
+                &view.sparql_with(text, &SparqlOptions { provenance })?,
+            ))
         }
         "cypher" => {
             let text = str_arg(args, "text")?;
@@ -249,7 +256,20 @@ fn sparql_json(r: &SparqlResult) -> J {
                 }
                 J::Object(o)
             });
-            json!({ "kind": "select", "vars": s.vars, "rows": rows.collect::<Vec<_>>() })
+            let mut out =
+                json!({ "kind": "select", "vars": s.vars, "rows": rows.collect::<Vec<_>>() });
+            if let Some(prov) = &s.provenance {
+                // one list of statements per row, parallel to "rows"
+                out["provenance"] = prov
+                    .iter()
+                    .map(|eids| {
+                        eids.iter()
+                            .map(|e| value_to_json(&tiramemsu::Value::Stmt(*e)))
+                            .collect::<Vec<_>>()
+                    })
+                    .collect();
+            }
+            out
         }
         SparqlResult::Boolean(b) => json!({ "kind": "ask", "value": b }),
         SparqlResult::Graph(g) => json!({

@@ -47,6 +47,14 @@ pub const ADD: &str = "ADD";
 pub const MOVE: &str = "MOVE";
 /// `COPY`.
 pub const COPY: &str = "COPY";
+/// Provenance requested for an `ASK` query (it has no rows to annotate).
+pub const PROVENANCE_ASK: &str = "provenance for ASK";
+/// Provenance requested for a `CONSTRUCT` query.
+pub const PROVENANCE_CONSTRUCT: &str = "provenance for CONSTRUCT";
+/// Provenance requested for an update request.
+pub const PROVENANCE_UPDATE: &str = "provenance for updates";
+/// Provenance with a `SELECT DISTINCT` of no variable inside a subquery.
+pub const PROVENANCE_EMPTY_DISTINCT: &str = "provenance with DISTINCT of no variable";
 
 /// `Unsupported { feature }`: the error every construct outside the v1 subset
 /// returns. `feature` is one of the constants of this module or a function name

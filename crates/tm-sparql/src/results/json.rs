@@ -2,6 +2,8 @@
 
 use std::fmt::Write;
 
+use tm_core::{Eid, Value};
+
 use super::term::{render, RdfTerm};
 use super::Solutions;
 
@@ -60,6 +62,12 @@ fn term(t: &RdfTerm, out: &mut String) {
 
 /// The JSON document of a `SELECT`: `head.vars` in projection order, one object
 /// per row in `results.bindings` omitting unbound variables. Row order is kept.
+///
+/// When the solutions carry provenance, the non-standard top-level member
+/// `"provenance"` sits between `head` and `results`: one array of statement IRIs
+/// per binding, in the same order. It precedes `results` because streaming
+/// parsers (such as `sparesults`) stop at the end of the bindings and reject
+/// anything after them. Without provenance only the standard members are written.
 pub fn write_select(sol: &Solutions) -> String {
     let mut out = String::from("{\"head\":{\"vars\":[");
     for (i, v) in sol.vars.iter().enumerate() {
@@ -68,7 +76,12 @@ pub fn write_select(sol: &Solutions) -> String {
         }
         escape(v, &mut out);
     }
-    out.push_str("]},\"results\":{\"bindings\":[");
+    out.push_str("]},");
+    if let Some(prov) = &sol.provenance {
+        write_provenance(prov, &mut out);
+        out.push(',');
+    }
+    out.push_str("\"results\":{\"bindings\":[");
     for (ri, row) in sol.rows.iter().enumerate() {
         if ri > 0 {
             out.push(',');
@@ -91,6 +104,27 @@ pub fn write_select(sol: &Solutions) -> String {
     out
 }
 
+/// `"provenance":[[<statement IRI>, …], …]`.
+fn write_provenance(prov: &[Vec<Eid>], out: &mut String) {
+    out.push_str("\"provenance\":[");
+    for (ri, eids) in prov.iter().enumerate() {
+        if ri > 0 {
+            out.push(',');
+        }
+        out.push('[');
+        for (i, e) in eids.iter().enumerate() {
+            if i > 0 {
+                out.push(',');
+            }
+            if let RdfTerm::Iri(iri) = render(&Value::Stmt(*e)) {
+                escape(&iri, out);
+            }
+        }
+        out.push(']');
+    }
+    out.push(']');
+}
+
 /// The JSON document of an `ASK`.
 pub fn write_ask(answer: bool) -> String {
     format!("{{\"head\":{{}},\"boolean\":{answer}}}")
@@ -100,7 +134,6 @@ pub fn write_ask(answer: bool) -> String {
 mod tests {
     use super::*;
     use sparesults::{QueryResultsFormat, QueryResultsParser, ReaderQueryResultsParserOutput};
-    use tm_core::Value;
 
     fn sample() -> Solutions {
         Solutions {
@@ -120,6 +153,7 @@ mod tests {
                     }),
                 ],
             ],
+            provenance: None,
         }
     }
 
@@ -129,6 +163,7 @@ mod tests {
         let sol = Solutions {
             vars: vec!["p".into(), "age".into()],
             rows: vec![vec![Some(Value::iri("urn:tiramemsu:v:bob")), None]],
+            provenance: None,
         };
         let want = r#"{"head":{"vars":["p","age"]},"results":{"bindings":[{"p":{"type":"uri","value":"urn:tiramemsu:v:bob"}}]}}"#;
         assert_eq!(write_select(&sol), want);
@@ -140,6 +175,7 @@ mod tests {
         let sol = Solutions {
             vars: vec!["a".into()],
             rows: vec![vec![Some(Value::Int(41))]],
+            provenance: None,
         };
         assert!(write_select(&sol).contains(
             r#"{"type":"literal","value":"41","datatype":"http://www.w3.org/2001/XMLSchema#integer"}"#
@@ -174,5 +210,29 @@ mod tests {
             .for_reader(ask_doc.as_bytes())
             .unwrap();
         assert!(matches!(ask, ReaderQueryResultsParserOutput::Boolean(true)));
+    }
+
+    // query-provenance "Provenance in SPARQL JSON": JSON member
+    // @lat: [[tests#Query Provenance#Provenance JSON Member]]
+    #[test]
+    fn provenance_member() {
+        let mut sol = sample();
+        let plain = write_select(&sol);
+        assert!(!plain.contains("provenance"));
+        sol.provenance = Some(vec![vec![Eid::new(5), Eid::new(7)], Vec::new()]);
+        let doc = write_select(&sol);
+        let prov = r#""provenance":[["urn:tiramemsu:stmt:5","urn:tiramemsu:stmt:7"],[]],"#;
+        assert_eq!(doc.replace(prov, ""), plain, "{doc}");
+        assert!(doc.contains(&format!(r#"]}},{prov}"results":"#)), "{doc}");
+        // still a SPARQL 1.1 JSON results document
+        let ReaderQueryResultsParserOutput::Solutions(sols) =
+            QueryResultsParser::from_format(QueryResultsFormat::Json)
+                .for_reader(doc.as_bytes())
+                .unwrap()
+        else {
+            panic!("not solutions")
+        };
+        let rows: Vec<_> = sols.map(|r| r.unwrap()).collect();
+        assert_eq!(rows.len(), 2);
     }
 }

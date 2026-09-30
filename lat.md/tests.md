@@ -315,3 +315,67 @@ A cardinality-one replacement written into a graph retracts the old statement an
 ### Cypher Keeps One Graph
 
 `USE GRAPH g1 MATCH …` and `USE g1 …` fail with `Unsupported("USE GRAPH")` before any write, and the time forms of `USE` are unaffected.
+
+## Query Provenance
+
+Tests of per-row SPARQL provenance: which stored statements produced each solution. See [[query#Front Ends#SPARQL#Query Provenance]].
+
+### Provenance Lists Matched Statements
+
+A row lists the eids of its BGP statements, of a matched `OPTIONAL` part (none when absent), of the `UNION` branch taken, of annotation and reifier triples, and of each hop of a fixed-length path.
+
+### Tested Statements Are Not Cited
+
+Statements only tested by `FILTER EXISTS`, `FILTER NOT EXISTS` or `MINUS` are not listed, a virtual predicate adds no eid, and a recursive path region contributes nothing.
+
+### Distinct Merges Provenance
+
+`DISTINCT` merges rows equal on the projected variables and unions their eids; `LIMIT` and `OFFSET` after `DISTINCT` count merged rows in `ORDER BY` order, and `REDUCED` keeps each row.
+
+### Groups And Subqueries Union Provenance
+
+A group lists the union over its input rows (an empty list for a group over no rows), `HAVING` keeps it, and plain, `DISTINCT` and grouped subqueries carry their eids into the outer row.
+
+### One Triple Lists All Its Eids
+
+Several visible eids with one `(s, p, o)` give one row listing all of them, a reifier still gives one row per eid, and a valid-time view or a retraction narrows the list to the visible eids.
+
+### Graphs Cite Memberships
+
+`GRAPH <g>`, `GRAPH ?g` and a single `FROM <g>` list the statement and its `sys:inGraph` membership; several `FROM` graphs list the statement only.
+
+### Time Scopes Cite Past Statements
+
+A pattern in `SERVICE <tm:asOf/N>` lists the eid it matched then, even though that statement is retracted in the current view.
+
+### Provenance Is Off By Default
+
+`sparql` and `sparql_with` without provenance give equal results and byte-identical JSON; with it only the `"provenance"` member is added, and `ASK`, `CONSTRUCT` and updates fail with `Unsupported` and write nothing.
+
+### Stale Answers Are Detectable
+
+After a cited statement is retracted, it is missing from the current view's statements and `tm:txRetracted` on the history view names the retracting transaction.
+
+### Provenance Keeps The Solutions
+
+Every `SELECT` of the differential corpus returns the same rows with and without provenance, and every cited eid is visible in the view the query read.
+
+### Provenance Is Sound
+
+Property test: for random data with parallel statements and random BGPs, provenance never changes the rows, cited eids are visible, and a fresh store holding only the cited statements reproduces each row.
+
+### Provenance Eids Keep Set Semantics
+
+A `~prov` eid variable binds the canonical eid and keeps the canonical-eid predicate, so parallel statements still match once; a user eid variable matches each eid.
+
+### Instrumentation Binds Hidden Eids
+
+The provenance pass gives each stored pattern a hidden eid column, reuses a reifier's variable, and skips `EXISTS`, `MINUS` and virtual predicates.
+
+### Provenance JSON Member
+
+The SPARQL JSON document gains a `"provenance"` member between `head` and `results` only when provenance is present, and still parses as SPARQL 1.1 JSON results.
+
+### Bridge Returns Provenance
+
+The JSON bridge `sparql` operation with `"provenance": true` returns a `"provenance"` array parallel to `"rows"`, omits it otherwise, and rejects a non-boolean argument.
