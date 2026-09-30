@@ -65,3 +65,45 @@ SELECT ?s ?o1 ?o2 ?a1 ?a2 WHERE {
 ```
 
 The overlap test is the same half-open test that assert uses ([[time-model#Operations#Assert]]); an unbound end is unbounded. Episodes that do not overlap, such as a later job, are not reported. `STR(?o1) < STR(?o2)` reports each pair once.
+
+## When We Learned It
+
+`tm:addedAt` and `tm:retractedAt` give the wall-clock instant a statement was recorded and retracted. Compared with valid time, they measure how late memory learned a fact.
+
+```sparql
+# facts recorded after they had already stopped being true
+SELECT ?s WHERE { ?s v:worksAt ?o ~ ?r . ?r tm:addedAt ?a ; tm:validTo ?to FILTER(?a > ?to) }
+```
+
+```cypher
+// learned more than $days days after it became true
+MATCH (a)-[r:worksAt]->(c)
+WHERE r.addedAt.epochMillis - r.validFrom.epochMillis > $days * 86400000
+RETURN a, c
+```
+
+Only a store with both clocks on every statement can ask this. The instants are virtual predicates computed from the `tx` table, so they cost one rowid seek and no stored row ([[query#Views and Scans#Virtual Predicates]]). SPARQL 1.1 has no date-time subtraction, so the threshold form is Cypher only. Tests are in `sparql_temporal.rs` and `cypher_temporal.rs`.
+
+## Answers That Cite Their Facts
+
+`View::sparql_with(q, &SparqlOptions { provenance: true })` attaches to every row the eids of the stored statements that produced it. An agent keeps them with its answer and later finds which answers rest on retracted facts.
+
+```rust
+let answer = view.sparql_with(q, &SparqlOptions { provenance: true })?;
+let cited = answer.solutions().unwrap().provenance(0).unwrap(); // sorted eids
+// later: a cited eid that is no longer live marks the answer as stale
+```
+
+```sparql
+# which cited statements were retracted, and by which transaction
+SELECT ?e ?t FROM <urn:tiramemsu:tm:history> WHERE {
+  VALUES ?e { <urn:tiramemsu:stmt:12> <urn:tiramemsu:stmt:19> } ?e tm:txRetracted ?t }
+```
+
+Provenance counts what matched, including `OPTIONAL` parts, the `UNION` branch taken, annotations and graph memberships, and not what was only tested by `FILTER EXISTS` or `MINUS`. Recursive paths contribute no eids yet. See [[query#Front Ends#SPARQL#Query Provenance]]. Tests are in `sparql_provenance.rs`.
+
+## Typed Layers
+
+`(v:confidence sys:subjectType sys:STMT)` declares that a predicate only annotates statements, so a confidence written on a node by mistake is rejected with `SubjectTypeMismatch` instead of silently becoming a property.
+
+Several values mean any of them, and the flag is checked on every assert and create, from the API, SPARQL and Cypher alike. See [[data-model#Predicate Schema]].
