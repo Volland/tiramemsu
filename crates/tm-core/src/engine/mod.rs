@@ -3,11 +3,12 @@
 //! [`Store`] owns the writer executor and runs transactions, dry runs and
 //! speculation. [`Tx`] is the write handle passed to a transaction body.
 
+mod bundle;
 mod cascade;
 mod config;
 mod graph;
 mod ops;
-mod reserved;
+pub(crate) mod reserved;
 pub mod schema;
 mod supersede;
 mod volatile;

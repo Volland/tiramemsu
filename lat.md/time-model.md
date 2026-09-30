@@ -203,7 +203,17 @@ Retracting a statement retracts, in the same transaction and recursively, every 
 - Walk: breadth-first over `live_spo` (`s = e`) and `live_osp` (`o = e`), with a visited set so cycles terminate.
 - Retracting `(alice worksAt acme)` touches only triples about that eid, never other triples about `alice` or `acme`.
 - Nothing is lost: cascaded rows get the same `t_ret`, so `asOf(t_ret − 1)` still shows the whole structure, including e.g. what a belief relied on.
-- Guard rails: `TxReport.retracted` lists the full set, `dry_run` previews it, and `max_cascade` (default 10 000) aborts the transaction with `CascadeLimitExceeded`.
+- Guard rails: `TxReport.retracted` lists the full set, `dry_run` previews it, `View::dependents` previews it without the writer (see below), and `max_cascade` (default 10 000) aborts the transaction with `CascadeLimitExceeded`.
+
+### Dependents
+
+`View::dependents(eid)` is the cascade walk as a read on any view: what a retraction would take with it now, what depended on a fact then, or everything that ever did. It needs no writer lock and burns no id.
+
+- **Walk:** `eid` first, then breadth-first over the statements visible in the view whose `s` or `o` is a statement already reached, each expansion in ascending eid order, with a visited set. It is the order of the cascade, and an eid not visible in the view gives an empty list. See [[crates/tm-core/src/read.rs#dependents]].
+- **Time:** the root check and every expansion take their predicates from [[crates/tm-core/src/view.rs#scan_predicates]], so `asOf(t)` gives the structure as it was (also after it was retracted), `history` every statement that ever stood on the root, including ones retracted before it, and `validAt` keeps only statements valid at the instant.
+- **Equivalence:** under the now view the set equals the retracted statements and memberships of a dry-run `retract(eid)`, and the ends of the path `(^sys:subject|^sys:object)*` from `eid` ([[query#Physical Planning#Path Engine]]). The path engine is not used, because `tm-core` must run on a host without virtual tables.
+- **Unbounded:** the read is never truncated and never fails for size. An under-reported impact list is the worst answer to "what would this take with it", so `max_cascade` stays a guard on retractions only; a caller compares `len()` with its own limit.
+- **Fact bundles** start from the same walk. See [[data-model#Fact Bundles]].
 
 ## Event Log
 

@@ -143,13 +143,16 @@ impl Database {
     ///
     /// Reads take `{"view": ..., ...}` and are `sparql` (`text`), `cypher` (`text`,
     /// `params`), `triples` (`s`, `p`, `o`), `path` (`start`, `path`, `mode`,
-    /// `maxHops`), `events` (`since`), `graphs`, `graphMembers` (`graph`) and `values`
-    /// (`s`, `key`). Writes are `transact` (`ops`, `options`), `cypherWrite` (`text`,
-    /// `params`, `options`) and `with` (`ops`, `queries`), plus `optimize` and `info`.
+    /// `maxHops`), `events` (`since`), `graphs`, `graphMembers` (`graph`), `values`
+    /// (`s`, `key`), `dependents` (`eid`: what stands on a statement) and `bundle`
+    /// (`eid`: the statement with its layers and evidence, as `tiramemsu-bundle/1`
+    /// JSON). Writes are `transact` (`ops`, `options`; the ops include `importBundle`),
+    /// `cypherWrite` (`text`, `params`, `options`) and `with` (`ops`, `queries`), plus
+    /// `optimize` and `info`.
     pub fn call(&self, op: &str, args: &J) -> Res<J> {
         match op {
             "sparql" | "cypher" | "triples" | "path" | "events" | "graphs" | "graphMembers"
-            | "values" => {
+            | "values" | "dependents" | "bundle" => {
                 let view = read::view_from_json(&self.db, args.get("view").unwrap_or(&J::Null))?;
                 read::run(&view, op, args)
             }

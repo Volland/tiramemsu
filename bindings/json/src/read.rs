@@ -1,12 +1,14 @@
 //! Read operations: views, SPARQL, Cypher, lookups, paths and the event log.
 
+use std::collections::HashMap;
+
 use serde_json::{json, Map, Value as J};
 use tiramemsu::{
-    Db, Event, ObjectId, Op, PathDir, PathMode, PathRow, RdfTerm, RdfTriple, SparqlOptions,
-    SparqlResult, TimeRef, Triple, TxReport, View,
+    BundleFormat, Db, Eid, Event, ObjectId, Op, PathDir, PathMode, PathRow, RdfTerm, RdfTriple,
+    SparqlOptions, SparqlResult, TimeRef, Triple, TxReport, View,
 };
 
-use crate::value::{params_from_json, value_from_json, value_to_json};
+use crate::value::{eid_from_json, params_from_json, value_from_json, value_to_json};
 use crate::{arg, Res};
 
 /// The view a read runs on, from `{"kind", "tx", "instant", "validAt"}`; `null` is now.
@@ -128,8 +130,26 @@ pub fn run(view: &View<'_>, op: &str, args: &J) -> Res<J> {
             )),
             _ => Ok(json!([])),
         },
+        "dependents" => {
+            let e = eid_arg(args)?;
+            Ok(json!(view
+                .dependents(e)?
+                .iter()
+                .map(|e| e.n())
+                .collect::<Vec<_>>()))
+        }
+        "bundle" => Ok(view.bundle(eid_arg(args)?)?.to_json()),
         other => Err(arg(format!("unknown read operation {other:?}"))),
     }
+}
+
+/// The statement id in `eid`: a number or `{"stmt": n}`.
+fn eid_arg(args: &J) -> Res<Eid> {
+    let j = args
+        .get("eid")
+        .filter(|j| !j.is_null())
+        .ok_or_else(|| arg("`eid` is required"))?;
+    eid_from_json(j, &HashMap::new())
 }
 
 fn str_arg<'a>(args: &'a J, key: &str) -> Res<&'a str> {

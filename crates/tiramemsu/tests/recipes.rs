@@ -101,7 +101,10 @@ fn facts_by_author_and_reasons_for_retraction() {
         "SELECT ?who ?why FROM <urn:tiramemsu:tm:history> WHERE { \
          ?who v:worksAt ?c ~ ?r . ?r tm:txRetracted ?t . ?t sys:reason ?why }",
     );
-    assert_eq!(why.rows, vec![vec![Some(v("bob")), Some(s("user correction"))]]);
+    assert_eq!(
+        why.rows,
+        vec![vec![Some(v("bob")), Some(s("user correction"))]]
+    );
 }
 
 // @lat: [[tests#Recipes#Edit Lineage Follows Supersedes]]
@@ -110,7 +113,10 @@ fn lineage_of_a_corrected_fact() {
     let t = T::new();
     let mut e1 = None;
     t.tx(|tx| {
-        e1 = Some(tx.assert(v("alice"), v("age"), int(30), Valid::ALWAYS)?.eid());
+        e1 = Some(
+            tx.assert(v("alice"), v("age"), int(30), Valid::ALWAYS)?
+                .eid(),
+        );
         Ok(())
     });
     let e1 = e1.unwrap();

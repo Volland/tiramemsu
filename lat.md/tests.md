@@ -80,6 +80,100 @@ A cascade larger than `max_cascade` fails with `CascadeLimitExceeded`, and the d
 
 `dry_run` returns the full retracted set while the triple and tx tables stay unchanged. Only the burned-id counters in `meta` advance.
 
+## Dependents
+
+Behaviour of [[time-model#Cascade#Dependents]], the read-only cascade walk on any view.
+
+### Dependents Follow Layers
+
+`dependents(e1)` lists e1, then its layers and references breadth-first in cascade order; plain nodes are not walked, a retracted layer is not walked, and an invisible root gives nothing.
+
+### Dependents Terminate On Cycles
+
+Two statements that reference each other, plus a statement linking them, are each listed once from either end, on the now and the history view.
+
+### Dependents Follow The View
+
+After a structure is retracted, `asOf` before the retraction lists it again, by transaction and by instant; `history` lists every statement that ever stood on the root, and `validAt` drops a layer valid in another period.
+
+### Dependents Are Unbounded
+
+A statement with 20 layers lists all 21 statements while a retraction with `max_cascade = 10` fails, and the read advances no id counter.
+
+### Dependents Match The Dry Run
+
+On random layered graphs (both hosts), `dependents(e)` on the now view equals the retracted set plus retracted memberships of a dry-run `retract(e)`, in the same order, and is empty for a retracted `e`.
+
+The graphs mix layers, references, links between statements, reference cycles, memberships, confirmations, supersedes and retractions.
+
+### Dependents Match Cascade And Path
+
+Through the facade, for random layered graphs, `View::dependents(e)`, the dry-run retraction of `e` and the ends of `View::path(e, "(^sys:subject|^sys:object)*", REACH)` are the same set for every live statement.
+
+### Dependents Reproduce The Past
+
+Through the facade, the as-of and history views reproduce the dependents of a retracted structure (layer on a layer, a belief, a membership), and a speculation sees its own new layers.
+
+## Fact Bundles
+
+Behaviour of [[data-model#Fact Bundles]]: building a bundle from a view, importing it into another database, and its text forms.
+
+### Bundle Collects Layers And Evidence
+
+A bundle holds the root's layers, nested layers, beliefs and memberships with valid times, references first and ties by eid; a belief's bundle carries its evidence but not the evidence's other layers; output is stable; an invisible root is `NotLive`.
+
+### Bundle Leaves Out Local Statements
+
+Confirmations and layers on them, supersede links, and statements that reference a statement outside the view are left out; a root about a transaction or outside the view is `Unsupported`.
+
+### Bundle Round Trip Between Databases
+
+Importing into an empty database creates every statement, and the target's bundle of the imported root equals the source bundle: contents, layer structure, membership and valid times.
+
+### Import Is Idempotent
+
+A second import of the same bundle maps every id to the same eid with `new` false, asserts nothing, and leaves every table but `tx` unchanged.
+
+### Import Attaches To An Existing Root
+
+When the target already holds the root fact, the root maps to that eid and the layers are asserted on it; its valid time is not changed.
+
+### Anonymous Nodes Stay Distinct
+
+`NODE` and `BNODE` ids export as bundle-local labels; import mints fresh nodes that do not alias the target's, keeps a shared node shared and two nodes distinct, and mints again on a second import.
+
+### Import Rejects Cycles And Malformed Bundles
+
+A bundle on a reference cycle (or a self-reference) is refused with `Unsupported`, and skolem or local-id values, dangling references, duplicate ids, an unknown root and a literal predicate with `InvalidTerm`, leaving the target unchanged.
+
+### Import Fails Atomically On Schema
+
+Importing a statement that violates `sys:unique` in the target fails with `UniqueViolation` and stores nothing from the bundle.
+
+### Bundle Of The Past
+
+The as-of bundle of a structure retracted since imports as live copies whose bundle equals it.
+
+### Bundles Round Trip On Random Graphs
+
+On random layered graphs (both hosts), for every live statement whose bundle is not refused, import into an empty database then re-export gives the same bundle, and a second import is a no-op.
+
+### Bundle JSON Round Trip
+
+The `tiramemsu-bundle/1` JSON of a bundle with every term kind reads back equal and writes the same text; another version, missing fields, malformed terms, dangling references and skolem IRIs are `InvalidTerm`.
+
+### Bundle N-Triples Is RDF 1.2
+
+The N-Triples export parses as RDF 1.2 and holds each triple, its `rdf:reifies` reifier, layers as annotations on the reifier, valid-time bounds, and blank nodes for anonymous nodes.
+
+### Bundle Travels As JSON Text
+
+Through the facade, a belief's bundle written as JSON text and read back imports into a second database, where SPARQL finds the belief in its graph with its evidence.
+
+### Bundles Cross The JSON Bridge
+
+The bridge read `bundle` feeds a `transact` op `importBundle` on another database; `as` names the imported root, memberships and valid times arrive, and a malformed bundle fails.
+
 ## Storage Invariants
 
 Checks of the SQLite-level guarantees in [[storage#Invariant Triggers]] and [[storage#Query Shapes]].

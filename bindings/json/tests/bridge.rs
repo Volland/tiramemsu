@@ -410,3 +410,96 @@ fn sparql_rows_can_carry_provenance() {
         .unwrap_err();
     assert_eq!(e.code(), "InvalidArgument");
 }
+
+#[test]
+fn dependents_preview_a_retraction_on_any_view() {
+    let (_d, db) = open();
+    let r = db
+        .call(
+            "transact",
+            &json!({ "ops": [
+                { "op": "assert", "s": v("alice"), "p": v("worksAt"), "o": v("acme"), "as": "job" },
+                { "op": "assert", "s": {"ref": "job"}, "p": v("source"), "o": "chat-1" },
+                { "op": "assert", "s": v("belief9"), "p": v("supportedBy"), "o": {"ref": "job"} }
+            ]}),
+        )
+        .unwrap();
+    let job = r["refs"]["job"].clone();
+    assert_eq!(
+        db.call("dependents", &json!({ "eid": job })).unwrap(),
+        r["asserted"]
+    );
+    // once retracted: nothing on the now view, the structure as of transaction 1
+    db.call(
+        "transact",
+        &json!({ "ops": [{ "op": "retract", "eid": job }] }),
+    )
+    .unwrap();
+    let then = json!({ "eid": { "stmt": job }, "view": { "kind": "asOf", "tx": 1 } });
+    assert_eq!(db.call("dependents", &then).unwrap(), r["asserted"]);
+    assert_eq!(
+        db.call("dependents", &json!({ "eid": job })).unwrap(),
+        json!([])
+    );
+    let e = db.call("dependents", &json!({})).unwrap_err();
+    assert_eq!(e.code(), "InvalidArgument");
+}
+
+// @lat: [[tests#Fact Bundles#Bundles Cross The JSON Bridge]]
+#[test]
+fn a_bundle_moves_between_bridge_databases() {
+    let (_d, a) = open();
+    let (_e, b) = open();
+    let r = a
+        .call(
+            "transact",
+            &json!({ "ops": [
+                { "op": "assert", "s": v("alice"), "p": v("worksAt"), "o": v("acme"), "validFrom": "2020-01-01", "as": "job" },
+                { "op": "assert", "s": {"ref": "job"}, "p": v("confidence"), "o": 0.8 },
+                { "op": "addToGraph", "eid": {"ref": "job"}, "graph": v("session12") }
+            ]}),
+        )
+        .unwrap();
+    let bundle = a
+        .call("bundle", &json!({ "eid": r["refs"]["job"] }))
+        .unwrap();
+    assert_eq!(bundle["format"], "tiramemsu-bundle/1");
+    assert_eq!(bundle["statements"].as_array().unwrap().len(), 3);
+    let t = b
+        .call(
+            "transact",
+            &json!({ "ops": [
+                { "op": "importBundle", "bundle": bundle, "as": "fact" },
+                { "op": "assert", "s": {"ref": "fact"}, "p": v("importedFrom"), "o": v("agentA") }
+            ]}),
+        )
+        .unwrap();
+    let res = &t["results"][0];
+    assert_eq!(res["root"], t["refs"]["fact"]);
+    assert_eq!(res["statements"].as_array().unwrap().len(), 3);
+    assert!(res["statements"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .all(|s| s["new"] == true));
+    let members = b
+        .call("graphMembers", &json!({ "graph": v("session12") }))
+        .unwrap();
+    assert_eq!(members, json!([t["refs"]["fact"]]));
+    // valid time travelled with the fact
+    let rows = b
+        .call("triples", &json!({ "s": v("alice"), "p": v("worksAt") }))
+        .unwrap();
+    assert_eq!(
+        rows[0]["validFrom"],
+        a.call("triples", &json!({ "s": v("alice") })).unwrap()[0]["validFrom"]
+    );
+    // a malformed bundle is refused and commits nothing
+    let e = b
+        .call(
+            "transact",
+            &json!({ "ops": [{ "op": "importBundle", "bundle": { "format": "tiramemsu-bundle/9" } }] }),
+        )
+        .unwrap_err();
+    assert_eq!(e.code(), "InvalidTerm");
+}

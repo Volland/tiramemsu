@@ -2,6 +2,7 @@
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
 
+pub mod bundle;
 pub mod clock;
 pub mod codec;
 pub mod engine;
@@ -18,6 +19,7 @@ pub mod value;
 pub mod view;
 pub mod vocab;
 
+pub use bundle::{BTerm, Bundle, BundleStatement, ImportReport, ImportedStatement};
 pub use clock::{Clock, ManualClock, SystemClock};
 pub use engine::{IntoObject, PredicateSchema, Store, StoreOptions, Tx};
 pub use error::{Dialect, Error, Position, Result, Span};
