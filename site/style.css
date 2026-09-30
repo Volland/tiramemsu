@@ -65,6 +65,11 @@ section > .wrap > p.sub { color: var(--muted); margin: 0 0 24px; max-width: 42em
 .card { background: var(--bg-soft); border: 1px solid var(--line); border-radius: 14px; padding: 18px 18px 14px; }
 .card h3 { margin: 0 0 6px; font-size: 18px; }
 .card p { margin: 0; color: var(--muted); font-size: 15.5px; }
+.hero .slogan { margin: 0 0 10px; font-weight: 700; font-size: 15px; letter-spacing: .06em; text-transform: uppercase; color: var(--pink); }
+.quote { margin: 0; background: var(--bg-soft); border: 1px solid var(--line); border-left: 4px solid var(--pink); border-radius: 0 14px 14px 0; padding: 16px 18px; }
+.quote p { margin: 0 0 8px; font-size: 15.5px; }
+.quote em { font-style: italic; }
+.quote cite { display: block; font-style: normal; font-size: 13.5px; font-weight: 600; color: var(--muted); }
 .tag { display: inline-block; font-size: 12px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase;
   color: var(--pink); margin-bottom: 4px; }
 

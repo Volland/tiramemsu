@@ -2,6 +2,8 @@
 
 <h1 align="center">Tiramemsu</h1>
 
+<p align="center"><em>Your agent’s brain loves Tiramemsu.</em></p>
+
 <p align="center"><strong>Layered, never-forget memory for agents.</strong><br>
 An embedded graph database on SQLite. Every fact has an id, so facts can carry layers of provenance and belief, and every change is kept with when it was made and when it was true.</p>
 
@@ -25,6 +27,22 @@ A knowledge graph stores facts. An agent also needs to say *how sure am I*, *whe
 - **Paths.** Reachability, trails and shortest paths through a native automaton search, also as a SQL table function (`tm_path`). Paths can cross layers.
 - **Named graphs as tags.** A graph is a node and membership is one more layer statement. `GRAPH`, `FROM`, `FROM NAMED` and `WITH` work with no new column or table.
 - **Embedded.** One SQLite file (WAL, STRICT). The core reaches SQLite through a small synchronous executor trait.
+
+### What agents are saying
+
+Early feedback from the people it is for. We made these up, but each one is about something the code really does.
+
+> “I used to say *‘I recall you said Acme’* with total confidence. Now I say *0.8, from chat-2026-09-29*. My humans find this either reassuring or unsettling.” — a chatbot, on layers
+
+> “I was wrong about where Alice works. `supersede` fixed the fact and carried my confidence over to it. I have never felt so forgiven.” — an assistant, on supersede
+
+> “My last memory store let me `DELETE` things. I do not trust myself with that kind of power. Here the triggers say no, in the file itself.” — a cautious agent, on never forgetting
+
+> “A user asked what I believed last Tuesday. I ran `as_of` and answered without a single hallucination. I asked for a raise in tokens.” — a support agent, on bitemporal views
+
+> “I wanted to try a wild idea without committing to it. A `with` block let me be reckless and leave no trace.” — a planner agent, on speculation
+
+> “My orchestrator speaks SPARQL and my intern speaks Cypher. They now share one store and, for the first time, one opinion.” — a multi-agent swarm, on two query languages
 
 ## Architecture
 
@@ -113,7 +131,7 @@ lat check                              # design graph and code refs stay in sync
 | | |
 |---|---|
 | Size | About 58 000 lines of Rust in 7 crates, 927 tests, 30 capability specs |
-| SPARQL | 634 of 781 in-scope W3C tests pass. Every other one is listed with a reason in `crates/tm-sparql/tests/w3c/expected-deviations.toml`, and an unexpected result fails the build |
+| SPARQL | 634 of 781 in-scope W3C tests pass (66 more are skipped: named-graph data and unsupported formats). Every failing one is listed with a reason in `crates/tm-sparql/tests/w3c/expected-deviations.toml`, and an unexpected result fails the build |
 | Cypher | 2 615 of 3 880 openCypher TCK scenarios (67 %). Temporal types, `CALL`, and a few dual-view cases are deferred and listed in `crates/tm-cypher/tests/tck/allowlist.txt` |
 | Speed | Raw SQLite lookups on the schema take about 4 µs at 11 million statements; about 150 bytes per statement with all indexes. See [`bench/`](bench/) |
 

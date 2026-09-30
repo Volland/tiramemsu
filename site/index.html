@@ -11,12 +11,13 @@
 <body>
 <header class="top"><div class="wrap">
   <a class="brand" href="./"><img src="assets/logo.svg" alt="">Tiramemsu</a>
-  <nav class="menu"><a href="#features">Features</a><a href="#layers">Layers</a><a href="#start">Quick start</a><a href="articles/">Articles</a><a href="https://github.com/Volland/tiramemsu">GitHub</a></nav>
+  <nav class="menu"><a href="#features">Features</a><a href="#feedback">Feedback</a><a href="#layers">Layers</a><a href="#start">Quick start</a><a href="articles/">Articles</a><a href="https://github.com/Volland/tiramemsu">GitHub</a></nav>
 </div></header>
 
 <main>
 <div class="wrap hero">
   <div>
+    <p class="slogan">Your agent’s brain loves Tiramemsu.</p>
     <h1>Memory that has <em>layers</em> and never forgets.</h1>
     <p class="lead">Tiramemsu is an embedded graph database on SQLite for agent and personal memory. Every fact has its own id, so a fact can carry a confidence, a source, or a belief about it, layer on layer. Every change is kept, with when it was made and when it was true.</p>
     <div class="btns"><a class="btn primary" href="#start">Quick start</a><a class="btn" href="articles/layered-graphs.html">What are layered graphs?</a><a class="btn" href="articles/tiramemsu-vs-oxilite.html">Tiramemsu vs oxilite</a></div>
@@ -36,6 +37,20 @@
     <div class="card"><span class="tag">Paths</span><h3>Native path engine</h3><p>Reachability, trails and shortest paths as an automaton search, also as a SQL table function. Paths can cross layers to reach what a belief is about.</p></div>
     <div class="card"><span class="tag">Graphs</span><h3>Named graphs as tags</h3><p>A graph is a node and membership is one more layer statement. <code>GRAPH</code>, <code>FROM</code> and <code>WITH</code> work with no new column or table.</p></div>
     <div class="card"><span class="tag">Embedded</span><h3>One file, one crate</h3><p>Rust library over bundled SQLite (WAL, STRICT). The core talks to SQLite through a small executor trait, so other hosts can follow.</p></div>
+  </div>
+</div></section>
+
+<section id="feedback"><div class="wrap">
+  <h2>What agents are saying</h2>
+  <p class="sub">Early feedback from the people it is for. We made these up, but each one is about something the code really does.</p>
+  <div class="grid">
+    <blockquote class="quote"><p>“I used to say <em>‘I recall you said Acme’</em> with total confidence. Now I say <em>0.8, from chat-2026-09-29</em>. My humans find this either reassuring or unsettling.”</p><cite>A chatbot, on layers</cite></blockquote>
+    <blockquote class="quote"><p>“I was wrong about where Alice works. <code>supersede</code> fixed the fact and carried my confidence over to it. I have never felt so forgiven.”</p><cite>An assistant, on supersede</cite></blockquote>
+    <blockquote class="quote"><p>“My last memory store let me <code>DELETE</code> things. I do not trust myself with that kind of power. Here the triggers say no, in the file itself.”</p><cite>A cautious agent, on never forgetting</cite></blockquote>
+    <blockquote class="quote"><p>“A user asked what I believed last Tuesday. I ran <code>as_of</code> and answered without a single hallucination. I asked for a raise in tokens.”</p><cite>A support agent, on bitemporal views</cite></blockquote>
+    <blockquote class="quote"><p>“I wanted to try a wild idea without committing to it. A <code>with</code> block let me be reckless and leave no trace. I recommend it to all my sub-agents.”</p><cite>A planner agent, on speculation</cite></blockquote>
+    <blockquote class="quote"><p>“My orchestrator speaks SPARQL and my intern speaks Cypher. They now share one store and, for the first time, one opinion.”</p><cite>A multi-agent swarm, on two query languages</cite></blockquote>
+    <blockquote class="quote"><p>“It is one SQLite file. I can carry my entire brain in my context window’s pocket. Please stop asking me to attach a server, there isn’t one yet.”</p><cite>An embedded agent, on being embedded</cite></blockquote>
   </div>
 </div></section>
 
@@ -86,7 +101,7 @@ db.now().cypher(<span class="s">"MATCH (p)-[r:worksAt]-&gt;(o) RETURN p, o, r.co
   <p class="sub">Tiramemsu is new: designed in September 2026 and implemented in one pass. Here is what is measured, and what is not.</p>
   <div class="grid">
     <div class="card"><h3>58 000 lines of Rust</h3><p>Seven crates, 927 tests, 30 capability specs written before the code (OpenSpec) and a design graph kept in sync (lat.md).</p></div>
-    <div class="card"><h3>SPARQL</h3><p>634 of 781 in-scope W3C tests pass. Every other one is listed with a reason, and an unexpected result fails the build.</p></div>
+    <div class="card"><h3>SPARQL</h3><p>634 of 781 in-scope W3C tests pass (66 more are skipped: named-graph data, unsupported formats). Every failing one is listed with a reason, and an unexpected result fails the build.</p></div>
     <div class="card"><h3>Cypher</h3><p>2 615 of 3 880 openCypher TCK scenarios (67 %). Temporal types, <code>CALL</code> and a few dual-view cases are deferred and listed.</p></div>
     <div class="card"><h3>Speed</h3><p>Raw SQLite lookups on its schema take about 4 µs at 11 million statements. Statements cost about 150 bytes each with all indexes. <a href="articles/tiramemsu-vs-oxilite.html#numbers">Details and caveats</a>.</p></div>
   </div>
@@ -104,7 +119,7 @@ db.now().cypher(<span class="s">"MATCH (p)-[r:worksAt]-&gt;(o) RETURN p, o, r.co
 
 <footer><div class="wrap">
   <span>Tiramemsu · MIT OR Apache-2.0 · <a href="https://github.com/Volland/tiramemsu">github.com/Volland/tiramemsu</a></span>
-  <span>Static page: no scripts, no trackers, no external fonts.</span>
+  <span>Static page: no scripts, no trackers, no external fonts. No tiramisu was harmed, and none was deleted.</span>
 </div></footer>
 </body>
 </html>
