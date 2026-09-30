@@ -1,0 +1,81 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1456 660" font-family="Helvetica Neue, Helvetica, Arial, sans-serif">
+  <title>Answers that cite their facts, and find out when they go stale</title>
+  <defs>
+    <marker id="ck" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M0 0L10 5L0 10z" fill="#3b2418"/></marker>
+  </defs>
+  <rect width="1456" height="660" fill="#fffaf0"/>
+
+  <!-- cards -->
+  <g stroke="#3b2418" stroke-width="3" fill="#fff">
+    <rect x="60" y="40" width="420" height="480" rx="20"/>
+    <rect x="518" y="40" width="420" height="480" rx="20"/>
+    <rect x="976" y="40" width="420" height="480" rx="20"/>
+  </g>
+  <g font-size="16" font-weight="700" fill="#6b5443" letter-spacing="1.5">
+    <text x="88" y="84">1 · THE AGENT ANSWERS</text>
+    <text x="546" y="84">2 · MEMORY CHANGES</text>
+    <text x="1004" y="84">3 · THE AGENT CHECKS</text>
+  </g>
+
+  <!-- 1 -->
+  <path d="M102 110 H452 a14 14 0 0 1 14 14 V222 a14 14 0 0 1 -14 14 H150 L118 266 L122 236 H102 a14 14 0 0 1 -14 -14 V124 a14 14 0 0 1 14 -14z" fill="#fff1d6" stroke="#3b2418" stroke-width="3"/>
+  <g font-size="20" fill="#2a1a10">
+    <text x="110" y="152">“Alice works at Acme,</text>
+    <text x="110" y="182">and she reports to Bob.”</text>
+  </g>
+  <text x="110" y="216" font-size="15" fill="#6b5443">query run with provenance: true</text>
+  <text x="88" y="316" font-size="16" fill="#6b5443">each row carries the ids of the</text>
+  <text x="88" y="340" font-size="16" fill="#6b5443">stored statements behind it</text>
+  <g stroke="#3b2418" stroke-width="3">
+    <rect x="88" y="368" width="364" height="44" rx="22" fill="#ff8fa3"/>
+    <rect x="88" y="428" width="364" height="44" rx="22" fill="#ff8fa3"/>
+  </g>
+  <g font-size="18" font-weight="700" fill="#2a1018" text-anchor="middle">
+    <text x="270" y="397">cites e1 · alice worksAt acme</text>
+    <text x="270" y="457">cites e9 · alice reportsTo bob</text>
+  </g>
+
+  <!-- 2 -->
+  <rect x="546" y="130" width="364" height="44" rx="22" fill="#f3ece0" stroke="#b8a58c" stroke-width="3" stroke-dasharray="7 5"/>
+  <text x="728" y="159" font-size="18" font-weight="700" text-anchor="middle" fill="#8a7760">e9 · alice reportsTo bob</text>
+  <line x1="570" y1="152" x2="886" y2="152" stroke="#e8607f" stroke-width="3"/>
+  <g font-size="18" fill="#2a1a10">
+    <text x="546" y="226">retracted by tx60</text>
+    <text x="546" y="262" font-family="Menlo, monospace" font-size="16">tx60 sys:reason "reorg"</text>
+    <text x="546" y="292" font-family="Menlo, monospace" font-size="16">tx60 sys:author :hr-sync</text>
+  </g>
+  <g font-size="16" fill="#6b5443">
+    <text x="546" y="352">The reason lives on the transaction,</text>
+    <text x="546" y="376">not on e9: a note written on e9 in</text>
+    <text x="546" y="400">the same transaction would itself</text>
+    <text x="546" y="424">be retracted with it.</text>
+    <text x="546" y="472">e9 stays in the file. It is no</text>
+    <text x="546" y="496">longer believed.</text>
+  </g>
+
+  <!-- 3 -->
+  <g font-size="19" fill="#2a1a10">
+    <text x="1004" y="146"><tspan fill="#2f8f4a" font-weight="700">✓</tspan>  e1 is live</text>
+    <text x="1004" y="186"><tspan fill="#d2456a" font-weight="700">✗</tspan>  e9 was retracted at t=60</text>
+  </g>
+  <rect x="1004" y="222" width="364" height="64" rx="16" fill="#e8607f" stroke="#3b2418" stroke-width="3"/>
+  <text x="1186" y="262" font-size="21" font-weight="700" text-anchor="middle" fill="#fff">the answer is stale</text>
+  <g font-size="16" fill="#6b5443">
+    <text x="1004" y="334">One history query over the cited ids</text>
+    <text x="1004" y="358">says which were retracted, when,</text>
+    <text x="1004" y="382">and why:</text>
+  </g>
+  <rect x="1004" y="404" width="364" height="84" rx="12" fill="#2a1a10"/>
+  <g font-family="Menlo, monospace" font-size="14" fill="#fff4d8">
+    <text x="1020" y="432">?e tm:txRetracted ?t .</text>
+    <text x="1020" y="456">?t sys:reason ?why</text>
+    <text x="1020" y="478" fill="#b8a58c"># over tm:history</text>
+  </g>
+
+  <!-- timeline -->
+  <line x1="60" y1="590" x2="1396" y2="590" stroke="#3b2418" stroke-width="3" marker-end="url(#ck)"/>
+  <g fill="#3b2418"><circle cx="270" cy="590" r="9"/><circle cx="728" cy="590" r="9"/><circle cx="1186" cy="590" r="9"/></g>
+  <g font-size="18" text-anchor="middle" fill="#2a1a10" font-weight="700">
+    <text x="270" y="630">t=40</text><text x="728" y="630">t=60</text><text x="1186" y="630">later</text>
+  </g>
+</svg>

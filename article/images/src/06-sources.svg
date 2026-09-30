@@ -1,0 +1,76 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1456 860" font-family="Helvetica Neue, Helvetica, Arial, sans-serif">
+  <title>Sources: transactions are nodes, confirmations are statements, conflicts are a query</title>
+  <defs>
+    <marker id="ck" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="#3b2418"/></marker>
+    <marker id="gy" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="#8a7760"/></marker>
+  </defs>
+  <rect width="1456" height="860" fill="#fffaf0"/>
+
+  <text x="60" y="64" font-size="16" font-weight="700" fill="#6b5443" letter-spacing="1.5">WHERE A FACT CAME FROM</text>
+
+  <!-- transaction cards -->
+  <g stroke="#3b2418" stroke-width="3">
+    <rect x="60" y="96" width="340" height="132" rx="16" fill="#fff1d6"/>
+    <rect x="540" y="96" width="340" height="132" rx="16" fill="#fff1d6"/>
+    <rect x="300" y="612" width="340" height="132" rx="16" fill="#fff1d6"/>
+  </g>
+  <g fill="#2a1a10">
+    <text x="84" y="134" font-size="21" font-weight="700">tx12 · wrote it</text>
+    <text x="84" y="170" font-size="17" font-family="Menlo, monospace">sys:author :agent7</text>
+    <text x="84" y="200" font-size="17" font-family="Menlo, monospace">sys:source "chat"</text>
+    <text x="564" y="134" font-size="21" font-weight="700">tx31 · confirmed it</text>
+    <text x="564" y="170" font-size="17" font-family="Menlo, monospace">sys:author :crawler</text>
+    <text x="564" y="200" font-size="17" font-family="Menlo, monospace">sys:source "acme.com"</text>
+    <text x="324" y="650" font-size="21" font-weight="700">tx44 · confirmed it</text>
+    <text x="324" y="686" font-size="17" font-family="Menlo, monospace">sys:author :alice</text>
+    <text x="324" y="716" font-size="17" font-family="Menlo, monospace">sys:source "email"</text>
+  </g>
+
+  <!-- the fact -->
+  <rect x="300" y="408" width="340" height="48" rx="24" fill="#ff8fa3" stroke="#3b2418" stroke-width="3"/>
+  <text x="470" y="439" font-size="20" font-weight="700" text-anchor="middle" fill="#2a1018">e1 · alice worksAt acme</text>
+
+  <!-- links -->
+  <path d="M390 406 L250 232" stroke="#8a7760" stroke-width="3" stroke-dasharray="3 6" stroke-linecap="round" fill="none" marker-end="url(#gy)"/>
+  <path d="M560 406 L690 232" stroke="#3b2418" stroke-width="3" fill="none" marker-end="url(#ck)"/>
+  <path d="M470 458 L470 608" stroke="#3b2418" stroke-width="3" fill="none" marker-end="url(#ck)"/>
+  <g font-size="16" font-family="Menlo, monospace">
+    <text x="150" y="330" fill="#8a7760">tm:txAdded</text>
+    <text x="150" y="352" fill="#8a7760" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="15">virtual, no stored row</text>
+    <text x="640" y="330" fill="#3b2418">sys:confirmedBy</text>
+    <text x="484" y="540" fill="#3b2418">sys:confirmedBy</text>
+  </g>
+
+  <g font-size="18" fill="#6b5443">
+    <text x="60" y="790">“Seen three times, from three sources” is a query over</text>
+    <text x="60" y="816">confirmations joined to transaction metadata, not a counter.</text>
+  </g>
+
+  <!-- contradiction panel -->
+  <rect x="950" y="40" width="466" height="780" rx="20" fill="#fff" stroke="#3b2418" stroke-width="3"/>
+  <text x="980" y="84" font-size="16" font-weight="700" fill="#6b5443" letter-spacing="1.5">WHERE SOURCES DISAGREE</text>
+
+  <rect x="980" y="130" width="406" height="48" rx="24" fill="#ff8fa3" stroke="#3b2418" stroke-width="3"/>
+  <text x="1183" y="161" font-size="19" font-weight="700" text-anchor="middle" fill="#2a1018">e1 · alice worksAt acme</text>
+  <text x="1183" y="206" font-size="16" text-anchor="middle" fill="#6b5443">written by agent7 · valid from 2020</text>
+
+  <!-- bolt -->
+  <polygon points="1196,232 1156,318 1188,318 1166,392 1224,296 1190,296 1214,232" fill="#e8607f" stroke="#3b2418" stroke-width="3" stroke-linejoin="round"/>
+
+  <rect x="980" y="420" width="406" height="48" rx="24" fill="#f6e2bf" stroke="#3b2418" stroke-width="3"/>
+  <text x="1183" y="451" font-size="19" font-weight="700" text-anchor="middle" fill="#2a1a10">e5 · alice worksAt globex</text>
+  <text x="1183" y="496" font-size="16" text-anchor="middle" fill="#6b5443">written by agent9 · valid from 2025</text>
+
+  <g font-size="17" fill="#2a1a10">
+    <text x="980" y="560">Found on read: same subject and</text>
+    <text x="980" y="586">predicate, different objects,</text>
+    <text x="980" y="612">overlapping valid time, different</text>
+    <text x="980" y="638">transaction authors.</text>
+  </g>
+  <g font-size="17" fill="#6b5443">
+    <text x="980" y="690">Declare the predicate cardinality</text>
+    <text x="980" y="716">one, and the second write retracts</text>
+    <text x="980" y="742">the first on write instead. History</text>
+    <text x="980" y="768">keeps both.</text>
+  </g>
+</svg>

@@ -1,0 +1,88 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1456 760" font-family="Helvetica Neue, Helvetica, Arial, sans-serif">
+  <title>A fact bundle carries a belief and its evidence from one agent's memory to another's</title>
+  <defs>
+    <marker id="ck" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M0 0L10 5L0 10z" fill="#3b2418"/></marker>
+    <marker id="pk" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0L10 5L0 10z" fill="#d2456a"/></marker>
+  </defs>
+  <rect width="1456" height="760" fill="#fffaf0"/>
+
+  <!-- database cylinders -->
+  <g stroke="#3b2418" stroke-width="3">
+    <path d="M60 130 V520 a180 40 0 0 0 360 0 V130" fill="#fff4d8"/>
+    <ellipse cx="240" cy="130" rx="180" ry="40" fill="#f6e2bf"/>
+    <path d="M1036 130 V520 a180 40 0 0 0 360 0 V130" fill="#fff4d8"/>
+    <ellipse cx="1216" cy="130" rx="180" ry="40" fill="#f6e2bf"/>
+  </g>
+  <g font-size="20" font-weight="700" text-anchor="middle" fill="#2a1a10">
+    <text x="240" y="137">agent A · memory.db</text>
+    <text x="1216" y="137">agent B · memory.db</text>
+  </g>
+
+  <!-- A's subgraph -->
+  <g stroke="#3b2418" stroke-width="3" fill="#fff">
+    <rect x="90" y="206" width="160" height="36" rx="18"/>
+    <rect x="260" y="206" width="136" height="36" rx="18"/>
+    <rect x="90" y="300" width="300" height="42" rx="21" fill="#ff8fa3"/>
+    <rect x="90" y="398" width="300" height="36" rx="18" stroke-dasharray="7 5"/>
+  </g>
+  <g font-size="16" text-anchor="middle" fill="#2a1a10">
+    <text x="170" y="230">confidence 0.8</text>
+    <text x="328" y="230">b9 supports</text>
+    <text x="240" y="327" font-weight="700" font-size="18" fill="#2a1018">e1 · alice worksAt acme</text>
+    <text x="240" y="422">in graph :session12</text>
+  </g>
+  <g stroke="#d2456a" stroke-width="2.5" stroke-dasharray="6 5" fill="none">
+    <path d="M170 242 L200 296" marker-end="url(#pk)"/>
+    <path d="M328 242 L290 296" marker-end="url(#pk)"/>
+    <path d="M240 398 L240 346" marker-end="url(#pk)"/>
+  </g>
+  <text x="240" y="480" font-size="15" text-anchor="middle" fill="#6b5443">View::bundle(e1)</text>
+  <text x="240" y="502" font-size="15" text-anchor="middle" fill="#6b5443">the fact, its layers, what it rests on</text>
+
+  <!-- bundle -->
+  <path d="M440 330 L520 330" stroke="#3b2418" stroke-width="4" marker-end="url(#ck)"/>
+  <path d="M936 330 L1016 330" stroke="#3b2418" stroke-width="4" marker-end="url(#ck)"/>
+  <rect x="540" y="130" width="376" height="400" rx="18" fill="#3b2418"/>
+  <text x="566" y="172" font-size="15" font-weight="700" fill="#ffd98a" letter-spacing="1.5">TIRAMEMSU-BUNDLE/1</text>
+  <g font-family="Menlo, monospace" font-size="16" fill="#fff4d8">
+    <text x="566" y="214">0  alice worksAt acme</text>
+    <text x="566" y="238" fill="#b8a58c">   valid from 2020</text>
+    <text x="566" y="272">1  (0) confidence 0.8</text>
+    <text x="566" y="306">2  b9 supportedBy (0)</text>
+    <text x="566" y="340">3  (0) inGraph session12</text>
+  </g>
+  <g font-size="15" fill="#e2cfae">
+    <text x="566" y="392">Local ids, not eids: eids, node ids and</text>
+    <text x="566" y="414">transaction numbers belong to one file.</text>
+    <text x="566" y="448">JSON, or RDF 1.2 N-Triples with</text>
+    <text x="566" y="470">reifiers for other RDF tools.</text>
+  </g>
+
+  <!-- B's side -->
+  <g stroke="#3b2418" stroke-width="3" fill="#fff">
+    <rect x="1066" y="206" width="160" height="36" rx="18"/>
+    <rect x="1236" y="206" width="136" height="36" rx="18"/>
+    <rect x="1066" y="300" width="300" height="42" rx="21" fill="#ff8fa3"/>
+    <rect x="1066" y="398" width="300" height="36" rx="18" stroke-dasharray="7 5"/>
+  </g>
+  <g font-size="16" text-anchor="middle" fill="#2a1a10">
+    <text x="1146" y="230">confidence 0.8</text>
+    <text x="1304" y="230">b9 supports</text>
+    <text x="1216" y="327" font-weight="700" font-size="18" fill="#2a1018">e57 · alice worksAt acme</text>
+    <text x="1216" y="422">in graph :session12</text>
+  </g>
+  <g stroke="#d2456a" stroke-width="2.5" stroke-dasharray="6 5" fill="none">
+    <path d="M1146 242 L1176 296" marker-end="url(#pk)"/>
+    <path d="M1304 242 L1266 296" marker-end="url(#pk)"/>
+    <path d="M1216 398 L1216 346" marker-end="url(#pk)"/>
+  </g>
+  <text x="1216" y="480" font-size="15" text-anchor="middle" fill="#6b5443">Tx::import_bundle, as assert</text>
+  <text x="1216" y="502" font-size="15" text-anchor="middle" fill="#6b5443">tx meta: sys:source :agentA</text>
+
+  <!-- footer notes -->
+  <g font-size="18" fill="#2a1a10">
+    <text x="60" y="632"><tspan font-weight="700">Import is idempotent.</tspan> Import twice and nothing changes. If B already knows the fact,</text>
+    <text x="60" y="660">the layers attach to B’s existing statement instead of creating a copy.</text>
+    <text x="60" y="704"><tspan font-weight="700">What stays behind:</tspan> transaction ids, confirmations and history. B records when it learned the fact.</text>
+  </g>
+</svg>

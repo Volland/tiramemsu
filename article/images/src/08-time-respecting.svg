@@ -1,0 +1,83 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1456 800" font-family="Helvetica Neue, Helvetica, Arial, sans-serif">
+  <title>A time-respecting path never goes back in time</title>
+  <defs>
+    <marker id="ck" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M0 0L10 5L0 10z" fill="#3b2418"/></marker>
+    <marker id="pk" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="#d2456a"/></marker>
+  </defs>
+  <rect width="1456" height="800" fill="#fffaf0"/>
+
+  <text x="60" y="64" font-size="16" font-weight="700" fill="#6b5443" letter-spacing="1.5">COULD SOMETHING STARTED BY A HAVE REACHED D?</text>
+
+  <!-- graph row -->
+  <g stroke="#3b2418" stroke-width="3">
+    <line x1="236" y1="160" x2="524" y2="160" marker-end="url(#ck)"/>
+    <line x1="596" y1="160" x2="884" y2="160" marker-end="url(#ck)"/>
+  </g>
+  <line x1="956" y1="160" x2="1244" y2="160" stroke="#e8607f" stroke-width="3" stroke-dasharray="10 7" marker-end="url(#pk)"/>
+  <g stroke="#3b2418" stroke-width="3">
+    <circle cx="200" cy="160" r="36" fill="#ff8fa3"/>
+    <circle cx="560" cy="160" r="36" fill="#fff4d8"/>
+    <circle cx="920" cy="160" r="36" fill="#fff4d8"/>
+    <circle cx="1280" cy="160" r="36" fill="#f3ece0" stroke="#b8a58c" stroke-dasharray="7 5"/>
+  </g>
+  <g font-size="24" font-weight="700" text-anchor="middle" fill="#2a1a10">
+    <text x="200" y="169">A</text><text x="560" y="169">B</text><text x="920" y="169">C</text><text x="1280" y="169" fill="#b8a58c">D</text>
+  </g>
+  <g font-size="18" text-anchor="middle" font-family="Menlo, monospace" fill="#2a1a10">
+    <text x="380" y="142">met [1, 5)</text><text x="740" y="142">met [3, 9)</text><text x="1100" y="142" fill="#d2456a">met [0, 2)</text>
+  </g>
+  <g font-size="17" text-anchor="middle" fill="#6b5443">
+    <text x="200" y="226">start</text>
+    <text x="560" y="226" font-weight="700" fill="#2a1a10">arrives at 1</text>
+    <text x="920" y="226" font-weight="700" fill="#2a1a10">arrives at 3</text>
+    <text x="1280" y="226" font-weight="700" fill="#d2456a">not reached</text>
+  </g>
+
+  <!-- timeline -->
+  <rect x="60" y="280" width="1336" height="360" rx="20" fill="#fff" stroke="#ecdcc0" stroke-width="3"/>
+  <g stroke="#ecdcc0" stroke-width="2">
+    <line x1="300" y1="310" x2="300" y2="560"/><line x1="400" y1="310" x2="400" y2="560"/><line x1="500" y1="310" x2="500" y2="560"/>
+    <line x1="600" y1="310" x2="600" y2="560"/><line x1="700" y1="310" x2="700" y2="560"/><line x1="800" y1="310" x2="800" y2="560"/>
+    <line x1="900" y1="310" x2="900" y2="560"/><line x1="1000" y1="310" x2="1000" y2="560"/><line x1="1100" y1="310" x2="1100" y2="560"/>
+    <line x1="1200" y1="310" x2="1200" y2="560"/>
+  </g>
+  <line x1="290" y1="570" x2="1320" y2="570" stroke="#3b2418" stroke-width="3" marker-end="url(#ck)"/>
+  <g font-size="16" text-anchor="middle" fill="#2a1a10">
+    <text x="300" y="598">0</text><text x="400" y="598">1</text><text x="500" y="598">2</text><text x="600" y="598">3</text><text x="700" y="598">4</text>
+    <text x="800" y="598">5</text><text x="900" y="598">6</text><text x="1000" y="598">7</text><text x="1100" y="598">8</text><text x="1200" y="598">9</text>
+  </g>
+  <text x="1250" y="598" font-size="16" fill="#6b5443">valid time</text>
+
+  <g font-size="18" font-weight="700" fill="#2a1a10">
+    <text x="90" y="366">A met B</text><text x="90" y="446">B met C</text><text x="90" y="526">C met D</text>
+  </g>
+  <g stroke="#3b2418" stroke-width="3">
+    <rect x="400" y="342" width="400" height="36" rx="18" fill="#f6e2bf"/>
+    <rect x="600" y="422" width="600" height="36" rx="18" fill="#f6e2bf"/>
+    <rect x="300" y="502" width="200" height="36" rx="18" fill="#f6e2bf"/>
+  </g>
+
+  <!-- the walk -->
+  <g stroke="#d2456a" stroke-width="4" fill="none">
+    <path d="M400 360 L400 440"/>
+    <path d="M400 440 L596 440" stroke-dasharray="4 8" stroke-linecap="round"/>
+    <path d="M600 440 L600 516" marker-end="url(#pk)"/>
+  </g>
+  <g stroke="#3b2418" stroke-width="3" fill="#e8607f">
+    <circle cx="400" cy="360" r="11"/><circle cx="600" cy="440" r="11"/>
+  </g>
+  <text x="408" y="332" font-size="16" fill="#d2456a" font-weight="700">reach B at 1</text>
+  <text x="430" y="478" font-size="16" fill="#d2456a">wait at B until 3</text>
+  <text x="614" y="410" font-size="16" fill="#d2456a" font-weight="700">reach C at 3</text>
+  <g transform="translate(600 520)">
+    <circle r="20" fill="#fff" stroke="#d2456a" stroke-width="3"/>
+    <path d="M-8 -8 L8 8 M8 -8 L-8 8" stroke="#d2456a" stroke-width="4" stroke-linecap="round"/>
+  </g>
+  <text x="634" y="527" font-size="16" fill="#d2456a" font-weight="700">C and D stopped meeting at 2</text>
+
+  <g font-size="19" fill="#2a1a10">
+    <text x="60" y="690">A plain path says A reaches D. A time-respecting path says it can’t, because every hop must still hold</text>
+    <text x="60" y="720">when the walk gets there, and the walk’s clock only moves forward. Each row reports its earliest arrival.</text>
+  </g>
+  <text x="60" y="764" font-size="16" fill="#6b5443">Useful for “could this rumour, leak or bad fact have spread from here to there, and how soon?”</text>
+</svg>

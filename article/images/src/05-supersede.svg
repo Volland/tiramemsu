@@ -1,0 +1,78 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1456 820" font-family="Helvetica Neue, Helvetica, Arial, sans-serif">
+  <title>Supersede: correct a fact, replay its layers, delete nothing</title>
+  <defs>
+    <marker id="pk" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="#d2456a"/></marker>
+    <marker id="gy" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="#b8a58c"/></marker>
+    <marker id="ck" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M0 0L10 5L0 10z" fill="#3b2418"/></marker>
+  </defs>
+  <rect width="1456" height="820" fill="#fffaf0"/>
+
+  <!-- left: before -->
+  <text x="60" y="70" font-size="16" font-weight="700" fill="#6b5443" letter-spacing="1.5">AFTER t=1 · BELIEVED NOW</text>
+  <text x="60" y="104" font-size="24" font-weight="700" fill="#2a1a10">alice worksAt acme, from January</text>
+  <g stroke="#3b2418" stroke-width="3" fill="#fff">
+    <rect x="60" y="150" width="210" height="40" rx="20"/>
+    <rect x="330" y="150" width="310" height="40" rx="20"/>
+    <rect x="330" y="250" width="240" height="40" rx="20"/>
+    <rect x="60" y="380" width="580" height="48" rx="24" fill="#ff8fa3"/>
+  </g>
+  <g font-size="18" text-anchor="middle" fill="#2a1a10">
+    <text x="165" y="176">e2 · confidence 0.8</text>
+    <text x="485" y="176">e8 · method “llm-extraction”</text>
+    <text x="450" y="276">e7 · b9 supportedBy e1</text>
+    <text x="350" y="410" font-weight="700" font-size="20" fill="#2a1018">e1 · alice worksAt acme · from Jan</text>
+  </g>
+  <g stroke="#d2456a" stroke-width="3" stroke-dasharray="7 6" fill="none">
+    <path d="M165 190 L200 376" marker-end="url(#pk)"/>
+    <path d="M485 190 L468 246" marker-end="url(#pk)"/>
+    <path d="M430 290 L400 376" marker-end="url(#pk)"/>
+  </g>
+
+  <!-- arrow -->
+  <path d="M680 300 L776 300" stroke="#3b2418" stroke-width="4" marker-end="url(#ck)"/>
+  <text x="728" y="268" font-size="17" text-anchor="middle" font-family="Menlo, monospace" fill="#2a1a10">supersede(e1,</text>
+  <text x="728" y="340" font-size="17" text-anchor="middle" font-family="Menlo, monospace" fill="#2a1a10">from: Feb)</text>
+
+  <!-- right: after -->
+  <text x="810" y="70" font-size="16" font-weight="700" fill="#6b5443" letter-spacing="1.5">AFTER t=2 · ONE TRANSACTION</text>
+  <text x="810" y="104" font-size="24" font-weight="700" fill="#2a1a10">Same layers, new ids, corrected date</text>
+
+  <!-- new cluster -->
+  <g stroke="#3b2418" stroke-width="3" fill="#fff">
+    <rect x="810" y="150" width="220" height="40" rx="20"/>
+    <rect x="1080" y="150" width="320" height="40" rx="20"/>
+    <rect x="1080" y="250" width="250" height="40" rx="20"/>
+    <rect x="810" y="380" width="590" height="48" rx="24" fill="#ff8fa3"/>
+  </g>
+  <g font-size="18" text-anchor="middle" fill="#2a1a10">
+    <text x="920" y="176">e11 · confidence 0.8</text>
+    <text x="1240" y="176">e13 · method “llm-extraction”</text>
+    <text x="1205" y="276">e12 · b9 supportedBy e10</text>
+    <text x="1105" y="410" font-weight="700" font-size="20" fill="#2a1018">e10 · alice worksAt acme · from Feb</text>
+  </g>
+  <g stroke="#d2456a" stroke-width="3" stroke-dasharray="7 6" fill="none">
+    <path d="M920 190 L955 376" marker-end="url(#pk)"/>
+    <path d="M1240 190 L1224 246" marker-end="url(#pk)"/>
+    <path d="M1190 290 L1160 376" marker-end="url(#pk)"/>
+  </g>
+
+  <!-- the old rows, retracted, still there -->
+  <path d="M1340 428 L1340 470" stroke="#3b2418" stroke-width="2.5" marker-end="url(#ck)"/>
+  <text x="1328" y="456" font-size="15" text-anchor="end" font-family="Menlo, monospace" fill="#3b2418">e10 sys:supersedes e1</text>
+  <rect x="810" y="474" width="590" height="44" rx="22" fill="#f3ece0" stroke="#b8a58c" stroke-width="2.5" stroke-dasharray="6 5"/>
+  <text x="1105" y="502" font-size="16" text-anchor="middle" fill="#8a7760">e1, e2, e7, e8 · retracted at t=2 (ret_kind = supersede)</text>
+
+  <!-- footer: never forget -->
+  <rect x="60" y="560" width="1336" height="210" rx="20" fill="#3b2418"/>
+  <g transform="translate(110 610)">
+    <rect x="0" y="40" width="80" height="64" rx="10" fill="#e8607f"/>
+    <path d="M14 40 V24 a26 26 0 0 1 52 0 V40" fill="none" stroke="#e8607f" stroke-width="10"/>
+    <circle cx="40" cy="68" r="8" fill="#3b2418"/><rect x="36" y="70" width="8" height="18" fill="#3b2418"/>
+  </g>
+  <g fill="#fff4d8">
+    <text x="240" y="624" font-size="26" font-weight="700">Nothing was deleted.</text>
+    <text x="240" y="662" font-size="19">The old rows got a retraction time and nothing else. <tspan font-family="Menlo, monospace" fill="#ffd98a">as of t=1</tspan> still shows e1 with its layers.</text>
+    <text x="240" y="694" font-size="19">SQLite triggers inside the file refuse <tspan font-family="Menlo, monospace" fill="#ffd98a">DELETE</tspan>, a second change to a row, and reused ids,</text>
+    <text x="240" y="726" font-size="19">so even a tool that opens the file with plain SQLite cannot rewrite history.</text>
+  </g>
+</svg>

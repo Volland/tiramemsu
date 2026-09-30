@@ -1,0 +1,95 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1456 980" font-family="Helvetica Neue, Helvetica, Arial, sans-serif">
+  <title>Four layers of statements, all pointing at the fact e1</title>
+  <defs>
+    <marker id="pk" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="#d2456a"/></marker>
+    <marker id="ck" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="#3b2418"/></marker>
+  </defs>
+  <rect width="1456" height="980" fill="#fffaf0"/>
+
+  <!-- cards -->
+  <g stroke="#3b2418" stroke-width="3">
+    <rect x="70" y="50" width="1336" height="180" rx="18" fill="#e9d6b0"/><rect x="60" y="40" width="1336" height="180" rx="18" fill="#fff1d6"/>
+    <rect x="70" y="280" width="1336" height="180" rx="18" fill="#e9c4cf"/><rect x="60" y="270" width="1336" height="180" rx="18" fill="#ffe3ea"/>
+    <rect x="70" y="510" width="1336" height="180" rx="18" fill="#e2cfae"/><rect x="60" y="500" width="1336" height="180" rx="18" fill="#fff4d8"/>
+    <rect x="70" y="740" width="1336" height="180" rx="18" fill="#d9b98a"/><rect x="60" y="730" width="1336" height="180" rx="18" fill="#f6e2bf"/>
+  </g>
+  <g font-size="16" font-weight="700" fill="#6b5443" letter-spacing="1.5">
+    <text x="88" y="74">LAYER 4 · CONTEXT: GRAPHS AND TRANSACTIONS</text>
+    <text x="88" y="304">LAYER 3 · BELIEFS AND THEIR EVIDENCE</text>
+    <text x="88" y="534">LAYER 2 · ANNOTATIONS</text>
+    <text x="88" y="764">LAYER 1 · FACTS</text>
+  </g>
+
+  <!-- layer 1 -->
+  <g stroke="#3b2418" stroke-width="3">
+    <line x1="262" y1="830" x2="878" y2="830" marker-end="url(#ck)"/>
+    <circle cx="230" cy="830" r="32" fill="#fff"/>
+    <circle cx="910" cy="830" r="32" fill="#fff"/>
+    <rect x="450" y="812" width="240" height="36" rx="18" fill="#ff8fa3"/>
+  </g>
+  <g font-size="19" text-anchor="middle" fill="#2a1a10">
+    <text x="230" y="836">alice</text><text x="910" y="836">acme</text>
+    <text x="570" y="837" font-weight="700" fill="#2a1018">e1 · worksAt</text>
+  </g>
+  <g font-size="17" fill="#6b5443">
+    <text x="1000" y="812">Retract e1 and everything that</text>
+    <text x="1000" y="838">points at it goes too, in the same</text>
+    <text x="1000" y="864">transaction, and stays in history.</text>
+  </g>
+
+  <!-- layer 2 -->
+  <g stroke="#3b2418" stroke-width="3" fill="#fff">
+    <rect x="200" y="572" width="260" height="40" rx="20"/>
+    <rect x="660" y="572" width="260" height="40" rx="20"/>
+  </g>
+  <g font-size="18" text-anchor="middle" fill="#2a1a10">
+    <text x="330" y="598">e2 · confidence 0.8</text>
+    <text x="790" y="598">e3 · source “chat-42”</text>
+  </g>
+
+  <!-- layer 3 -->
+  <g stroke="#3b2418" stroke-width="3">
+    <line x1="262" y1="360" x2="468" y2="360" marker-end="url(#ck)"/>
+    <circle cx="230" cy="360" r="32" fill="#fff"/>
+    <rect x="470" y="342" width="200" height="36" rx="18" fill="#fff"/>
+    <rect x="840" y="340" width="330" height="40" rx="20" fill="#fff"/>
+  </g>
+  <g font-size="18" text-anchor="middle" fill="#2a1a10">
+    <text x="230" y="366" font-weight="700">b9</text>
+    <text x="570" y="366">e7 · supportedBy</text>
+    <text x="1005" y="366">e8 · method “llm-extraction”</text>
+  </g>
+  <text x="230" y="420" font-size="16" text-anchor="middle" fill="#6b5443">a belief</text>
+
+  <!-- layer 4 -->
+  <g stroke="#3b2418" stroke-width="3">
+    <circle cx="230" cy="140" r="32" fill="#fff"/>
+    <line x1="262" y1="140" x2="458" y2="140" marker-end="url(#ck)"/>
+    <rect x="990" y="120" width="380" height="40" rx="20" fill="#fff" stroke-dasharray="8 5"/>
+  </g>
+  <g font-size="18" fill="#2a1a10">
+    <text x="230" y="146" text-anchor="middle" font-weight="700">tx42</text>
+    <text x="360" y="128" text-anchor="middle" font-size="16" fill="#6b5443">sys:author</text>
+    <text x="468" y="146" font-weight="700">agent 7</text>
+    <text x="1180" y="146" text-anchor="middle">m1 · e1 sys:inGraph :session12</text>
+  </g>
+  <g font-size="16" fill="#6b5443">
+    <text x="600" y="130">The transaction that wrote e1 is a node</text>
+    <text x="600" y="154">too: e1 tm:txAdded tx42 costs no stored row.</text>
+  </g>
+
+  <!-- statements about statements -->
+  <g stroke="#d2456a" stroke-width="3" stroke-dasharray="7 6" fill="none">
+    <path d="M360 612 C 380 700, 470 760, 492 810" marker-end="url(#pk)"/>
+    <path d="M770 612 C 740 700, 640 760, 622 810" marker-end="url(#pk)"/>
+    <path d="M560 378 L560 810" marker-end="url(#pk)"/>
+    <path d="M840 360 L672 360" marker-end="url(#pk)"/>
+    <path d="M1250 160 C 1250 620, 760 690, 672 812" marker-end="url(#pk)"/>
+  </g>
+  <g font-size="15" fill="#d2456a" font-weight="700">
+    <text x="572" y="470">object</text>
+    <text x="700" y="350">subject</text>
+  </g>
+
+  <text x="60" y="958" font-size="19" fill="#6b5443">Every dashed arrow is an ordinary triple whose subject or object is a statement id. No second data structure, no depth limit.</text>
+</svg>

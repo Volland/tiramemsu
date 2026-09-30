@@ -1,0 +1,80 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1456 860" font-family="Helvetica Neue, Helvetica, Arial, sans-serif">
+  <title>Under the hood: two query languages, one IR, one view-aware scan, one SQLite file</title>
+  <defs>
+    <marker id="ck" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M0 0L10 5L0 10z" fill="#3b2418"/></marker>
+  </defs>
+  <rect width="1456" height="860" fill="#fffaf0"/>
+
+  <!-- stack boxes -->
+  <g stroke="#3b2418" stroke-width="3">
+    <rect x="60" y="50" width="260" height="96" rx="16" fill="#fff1d6"/>
+    <rect x="350" y="50" width="260" height="96" rx="16" fill="#fff1d6"/>
+    <rect x="640" y="50" width="260" height="96" rx="16" fill="#fff1d6"/>
+    <rect x="60" y="206" width="840" height="96" rx="16" fill="#ffe3ea"/>
+    <rect x="60" y="362" width="405" height="96" rx="16" fill="#fff1d6"/>
+    <rect x="495" y="362" width="405" height="96" rx="16" fill="#fff1d6"/>
+    <rect x="60" y="518" width="840" height="96" rx="16" fill="#fff"/>
+    <rect x="60" y="674" width="840" height="120" rx="16" fill="#d9b98a"/>
+  </g>
+  <g stroke="#3b2418" stroke-width="3" fill="none">
+    <path d="M190 146 V200" marker-end="url(#ck)"/><path d="M480 146 V200" marker-end="url(#ck)"/><path d="M770 146 V200" marker-end="url(#ck)"/>
+    <path d="M262 302 V356" marker-end="url(#ck)"/><path d="M697 302 V356" marker-end="url(#ck)"/>
+    <path d="M262 458 V512" marker-end="url(#ck)"/><path d="M697 458 V512" marker-end="url(#ck)"/>
+    <path d="M480 614 V668" marker-end="url(#ck)"/>
+  </g>
+  <g text-anchor="middle" fill="#2a1a10">
+    <text x="190" y="92" font-size="21" font-weight="700">SPARQL 1.1 + 1.2</text>
+    <text x="190" y="122" font-size="16" fill="#6b5443">annotations {| … |}</text>
+    <text x="480" y="92" font-size="21" font-weight="700">openCypher</text>
+    <text x="480" y="122" font-size="16" fill="#6b5443">edge = :Statement node</text>
+    <text x="770" y="92" font-size="21" font-weight="700">API</text>
+    <text x="770" y="122" font-size="16" fill="#6b5443">Rust · Python · Node.js</text>
+    <text x="480" y="248" font-size="22" font-weight="700">One logical IR</text>
+    <text x="480" y="278" font-size="16" fill="#6b5443">patterns · joins · paths · aggregates · a time view per pattern · semantic flags</text>
+    <text x="262" y="404" font-size="21" font-weight="700">Planner + SQL codegen</text>
+    <text x="262" y="434" font-size="16" fill="#6b5443">one SQL statement, join order from statistics</text>
+    <text x="697" y="404" font-size="21" font-weight="700">Path engine</text>
+    <text x="697" y="434" font-size="16" fill="#6b5443">automaton search · layers · graphs · time-respecting</text>
+    <text x="480" y="560" font-size="22" font-weight="700">View-aware scan: time is resolved in one place</text>
+    <text x="480" y="590" font-size="16" fill="#6b5443">now · as of t · history, each combined with valid at d</text>
+    <text x="480" y="718" font-size="22" font-weight="700">One SQLite file (WAL, STRICT)</text>
+    <text x="480" y="750" font-size="16" fill="#2a1a10">triple · term dictionary · tx · volatile · triggers</text>
+    <text x="480" y="774" font-size="16" fill="#2a1a10">reached through a small synchronous executor trait</text>
+  </g>
+
+  <!-- inside the file -->
+  <rect x="950" y="50" width="446" height="744" rx="20" fill="#3b2418"/>
+  <text x="980" y="94" font-size="16" font-weight="700" fill="#ffd98a" letter-spacing="1.5">INSIDE THE FILE</text>
+  <g fill="#fff4d8">
+    <text x="980" y="140" font-size="19" font-weight="700">A row carries its own lifetime</text>
+    <text x="980" y="170" font-size="15" font-family="Menlo, monospace" fill="#e2cfae">(eid, s, p, o, t_add, t_ret,</text>
+    <text x="980" y="192" font-size="15" font-family="Menlo, monospace" fill="#e2cfae"> v_from, v_to, ret_kind)</text>
+
+    <text x="980" y="244" font-size="19" font-weight="700">“Now” skips dead rows</text>
+    <text x="980" y="272" font-size="16" fill="#e2cfae">live_spo · live_pos · live_osp are</text>
+    <text x="980" y="296" font-size="16" fill="#e2cfae">partial: WHERE t_ret IS NULL</text>
+
+    <text x="980" y="348" font-size="19" font-weight="700">“As of” seeks, never replays</text>
+    <text x="980" y="376" font-size="16" fill="#e2cfae">hist_* indexes, newest first, so the</text>
+    <text x="980" y="400" font-size="16" fill="#e2cfae">past is one index range, not a log</text>
+
+    <text x="980" y="452" font-size="19" font-weight="700">Small values live in the id</text>
+    <text x="980" y="480" font-size="16" fill="#e2cfae">64-bit ids with a 4-bit low tag: ints,</text>
+    <text x="980" y="504" font-size="16" fill="#e2cfae">dates, short strings need no lookup</text>
+
+    <text x="980" y="556" font-size="19" font-weight="700">The file defends itself</text>
+    <text x="980" y="584" font-size="16" fill="#e2cfae">triggers refuse DELETE, a second</text>
+    <text x="980" y="608" font-size="16" fill="#e2cfae">change to a row, and reused ids</text>
+  </g>
+  <line x1="980" y1="646" x2="1366" y2="646" stroke="#6b5443" stroke-width="2"/>
+  <g fill="#ffd98a">
+    <text x="980" y="700" font-size="34" font-weight="800">~4 µs</text>
+    <text x="1180" y="700" font-size="34" font-weight="800">~150 B</text>
+  </g>
+  <g fill="#e2cfae" font-size="15">
+    <text x="980" y="728">raw lookup at 11 M</text>
+    <text x="980" y="750">statements</text>
+    <text x="1180" y="728">per statement,</text>
+    <text x="1180" y="750">all indexes included</text>
+  </g>
+</svg>

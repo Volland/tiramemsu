@@ -1,0 +1,82 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1456 760" font-family="Helvetica Neue, Helvetica, Arial, sans-serif">
+  <title>A plain edge has no address; a tiramemsu statement does</title>
+  <defs>
+    <marker id="pk" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="#d2456a"/></marker>
+    <marker id="ck" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="#3b2418"/></marker>
+    <marker id="gy" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="#b8a58c"/></marker>
+  </defs>
+  <rect width="1456" height="760" fill="#fffaf0"/>
+
+  <!-- left panel -->
+  <rect x="40" y="40" width="660" height="440" rx="22" fill="#fff" stroke="#ecdcc0" stroke-width="3"/>
+  <text x="80" y="92" font-size="16" font-weight="700" fill="#6b5443" letter-spacing="1.5">A PLAIN EDGE</text>
+  <text x="80" y="126" font-size="26" font-weight="700" fill="#2a1a10">Where does “0.8 sure” go?</text>
+  <g stroke="#3b2418" stroke-width="3">
+    <line x1="182" y1="300" x2="528" y2="300" marker-end="url(#ck)"/>
+    <circle cx="150" cy="300" r="32" fill="#fff4d8"/>
+    <circle cx="560" cy="300" r="32" fill="#fff4d8"/>
+  </g>
+  <g font-size="19" text-anchor="middle" fill="#2a1a10">
+    <text x="150" y="306">alice</text><text x="560" y="306">acme</text>
+    <text x="355" y="288" fill="#6b5443">worksAt</text>
+  </g>
+  <rect x="300" y="170" width="110" height="40" rx="20" fill="#fff" stroke="#b8a58c" stroke-width="3" stroke-dasharray="7 6"/>
+  <text x="355" y="197" font-size="19" text-anchor="middle" fill="#6b5443">0.8 ?</text>
+  <g stroke="#b8a58c" stroke-width="3" stroke-dasharray="7 6" fill="none">
+    <path d="M300 200 C 230 220, 180 240, 165 262" marker-end="url(#gy)"/>
+    <path d="M410 200 C 480 220, 530 240, 548 262" marker-end="url(#gy)"/>
+  </g>
+  <text x="80" y="390" font-size="19" fill="#6b5443">On alice? On acme? A column on the edge?</text>
+  <text x="80" y="420" font-size="19" fill="#6b5443">The edge has no id, so nothing can point at it,</text>
+  <text x="80" y="450" font-size="19" fill="#6b5443">and a property can’t carry a property of its own.</text>
+
+  <!-- right panel -->
+  <rect x="756" y="40" width="660" height="440" rx="22" fill="#fff" stroke="#3b2418" stroke-width="3"/>
+  <text x="796" y="92" font-size="16" font-weight="700" fill="#6b5443" letter-spacing="1.5">A TIRAMEMSU STATEMENT</text>
+  <text x="796" y="126" font-size="26" font-weight="700" fill="#2a1a10">The fact has an address: e1</text>
+  <g stroke="#3b2418" stroke-width="3">
+    <line x1="898" y1="330" x2="1244" y2="330" marker-end="url(#ck)"/>
+    <circle cx="866" cy="330" r="32" fill="#fff4d8"/>
+    <circle cx="1276" cy="330" r="32" fill="#fff4d8"/>
+    <rect x="1000" y="314" width="150" height="34" rx="17" fill="#ff8fa3"/>
+  </g>
+  <g font-size="19" text-anchor="middle" fill="#2a1a10">
+    <text x="866" y="336">alice</text><text x="1276" y="336">acme</text>
+    <text x="1075" y="337" font-weight="700" fill="#2a1018">e1 · worksAt</text>
+  </g>
+  <g stroke="#3b2418" stroke-width="3" fill="#fff">
+    <rect x="800" y="176" width="230" height="40" rx="20"/>
+    <rect x="1120" y="176" width="260" height="40" rx="20"/>
+  </g>
+  <g font-size="18" text-anchor="middle" fill="#2a1a10">
+    <text x="915" y="202">e2 · confidence 0.8</text>
+    <text x="1250" y="202">e3 · source “chat-42”</text>
+  </g>
+  <g stroke="#d2456a" stroke-width="3" stroke-dasharray="7 6" fill="none">
+    <path d="M940 216 C 980 250, 1030 280, 1050 310" marker-end="url(#pk)"/>
+    <path d="M1220 216 C 1170 250, 1120 280, 1100 310" marker-end="url(#pk)"/>
+  </g>
+  <text x="796" y="420" font-size="19" fill="#6b5443">Confidence and source are statements too, with</text>
+  <text x="796" y="450" font-size="19" fill="#6b5443">their own ids. Their subject is e1, not alice.</text>
+
+  <!-- the row -->
+  <text x="40" y="548" font-size="16" font-weight="700" fill="#6b5443" letter-spacing="1.5">WHAT IS STORED: ONE ROW PER STATEMENT, NEVER DELETED</text>
+  <g font-family="Menlo, monospace" font-size="19">
+    <rect x="40" y="570" width="1376" height="52" rx="10" fill="#3b2418"/>
+    <rect x="40" y="622" width="1376" height="100" rx="10" fill="#fff" stroke="#3b2418" stroke-width="3"/>
+    <g fill="#fff4d8" font-weight="700">
+      <text x="62" y="603">eid</text><text x="162" y="603">s</text><text x="312" y="603">p</text><text x="472" y="603">o</text>
+      <text x="632" y="603">t_add</text><text x="752" y="603">t_ret</text><text x="872" y="603">v_from</text><text x="1052" y="603">v_to</text><text x="1192" y="603">ret_kind</text>
+    </g>
+    <g fill="#2a1a10">
+      <text x="62" y="660" font-weight="700" fill="#d2456a">e1</text><text x="162" y="660">alice</text><text x="312" y="660">worksAt</text><text x="472" y="660">acme</text>
+      <text x="632" y="660">1</text><text x="752" y="660">·</text><text x="872" y="660">2020-01-01</text><text x="1052" y="660">·</text><text x="1192" y="660">·</text>
+      <text x="62" y="700" font-weight="700" fill="#d2456a">e2</text><text x="162" y="700" fill="#d2456a">e1</text><text x="312" y="700">confidence</text><text x="472" y="700">0.8</text>
+      <text x="632" y="700">1</text><text x="752" y="700">·</text><text x="872" y="700">·</text><text x="1052" y="700">·</text><text x="1192" y="700">·</text>
+    </g>
+  </g>
+  <g font-size="15" fill="#6b5443">
+    <text x="632" y="746">transaction time: when we believed it</text>
+    <text x="1030" y="746">valid time: when it was true</text>
+  </g>
+</svg>

@@ -1,0 +1,85 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1456 880" font-family="Helvetica Neue, Helvetica, Arial, sans-serif">
+  <title>Two clocks: valid time across, transaction time up</title>
+  <defs>
+    <marker id="ck" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M0 0L10 5L0 10z" fill="#3b2418"/></marker>
+    <pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+      <rect width="14" height="14" fill="#f3ece0"/><line x1="0" y1="0" x2="0" y2="14" stroke="#ddd0bb" stroke-width="6"/>
+    </pattern>
+    <linearGradient id="fadeR" x1="0" x2="1"><stop offset="0.8" stop-color="#fffaf0" stop-opacity="0"/><stop offset="1" stop-color="#fffaf0" stop-opacity="0.9"/></linearGradient>
+  </defs>
+  <rect width="1456" height="880" fill="#fffaf0"/>
+
+  <!-- statements as rectangles -->
+  <rect x="200" y="540" width="820" height="160" fill="url(#hatch)" stroke="#b8a58c" stroke-width="3" stroke-dasharray="9 6"/>
+  <rect x="200" y="150" width="480" height="390" fill="#f6e2bf" stroke="#3b2418" stroke-width="3"/>
+  <rect x="700" y="150" width="320" height="250" fill="#ffc7d2" stroke="#3b2418" stroke-width="3"/>
+  <rect x="940" y="140" width="90" height="570" fill="url(#fadeR)"/>
+
+  <g fill="#2a1a10">
+    <text x="224" y="590" font-size="21" font-weight="700" fill="#6b5443">e1 · alice worksAt acme</text>
+    <text x="224" y="618" font-size="17" fill="#6b5443">valid from 2020, no end · believed from t=1 until t=2</text>
+    <text x="224" y="644" font-size="17" fill="#6b5443">retracted by a correction, never deleted</text>
+    <text x="224" y="200" font-size="21" font-weight="700">e2 · alice worksAt acme</text>
+    <text x="224" y="228" font-size="17" fill="#6b5443">valid 2020-01-01 → 2024-01-01</text>
+    <text x="224" y="254" font-size="17" fill="#6b5443">believed from t=2, still live</text>
+    <text x="722" y="200" font-size="21" font-weight="700">e3 · globex</text>
+    <text x="722" y="228" font-size="17" fill="#6b5443">alice worksAt globex</text>
+    <text x="722" y="254" font-size="17" fill="#6b5443">valid from 2024-03-01</text>
+    <text x="722" y="280" font-size="17" fill="#6b5443">believed from t=3</text>
+  </g>
+
+  <!-- gap between jobs -->
+  <path d="M690 140 L690 108" stroke="#6b5443" stroke-width="2"/>
+  <text x="690" y="98" font-size="16" text-anchor="middle" fill="#6b5443">two months between jobs</text>
+
+  <!-- axes -->
+  <g stroke="#3b2418" stroke-width="3" fill="none">
+    <line x1="180" y1="740" x2="1070" y2="740" marker-end="url(#ck)"/>
+    <line x1="180" y1="740" x2="180" y2="112" marker-end="url(#ck)"/>
+  </g>
+  <g font-size="17" fill="#2a1a10" text-anchor="middle">
+    <text x="200" y="770">2020</text><text x="320" y="770">2021</text><text x="440" y="770">2022</text><text x="560" y="770">2023</text>
+    <text x="680" y="770">2024</text><text x="800" y="770">2025</text><text x="920" y="770">2026</text><text x="1030" y="770" fill="#6b5443">open</text>
+  </g>
+  <g stroke="#3b2418" stroke-width="2">
+    <line x1="200" y1="740" x2="200" y2="750"/><line x1="320" y1="740" x2="320" y2="750"/><line x1="440" y1="740" x2="440" y2="750"/>
+    <line x1="560" y1="740" x2="560" y2="750"/><line x1="680" y1="740" x2="680" y2="750"/><line x1="800" y1="740" x2="800" y2="750"/><line x1="920" y1="740" x2="920" y2="750"/>
+    <line x1="170" y1="700" x2="180" y2="700"/><line x1="170" y1="540" x2="180" y2="540"/><line x1="170" y1="400" x2="180" y2="400"/><line x1="170" y1="150" x2="180" y2="150"/>
+  </g>
+  <g font-size="17" fill="#2a1a10" text-anchor="end">
+    <text x="162" y="706">t=1</text><text x="162" y="546">t=2</text><text x="162" y="406">t=3</text><text x="162" y="156">now</text>
+  </g>
+  <text x="620" y="818" font-size="19" font-weight="700" text-anchor="middle" fill="#3b2418">valid time: when it was true in the world →</text>
+  <text transform="translate(92 430) rotate(-90)" font-size="19" font-weight="700" text-anchor="middle" fill="#3b2418">transaction time: when we believed it →</text>
+
+  <!-- cuts -->
+  <g stroke="#e8607f" stroke-width="3" stroke-dasharray="10 7">
+    <line x1="180" y1="668" x2="1025" y2="668"/>
+    <line x1="920" y1="740" x2="920" y2="120"/>
+  </g>
+  <g font-size="17" font-weight="700" fill="#d2456a">
+    <text x="936" y="696">as of t=1</text>
+    <text x="928" y="132">valid at 2026-01-01</text>
+  </g>
+  <circle cx="920" cy="668" r="10" fill="#e8607f" stroke="#3b2418" stroke-width="3"/>
+
+  <!-- answers panel -->
+  <rect x="1110" y="150" width="316" height="590" rx="18" fill="#fff" stroke="#3b2418" stroke-width="3"/>
+  <text x="1134" y="192" font-size="15" font-weight="700" fill="#6b5443" letter-spacing="1.5">ONE QUESTION, FIVE VIEWS</text>
+  <text x="1134" y="224" font-size="20" font-weight="700" fill="#2a1a10">Who does Alice work for?</text>
+  <g font-size="16">
+    <text x="1134" y="274" font-family="Menlo, monospace" fill="#6b5443">now</text>
+    <text x="1134" y="300" font-weight="700" fill="#2a1a10">acme, globex</text>
+    <text x="1134" y="346" font-family="Menlo, monospace" fill="#6b5443">now · valid 2026-01-01</text>
+    <text x="1134" y="372" font-weight="700" fill="#2a1a10">globex</text>
+    <text x="1134" y="418" font-family="Menlo, monospace" fill="#6b5443">now · valid 2024-02-01</text>
+    <text x="1134" y="444" font-weight="700" fill="#2a1a10">nobody</text>
+    <text x="1134" y="490" font-family="Menlo, monospace" fill="#6b5443">as of t=1</text>
+    <text x="1134" y="516" font-weight="700" fill="#2a1a10">acme</text>
+    <text x="1134" y="562" font-family="Menlo, monospace" fill="#d2456a">as of t=1 · valid 2026</text>
+    <text x="1134" y="588" font-weight="700" fill="#d2456a">acme</text>
+    <text x="1134" y="630" fill="#6b5443">We believed she was still</text>
+    <text x="1134" y="654" fill="#6b5443">there. We were wrong, and</text>
+    <text x="1134" y="678" fill="#6b5443">we remember being wrong.</text>
+  </g>
+</svg>
