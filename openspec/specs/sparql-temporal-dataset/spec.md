@@ -135,18 +135,6 @@ Outside `FROM`, `FROM NAMED`, `USING`, `USING NAMED` and the endpoint IRI of `SE
 - **WHEN** `(v:doc v:ref <urn:tiramemsu:tm:asOf/150>)` is inserted and `SELECT ?x WHERE { v:doc v:ref ?x FILTER(?x = <urn:tiramemsu:tm:asOf/150>) }` is run
 - **THEN** one row with `x = <urn:tiramemsu:tm:asOf/150>` is returned, and the query is evaluated in the current view
 
-### Requirement: Non-time graphs are unsupported
-
-The store has no named graphs in v1. A `FROM`, `FROM NAMED` or `GRAPH` IRI that is not in the `tm:` namespace SHALL fail with `Unsupported { feature: "named graph" }`, and `GRAPH ?g` SHALL fail with `Unsupported { feature: "GRAPH variable" }`, before execution. A `GRAPH` block nested inside a time `SERVICE` group SHALL be rejected in the same way.
-
-#### Scenario: Ordinary named graph rejected
-- **WHEN** `SELECT * FROM <http://example.org/graph1> WHERE { ?s ?p ?o }` is submitted
-- **THEN** the request fails with `Unsupported { feature: "named graph" }`
-
-#### Scenario: GRAPH inside a time scope is still a named graph
-- **WHEN** `SELECT * WHERE { SERVICE <urn:tiramemsu:tm:asOf/150> { GRAPH <http://example.org/g> { ?s ?p ?o } } }` is submitted
-- **THEN** the request fails with `Unsupported { feature: "named graph" }`
-
 ### Requirement: Statement-time virtual predicates
 
 In a triple pattern whose subject is a statement eid, the predicates `tm:txAdded`, `tm:txRetracted`, `tm:validFrom`, `tm:validTo` and `tm:retractKind` SHALL match computed values instead of stored triples. `tm:txAdded` and `tm:txRetracted` bind the adding and retracting transactions, rendered as `urn:tiramemsu:tx:<t>`. `tm:validFrom` and `tm:validTo` bind `xsd:dateTime` values. `tm:retractKind` binds the retraction kind. When the underlying value is absent (a live statement has no `tm:txRetracted`, and an unbounded interval end has no `tm:validFrom` or `tm:validTo`), the pattern SHALL produce no solution for that statement, so `OPTIONAL` is needed to keep it. Transactions bound this way SHALL join with transaction metadata triples such as `sys:author` and `sys:reason`.

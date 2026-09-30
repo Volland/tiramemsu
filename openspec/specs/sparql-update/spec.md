@@ -93,26 +93,6 @@ For `DELETE { … } INSERT { … } WHERE { … }`, `INSERT { … } WHERE { … }
 - **WHEN** `INSERT { ?p v:card _:c . _:c v:owner ?p } WHERE { ?p a v:Person }` runs over two persons
 - **THEN** two distinct blank nodes are created, one per person
 
-### Requirement: Time-scoped WHERE in updates
-
-The `WHERE` pattern of an update SHALL accept the time IRIs of the temporal dataset capability: in `SERVICE` groups as per-group scopes, and in `USING` as the default for the `WHERE` pattern, with the same meaning that `FROM` has in queries. Inside the `WHERE` pattern, `GRAPH` with a time IRI, `GRAPH` with any other IRI or a variable, and `SERVICE` with a non-time IRI or a variable SHALL fail exactly as they do in queries. Templates and data blocks SHALL always write to the current state, so a time IRI has no meaning there. A `GRAPH` block in `INSERT DATA`, `DELETE DATA` or a template, whatever its IRI (a time IRI included), and `WITH`, `USING` or `USING NAMED` with a non-time IRI, SHALL fail with `Unsupported { feature: "named graph" }`.
-
-#### Scenario: Restore a past value
-- **WHEN** `(v:alice v:worksAt v:acme)` was live as of tx 150 and has since been retracted, and `INSERT { v:alice v:worksAt ?c } WHERE { SERVICE <urn:tiramemsu:tm:asOf/150> { v:alice v:worksAt ?c } }` is submitted
-- **THEN** a new live statement `(v:alice v:worksAt v:acme)` with a new eid is asserted, and the old eid stays retracted
-
-#### Scenario: Time IRI in GRAPH of a WHERE pattern is rejected
-- **WHEN** `INSERT { v:alice v:worksAt ?c } WHERE { GRAPH <urn:tiramemsu:tm:asOf/150> { v:alice v:worksAt ?c } }` is submitted
-- **THEN** the request fails with a `Parse` error of dialect SPARQL whose message names `SERVICE`, and nothing is written
-
-#### Scenario: GRAPH in INSERT DATA is rejected
-- **WHEN** `INSERT DATA { GRAPH <urn:tiramemsu:tm:asOf/150> { v:a v:b v:c } }` is submitted
-- **THEN** the request fails with `Unsupported { feature: "named graph" }` and nothing is written, because data is always written to the current state and v1 has no named graphs
-
-#### Scenario: WITH is rejected
-- **WHEN** `WITH <http://example.org/g> DELETE { ?s ?p ?o } WHERE { ?s ?p ?o }` is submitted
-- **THEN** the request fails with `Unsupported { feature: "named graph" }` and nothing is written
-
 ### Requirement: Store constraints apply to SPARQL updates
 
 Every assert and retract made by a SPARQL update SHALL go through the same checks as the Rust API: predicate `sys:valueType`, `sys:unique` and `sys:cardinality` schema flags, the reserved `sys:` namespace, the self-reference rule and the cascade limit. A failed check SHALL fail the whole request with the corresponding typed error. Predicate-schema flags, vocab and prefix settings in `sys:` SHALL be insertable through SPARQL.
@@ -141,22 +121,6 @@ Asserting a triple whose predicate is a statement-time virtual predicate (`tm:tx
 - **WHEN** `INSERT { ?r tm:validFrom "2020-01-01T00:00:00Z"^^xsd:dateTime } WHERE { v:alice v:worksAt v:acme ~ ?r }` is submitted
 - **THEN** the request fails with `ReservedNamespace` naming `urn:tiramemsu:tm:validFrom` and nothing is written
 
-### Requirement: Unsupported update operations
-
-The graph-management operations `LOAD`, `CLEAR`, `CREATE`, `DROP`, `ADD`, `MOVE` and `COPY` SHALL fail with `Unsupported` before anything is written. For `LOAD`, `CLEAR`, `CREATE` and `DROP` the feature SHALL be the operation keyword. `ADD`, `MOVE` and `COPY` SHALL fail with an `Unsupported` error naming either the operation or `"named graph"`. `SILENT` SHALL NOT turn these failures into success.
-
-#### Scenario: CLEAR is rejected
-- **WHEN** `CLEAR DEFAULT` is submitted
-- **THEN** the request fails with `Unsupported { feature: "CLEAR" }` and nothing is retracted
-
-#### Scenario: DROP SILENT is still rejected
-- **WHEN** `DROP SILENT ALL` is submitted
-- **THEN** the request fails with `Unsupported { feature: "DROP" }`
-
-#### Scenario: Rejected operation aborts the whole request
-- **WHEN** `INSERT DATA { v:a v:b v:c } ; LOAD <http://example.org/data.ttl>` is submitted
-- **THEN** the request fails with `Unsupported { feature: "LOAD" }` and `(v:a v:b v:c)` is not stored
-
 ### Requirement: Update parse errors report position
 
 Update text that is not valid SPARQL 1.1 Update (with SPARQL 1.2 syntax) SHALL fail with a `Parse` error of dialect SPARQL, carrying the line, column and byte offset of the failure. Nothing SHALL be written. Variables in `INSERT DATA`, and variables or blank nodes in `DELETE DATA` or `DELETE WHERE`, SHALL be reported as parse errors.
@@ -168,3 +132,43 @@ Update text that is not valid SPARQL 1.1 Update (with SPARQL 1.2 syntax) SHALL f
 #### Scenario: Blank node in DELETE DATA
 - **WHEN** `DELETE DATA { _:b v:p 1 }` is submitted
 - **THEN** the request fails with a `Parse` error of dialect SPARQL and nothing is written
+
+### Requirement: Time- and graph-scoped WHERE in updates
+
+The `WHERE` pattern of an update SHALL accept the time IRIs of the temporal dataset capability: in `SERVICE` groups as per-group scopes, and in `USING` as the default for the `WHERE` pattern, with the same meaning that `FROM` has in queries. `USING` and `USING NAMED` with a non-`tm:` IRI, and `GRAPH` with a non-`tm:` IRI or a variable inside the `WHERE` pattern, SHALL name graphs as the `named-graphs` capability specifies. Inside the `WHERE` pattern, `GRAPH` with a time IRI and `SERVICE` with a non-time IRI or a variable SHALL fail exactly as they do in queries. Templates and data blocks SHALL always write to the current state, so a time IRI has no meaning there: a `GRAPH` block in `INSERT DATA`, `DELETE DATA` or a template SHALL name a graph as `named-graphs` specifies, and a time IRI as its name SHALL fail with a `Parse` error that names `SERVICE`. `WITH <g>` SHALL name the graph for template triples outside their own `GRAPH` block and SHALL scope the `WHERE` default graph to `g`. Property paths in the `WHERE` pattern inside `GRAPH` or under a `FROM`-style graph default SHALL fail with `Unsupported { feature: "named graph path" }`.
+
+#### Scenario: Restore a past value
+- **WHEN** `(v:alice v:worksAt v:acme)` was live as of tx 150 and has since been retracted, and `INSERT { v:alice v:worksAt ?c } WHERE { SERVICE <urn:tiramemsu:tm:asOf/150> { v:alice v:worksAt ?c } }` is submitted
+- **THEN** a new live statement `(v:alice v:worksAt v:acme)` with a new eid is asserted, and the old eid stays retracted
+
+#### Scenario: Time IRI in GRAPH of a WHERE pattern is rejected
+- **WHEN** `INSERT { v:alice v:worksAt ?c } WHERE { GRAPH <urn:tiramemsu:tm:asOf/150> { v:alice v:worksAt ?c } }` is submitted
+- **THEN** the request fails with a `Parse` error of dialect SPARQL whose message names `SERVICE`, and nothing is written
+
+#### Scenario: Time IRI as the graph of INSERT DATA is rejected
+- **WHEN** `INSERT DATA { GRAPH <urn:tiramemsu:tm:asOf/150> { v:a v:b v:c } }` is submitted
+- **THEN** the request fails with a `Parse` error of dialect SPARQL whose message names `SERVICE`, and nothing is written, because data is always written to the current state
+
+#### Scenario: GRAPH in INSERT DATA names a graph
+- **WHEN** `INSERT DATA { GRAPH <g1> { v:a v:b v:c } }` is submitted
+- **THEN** `(v:a v:b v:c)` is live and a member of `g1`
+
+#### Scenario: WITH names a graph
+- **WHEN** `WITH <g1> DELETE { ?s ?p ?o } WHERE { ?s ?p ?o }` is submitted over a store where `(v:a v:b v:c)` is in `<g1>` and `(v:d v:e v:f)` is in no graph
+- **THEN** the membership of `(v:a v:b v:c)` in `g1` is retracted, the statement stays live, and `(v:d v:e v:f)` is untouched
+
+### Requirement: Unsupported graph operations
+
+The graph-management operations `LOAD`, `ADD`, `MOVE` and `COPY` SHALL fail with `Unsupported` before anything is written, and so SHALL `CLEAR DEFAULT`, `CLEAR ALL`, `DROP DEFAULT` and `DROP ALL`. The feature SHALL be the operation keyword. `CREATE`, `CLEAR GRAPH`, `CLEAR NAMED`, `DROP GRAPH` and `DROP NAMED` are supported, as the `named-graphs` capability specifies. `SILENT` SHALL NOT turn an unsupported operation into success.
+
+#### Scenario: CLEAR DEFAULT is rejected
+- **WHEN** `CLEAR DEFAULT` is submitted
+- **THEN** the request fails with `Unsupported { feature: "CLEAR DEFAULT" }` and nothing is retracted
+
+#### Scenario: DROP SILENT ALL is still rejected
+- **WHEN** `DROP SILENT ALL` is submitted
+- **THEN** the request fails with `Unsupported { feature: "DROP ALL" }`
+
+#### Scenario: Rejected operation aborts the whole request
+- **WHEN** `INSERT DATA { v:a v:b v:c } ; LOAD <http://example.org/data.ttl>` is submitted
+- **THEN** the request fails with `Unsupported { feature: "LOAD" }` and `(v:a v:b v:c)` is not stored

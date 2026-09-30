@@ -281,22 +281,6 @@ Blank nodes in query patterns SHALL act as variables that are not projected. A s
 - **WHEN** a node created without an IRI is returned by a query as `urn:tiramemsu:node:7`, and `SELECT ?n WHERE { <urn:tiramemsu:node:7> v:name ?n }` is then run
 - **THEN** the name of that same node is returned
 
-### Requirement: Unsupported features fail before execution
-
-Constructs outside the v1 subset SHALL be rejected after parsing and before any SQL is executed, with `Unsupported { feature }` naming the construct. This SHALL cover at least: `DESCRIBE` (`"DESCRIBE"`), `SERVICE` with a variable or with an IRI that is not a time IRI, that is federation (`"SERVICE"`), `GRAPH` with a variable (`"GRAPH variable"`), `FROM`, `FROM NAMED` or `GRAPH` with an IRI outside the `tm:` namespace (`"named graph"`), custom aggregates, the functions listed as unsupported, and negated property sets (`"negated property sets"`). A rejected query SHALL return no partial results. `SERVICE` with a `tm:` time IRI is not federation: it is the per-group time scope of the temporal dataset capability. `GRAPH` with a `tm:` IRI is a `Parse` error that names `SERVICE`, as that capability specifies.
-
-#### Scenario: Federated SERVICE is rejected
-- **WHEN** `SELECT * WHERE { SERVICE <http://dbpedia.org/sparql> { ?s ?p ?o } }` is submitted
-- **THEN** the request fails with `Unsupported { feature: "SERVICE" }`
-
-#### Scenario: GRAPH variable is rejected
-- **WHEN** `SELECT ?g WHERE { GRAPH ?g { ?s ?p ?o } }` is submitted
-- **THEN** the request fails with `Unsupported { feature: "GRAPH variable" }`
-
-#### Scenario: Negated property set is rejected
-- **WHEN** `SELECT ?x WHERE { v:alice !v:knows ?x }` is submitted
-- **THEN** the request fails with `Unsupported { feature: "negated property sets" }`
-
 ### Requirement: Parse errors report position
 
 Text that is not valid SPARQL 1.1 (with the SPARQL 1.2 triple-term, reifier and annotation syntax) SHALL fail with a `Parse` error whose dialect is SPARQL. The error SHALL carry the 1-based line and column, and the byte offset, at which parsing failed, together with a message that says what was expected. No part of the store SHALL be read or written.
@@ -372,3 +356,19 @@ Every solution value SHALL be an RDF term. IRIs SHALL be returned as IRIs. Anony
 #### Scenario: Fresh blank node per solution
 - **WHEN** `CONSTRUCT { ?p v:card [ v:name ?n ] } WHERE { ?p v:name ?n }` runs over two named people
 - **THEN** four triples are produced, and the two card nodes are distinct blank nodes
+
+### Requirement: Out-of-subset constructs fail before execution
+
+Constructs outside the v1 subset SHALL be rejected after parsing and before any SQL is executed, with `Unsupported { feature }` naming the construct. This SHALL cover at least: `DESCRIBE` (`"DESCRIBE"`), `SERVICE` with a variable or with an IRI that is not a time IRI, that is federation (`"SERVICE"`), custom aggregates, the functions listed as unsupported, and the property paths of the interim path requirement. Property paths inside `GRAPH` or under a `FROM <g>` default graph SHALL be rejected with `"named graph path"`. A rejected query SHALL return no partial results. `SERVICE` with a `tm:` time IRI is not federation: it is the per-group time scope of the temporal dataset capability. `GRAPH` with a `tm:` IRI is a `Parse` error that names `SERVICE`, as that capability specifies. `GRAPH`, `GRAPH ?g`, `FROM` and `FROM NAMED` with other IRIs are named graphs, specified by the `named-graphs` capability.
+
+#### Scenario: Federated SERVICE is rejected
+- **WHEN** `SELECT * WHERE { SERVICE <http://dbpedia.org/sparql> { ?s ?p ?o } }` is submitted
+- **THEN** the request fails with `Unsupported { feature: "SERVICE" }`
+
+#### Scenario: GRAPH variable is evaluated
+- **WHEN** `SELECT ?g WHERE { GRAPH ?g { ?s ?p ?o } }` is submitted on a store where one statement is a member of `<g1>`
+- **THEN** one row with `g = <g1>` is returned and no error is raised
+
+#### Scenario: Path inside GRAPH is rejected
+- **WHEN** `SELECT ?x WHERE { GRAPH <g1> { v:a v:knows+ ?x } }` is submitted
+- **THEN** the request fails with `Unsupported { feature: "named graph path" }`
