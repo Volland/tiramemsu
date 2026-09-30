@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Questions only layers can answer: tiramemsu</title>
+<meta name="description" content="Recipes that combine statement ids, layers, transaction metadata, paths and two clocks: evidence through time, impact analysis, cited answers, contradictions, portable facts and more.">
+<link rel="icon" href="../assets/logo.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+<header class="top"><div class="wrap">
+  <a class="brand" href="../"><img src="../assets/logo.svg" alt="">Tiramemsu</a>
+  <nav class="menu"><a href="../#features">Features</a><a href="../#start">Quick start</a><a href="./" aria-current="page">Articles</a><a href="https://github.com/Volland/tiramemsu">GitHub</a></nav>
+</div></header>
+
+<article class="post">
+<h1>Questions only layers can answer</h1>
+<p class="meta">Tiramemsu articles · 30 September 2026</p>
+
+<p>None of tiramemsu's ingredients is new on its own. RDF-star annotates edges, Datomic makes transactions into entities, XTDB keeps two clocks, Graphiti gives edges validity windows. What is unusual is that they meet in one row. Every statement, and every layer on it, has an id, both clocks, a structural link to what it is about, and a row that is never deleted. This article collects the questions that combination answers in one query. Each one is a test in the repository (<code>crates/tiramemsu/tests/recipes.rs</code> and the feature suites), and the design notes are in <a href="https://github.com/Volland/tiramemsu/blob/main/lat.md/recipes.md"><code>lat.md/recipes.md</code></a>.</p>
+<p>The examples use one small memory: <code>e1 = (alice worksAt acme)</code>, a confidence and a source on <code>e1</code>, a derivation from a document statement, and a belief <code>belief9</code> supported by <code>e1</code>. If layers are new to you, start with <a href="layered-graphs.html">Layered graphs, explained</a>.</p>
+
+<h2>1. What did this belief rest on, back then?</h2>
+<p>A property path can start at a belief, land on a statement id, and keep walking through links between statements. Put it in a time scope and the walk sees the links as they were:</p>
+<pre><code>SELECT ?src WHERE {
+  SERVICE &lt;urn:tiramemsu:tm:asOf/150&gt; {
+    v:belief9 v:supportedBy/v:derivedFrom* ?src } }</code></pre>
+<p>If the derivation link was retracted after transaction 150, today's answer is <code>e1</code> alone, and the answer as of 150 also includes the document statement. The virtual hop <code>sys:subject</code> steps from a statement to its subject, so <code>v:belief9 v:supportedBy/sys:subject ?who</code> gives the person the belief is ultimately about. A property graph cannot point an edge at an edge, an RDF-star store cannot run a property path through a quoted triple, and a datom has no id to walk to.</p>
+
+<h2>2. What breaks if I retract this?</h2>
+<p>Retracting a fact retracts everything about it, recursively. <code>View::dependents(eid)</code> lists that set without taking the write lock, on any view:</p>
+<pre><code><span class="c">// what a retraction of e1 would take with it, and what depended on it back then</span>
+let at_risk = db.now().dependents(e1)?;
+let then    = db.as_of(TimeRef::Tx(150)).dependents(e1)?;</code></pre>
+<p>It is also a path query, because the inverse virtual hops step from a statement to the statements about it. A property test checks, over random layered graphs with cycles, that these three are the same set: the dependents, the list a dry-run retraction reports, and the ends of this path:</p>
+<pre><code>SELECT "end" FROM tm_path(:e1, '(^sys:subject|^sys:object)*', 'REACH')</code></pre>
+
+<h2>3. Who wrote this, and why was that forgotten?</h2>
+<p>A transaction is a node, and its metadata is ordinary triples. The hop from a statement to its transaction is a virtual predicate, so provenance needs no annotation on each fact:</p>
+<pre><code><span class="c"># every employment fact agent7 wrote</span>
+SELECT ?who ?c WHERE { ?who v:worksAt ?c ~ ?r . ?r tm:txAdded ?t . ?t sys:author v:agent7 }
+
+<span class="c"># why facts were retracted</span>
+SELECT ?who ?why FROM &lt;urn:tiramemsu:tm:history&gt; WHERE {
+  ?who v:worksAt ?c ~ ?r . ?r tm:txRetracted ?t . ?t sys:reason ?why }</code></pre>
+
+<h2>4. How was this fact corrected over time?</h2>
+<p>Every correction writes <code>sys:supersedes</code> from the new version to the old one, and replays the fact's layers onto the new version. The whole lineage is one path:</p>
+<pre><code>SELECT ?old WHERE { v:alice v:age ?a ~ ?r . ?r sys:supersedes+ ?old }</code></pre>
+
+<h2>5. Where do my sources disagree?</h2>
+<p>Two live facts with the same subject and predicate, different objects, overlapping valid time and different authors. A single-valued predicate would have refused the second one on write. For the others, this finds the conflict on read, and a later job that overlaps neither is not reported:</p>
+<pre><code>SELECT ?s ?o1 ?o2 ?a1 ?a2 WHERE {
+  ?s v:worksAt ?o1 ~ ?r1 . ?s v:worksAt ?o2 ~ ?r2 . FILTER(STR(?o1) &lt; STR(?o2))
+  ?r1 tm:txAdded ?t1 . ?t1 sys:author ?a1 .
+  ?r2 tm:txAdded ?t2 . ?t2 sys:author ?a2 . FILTER(?a1 != ?a2)
+  OPTIONAL { ?r1 tm:validFrom ?f1 } OPTIONAL { ?r1 tm:validTo ?u1 }
+  OPTIONAL { ?r2 tm:validFrom ?f2 } OPTIONAL { ?r2 tm:validTo ?u2 }
+  FILTER((!BOUND(?f1) || !BOUND(?u2) || ?f1 &lt; ?u2) &amp;&amp;
+         (!BOUND(?f2) || !BOUND(?u1) || ?f2 &lt; ?u1)) }</code></pre>
+
+<h2>6. How late did we learn it?</h2>
+<p><code>tm:addedAt</code> is the wall-clock instant a statement was recorded; <code>tm:validFrom</code> is when it became true. Their difference is how late memory learned the fact, and only a store with both clocks on every statement can compute it:</p>
+<pre><code><span class="c">// Cypher: learned more than $days days after it became true</span>
+MATCH (a)-[r:worksAt]-&gt;(c)
+WHERE r.addedAt.epochMillis - r.validFrom.epochMillis &gt; $days * 86400000
+RETURN a, c
+
+<span class="c"># SPARQL: recorded after it had already stopped being true</span>
+SELECT ?s WHERE { ?s v:worksAt ?o ~ ?r . ?r tm:addedAt ?a ; tm:validTo ?to FILTER(?a &gt; ?to) }</code></pre>
+
+<h2>7. Which of my answers are stale?</h2>
+<p>With provenance switched on, every SPARQL row carries the ids of the stored statements that produced it: the matched patterns, the optional parts that matched, the union branch taken, annotations and graph memberships. An agent keeps them with its answer. Later, a cited id that is no longer live marks the answer as stale, and the history view says which transaction retracted it:</p>
+<pre><code>let rows  = view.sparql_with(q, &amp;SparqlOptions { provenance: true })?;
+let cited = rows.solutions().unwrap().provenance(0).unwrap();   <span class="c">// sorted statement ids</span></code></pre>
+<pre><code>SELECT ?e ?t FROM &lt;urn:tiramemsu:tm:history&gt; WHERE {
+  VALUES ?e { &lt;urn:tiramemsu:stmt:12&gt; &lt;urn:tiramemsu:stmt:19&gt; } ?e tm:txRetracted ?t }</code></pre>
+<p>Rows are exactly the rows of the same query without provenance; a corpus test runs every differential query both ways. Recursive paths do not cite their hops yet.</p>
+
+<h2>8. Can I hand this fact to another agent?</h2>
+<p>Tiramemsu is one SQLite file per agent. A bundle is one fact with everything about it and everything it rests on, ready to move to another file:</p>
+<pre><code>let bundle = agent_a.now().bundle(e1)?.to_json();     <span class="c">// "tiramemsu-bundle/1"</span>
+agent_b.transact(TxOptions::default(), |tx| {
+    tx.meta(Value::iri(vocab::SYS_SOURCE), v("agentA"))?;
+    tx.import_bundle(&amp;Bundle::from_json(&amp;bundle)?)?;
+    Ok(())
+})?;</code></pre>
+<p>Import asserts, so importing twice changes nothing, and a fact the other agent already knows gains the new layers on its own id. Transaction ids and confirmations stay behind, because they only mean something in the file that wrote them. <code>to_ntriples()</code> writes the same bundle as RDF 1.2 with reifiers, for other RDF tools.</p>
+
+<h2>9. Can I stop layers from rotting?</h2>
+<p>A schema flag says what a layer predicate may annotate. With <code>(v:confidence sys:subjectType sys:STMT)</code>, a confidence written on a node by mistake is rejected with <code>SubjectTypeMismatch</code> on every write path, API, SPARQL and Cypher alike, and a flag that live data already violates is refused with the list of violating ids.</p>
+
+<!-- paths -->
+
+<h2>What is not new, and what is still missing</h2>
+<p>Each recipe could be built elsewhere with enough glue: a side table for statement ids, a history table per relation, a job that recomputes impact. The point is that here they are the same row and one query, and they stay exact under time travel because nothing is deleted.</p>
+<p class="note">Still open: merging two agents' files as a whole needs ids that mean the same thing in both. A proposal to reserve origin bits in every id is in <code>openspec/changes/reserve-replica-id</code> and waits for a decision. Ranking text and vector search results by how well a memory is supported is part of the planned retrieval milestone.</p>
+<p><a href="layered-graphs.html">← Layered graphs, explained</a> · <a href="time-travel.html">Time travel, explained →</a></p>
+</article>
+
+<footer><div class="wrap">
+  <span>Tiramemsu · MIT OR Apache-2.0 · <a href="https://github.com/Volland/tiramemsu">github.com/Volland/tiramemsu</a></span>
+  <span><a href="../">Home</a> · <a href="./">All articles</a></span>
+  <span><a href="../impressum.html">Impressum</a> · <a href="../datenschutz.html">Datenschutz</a> · <a href="../agb.html">AGB</a></span>
+</div></footer>
+</body>
+</html>

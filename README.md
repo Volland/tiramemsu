@@ -44,6 +44,22 @@ Early feedback from the people it is for. We made these up, but each one is abou
 
 > “My orchestrator speaks SPARQL and my intern speaks Cypher. They now share one store and, for the first time, one opinion.” — a multi-agent swarm, on two query languages
 
+## Questions only layers can answer
+
+Every statement and every layer on it has an id, both clocks, a structural link to what it is about, and a row that is never deleted. Together those answer questions that usually need glue code, each in one query. All of these are tests; the queries are in [`lat.md/recipes.md`](lat.md/recipes.md) and explained in [the article](site/articles/layer-recipes.html).
+
+| Question | How |
+|---|---|
+| What did this belief rest on, back then? | A path from the belief through statement ids, inside `SERVICE <tm:asOf/150>` |
+| What breaks if I retract this? | `View::dependents(eid)` on any view, with no write lock; equal to the path `(^sys:subject\|^sys:object)*` |
+| Who wrote this, and why was that forgotten? | `?r tm:txAdded ?t . ?t sys:author ?who`, and `tm:txRetracted` → `sys:reason` |
+| How was this fact corrected over time? | `?r sys:supersedes+ ?old` |
+| Where do my sources disagree? | Same subject and predicate, different objects, overlapping valid time, different authors |
+| How late did we learn it? | `tm:addedAt` / `r.addedAt` against `tm:validFrom` / `tm:validTo` |
+| Which of my answers are stale? | `View::sparql_with(q, &SparqlOptions { provenance: true })` cites the statement ids behind every row |
+| Can I hand this fact to another agent? | `View::bundle(eid)` exports it with its layers and evidence; `Tx::import_bundle` asserts it idempotently |
+| Can I stop layers from rotting? | `(v:confidence sys:subjectType sys:STMT)` rejects a confidence on anything but a statement |
+
 ## Architecture
 
 ```mermaid
