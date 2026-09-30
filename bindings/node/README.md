@@ -1,4 +1,4 @@
-<p align="center"><img src="https://volland.github.io/tiramemsu/assets/logo.svg" width="140" alt="Tiramemsu: a brain taking a bite out of a tiramisu whose layers are a graph"></p>
+<p align="center"><img src="https://cdn.jsdelivr.net/gh/Volland/tiramemsu@main/site/assets/logo.svg" width="140" alt="Tiramemsu: a brain taking a bite out of a tiramisu whose layers are a graph"></p>
 
 <h1 align="center">@tiramemsu/node</h1>
 
