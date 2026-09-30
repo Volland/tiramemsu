@@ -1,0 +1,8 @@
+---
+source: crates/tm-sparql/tests/lower_exprs.rs
+expression: "ir(\"SELECT (NOW() AS ?n) WHERE { }\")"
+---
+; Homomorphism Unbound SetOfTriples
+(project [?n]
+  (extend ?n "1970-01-01T00:00:00.000Z"^^<http://www.w3.org/2001/XMLSchema#dateTime>
+    (join)))

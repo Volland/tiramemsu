@@ -1,0 +1,7 @@
+; Homomorphism Unbound SetOfTriples
+(project [?~ask]
+  (orderLimit [] :limit 1
+    (extend ?~ask true
+      (project []
+        (filter (= "2026-03-01T12:00:00.000+02:00"^^<http://www.w3.org/2001/XMLSchema#dateTime> "2026-03-01T10:00:00.000Z"^^<http://www.w3.org/2001/XMLSchema#dateTime>)
+          (join))))))

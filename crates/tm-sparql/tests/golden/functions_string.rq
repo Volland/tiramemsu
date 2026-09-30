@@ -1,0 +1,1 @@
+SELECT (UCASE(STRBEFORE(?n, "l")) AS ?f) (STRLEN(?n) AS ?len) WHERE { v:alice v:name ?n }

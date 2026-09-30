@@ -1,0 +1,1 @@
+SELECT ?c ?m WHERE { v:alice v:worksAt v:acme {| v:confidence ?c ~ ?r2 {| v:method ?m |} |} }

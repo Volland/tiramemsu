@@ -1,0 +1,8 @@
+---
+source: crates/tm-sparql/tests/lower_patterns.rs
+expression: "ir(\"CONSTRUCT { ?c v:employs ?p } WHERE { ?p v:worksAt ?c }\")"
+---
+; Homomorphism Unbound SetOfTriples
+(project [?c ?p]
+  (project [?c ?p]
+    (triple ?p <urn:tiramemsu:v:worksAt> ?c :view now)))

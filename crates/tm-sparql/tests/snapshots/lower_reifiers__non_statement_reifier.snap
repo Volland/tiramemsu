@@ -1,0 +1,10 @@
+---
+source: crates/tm-sparql/tests/lower_reifiers.rs
+expression: "ir(\"ASK { v:alice v:worksAt v:acme ~ v:someIri }\")"
+---
+; Homomorphism Unbound SetOfTriples
+(project [?~ask]
+  (orderLimit [] :limit 1
+    (extend ?~ask true
+      (project []
+        (values [])))))

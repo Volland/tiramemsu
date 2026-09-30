@@ -1,0 +1,8 @@
+---
+source: crates/tm-sparql/tests/lower_patterns.rs
+expression: "ir(\"SELECT ?p WHERE { ?p a v:Person FILTER NOT EXISTS { ?p v:banned true } }\")"
+---
+; Homomorphism Unbound SetOfTriples
+(project [?p]
+  (filter (notExists (triple ?p <urn:tiramemsu:v:banned> true :view now))
+    (triple ?p <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <urn:tiramemsu:v:Person> :view now)))

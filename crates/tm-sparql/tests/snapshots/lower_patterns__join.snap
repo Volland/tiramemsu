@@ -1,0 +1,9 @@
+---
+source: crates/tm-sparql/tests/lower_patterns.rs
+expression: "ir(\"SELECT ?p ?city WHERE { ?p v:worksAt ?c . ?c v:locatedIn ?city }\")"
+---
+; Homomorphism Unbound SetOfTriples
+(project [?p ?city]
+  (join
+    (triple ?p <urn:tiramemsu:v:worksAt> ?c :view now)
+    (triple ?c <urn:tiramemsu:v:locatedIn> ?city :view now)))

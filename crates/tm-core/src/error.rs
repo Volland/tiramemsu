@@ -23,6 +23,28 @@ pub enum Position {
     Value,
 }
 
+/// The query language a [`Error::Parse`] failure belongs to.
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
+pub enum Dialect {
+    /// SPARQL 1.1 / 1.2 query or update text.
+    Sparql,
+    /// Cypher text.
+    Cypher,
+    /// A `tm_path` path expression.
+    Path,
+}
+
+/// Where parsing failed: 1-based line and column, and the byte offset.
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
+pub struct Span {
+    /// 1-based line.
+    pub line: usize,
+    /// 1-based column.
+    pub column: usize,
+    /// Byte offset into the text.
+    pub offset: usize,
+}
+
 /// Every failure of the store. A failed transaction leaves no trace.
 #[non_exhaustive]
 #[derive(Debug, thiserror::Error)]
@@ -81,6 +103,16 @@ pub enum Error {
         /// Highest version this build supports.
         supported: i64,
     },
+    /// Query text that is not valid in its dialect (`lat.md/api#Errors`).
+    #[error("{dialect:?} parse error{}: {msg}", span.map(|s| format!(" at {}:{}", s.line, s.column)).unwrap_or_default())]
+    Parse {
+        /// The language of the text.
+        dialect: Dialect,
+        /// Where it failed, when known.
+        span: Option<Span>,
+        /// What was wrong.
+        msg: String,
+    },
     /// A feature reserved for a later milestone.
     #[error("unsupported: {feature}")]
     Unsupported {
@@ -136,6 +168,15 @@ impl Error {
     /// Wraps a caller error as [`Error::Custom`].
     pub fn custom(e: impl Into<Box<dyn std::error::Error + Send + Sync>>) -> Error {
         Error::Custom(e.into())
+    }
+
+    /// An [`Error::Parse`] of `dialect`.
+    pub fn parse(dialect: Dialect, span: Option<Span>, msg: impl Into<String>) -> Error {
+        Error::Parse {
+            dialect,
+            span,
+            msg: msg.into(),
+        }
     }
 
     /// An [`Error::InvalidQuery`] with `msg`.

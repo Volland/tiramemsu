@@ -1,0 +1,2 @@
+<urn:tiramemsu:v:alice> <urn:tiramemsu:v:hasAge> "41"^^<http://www.w3.org/2001/XMLSchema#integer> .
+<urn:tiramemsu:v:carol> <urn:tiramemsu:v:hasAge> "25"^^<http://www.w3.org/2001/XMLSchema#integer> .

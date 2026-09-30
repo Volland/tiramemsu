@@ -1,0 +1,1 @@
+SELECT * WHERE { SERVICE SILENT <urn:tiramemsu:tm:asOf/yesterday> { ?s ?p ?o } }

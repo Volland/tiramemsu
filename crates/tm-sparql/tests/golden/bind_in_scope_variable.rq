@@ -1,0 +1,1 @@
+SELECT ?a WHERE { v:alice v:age ?a BIND(1 AS ?a) }

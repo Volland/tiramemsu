@@ -23,7 +23,7 @@ pub mod vocab;
 
 pub use clock::{Clock, ManualClock, SystemClock};
 pub use engine::{IntoObject, PredicateSchema, Store, StoreOptions, Tx};
-pub use error::{Error, Position, Result};
+pub use error::{Dialect, Error, Position, Result, Span};
 pub use event::{Event, Op};
 pub use exec::{
     AggregateFunction, AggregateState, Capabilities, Executor, Host, HostOptions, HostRegistry,

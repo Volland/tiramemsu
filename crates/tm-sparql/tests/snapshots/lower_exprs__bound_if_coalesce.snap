@@ -1,0 +1,12 @@
+---
+source: crates/tm-sparql/tests/lower_exprs.rs
+expression: "ir(\"SELECT (IF(BOUND(?b), 1, 2) AS ?x) (COALESCE(?b, ?a, 0) AS ?y) (sameTerm(?a, ?a) AS ?z) WHERE { ?p v:age ?a OPTIONAL { ?p v:b ?b } }\")"
+---
+; Homomorphism Unbound SetOfTriples
+(project [?x ?y ?z]
+  (extend ?z (sameTerm ?a ?a)
+    (extend ?y (coalesce ?b ?a 0)
+      (extend ?x (if (bound ?b) 1 2)
+        (leftJoin
+          (triple ?p <urn:tiramemsu:v:age> ?a :view now)
+          (triple ?p <urn:tiramemsu:v:b> ?b :view now))))))

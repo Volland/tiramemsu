@@ -123,6 +123,7 @@ pub struct Db {
     engine: Option<QueryEngine>,
     caps: Capabilities,
     path: PathBuf,
+    clock: Arc<dyn Clock>,
 }
 
 impl std::fmt::Debug for Db {
@@ -199,7 +200,13 @@ impl Db {
             engine,
             caps,
             path: path.to_path_buf(),
+            clock: opts.clock.clone(),
         })
+    }
+
+    /// The database clock (`NOW()` in SPARQL).
+    pub(crate) fn now_ms(&self) -> i64 {
+        self.clock.now_ms()
     }
 
     /// The capabilities declared by the host, for crates that need one.

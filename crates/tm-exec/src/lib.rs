@@ -39,6 +39,7 @@ pub mod result;
 pub mod scan;
 pub mod sqlgen;
 pub mod udf;
+pub mod udf_fn;
 pub mod virtual_pred;
 
 use std::sync::{Arc, Mutex};

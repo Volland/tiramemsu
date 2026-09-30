@@ -1,0 +1,1 @@
+SELECT ?t WHERE { ?r rdf:reifies ?t }

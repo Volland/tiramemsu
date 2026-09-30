@@ -1,0 +1,8 @@
+---
+source: crates/tm-sparql/tests/lower_modifiers.rs
+expression: "ir(\"SELECT ?s WHERE { ?s v:knows ?o } LIMIT 3\")"
+---
+; Homomorphism Unbound SetOfTriples
+(project [?s]
+  (orderLimit [] :limit 3
+    (triple ?s <urn:tiramemsu:v:knows> ?o :view now)))

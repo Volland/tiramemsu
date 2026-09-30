@@ -414,6 +414,13 @@ impl<'a> Tx<'a> {
         }
     }
 
+    /// Runs a read on this transaction's connection: the closure sees the
+    /// transaction's own uncommitted statements and terms. It is meant for queries
+    /// (`SELECT`); the executor is the writer, so callers must not write through it.
+    pub fn read_with<R>(&mut self, f: impl FnOnce(&mut dyn Executor) -> Result<R>) -> Result<R> {
+        f(&mut *self.exec)
+    }
+
     /// Encodes a value, interning it if needed.
     pub fn encode(&mut self, v: impl IntoObject) -> Result<ObjectId> {
         v.into_object(self)

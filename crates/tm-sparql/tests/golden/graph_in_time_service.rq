@@ -1,0 +1,1 @@
+SELECT * WHERE { SERVICE <urn:tiramemsu:tm:asOf/150> { GRAPH <http://example.org/g> { ?s ?p ?o } } }

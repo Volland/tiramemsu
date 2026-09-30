@@ -1,0 +1,1 @@
+SELECT ?p WHERE { ?p v:worksAt _:c . _:c v:locatedIn v:berlin }

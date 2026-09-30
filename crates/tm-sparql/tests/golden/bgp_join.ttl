@@ -1,0 +1,7 @@
+@prefix v: <urn:tiramemsu:v:> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+v:alice v:worksAt v:acme ; v:name "Alice" ; v:age 41 .
+v:bob v:worksAt v:acme ; v:name "Bob" .
+v:carol v:worksAt v:initech ; v:age 25 ; v:name "Carol" .
+v:acme v:locatedIn v:berlin .

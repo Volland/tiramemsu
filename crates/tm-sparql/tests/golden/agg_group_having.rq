@@ -1,0 +1,1 @@
+SELECT ?c (COUNT(?p) AS ?n) WHERE { ?p v:worksAt ?c } GROUP BY ?c HAVING (COUNT(?p) > 1) ORDER BY ?c

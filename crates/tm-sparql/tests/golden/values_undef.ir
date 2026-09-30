@@ -1,0 +1,5 @@
+; Homomorphism Unbound SetOfTriples
+(project [?p ?a]
+  (join
+    (triple ?p <urn:tiramemsu:v:age> ?a :view now)
+    (values [?p ?a] (UNDEF 30))))

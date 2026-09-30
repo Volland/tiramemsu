@@ -1,0 +1,1 @@
+SELECT ?n WHERE { <urn:tiramemsu:node:1> v:name ?n }

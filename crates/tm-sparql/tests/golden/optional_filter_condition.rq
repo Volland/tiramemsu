@@ -1,0 +1,1 @@
+SELECT ?p ?age WHERE { ?p v:name ?n OPTIONAL { ?p v:age ?age FILTER(?age > 30) } } ORDER BY ?p

@@ -1,0 +1,1 @@
+SELECT (PREDICATE(?p) AS ?x) WHERE { ?p v:name ?n }

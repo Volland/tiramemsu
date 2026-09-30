@@ -1,0 +1,1 @@
+SELECT * WHERE { SERVICE <http://dbpedia.org/sparql> { ?s ?p ?o } }

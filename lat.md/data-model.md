@@ -172,6 +172,7 @@ Cypher names and RDF IRIs map through one configurable `@vocab` base plus a pref
 - **Cypher → IRI:** a bare name (label, relationship type, property key) resolves to `@vocab` + name, verbatim with no case change. A backticked CURIE such as `` `schema:name` `` resolves through the prefix table.
 - **IRI → Cypher:** an IRI under `@vocab` shows as its local name. Otherwise it shows as a CURIE if a prefix matches, else as the full IRI in backticks.
 - **Labels:** a Cypher label is an `rdf:type` triple. `labels(n)` returns the objects of `rdf:type` for `n`.
+- SPARQL predeclares `rdf`, `rdfs`, `xsd`, `sys`, `tm`, `v` (the `@vocab`) and every prefix of the table, so `v:name` needs no `PREFIX`. A `PREFIX` in the query overrides a predeclared one.
 - The default `@vocab` is `urn:tiramemsu:v:`. It is set per database as `(sys:db sys:vocab <iri>)`. Prefixes are `(sys:db sys:prefix [sys:prefixName "schema"; sys:prefixIri <https://schema.org/>])`, stored as a small layer.
 
 ### Reserved Namespaces

@@ -1,0 +1,6 @@
+<urn:tiramemsu:v:alice> <urn:tiramemsu:v:card> _:b .
+<urn:tiramemsu:v:bob> <urn:tiramemsu:v:card> _:b .
+<urn:tiramemsu:v:carol> <urn:tiramemsu:v:card> _:b .
+_:b <urn:tiramemsu:v:name> "Alice" .
+_:b <urn:tiramemsu:v:name> "Bob" .
+_:b <urn:tiramemsu:v:name> "Carol" .

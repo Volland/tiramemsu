@@ -1,0 +1,8 @@
+---
+source: crates/tm-sparql/tests/lower_modifiers.rs
+expression: "ir(\"SELECT ?n WHERE { ?p v:name ?n } ORDER BY DESC(?n) LIMIT 2 OFFSET 1\")"
+---
+; Homomorphism Unbound SetOfTriples
+(project [?n]
+  (orderLimit [(desc ?n)] :skip 1 :limit 2
+    (triple ?p <urn:tiramemsu:v:name> ?n :view now)))

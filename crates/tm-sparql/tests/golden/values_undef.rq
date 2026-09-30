@@ -1,0 +1,1 @@
+SELECT ?p ?a WHERE { ?p v:age ?a } VALUES (?p ?a) { (UNDEF 30) }

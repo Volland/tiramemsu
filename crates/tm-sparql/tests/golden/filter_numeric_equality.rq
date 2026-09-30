@@ -1,0 +1,1 @@
+ASK { v:alice v:age ?a FILTER(?a = 41.0) }

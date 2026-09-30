@@ -1,0 +1,25 @@
+[package]
+name = "tm-sparql"
+description = "Tiramemsu SPARQL 1.1/1.2 front end: parsing, lowering to the query IR, updates and result serialisation"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+tm-core = { workspace = true }
+tm-ir = { workspace = true }
+spargebra = { version = "0.4.7", features = ["sparql-12"] }
+peg = "0.8"
+
+[dev-dependencies]
+tiramemsu = { workspace = true }
+tempfile = "3"
+toml = "0.8"
+oxttl = { version = "0.2", features = ["rdf-12"] }
+sparesults = { version = "0.3", features = ["sparql-12"] }
+insta = "1"
+proptest = "1"
+
+[lints]
+workspace = true

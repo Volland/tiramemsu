@@ -1,0 +1,8 @@
+---
+source: crates/tm-sparql/tests/lower_patterns.rs
+expression: "ir(\"SELECT ?p WHERE { ?p v:age ?a FILTER(?a > 30) }\")"
+---
+; Homomorphism Unbound SetOfTriples
+(project [?p]
+  (filter (> ?a 30)
+    (triple ?p <urn:tiramemsu:v:age> ?a :view now)))

@@ -1,0 +1,1 @@
+SELECT ?a ?c WHERE { ?a v:knows ?b . ?c v:knows ?d }

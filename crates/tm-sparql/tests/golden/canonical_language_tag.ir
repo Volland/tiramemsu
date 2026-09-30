@@ -1,0 +1,5 @@
+; Homomorphism Unbound SetOfTriples
+(project [?l]
+  (extend ?l (LANG ?g)
+    (filter (= ?g "Hallo"@de)
+      (triple <urn:tiramemsu:v:alice> <urn:tiramemsu:v:greeting> ?g :view now))))

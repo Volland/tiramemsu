@@ -1,0 +1,7 @@
+---
+source: crates/tm-sparql/tests/lower_modifiers.rs
+expression: "ir(\"SELECT REDUCED ?s WHERE { ?s v:knows ?o }\")"
+---
+; Homomorphism Unbound SetOfTriples
+(project [?s]
+  (triple ?s <urn:tiramemsu:v:knows> ?o :view now))

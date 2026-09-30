@@ -1,0 +1,1 @@
+CONSTRUCT { ?s v:worksAt ?o ~ ?r {| v:confidence ?c |} } WHERE { ?s v:worksAt ?o ~ ?r {| v:confidence ?c |} }

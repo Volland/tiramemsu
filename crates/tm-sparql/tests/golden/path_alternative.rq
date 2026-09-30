@@ -1,0 +1,1 @@
+SELECT ?x WHERE { v:alice v:a|v:b ?x }

@@ -1,0 +1,10 @@
+---
+source: crates/tm-sparql/tests/lower_reifiers.rs
+expression: "ir(\"SELECT ?c ?m WHERE { v:alice v:worksAt v:acme {| v:confidence ?c ~ ?r2 {| v:method ?m |} |} }\")"
+---
+; Homomorphism Unbound SetOfTriples
+(project [?c ?m]
+  (join
+    (triple ?~b0 <urn:tiramemsu:v:confidence> ?c :view now :eid ?r2)
+    (triple ?r2 <urn:tiramemsu:v:method> ?m :view now)
+    (triple <urn:tiramemsu:v:alice> <urn:tiramemsu:v:worksAt> <urn:tiramemsu:v:acme> :view now :eid ?~b0)))

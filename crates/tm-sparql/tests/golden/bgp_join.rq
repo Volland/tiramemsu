@@ -1,0 +1,1 @@
+SELECT ?p ?city WHERE { ?p v:worksAt ?c . ?c v:locatedIn ?city }

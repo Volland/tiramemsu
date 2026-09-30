@@ -92,6 +92,66 @@ pub enum Func {
     StrEnds,
     /// `REGEX(x, pattern [, flags])`.
     Regex,
+    /// `isBlank(x)`.
+    IsBlank,
+    /// `LANGMATCHES(tag, range)`.
+    LangMatches,
+    /// `IRI(x)` / `URI(x)`: an IRI from a string or IRI.
+    Iri,
+    /// `STRDT(lex, datatype)`.
+    StrDt,
+    /// `STRLANG(lex, tag)`.
+    StrLang,
+    /// `SUBSTR(x, start [, length])`, 1-based.
+    Substr,
+    /// `STRBEFORE(x, y)`.
+    StrBefore,
+    /// `STRAFTER(x, y)`.
+    StrAfter,
+    /// `CONCAT(x, ...)`.
+    Concat,
+    /// `ENCODE_FOR_URI(x)`.
+    EncodeForUri,
+    /// `REPLACE(x, pattern, replacement [, flags])`.
+    Replace,
+    /// `ABS(x)`.
+    Abs,
+    /// `CEIL(x)`.
+    Ceil,
+    /// `FLOOR(x)`.
+    Floor,
+    /// `ROUND(x)`.
+    Round,
+    /// `YEAR(dt)` in the stored offset.
+    Year,
+    /// `MONTH(dt)`.
+    Month,
+    /// `DAY(dt)`.
+    Day,
+    /// `HOURS(dt)`.
+    Hours,
+    /// `MINUTES(dt)`.
+    Minutes,
+    /// `SECONDS(dt)`.
+    Seconds,
+    /// `TIMEZONE(dt)`: an `xsd:dayTimeDuration`, an error without a timezone.
+    Timezone,
+    /// `TZ(dt)`: the offset text, `""` without one.
+    Tz,
+    /// The `xsd:string(x)` cast.
+    CastString,
+    /// The `xsd:integer(x)` cast.
+    CastInteger,
+    /// The `xsd:decimal(x)` cast.
+    CastDecimal,
+    /// The `xsd:double(x)` cast.
+    CastDouble,
+    /// The `xsd:boolean(x)` cast.
+    CastBoolean,
+    /// The `xsd:date(x)` cast.
+    CastDate,
+    /// The `xsd:dateTime(x)` cast.
+    CastDateTime,
 }
 
 impl Func {
@@ -111,6 +171,36 @@ impl Func {
             Func::StrStarts => "STRSTARTS",
             Func::StrEnds => "STRENDS",
             Func::Regex => "REGEX",
+            Func::IsBlank => "isBlank",
+            Func::LangMatches => "LANGMATCHES",
+            Func::Iri => "IRI",
+            Func::StrDt => "STRDT",
+            Func::StrLang => "STRLANG",
+            Func::Substr => "SUBSTR",
+            Func::StrBefore => "STRBEFORE",
+            Func::StrAfter => "STRAFTER",
+            Func::Concat => "CONCAT",
+            Func::EncodeForUri => "ENCODE_FOR_URI",
+            Func::Replace => "REPLACE",
+            Func::Abs => "ABS",
+            Func::Ceil => "CEIL",
+            Func::Floor => "FLOOR",
+            Func::Round => "ROUND",
+            Func::Year => "YEAR",
+            Func::Month => "MONTH",
+            Func::Day => "DAY",
+            Func::Hours => "HOURS",
+            Func::Minutes => "MINUTES",
+            Func::Seconds => "SECONDS",
+            Func::Timezone => "TIMEZONE",
+            Func::Tz => "TZ",
+            Func::CastString => "xsd:string",
+            Func::CastInteger => "xsd:integer",
+            Func::CastDecimal => "xsd:decimal",
+            Func::CastDouble => "xsd:double",
+            Func::CastBoolean => "xsd:boolean",
+            Func::CastDate => "xsd:date",
+            Func::CastDateTime => "xsd:dateTime",
         }
     }
 }

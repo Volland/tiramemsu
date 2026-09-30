@@ -1,0 +1,8 @@
+---
+source: crates/tm-sparql/tests/lower_exprs.rs
+expression: "ir(\"SELECT ?p WHERE { ?p v:age ?a FILTER((?a > 1 && ?a < 9) || !(?a = 5) || ?a IN (1, 2) || ?a NOT IN (3)) }\")"
+---
+; Homomorphism Unbound SetOfTriples
+(project [?p]
+  (filter (or (and (> ?a 1) (< ?a 9)) (not (= ?a 5)) (in ?a 1 2) (notIn ?a 3))
+    (triple ?p <urn:tiramemsu:v:age> ?a :view now)))

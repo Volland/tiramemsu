@@ -1,0 +1,7 @@
+---
+source: crates/tm-sparql/tests/lower_modifiers.rs
+expression: "ir(\"SELECT ?p WHERE { v:acme ^v:worksAt ?p }\")"
+---
+; Homomorphism Unbound SetOfTriples
+(project [?p]
+  (triple ?p <urn:tiramemsu:v:worksAt> <urn:tiramemsu:v:acme> :view now))

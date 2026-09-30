@@ -1,0 +1,1 @@
+SELECT ?r WHERE { v:alice v:worksAt v:acme ~ ?r }

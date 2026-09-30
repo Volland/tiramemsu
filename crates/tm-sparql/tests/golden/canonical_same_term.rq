@@ -1,0 +1,1 @@
+ASK { FILTER(sameTerm("01"^^xsd:integer, 1)) }

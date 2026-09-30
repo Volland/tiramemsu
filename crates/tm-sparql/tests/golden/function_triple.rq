@@ -1,0 +1,1 @@
+SELECT (TRIPLE(?p, ?p, ?p) AS ?x) WHERE { ?p v:name ?n }

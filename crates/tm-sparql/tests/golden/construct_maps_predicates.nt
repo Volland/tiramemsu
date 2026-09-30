@@ -1,0 +1,3 @@
+<urn:tiramemsu:v:acme> <urn:tiramemsu:v:employs> <urn:tiramemsu:v:alice> .
+<urn:tiramemsu:v:acme> <urn:tiramemsu:v:employs> <urn:tiramemsu:v:bob> .
+<urn:tiramemsu:v:initech> <urn:tiramemsu:v:employs> <urn:tiramemsu:v:carol> .

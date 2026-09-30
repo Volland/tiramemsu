@@ -1,0 +1,4 @@
+; Homomorphism Unbound SetOfTriples
+(project [?p]
+  (filter (notExists (triple ?p <urn:tiramemsu:v:banned> true :view now))
+    (triple ?p <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <urn:tiramemsu:v:Person> :view now)))

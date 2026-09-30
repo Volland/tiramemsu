@@ -1,0 +1,1 @@
+SELECT ?p ?n WHERE { { SELECT ?p WHERE { ?p v:age ?a } ORDER BY DESC(?a) LIMIT 1 } OPTIONAL { ?p v:name ?n } }

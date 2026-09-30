@@ -133,7 +133,14 @@ impl Gen<'_> {
                     "CASE WHEN ({x} & 15) = 5 THEN ({x} >> 4) WHEN ({x} & 15) IN (13, 14) THEN {n} END"
                 )
             }
-            Dom::Computed(VClass::Bool) => format!("CASE WHEN {x} IS NULL THEN NULL END"),
+            // strings, IRIs, boxed literals and booleans are not numbers: arithmetic
+            // on them is an error (NULL), never SQLite's text-to-number coercion
+            Dom::Computed(VClass::Bool | VClass::Str | VClass::Iri | VClass::Lit) => {
+                format!("CASE WHEN {x} IS NULL THEN NULL END")
+            }
+            Dom::Computed(VClass::Dynamic) => {
+                format!("CASE WHEN typeof({x}) IN ('integer', 'real') THEN {x} END")
+            }
             _ => x.to_string(),
         }
     }
@@ -146,6 +153,7 @@ impl Gen<'_> {
                 format!("tm_str({x}, CASE WHEN ({x} & 15) IN {DICT_TAGS} THEN {lex} END)")
             }
             Dom::Computed(VClass::Str | VClass::Iri) => x.to_string(),
+            Dom::Computed(VClass::Lit) => format!("tm_lit_lex({x})"),
             Dom::Computed(VClass::Bool) => {
                 format!("CASE WHEN {x} IS NULL THEN NULL WHEN {x} THEN 'true' ELSE 'false' END")
             }
@@ -331,8 +339,17 @@ impl Gen<'_> {
             .map(|a| self.value(a, rel))
             .collect::<Result<_>>()?;
         let arity = match f {
-            Func::Contains | Func::StrStarts | Func::StrEnds => 2..=2,
-            Func::Regex => 2..=3,
+            Func::Contains
+            | Func::StrStarts
+            | Func::StrEnds
+            | Func::LangMatches
+            | Func::StrDt
+            | Func::StrLang
+            | Func::StrBefore
+            | Func::StrAfter => 2..=2,
+            Func::Regex | Func::Substr => 2..=3,
+            Func::Replace => 3..=4,
+            Func::Concat => 0..=usize::MAX,
             _ => 1..=1,
         };
         if !arity.contains(&vals.len()) {
@@ -356,6 +373,7 @@ impl Gen<'_> {
                             "tm_lang({x}, CASE WHEN ({x} & 15) = 11 THEN {l} END)"
                         ))
                     }
+                    Dom::Computed(VClass::Lit) => str_(format!("tm_lit_lang({x})")),
                     _ => str_(format!("CASE WHEN {x} IS NULL THEN NULL ELSE '' END")),
                 }
             }
@@ -372,6 +390,7 @@ impl Gen<'_> {
                              FROM term AS {d} WHERE {d}.id = ({x} >> 4)) END)"
                         )
                     }
+                    Dom::Computed(VClass::Lit) => format!("tm_lit_dt({x})"),
                     _ => {
                         let i = self
                             .params
@@ -448,6 +467,173 @@ impl Gen<'_> {
                 };
                 Val::boolean(format!("tm_regex({a}, {p}, {fl})"), true)
             }
+            other => return self.sparql_func(other, &vals),
+        })
+    }
+
+    /// The SPARQL built-ins of `add-sparql-frontend` (string, numeric, date-time
+    /// and cast functions).
+    fn sparql_func(&mut self, f: Func, vals: &[Val]) -> Result<Val> {
+        use crate::udf_fn::cast;
+        let sv = |g: &mut Self, i: usize| g.str_val(&vals[i]);
+        let with = |sql: String, c: VClass| Val::sql(sql, Dom::Computed(c), true);
+        let arg_class = |v: &Val| match (&v.dom, &v.konst) {
+            (_, Some(k)) => match class_of(&k.value) {
+                c if c.numeric() => c,
+                _ => VClass::Dynamic,
+            },
+            (Dom::Computed(c), None) if c.numeric() => *c,
+            _ => VClass::Dynamic,
+        };
+        Ok(match f {
+            Func::IsBlank => {
+                let x = self.val_sql(&vals[0]);
+                let sql = match vals[0].dom {
+                    Dom::Term => format!("(({x} & 15) = 2)"),
+                    _ => format!("CASE WHEN {x} IS NULL THEN NULL ELSE 0 END"),
+                };
+                Val::boolean(sql, true)
+            }
+            Func::LangMatches => {
+                let (a, b) = (sv(self, 0), sv(self, 1));
+                Val::boolean(format!("tm_langmatches({a}, {b})"), true)
+            }
+            Func::Iri => with(sv(self, 0), VClass::Iri),
+            Func::StrDt => {
+                let (a, b) = (sv(self, 0), sv(self, 1));
+                with(format!("tm_lit({a}, {b}, 0)"), VClass::Lit)
+            }
+            Func::StrLang => {
+                let (a, b) = (sv(self, 0), sv(self, 1));
+                with(format!("tm_lit({a}, {b}, 1)"), VClass::Lit)
+            }
+            Func::Substr => {
+                let a = sv(self, 0);
+                let start = self.num_val(&vals[1]);
+                let len = match vals.get(2) {
+                    Some(v) => self.num_val(v),
+                    None => "NULL".to_string(),
+                };
+                with(format!("tm_substr({a}, {start}, {len})"), VClass::Str)
+            }
+            Func::StrBefore => {
+                let (a, b) = (sv(self, 0), sv(self, 1));
+                with(
+                    format!(
+                        "CASE WHEN {a} IS NULL OR {b} IS NULL THEN NULL WHEN {b} = '' THEN '' \
+                         WHEN instr({a}, {b}) > 0 THEN substr({a}, 1, instr({a}, {b}) - 1) ELSE '' END"
+                    ),
+                    VClass::Str,
+                )
+            }
+            Func::StrAfter => {
+                let (a, b) = (sv(self, 0), sv(self, 1));
+                with(
+                    format!(
+                        "CASE WHEN {a} IS NULL OR {b} IS NULL THEN NULL WHEN {b} = '' THEN {a} \
+                         WHEN instr({a}, {b}) > 0 THEN substr({a}, instr({a}, {b}) + length({b})) ELSE '' END"
+                    ),
+                    VClass::Str,
+                )
+            }
+            Func::Concat => {
+                let parts: Vec<String> = (0..vals.len()).map(|i| sv(self, i)).collect();
+                with(
+                    if parts.is_empty() {
+                        "''".to_string()
+                    } else {
+                        format!("({})", parts.join(" || "))
+                    },
+                    VClass::Str,
+                )
+            }
+            Func::EncodeForUri => {
+                let a = sv(self, 0);
+                with(format!("tm_encode_uri({a})"), VClass::Str)
+            }
+            Func::Replace => {
+                let (a, p, r) = (sv(self, 0), sv(self, 1), sv(self, 2));
+                let fl = match vals.get(3) {
+                    Some(_) => sv(self, 3),
+                    None => "''".to_string(),
+                };
+                with(format!("tm_replace({a}, {p}, {r}, {fl})"), VClass::Str)
+            }
+            Func::Abs | Func::Ceil | Func::Floor | Func::Round => {
+                let c = arg_class(&vals[0]);
+                let n = self.num_val(&vals[0]);
+                let name = match f {
+                    Func::Abs => "abs",
+                    Func::Ceil => "tm_ceil",
+                    Func::Floor => "tm_floor",
+                    _ => "tm_round",
+                };
+                with(format!("{name}({n})"), c)
+            }
+            Func::Year | Func::Month | Func::Day | Func::Hours | Func::Minutes | Func::Seconds => {
+                let part = match f {
+                    Func::Year => 0,
+                    Func::Month => 1,
+                    Func::Day => 2,
+                    Func::Hours => 3,
+                    Func::Minutes => 4,
+                    _ => 5,
+                };
+                let x = self.val_sql(&vals[0]);
+                let sql = match vals[0].dom {
+                    Dom::Term => format!("tm_dt({x}, {part})"),
+                    _ => "NULL".to_string(),
+                };
+                with(
+                    sql,
+                    if part == 5 {
+                        VClass::Dynamic
+                    } else {
+                        VClass::Int
+                    },
+                )
+            }
+            Func::Tz | Func::Timezone => {
+                let x = self.val_sql(&vals[0]);
+                let (name, c) = if f == Func::Tz {
+                    ("tm_tz", VClass::Str)
+                } else {
+                    ("tm_timezone", VClass::Lit)
+                };
+                let sql = match vals[0].dom {
+                    Dom::Term => format!("{name}({x})"),
+                    _ => "NULL".to_string(),
+                };
+                with(sql, c)
+            }
+            Func::CastString => with(sv(self, 0), VClass::Str),
+            Func::CastInteger => {
+                let a = sv(self, 0);
+                with(format!("tm_cast({a}, {})", cast::INTEGER), VClass::Int)
+            }
+            Func::CastDouble | Func::CastDecimal => {
+                let a = sv(self, 0);
+                let k = if f == Func::CastDouble {
+                    cast::DOUBLE
+                } else {
+                    cast::DECIMAL
+                };
+                with(format!("tm_cast({a}, {k})"), VClass::Double)
+            }
+            Func::CastBoolean => {
+                let a = sv(self, 0);
+                Val::boolean(format!("tm_cast({a}, {})", cast::BOOLEAN), true)
+            }
+            Func::CastDate | Func::CastDateTime => {
+                let a = sv(self, 0);
+                let k = if f == Func::CastDate {
+                    cast::DATE
+                } else {
+                    cast::DATETIME
+                };
+                Val::sql(format!("tm_cast({a}, {k})"), Dom::Term, true)
+            }
+            _ => return Err(invalid(format!("{} is not a SPARQL built-in", f.name()))),
         })
     }
 
@@ -661,6 +847,12 @@ impl Gen<'_> {
                     }
                     VClass::Bool => {
                         format!("{head} WHEN ({x} & 15) = 6 THEN ({x} >> 4) = {y} ELSE 0 END")
+                    }
+                    VClass::Lit => {
+                        // boxed literals compare by lexical form (datatype and tag are
+                        // not compared): a documented limitation
+                        let sx = self.str_of(a, x);
+                        format!("{head} WHEN ({x} & 15) IN (11, 12) THEN {sx} = tm_lit_lex({y}) ELSE 0 END")
                     }
                     VClass::Dynamic => {
                         let kx = self.key_of(a, x);

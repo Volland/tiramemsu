@@ -29,6 +29,9 @@ jobs:
         run: cargo clippy --all-targets -- -D warnings
       - name: Tests
         run: cargo test --workspace
+      - name: W3C SPARQL subset
+        # fails on any unlisted failure and on any listed deviation that now passes
+        run: cargo test -p tm-sparql --test w3c
       - name: Benchmarks compile
         run: cargo bench --no-run
       - name: Never-forget source audit

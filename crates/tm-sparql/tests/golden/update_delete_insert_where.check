@@ -1,0 +1,1 @@
+SELECT ?p ?c WHERE { ?p v:worksAt ?c } ORDER BY ?p

@@ -206,6 +206,7 @@ pub fn computed(v: &SqlValue, c: VClass) -> Option<Value> {
         (VClass::Bool, SqlValue::Integer(i)) => Value::Bool(*i != 0),
         (VClass::Bool, SqlValue::Real(x)) => Value::Bool(*x != 0.0),
         (VClass::Iri, SqlValue::Text(s)) => Value::Iri(s.clone()),
+        (VClass::Lit, SqlValue::Text(s)) => crate::udf_fn::unboxed_value(s),
         (VClass::Double, SqlValue::Integer(i)) => Value::Double(*i as f64),
         (_, SqlValue::Integer(i)) => Value::Int(*i),
         (_, SqlValue::Real(x)) => Value::Double(*x),

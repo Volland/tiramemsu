@@ -1,0 +1,7 @@
+@prefix v: <urn:tiramemsu:v:> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+v:a v:at "2026-09-01T14:00:00.000+02:00"^^xsd:dateTime .
+v:b v:at "2026-09-01T12:00:00+00:00"^^xsd:dateTime .
+v:c v:at "2026-09-01T12:00:00"^^xsd:dateTime .
+v:d v:at "2026-09-01T12:00:00.250Z"^^xsd:dateTime .

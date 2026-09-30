@@ -1,0 +1,4 @@
+; Homomorphism Unbound SetOfTriples
+(project [?p ?y]
+  (extend ?y (* ?a 2)
+    (triple ?p <urn:tiramemsu:v:age> ?a :view now)))

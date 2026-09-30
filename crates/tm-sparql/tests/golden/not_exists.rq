@@ -1,0 +1,1 @@
+SELECT ?p WHERE { ?p a v:Person FILTER NOT EXISTS { ?p v:banned true } }

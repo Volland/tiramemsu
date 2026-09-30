@@ -1,0 +1,1 @@
+{"head":{"vars":["p","c"]},"results":{"bindings":[{"p":{"type":"uri","value":"urn:tiramemsu:v:alice"},"c":{"type":"uri","value":"urn:tiramemsu:v:acme"}},{"p":{"type":"uri","value":"urn:tiramemsu:v:bob"},"c":{"type":"uri","value":"urn:tiramemsu:v:acme"}},{"p":{"type":"uri","value":"urn:tiramemsu:v:carol"},"c":{"type":"uri","value":"urn:tiramemsu:v:initech"}}]}}

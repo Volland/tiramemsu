@@ -1,0 +1,1 @@
+SELECT (BNODE() AS ?x) WHERE { ?p v:name ?n }

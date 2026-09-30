@@ -1,0 +1,11 @@
+---
+source: crates/tm-sparql/tests/lower_modifiers.rs
+expression: "ir(\"SELECT ?c (COUNT(?p) AS ?n) WHERE { ?p v:worksAt ?c } GROUP BY ?c HAVING (COUNT(?p) > 1) ORDER BY ?c\")"
+---
+; Homomorphism Unbound SetOfTriples
+(project [?c ?n]
+  (orderLimit [(asc ?c)]
+    (extend ?n ?~a0
+      (filter (> ?~a0 1)
+        (aggregate [?c] [(?~a0 count ?p)]
+          (triple ?p <urn:tiramemsu:v:worksAt> ?c :view now))))))

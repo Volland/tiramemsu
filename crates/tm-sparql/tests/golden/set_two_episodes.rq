@@ -1,0 +1,1 @@
+SELECT ?c WHERE { v:alice v:worksAt ?c }

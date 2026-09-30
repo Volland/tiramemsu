@@ -280,15 +280,15 @@ pub fn vkey(v: &SqlValue, class: i64) -> Option<Vec<u8>> {
     })
 }
 
-fn arg_i64(a: &[SqlValue], i: usize) -> Option<i64> {
+pub(crate) fn arg_i64(a: &[SqlValue], i: usize) -> Option<i64> {
     a.get(i).and_then(SqlValue::as_i64)
 }
 
-fn arg_str(a: &[SqlValue], i: usize) -> Option<&str> {
+pub(crate) fn arg_str(a: &[SqlValue], i: usize) -> Option<&str> {
     a.get(i).and_then(SqlValue::as_str)
 }
 
-fn arg_f64(a: &[SqlValue], i: usize) -> Option<f64> {
+pub(crate) fn arg_f64(a: &[SqlValue], i: usize) -> Option<f64> {
     match a.get(i) {
         Some(SqlValue::Real(x)) => Some(*x),
         Some(SqlValue::Integer(i)) => Some(*i as f64),
@@ -296,7 +296,7 @@ fn arg_f64(a: &[SqlValue], i: usize) -> Option<f64> {
     }
 }
 
-fn opt<T>(v: Option<T>, f: impl FnOnce(T) -> SqlValue) -> SqlValue {
+pub(crate) fn opt<T>(v: Option<T>, f: impl FnOnce(T) -> SqlValue) -> SqlValue {
     v.map_or(SqlValue::Null, f)
 }
 
@@ -369,7 +369,7 @@ pub fn regex_match(text: &str, pattern: &str, flags: &str) -> Option<bool> {
     })
 }
 
-fn scalar(
+pub(crate) fn scalar(
     name: &str,
     n_args: i32,
     f: impl Fn(&[SqlValue]) -> Result<SqlValue, String> + Send + Sync + 'static,
@@ -384,6 +384,12 @@ fn scalar(
 
 /// Every scalar helper function.
 pub fn scalar_functions() -> Vec<ScalarFunction> {
+    let mut all = core_functions();
+    all.extend(crate::udf_fn::functions());
+    all
+}
+
+fn core_functions() -> Vec<ScalarFunction> {
     vec![
         scalar("tm_kind", 1, |a| {
             Ok(opt(arg_i64(a, 0), |id| {

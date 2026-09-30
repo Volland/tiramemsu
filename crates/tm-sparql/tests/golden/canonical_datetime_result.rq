@@ -1,0 +1,1 @@
+SELECT ?t WHERE { v:meeting v:at ?t }

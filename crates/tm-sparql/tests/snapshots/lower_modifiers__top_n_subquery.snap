@@ -1,0 +1,11 @@
+---
+source: crates/tm-sparql/tests/lower_modifiers.rs
+expression: "ir(\"SELECT ?p ?n WHERE { { SELECT ?p WHERE { ?p v:age ?a } ORDER BY DESC(?a) LIMIT 2 } OPTIONAL { ?p v:name ?n } }\")"
+---
+; Homomorphism Unbound SetOfTriples
+(project [?p ?n]
+  (leftJoin
+    (project [?p]
+      (orderLimit [(desc ?a)] :limit 2
+        (triple ?p <urn:tiramemsu:v:age> ?a :view now)))
+    (triple ?p <urn:tiramemsu:v:name> ?n :view now)))

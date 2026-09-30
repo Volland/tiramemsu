@@ -1,0 +1,1 @@
+{"head":{"vars":["f","len"]},"results":{"bindings":[{"f":{"type":"literal","value":"A"},"len":{"type":"literal","value":"5","datatype":"http://www.w3.org/2001/XMLSchema#integer"}}]}}

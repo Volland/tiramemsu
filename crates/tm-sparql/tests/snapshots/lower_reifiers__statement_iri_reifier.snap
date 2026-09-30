@@ -1,0 +1,8 @@
+---
+source: crates/tm-sparql/tests/lower_reifiers.rs
+expression: "ir(\"SELECT ?c WHERE { <urn:tiramemsu:stmt:12> rdf:reifies <<( v:alice v:worksAt ?c )>> }\")"
+---
+; Homomorphism Unbound SetOfTriples
+(project [?c]
+  (filter (sameTerm ?~e0 <urn:tiramemsu:stmt:12>)
+    (triple <urn:tiramemsu:v:alice> <urn:tiramemsu:v:worksAt> ?c :view now :eid ?~e0)))

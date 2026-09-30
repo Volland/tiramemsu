@@ -1,0 +1,1 @@
+SELECT (STRUUID() AS ?x) WHERE { ?p v:name ?n }

@@ -1,0 +1,3 @@
+; Homomorphism Unbound SetOfTriples
+(project [?s]
+  (triple ?s <urn:tiramemsu:v:worksAt> ?~b0 :view now))

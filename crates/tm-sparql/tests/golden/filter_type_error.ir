@@ -1,0 +1,4 @@
+; Homomorphism Unbound SetOfTriples
+(project [?p]
+  (filter (> ?a 30)
+    (triple ?p <urn:tiramemsu:v:age> ?a :view now)))

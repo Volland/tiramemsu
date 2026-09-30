@@ -1,0 +1,3 @@
+<urn:tiramemsu:stmt:1> <http://www.w3.org/1999/02/22-rdf-syntax-ns#reifies> <<( <urn:tiramemsu:v:alice> <urn:tiramemsu:v:worksAt> <urn:tiramemsu:v:acme> )>> .
+<urn:tiramemsu:stmt:1> <urn:tiramemsu:v:confidence> "0.8"^^<http://www.w3.org/2001/XMLSchema#decimal> .
+<urn:tiramemsu:v:alice> <urn:tiramemsu:v:worksAt> <urn:tiramemsu:v:acme> .

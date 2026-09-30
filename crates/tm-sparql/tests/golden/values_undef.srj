@@ -1,0 +1,1 @@
+{"head":{"vars":["p","a"]},"results":{"bindings":[{"p":{"type":"uri","value":"urn:tiramemsu:v:bob"},"a":{"type":"literal","value":"30","datatype":"http://www.w3.org/2001/XMLSchema#integer"}}]}}

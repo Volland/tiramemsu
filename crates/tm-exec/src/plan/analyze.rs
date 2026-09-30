@@ -22,6 +22,9 @@ pub enum VClass {
     Bool,
     /// TEXT holding an IRI.
     Iri,
+    /// A boxed literal (TEXT `lex SOH datatype-or-@lang`) from `STRDT`, `STRLANG`
+    /// and `TIMEZONE`; ordered as a plain string.
+    Lit,
     /// A number or a string, decided per value (sums, sample of computed values).
     Dynamic,
 }
@@ -31,7 +34,7 @@ impl VClass {
     pub fn code(self) -> i64 {
         match self {
             VClass::Int | VClass::Double => udf::class::NUM,
-            VClass::Str => udf::class::STR,
+            VClass::Str | VClass::Lit => udf::class::STR,
             VClass::Bool => udf::class::BOOL,
             VClass::Iri => udf::class::IRI,
             VClass::Dynamic => udf::class::DYNAMIC,

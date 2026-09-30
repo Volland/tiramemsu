@@ -1,0 +1,1 @@
+SELECT ?x WHERE { ?x v:age ?a FILTER(<http://example.org/fn>(?a)) }

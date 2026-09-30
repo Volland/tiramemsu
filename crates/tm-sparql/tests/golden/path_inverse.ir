@@ -1,0 +1,4 @@
+; Homomorphism Unbound SetOfTriples
+(project [?p]
+  (orderLimit [(asc ?p)]
+    (triple ?p <urn:tiramemsu:v:worksAt> <urn:tiramemsu:v:acme> :view now)))

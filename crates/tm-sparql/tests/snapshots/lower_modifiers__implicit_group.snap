@@ -1,0 +1,11 @@
+---
+source: crates/tm-sparql/tests/lower_modifiers.rs
+expression: "ir(\"SELECT (COUNT(*) AS ?n) (SUM(?a) AS ?s) (AVG(?a) AS ?m) WHERE { ?p v:age ?a }\")"
+---
+; Homomorphism Unbound SetOfTriples
+(project [?n ?s ?m]
+  (extend ?m ?~a2
+    (extend ?s ?~a1
+      (extend ?n ?~a0
+        (aggregate [] [(?~a0 count *) (?~a1 sum ?a) (?~a2 avg ?a)]
+          (triple ?p <urn:tiramemsu:v:age> ?a :view now))))))

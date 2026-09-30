@@ -1,0 +1,1 @@
+CONSTRUCT { ?p v:card [ v:name ?n ] } WHERE { ?p v:name ?n }

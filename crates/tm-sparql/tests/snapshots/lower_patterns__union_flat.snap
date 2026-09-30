@@ -1,0 +1,10 @@
+---
+source: crates/tm-sparql/tests/lower_patterns.rs
+expression: "ir(\"SELECT * WHERE { { ?p v:email ?e } UNION { ?p v:phone ?t } UNION { ?p v:fax ?f } }\")"
+---
+; Homomorphism Unbound SetOfTriples
+(project [?e ?f ?p ?t]
+  (union
+    (triple ?p <urn:tiramemsu:v:email> ?e :view now)
+    (triple ?p <urn:tiramemsu:v:phone> ?t :view now)
+    (triple ?p <urn:tiramemsu:v:fax> ?f :view now)))

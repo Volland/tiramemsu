@@ -1,0 +1,548 @@
+# Expected deviations of the W3C SPARQL test-suite subset (see ../w3c.rs).
+# The runner fails on any test that fails and is not listed here, and on any
+# listed test that now passes.
+
+[[deviation]]
+test = "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/syntax-query/manifest#test_33"
+reason = "spargebra 0.4.7 rejects valid SPARQL syntax (grammar gap in the parser)"
+
+[[deviation]]
+test = "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/syntax-query/manifest#test_42"
+reason = "relative IRI: no base IRI is configured (design D4), so relative IRIs in the text are rejected"
+
+[[deviation]]
+test = "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/syntax-update-1/manifest#test_4"
+reason = "relative IRI: no base IRI is configured (design D4), so relative IRIs in the text are rejected"
+
+[[deviation]]
+test = "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/syntax-update-1/manifest#test_8"
+reason = "relative IRI: no base IRI is configured (design D4), so relative IRIs in the text are rejected"
+
+[[deviation]]
+test = "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/syntax-update-1/manifest#test_12"
+reason = "relative IRI: no base IRI is configured (design D4), so relative IRIs in the text are rejected"
+
+[[deviation]]
+test = "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/syntax-update-1/manifest#test_13"
+reason = "relative IRI: no base IRI is configured (design D4), so relative IRIs in the text are rejected"
+
+[[deviation]]
+test = "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/syntax-update-1/manifest#test_14"
+reason = "relative IRI: no base IRI is configured (design D4), so relative IRIs in the text are rejected"
+
+[[deviation]]
+test = "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/syntax-update-1/manifest#test_18"
+reason = "relative IRI: no base IRI is configured (design D4), so relative IRIs in the text are rejected"
+
+[[deviation]]
+test = "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/syntax-update-1/manifest#test_22"
+reason = "relative IRI: no base IRI is configured (design D4), so relative IRIs in the text are rejected"
+
+[[deviation]]
+test = "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/syntax-update-1/manifest#test_23"
+reason = "spargebra 0.4.7 rejects valid SPARQL syntax (grammar gap in the parser)"
+
+[[deviation]]
+test = "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/syntax-update-1/manifest#test_24"
+reason = "relative IRI: no base IRI is configured (design D4), so relative IRIs in the text are rejected"
+
+[[deviation]]
+test = "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/syntax-update-1/manifest#test_25"
+reason = "spargebra 0.4.7 rejects valid SPARQL syntax (grammar gap in the parser)"
+
+[[deviation]]
+test = "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/syntax-update-1/manifest#test_26"
+reason = "relative IRI: no base IRI is configured (design D4), so relative IRIs in the text are rejected"
+
+[[deviation]]
+test = "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/syntax-update-1/manifest#test_28"
+reason = "relative IRI: no base IRI is configured (design D4), so relative IRIs in the text are rejected"
+
+[[deviation]]
+test = "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/syntax-update-1/manifest#test_29"
+reason = "spargebra 0.4.7 rejects valid SPARQL syntax (grammar gap in the parser)"
+
+[[deviation]]
+test = "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/syntax-update-1/manifest#test_30"
+reason = "relative IRI: no base IRI is configured (design D4), so relative IRIs in the text are rejected"
+
+[[deviation]]
+test = "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/syntax-update-1/manifest#test_31"
+reason = "spargebra 0.4.7 rejects valid SPARQL syntax (grammar gap in the parser)"
+
+[[deviation]]
+test = "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/syntax-update-1/manifest#test_36"
+reason = "relative IRI: no base IRI is configured (design D4), so relative IRIs in the text are rejected"
+
+[[deviation]]
+test = "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/syntax-update-1/manifest#test_37"
+reason = "relative IRI: no base IRI is configured (design D4), so relative IRIs in the text are rejected"
+
+[[deviation]]
+test = "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/syntax-update-1/manifest#test_53"
+reason = "relative IRI: no base IRI is configured (design D4), so relative IRIs in the text are rejected"
+
+[[deviation]]
+test = "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/aggregates/manifest#agg-sum-01"
+reason = "xsd:decimal results of aggregates are computed as xsd:double (M1 executor)"
+
+[[deviation]]
+test = "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/aggregates/manifest#agg-sum-02"
+reason = "xsd:decimal results of aggregates are computed as xsd:double (M1 executor)"
+
+[[deviation]]
+test = "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/aggregates/manifest#agg-avg-01"
+reason = "xsd:decimal results of aggregates are computed as xsd:double (M1 executor)"
+
+[[deviation]]
+test = "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/aggregates/manifest#agg-avg-02"
+reason = "xsd:decimal results of aggregates are computed as xsd:double (M1 executor)"
+
+[[deviation]]
+test = "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/aggregates/manifest#agg-avg-03"
+reason = "AVG over an empty group is unbound (SPARQL 1.1 gives 0)"
+
+[[deviation]]
+test = "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/aggregates/manifest#agg-err-01"
+reason = "aggregates skip non-numeric values instead of raising an error"
+
+[[deviation]]
+test = "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/aggregates/manifest#agg-err-02"
+reason = "M1 executor: an expression mixing stored terms and computed values (COALESCE, aggregates over them) is not supported"
+
+[[deviation]]
+test = "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/aggregates/manifest#agg-avg-distinct"
+reason = "xsd:decimal results of aggregates are computed as xsd:double (M1 executor)"
+
+[[deviation]]
+test = "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/aggregates/manifest#agg-count-rows-distinct"
+reason = "COUNT(DISTINCT *) is not supported"
+
+[[deviation]]
+test = "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/aggregates/manifest#agg-groupconcat-distinct"
+reason = "M1 executor: GROUP_CONCAT(DISTINCT ...) with a separator is not supported"
+
+[[deviation]]
+test = "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/aggregates/manifest#agg-sum-distinct"
+reason = "xsd:decimal results of aggregates are computed as xsd:double (M1 executor)"
+
+[[deviation]]
+test = "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/functions/manifest#strdt01"
+reason = "STRDT/STRLANG accept any string argument (no datatype or language restriction)"
+
+[[deviation]]
+test = "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/functions/manifest#strdt03-rdf11"
+reason = "STRDT/STRLANG accept any string argument (no datatype or language restriction)"
+
+[[deviation]]
+test = "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/functions/manifest#strlang01"
+reason = "STRDT/STRLANG accept any string argument (no datatype or language restriction)"
+
+[[deviation]]
+test = "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/functions/manifest#strlang03-rdf11"
+reason = "STRDT/STRLANG accept any string argument (no datatype or language restriction)"
+
+[[deviation]]
+test = "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/functions/manifest#ceil01"
+reason = "xsd:decimal results are computed as xsd:double or xsd:integer (M1 executor); sub-results differ in datatype only"
+
+[[deviation]]
+test = "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/functions/manifest#floor01"
+reason = "xsd:decimal results are computed as xsd:double or xsd:integer (M1 executor); sub-results differ in datatype only"
+
+[[deviation]]
+test = "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/functions/manifest#round01"
+reason = "xsd:decimal results are computed as xsd:double or xsd:integer (M1 executor); sub-results differ in datatype only"
+
+[[deviation]]
+test = "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/functions/manifest#concat02"
+reason = "string functions do not preserve language tags (results are plain strings)"
+
+[[deviation]]
+test = "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/functions/manifest#substring01"
+reason = "string functions do not preserve language tags (results are plain strings)"
+
+[[deviation]]
+test = "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/functions/manifest#substring02"
+reason = "string functions do not preserve language tags (results are plain strings)"
+
+[[deviation]]
+test = "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/functions/manifest#ucase01"
+reason = "string functions do not preserve language tags (results are plain strings)"
+
+[[deviation]]
+test = "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/functions/manifest#lcase01"
+reason = "string functions do not preserve language tags (results are plain strings)"
+
+[[deviation]]
+test = "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/functions/manifest#plus-1-corrected"
+reason = "xsd:decimal results are computed as xsd:double or xsd:integer (M1 executor); sub-results differ in datatype only"
+
+[[deviation]]
+test = "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/functions/manifest#md5-01"
+reason = "function rejected in v1 (design D10: Unsupported names the function)"
+
+[[deviation]]
+test = "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/functions/manifest#md5-02"
+reason = "function rejected in v1 (design D10: Unsupported names the function)"
+
+[[deviation]]
+test = "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/functions/manifest#sha1-01"
+reason = "function rejected in v1 (design D10: Unsupported names the function)"
+
+[[deviation]]
+test = "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/functions/manifest#sha1-02"
+reason = "function rejected in v1 (design D10: Unsupported names the function)"
+
+[[deviation]]
+test = "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/functions/manifest#sha256-01"
+reason = "function rejected in v1 (design D10: Unsupported names the function)"
+
+[[deviation]]
+test = "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/functions/manifest#sha256-02"
+reason = "function rejected in v1 (design D10: Unsupported names the function)"
+
+[[deviation]]
+test = "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/functions/manifest#sha384-01"
+reason = "function rejected in v1 (design D10: Unsupported names the function)"
+
+[[deviation]]
+test = "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/functions/manifest#sha384-02"
+reason = "function rejected in v1 (design D10: Unsupported names the function)"
+
+[[deviation]]
+test = "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/functions/manifest#sha512-01"
+reason = "function rejected in v1 (design D10: Unsupported names the function)"
+
+[[deviation]]
+test = "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/functions/manifest#sha512-02"
+reason = "function rejected in v1 (design D10: Unsupported names the function)"
+
+[[deviation]]
+test = "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/functions/manifest#seconds"
+reason = "xsd:decimal results are computed as xsd:double or xsd:integer (M1 executor); sub-results differ in datatype only"
+
+[[deviation]]
+test = "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/functions/manifest#bnode01"
+reason = "function rejected in v1 (design D10: Unsupported names the function)"
+
+[[deviation]]
+test = "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/functions/manifest#bnode02"
+reason = "function rejected in v1 (design D10: Unsupported names the function)"
+
+[[deviation]]
+test = "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/functions/manifest#rand01"
+reason = "function rejected in v1 (design D10: Unsupported names the function)"
+
+[[deviation]]
+test = "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/functions/manifest#iri01"
+reason = "IRI() does not resolve against BASE"
+
+[[deviation]]
+test = "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/functions/manifest#coalesce01"
+reason = "M1 executor: an expression mixing stored terms and computed values (COALESCE, aggregates over them) is not supported"
+
+[[deviation]]
+test = "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/functions/manifest#strbefore01a"
+reason = "string functions do not preserve language tags (results are plain strings)"
+
+[[deviation]]
+test = "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/functions/manifest#strbefore02"
+reason = "string functions do not preserve language tags (results are plain strings)"
+
+[[deviation]]
+test = "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/functions/manifest#strafter01a"
+reason = "string functions do not preserve language tags (results are plain strings)"
+
+[[deviation]]
+test = "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/functions/manifest#strafter02"
+reason = "string functions do not preserve language tags (results are plain strings)"
+
+[[deviation]]
+test = "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/functions/manifest#replace01"
+reason = "string functions do not preserve language tags (results are plain strings)"
+
+[[deviation]]
+test = "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/functions/manifest#uuid01"
+reason = "function rejected in v1 (design D10: Unsupported names the function)"
+
+[[deviation]]
+test = "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/functions/manifest#uuid02"
+reason = "function rejected in v1 (design D10: Unsupported names the function)"
+
+[[deviation]]
+test = "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/functions/manifest#struuid01"
+reason = "function rejected in v1 (design D10: Unsupported names the function)"
+
+[[deviation]]
+test = "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/negation/manifest#partial-minuend"
+reason = "MINUS with a variable that may be unbound on the left uses an approximate domain rule"
+
+[[deviation]]
+test = "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/json-res/manifest#jsonres01"
+reason = "canonical decimal: 5.0 is stored and returned as '5.0', the expected file has '5'"
+
+[[deviation]]
+test = "http://www.w3.org/2009/sparql/docs/tests/data-sparql11/json-res/manifest#jsonres02"
+reason = "canonical decimal: 5.0 is stored and returned as '5.0', the expected file has '5'"
+
+[[deviation]]
+test = "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/optional-filter/manifest#dawg-optional-filter-005-not-simplified"
+reason = "spargebra 0.4.7 merges a FILTER in a nested group inside OPTIONAL into the join condition"
+
+[[deviation]]
+test = "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/distinct/manifest#no-distinct-1"
+reason = "canonical literals: numerically equal lexical forms (01, +1, 1.0e0) are one term, so DISTINCT collapses them"
+
+[[deviation]]
+test = "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/distinct/manifest#distinct-1"
+reason = "canonical literals: numerically equal lexical forms (01, +1, 1.0e0) are one term, so DISTINCT collapses them"
+
+[[deviation]]
+test = "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/distinct/manifest#no-distinct-9"
+reason = "canonical literals: numerically equal lexical forms (01, +1, 1.0e0) are one term, so DISTINCT collapses them"
+
+[[deviation]]
+test = "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/distinct/manifest#distinct-9"
+reason = "canonical literals: numerically equal lexical forms (01, +1, 1.0e0) are one term, so DISTINCT collapses them"
+
+[[deviation]]
+test = "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/expr-builtin/manifest#dawg-str-1"
+reason = "canonical literals: lexical forms of numbers collapse (01, 1.0e0), STR() returns the canonical form, and xsd:float is a typed literal"
+
+[[deviation]]
+test = "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/expr-builtin/manifest#dawg-str-2"
+reason = "canonical literals: lexical forms of numbers collapse (01, 1.0e0), STR() returns the canonical form, and xsd:float is a typed literal"
+
+[[deviation]]
+test = "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/expr-builtin/manifest#dawg-datatype-1"
+reason = "canonical literals: lexical forms of numbers collapse (01, 1.0e0), STR() returns the canonical form, and xsd:float is a typed literal"
+
+[[deviation]]
+test = "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/expr-builtin/manifest#sameTerm-simple"
+reason = "canonical literals: lexical forms of numbers collapse (01, 1.0e0), STR() returns the canonical form, and xsd:float is a typed literal"
+
+[[deviation]]
+test = "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/expr-builtin/manifest#sameTerm-eq"
+reason = "canonical literals: lexical forms of numbers collapse (01, 1.0e0), STR() returns the canonical form, and xsd:float is a typed literal"
+
+[[deviation]]
+test = "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/expr-builtin/manifest#sameTerm-not-eq"
+reason = "canonical literals: lexical forms of numbers collapse (01, 1.0e0), STR() returns the canonical form, and xsd:float is a typed literal"
+
+[[deviation]]
+test = "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/expr-builtin/manifest#case-insensitive-booleans"
+reason = "spargebra 0.4.7 does not accept case-insensitive boolean literals"
+
+[[deviation]]
+test = "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/expr-equals/manifest#eq-2-1"
+reason = "canonical literals and xsd:float: numerically equal lexical forms are one term; xsd:float is not numeric"
+
+[[deviation]]
+test = "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/expr-equals/manifest#eq-2-2"
+reason = "canonical literals and xsd:float: numerically equal lexical forms are one term; xsd:float is not numeric"
+
+[[deviation]]
+test = "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/expr-equals/manifest#eq-graph-1"
+reason = "canonical literals and xsd:float: numerically equal lexical forms are one term; xsd:float is not numeric"
+
+[[deviation]]
+test = "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/expr-equals/manifest#eq-graph-2"
+reason = "canonical literals and xsd:float: numerically equal lexical forms are one term; xsd:float is not numeric"
+
+[[deviation]]
+test = "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/expr-equals/manifest#eq-float"
+reason = "canonical literals and xsd:float: numerically equal lexical forms are one term; xsd:float is not numeric"
+
+[[deviation]]
+test = "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/expr-ops/manifest#add-numbers-cast"
+reason = "xsd:decimal and xsd:float arithmetic is computed as xsd:double; xsd:float operands are not numeric"
+
+[[deviation]]
+test = "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/expr-ops/manifest#subtract-numbers-cast"
+reason = "xsd:decimal and xsd:float arithmetic is computed as xsd:double; xsd:float operands are not numeric"
+
+[[deviation]]
+test = "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/expr-ops/manifest#multiply-numbers-cast"
+reason = "xsd:decimal and xsd:float arithmetic is computed as xsd:double; xsd:float operands are not numeric"
+
+[[deviation]]
+test = "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/expr-ops/manifest#divide-numbers-cast"
+reason = "xsd:decimal and xsd:float arithmetic is computed as xsd:double; xsd:float operands are not numeric"
+
+[[deviation]]
+test = "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/expr-ops/manifest#unplus-2"
+reason = "xsd:decimal and xsd:float arithmetic is computed as xsd:double; xsd:float operands are not numeric"
+
+[[deviation]]
+test = "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/expr-ops/manifest#unminus-2"
+reason = "xsd:decimal and xsd:float arithmetic is computed as xsd:double; xsd:float operands are not numeric"
+
+[[deviation]]
+test = "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/open-world/manifest#open-eq-03"
+reason = "canonical literals and value-space comparison of unknown datatypes differ from RDFterm-equal errors"
+
+[[deviation]]
+test = "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/open-world/manifest#open-eq-04"
+reason = "canonical literals and value-space comparison of unknown datatypes differ from RDFterm-equal errors"
+
+[[deviation]]
+test = "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/open-world/manifest#open-eq-06"
+reason = "canonical literals and value-space comparison of unknown datatypes differ from RDFterm-equal errors"
+
+[[deviation]]
+test = "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/open-world/manifest#open-eq-08"
+reason = "canonical literals and value-space comparison of unknown datatypes differ from RDFterm-equal errors"
+
+[[deviation]]
+test = "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/open-world/manifest#open-eq-10"
+reason = "canonical literals and value-space comparison of unknown datatypes differ from RDFterm-equal errors"
+
+[[deviation]]
+test = "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/open-world/manifest#open-eq-11"
+reason = "canonical literals and value-space comparison of unknown datatypes differ from RDFterm-equal errors"
+
+[[deviation]]
+test = "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/open-world/manifest#open-eq-12"
+reason = "canonical literals and value-space comparison of unknown datatypes differ from RDFterm-equal errors"
+
+[[deviation]]
+test = "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/open-world/manifest#date-1"
+reason = "xsd:date drops its timezone (only xsd:dateTime keeps its offset, design D20)"
+
+[[deviation]]
+test = "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/open-world/manifest#date-2"
+reason = "xsd:date drops its timezone (only xsd:dateTime keeps its offset, design D20)"
+
+[[deviation]]
+test = "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/open-world/manifest#date-3"
+reason = "xsd:date drops its timezone (only xsd:dateTime keeps its offset, design D20)"
+
+[[deviation]]
+test = "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/open-world/manifest#date-4"
+reason = "xsd:date drops its timezone (only xsd:dateTime keeps its offset, design D20)"
+
+[[deviation]]
+test = "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/regex/manifest#dawg-regex-003"
+reason = "REGEX on an IRI matches its text instead of raising a type error"
+
+[[deviation]]
+test = "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/regex/manifest#regex-no-metacharacters"
+reason = "REGEX flag q (literal pattern) is not supported"
+
+[[deviation]]
+test = "http://www.w3.org/2001/sw/DataAccess/tests/data-r2/regex/manifest#regex-no-metacharacters-case-insensitive"
+reason = "REGEX flag q (literal pattern) is not supported"
+
+[[deviation]]
+test = "https://w3c.github.io/rdf-tests/sparql/sparql12/syntax-triple-terms-negative/manifest#tripleterm-subject-03"
+reason = "spargebra 0.4.7 accepts a triple term in subject position that SPARQL 1.2 rejects"
+
+[[deviation]]
+test = "https://w3c.github.io/rdf-tests/sparql/sparql12/syntax-triple-terms-negative/manifest#tripleterm-subject-06"
+reason = "spargebra 0.4.7 accepts a triple term in subject position that SPARQL 1.2 rejects"
+
+[[deviation]]
+test = "https://w3c.github.io/rdf-tests/sparql/sparql12/eval-triple-terms/manifest#results-tripleterms-1j"
+reason = "by design: rdf:reifies is virtual, reifiers and triple terms are returned as statement IRIs (design D6, D9)"
+
+[[deviation]]
+test = "https://w3c.github.io/rdf-tests/sparql/sparql12/eval-triple-terms/manifest#results-tripleterms-1x"
+reason = "by design: rdf:reifies is virtual, reifiers and triple terms are returned as statement IRIs (design D6, D9)"
+
+[[deviation]]
+test = "https://w3c.github.io/rdf-tests/sparql/sparql12/eval-triple-terms/manifest#results-reifiedtriples-1j"
+reason = "by design: rdf:reifies is virtual, reifiers and triple terms are returned as statement IRIs (design D6, D9)"
+
+[[deviation]]
+test = "https://w3c.github.io/rdf-tests/sparql/sparql12/eval-triple-terms/manifest#results-reifiedtriples-1x"
+reason = "by design: rdf:reifies is virtual, reifiers and triple terms are returned as statement IRIs (design D6, D9)"
+
+[[deviation]]
+test = "https://w3c.github.io/rdf-tests/sparql/sparql12/eval-triple-terms/manifest#basic-2"
+reason = "by design: rdf:reifies is virtual, reifiers and triple terms are returned as statement IRIs (design D6, D9)"
+
+[[deviation]]
+test = "https://w3c.github.io/rdf-tests/sparql/sparql12/eval-triple-terms/manifest#basic-3"
+reason = "by design: rdf:reifies is virtual, reifiers and triple terms are returned as statement IRIs (design D6, D9)"
+
+[[deviation]]
+test = "https://w3c.github.io/rdf-tests/sparql/sparql12/eval-triple-terms/manifest#basic-7"
+reason = "by design: rdf:reifies is virtual, reifiers and triple terms are returned as statement IRIs (design D6, D9)"
+
+[[deviation]]
+test = "https://w3c.github.io/rdf-tests/sparql/sparql12/eval-triple-terms/manifest#basic-8"
+reason = "SPARQL 1.2 triple functions, triple terms in VALUES and variable predicates with triple terms are unsupported (design D6)"
+
+[[deviation]]
+test = "https://w3c.github.io/rdf-tests/sparql/sparql12/eval-triple-terms/manifest#basic-9"
+reason = "SPARQL 1.2 triple functions, triple terms in VALUES and variable predicates with triple terms are unsupported (design D6)"
+
+[[deviation]]
+test = "https://w3c.github.io/rdf-tests/sparql/sparql12/eval-triple-terms/manifest#pattern-1"
+reason = "IRI and blank-node reifiers that are not stored statements are unsupported (design D8: every reifier is an eid)"
+
+[[deviation]]
+test = "https://w3c.github.io/rdf-tests/sparql/sparql12/eval-triple-terms/manifest#pattern-2"
+reason = "IRI and blank-node reifiers that are not stored statements are unsupported (design D8: every reifier is an eid)"
+
+[[deviation]]
+test = "https://w3c.github.io/rdf-tests/sparql/sparql12/eval-triple-terms/manifest#pattern-3"
+reason = "IRI and blank-node reifiers that are not stored statements are unsupported (design D8: every reifier is an eid)"
+
+[[deviation]]
+test = "https://w3c.github.io/rdf-tests/sparql/sparql12/eval-triple-terms/manifest#pattern-3-nomatch"
+reason = "IRI and blank-node reifiers that are not stored statements are unsupported (design D8: every reifier is an eid)"
+
+[[deviation]]
+test = "https://w3c.github.io/rdf-tests/sparql/sparql12/eval-triple-terms/manifest#pattern-4"
+reason = "IRI and blank-node reifiers that are not stored statements are unsupported (design D8: every reifier is an eid)"
+
+[[deviation]]
+test = "https://w3c.github.io/rdf-tests/sparql/sparql12/eval-triple-terms/manifest#pattern-5"
+reason = "IRI and blank-node reifiers that are not stored statements are unsupported (design D8: every reifier is an eid)"
+
+[[deviation]]
+test = "https://w3c.github.io/rdf-tests/sparql/sparql12/eval-triple-terms/manifest#pattern-6"
+reason = "IRI and blank-node reifiers that are not stored statements are unsupported (design D8: every reifier is an eid)"
+
+[[deviation]]
+test = "https://w3c.github.io/rdf-tests/sparql/sparql12/eval-triple-terms/manifest#pattern-7"
+reason = "IRI and blank-node reifiers that are not stored statements are unsupported (design D8: every reifier is an eid)"
+
+[[deviation]]
+test = "https://w3c.github.io/rdf-tests/sparql/sparql12/eval-triple-terms/manifest#pattern-8"
+reason = "IRI and blank-node reifiers that are not stored statements are unsupported (design D8: every reifier is an eid)"
+
+[[deviation]]
+test = "https://w3c.github.io/rdf-tests/sparql/sparql12/eval-triple-terms/manifest#pattern-8-nomatch"
+reason = "IRI and blank-node reifiers that are not stored statements are unsupported (design D8: every reifier is an eid)"
+
+[[deviation]]
+test = "https://w3c.github.io/rdf-tests/sparql/sparql12/eval-triple-terms/manifest#pattern-11"
+reason = "SPARQL 1.2 triple functions, triple terms in VALUES and variable predicates with triple terms are unsupported (design D6)"
+
+[[deviation]]
+test = "https://w3c.github.io/rdf-tests/sparql/sparql12/eval-triple-terms/manifest#construct-3"
+reason = "by design: rdf:reifies is virtual, reifiers and triple terms are returned as statement IRIs (design D6, D9)"
+
+[[deviation]]
+test = "https://w3c.github.io/rdf-tests/sparql/sparql12/eval-triple-terms/manifest#construct-5"
+reason = "by design: rdf:reifies is virtual, reifiers and triple terms are returned as statement IRIs (design D6, D9)"
+
+[[deviation]]
+test = "https://w3c.github.io/rdf-tests/sparql/sparql12/eval-triple-terms/manifest#op-1"
+reason = "IRI and blank-node reifiers that are not stored statements are unsupported (design D8: every reifier is an eid)"
+
+[[deviation]]
+test = "https://w3c.github.io/rdf-tests/sparql/sparql12/eval-triple-terms/manifest#op-2"
+reason = "IRI and blank-node reifiers that are not stored statements are unsupported (design D8: every reifier is an eid)"
+
+[[deviation]]
+test = "https://w3c.github.io/rdf-tests/sparql/sparql12/eval-triple-terms/manifest#order-1"
+reason = "by design: rdf:reifies is virtual, reifiers and triple terms are returned as statement IRIs (design D6, D9)"
+
+[[deviation]]
+test = "https://w3c.github.io/rdf-tests/sparql/sparql12/eval-triple-terms/manifest#order-2"
+reason = "by design: rdf:reifies is virtual, reifiers and triple terms are returned as statement IRIs (design D6, D9)"
+

@@ -1,0 +1,1 @@
+PREFIX v: <urn:tiramemsu:v:> PREFIX x: <urn:tiramemsu:v:> SELECT ?c WHERE { x:alice v:worksAt ?c }

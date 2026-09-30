@@ -1,0 +1,1 @@
+{"head":{"vars":["p","o"]},"results":{"bindings":[{"p":{"type":"uri","value":"urn:tiramemsu:bnode:1"},"o":{"type":"literal","value":"anon"}},{"p":{"type":"uri","value":"urn:tiramemsu:v:alice"},"o":{"type":"uri","value":"urn:tiramemsu:v:acme"}}]}}

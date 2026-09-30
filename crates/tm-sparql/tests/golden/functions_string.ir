@@ -1,0 +1,5 @@
+; Homomorphism Unbound SetOfTriples
+(project [?f ?len]
+  (extend ?len (STRLEN ?n)
+    (extend ?f (UCASE (STRBEFORE ?n "l"))
+      (triple <urn:tiramemsu:v:alice> <urn:tiramemsu:v:name> ?n :view now))))

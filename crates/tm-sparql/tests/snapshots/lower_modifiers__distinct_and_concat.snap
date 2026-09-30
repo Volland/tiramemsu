@@ -1,0 +1,15 @@
+---
+source: crates/tm-sparql/tests/lower_modifiers.rs
+expression: "ir(\"SELECT (COUNT(DISTINCT ?c) AS ?n) (MIN(?a) AS ?lo) (MAX(?a) AS ?hi) (SAMPLE(?a) AS ?x) (GROUP_CONCAT(?c; SEPARATOR=\\\"|\\\") AS ?all) WHERE { ?p v:worksAt ?c . ?p v:age ?a }\")"
+---
+; Homomorphism Unbound SetOfTriples
+(project [?n ?lo ?hi ?x ?all]
+  (extend ?all ?~a4
+    (extend ?x ?~a3
+      (extend ?hi ?~a2
+        (extend ?lo ?~a1
+          (extend ?n ?~a0
+            (aggregate [] [(?~a0 count distinct ?c) (?~a1 min ?a) (?~a2 max ?a) (?~a3 sample ?a) (?~a4 group_concat ?c :sep "|")]
+              (join
+                (triple ?p <urn:tiramemsu:v:worksAt> ?c :view now)
+                (triple ?p <urn:tiramemsu:v:age> ?a :view now)))))))))

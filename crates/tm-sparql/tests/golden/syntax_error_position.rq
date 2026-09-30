@@ -1,0 +1,4 @@
+SELECT ?s WHERE {
+  ?s v:p ?o
+  FILTER(
+}

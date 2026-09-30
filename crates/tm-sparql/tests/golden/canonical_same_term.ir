@@ -1,0 +1,7 @@
+; Homomorphism Unbound SetOfTriples
+(project [?~ask]
+  (orderLimit [] :limit 1
+    (extend ?~ask true
+      (project []
+        (filter (sameTerm 1 1)
+          (join))))))

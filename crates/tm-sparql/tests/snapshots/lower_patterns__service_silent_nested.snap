@@ -1,0 +1,7 @@
+---
+source: crates/tm-sparql/tests/lower_patterns.rs
+expression: "ir(\"SELECT ?c WHERE { SERVICE SILENT <urn:tiramemsu:tm:asOf/150> { SERVICE <urn:tiramemsu:tm:validAt/2021-06-01> { v:alice v:worksAt ?c } } }\")"
+---
+; Homomorphism Unbound SetOfTriples
+(project [?c]
+  (triple <urn:tiramemsu:v:alice> <urn:tiramemsu:v:worksAt> ?c :view asOf/tx:150;validAt/1622505600000))

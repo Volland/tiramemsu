@@ -1,0 +1,1 @@
+SELECT ?a WHERE { { SELECT ?p WHERE { ?p v:age ?a } } }

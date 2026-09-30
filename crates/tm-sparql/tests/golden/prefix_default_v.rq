@@ -1,0 +1,1 @@
+SELECT ?c WHERE { <urn:tiramemsu:v:alice> v:worksAt ?c }

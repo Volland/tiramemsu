@@ -1,0 +1,1 @@
+SELECT * FROM <urn:tiramemsu:tm:asOf/5> FROM <urn:tiramemsu:tm:history> WHERE { ?s ?p ?o }

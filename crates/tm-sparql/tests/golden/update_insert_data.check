@@ -1,0 +1,1 @@
+SELECT ?p ?o WHERE { ?p ?q ?o } ORDER BY ?q

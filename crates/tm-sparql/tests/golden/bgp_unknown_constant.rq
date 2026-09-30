@@ -1,0 +1,1 @@
+SELECT ?o WHERE { v:neverSeen v:worksAt ?o }

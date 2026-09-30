@@ -1,0 +1,9 @@
+---
+source: crates/tm-sparql/tests/lower_patterns.rs
+expression: "ir(\"SELECT ?p ?a WHERE { ?p v:age ?a } VALUES (?p ?a) { (UNDEF 30) (v:bob 31) }\")"
+---
+; Homomorphism Unbound SetOfTriples
+(project [?p ?a]
+  (join
+    (triple ?p <urn:tiramemsu:v:age> ?a :view now)
+    (values [?p ?a] (UNDEF 30) (<urn:tiramemsu:v:bob> 31))))

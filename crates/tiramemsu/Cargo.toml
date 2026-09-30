@@ -11,9 +11,11 @@ tm-core = { workspace = true }
 tm-rusqlite = { workspace = true }
 tm-ir = { workspace = true }
 tm-exec = { workspace = true }
+tm-sparql = { workspace = true }
 lru = "0.18"
 
 [dev-dependencies]
+sparesults = { version = "0.3", features = ["sparql-12"] }
 proptest = "1"
 tempfile = "3"
 rusqlite = { version = "0.40", features = ["bundled"] }
@@ -21,6 +23,10 @@ criterion = { version = "0.8", default-features = false, features = ["cargo_benc
 
 [[bench]]
 name = "core"
+harness = false
+
+[[bench]]
+name = "sparql"
 harness = false
 
 [lints]

@@ -1,0 +1,1 @@
+SELECT (LANG(?g) AS ?l) WHERE { v:alice v:greeting ?g FILTER(?g = "Hallo"@de) }

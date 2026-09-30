@@ -1,0 +1,8 @@
+---
+source: crates/tm-sparql/tests/lower_modifiers.rs
+expression: "ir(\"SELECT ?p WHERE { ?p v:age ?a } ORDER BY ?a\")"
+---
+; Homomorphism Unbound SetOfTriples
+(project [?p]
+  (orderLimit [(asc ?a)]
+    (triple ?p <urn:tiramemsu:v:age> ?a :view now)))

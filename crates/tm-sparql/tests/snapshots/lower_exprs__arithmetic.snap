@@ -1,0 +1,8 @@
+---
+source: crates/tm-sparql/tests/lower_exprs.rs
+expression: "ir(\"SELECT ((-?a + 2 * ?a / 3 - +1) AS ?r) WHERE { ?p v:age ?a }\")"
+---
+; Homomorphism Unbound SetOfTriples
+(project [?r]
+  (extend ?r (- (+ (neg ?a) (/ (* 2 ?a) 3)) 1)
+    (triple ?p <urn:tiramemsu:v:age> ?a :view now)))

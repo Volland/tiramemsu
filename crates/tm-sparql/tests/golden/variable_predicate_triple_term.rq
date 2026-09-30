@@ -1,0 +1,1 @@
+SELECT * WHERE { ?s ?p <<( v:a v:b v:c )>> }

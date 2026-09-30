@@ -1,0 +1,1 @@
+SELECT (hasLANGDIR(?n) AS ?x) WHERE { ?p v:name ?n }

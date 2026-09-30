@@ -71,6 +71,14 @@ impl<'a> View<'a> {
         }
     }
 
+    /// The database behind a view on committed state (`None` inside a speculation).
+    pub(crate) fn db(&self) -> Option<&'a Db> {
+        match self.src {
+            Source::Db(db) => Some(db),
+            Source::Writer(..) => None,
+        }
+    }
+
     /// The time selection of this view.
     pub fn spec(&self) -> ViewSpec {
         self.spec
@@ -85,7 +93,7 @@ impl<'a> View<'a> {
         }
     }
 
-    fn exec<R>(
+    pub(crate) fn exec<R>(
         &self,
         f: impl FnOnce(&mut dyn Executor, Option<&TermReader>) -> Result<R>,
     ) -> Result<R> {
@@ -144,7 +152,7 @@ impl<'a> View<'a> {
         self.spec.into()
     }
 
-    fn engine(&self) -> Result<&'a QueryEngine> {
+    pub(crate) fn engine(&self) -> Result<&'a QueryEngine> {
         let e = match self.src {
             Source::Db(db) => db.engine(),
             Source::Writer(_, e) => e,

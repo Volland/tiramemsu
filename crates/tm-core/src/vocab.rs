@@ -36,6 +36,8 @@ pub const XSD_DATETIME: &str = "http://www.w3.org/2001/XMLSchema#dateTime";
 pub const XSD_DOUBLE: &str = "http://www.w3.org/2001/XMLSchema#double";
 /// `xsd:decimal`.
 pub const XSD_DECIMAL: &str = "http://www.w3.org/2001/XMLSchema#decimal";
+/// `xsd:dayTimeDuration`.
+pub const XSD_DAYTIME_DURATION: &str = "http://www.w3.org/2001/XMLSchema#dayTimeDuration";
 /// `rdf:langString`.
 pub const RDF_LANGSTRING: &str = "http://www.w3.org/1999/02/22-rdf-syntax-ns#langString";
 

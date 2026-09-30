@@ -1,0 +1,6 @@
+; Homomorphism Unbound SetOfTriples
+(project [?~ask]
+  (orderLimit [] :limit 1
+    (extend ?~ask true
+      (project []
+        (triple <urn:tiramemsu:v:alice> <urn:tiramemsu:v:age> 41 :view now)))))

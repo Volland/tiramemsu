@@ -1,0 +1,1 @@
+SELECT * FROM <http://example.org/graph1> WHERE { ?s ?p ?o }

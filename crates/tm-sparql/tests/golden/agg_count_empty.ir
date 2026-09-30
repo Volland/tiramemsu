@@ -1,0 +1,5 @@
+; Homomorphism Unbound SetOfTriples
+(project [?n]
+  (extend ?n ?~a0
+    (aggregate [] [(?~a0 count *)]
+      (triple ?p <urn:tiramemsu:v:neverUsed> ?o :view now))))

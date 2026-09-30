@@ -1,0 +1,7 @@
+; Homomorphism Unbound SetOfTriples
+(project [?p ?n]
+  (leftJoin
+    (project [?p]
+      (orderLimit [(desc ?a)] :limit 1
+        (triple ?p <urn:tiramemsu:v:age> ?a :view now)))
+    (triple ?p <urn:tiramemsu:v:name> ?n :view now)))

@@ -1,0 +1,1 @@
+SELECT ?p ?y WHERE { ?p v:age ?a BIND(?a * 2 AS ?y) }

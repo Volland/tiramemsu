@@ -1,0 +1,1 @@
+SELECT * WHERE { SERVICE ?ep { ?s ?p ?o } }

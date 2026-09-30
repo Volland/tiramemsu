@@ -1,0 +1,9 @@
+---
+source: crates/tm-sparql/tests/lower_patterns.rs
+expression: "ir(\"SELECT ?p ?age WHERE { ?p v:name ?n OPTIONAL { ?p v:age ?age FILTER(?age > 50) } }\")"
+---
+; Homomorphism Unbound SetOfTriples
+(project [?p ?age]
+  (leftJoin :cond (> ?age 50)
+    (triple ?p <urn:tiramemsu:v:name> ?n :view now)
+    (triple ?p <urn:tiramemsu:v:age> ?age :view now)))

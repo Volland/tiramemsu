@@ -140,6 +140,14 @@ A Cypher relationship variable used in node position and a SPARQL `~ ?r` reifier
 
 A query that mixes an `asOf(t)` pattern and a now pattern returns the before and after values of a superseded fact. In SPARQL, the `asOf` pattern sits in `SERVICE <tm:asOf/t>`, and a `tm:` IRI in `GRAPH` fails with a `Parse` error.
 
+### SPARQL Golden Cases
+
+Every case under `crates/tm-sparql/tests/golden` runs on a fresh database and is compared with the files next to the query: IR text, SPARQL JSON or N-Triples, or the error. A rejected request runs no SQL and opens no transaction.
+
+### SPARQL W3C Subset
+
+The manifest-driven runner executes the in-scope SPARQL 1.0, 1.1 and 1.2 test categories against fresh databases. It fails on any failure that is not in `expected-deviations.toml`, and on any listed test that now passes.
+
 ### Skewed Joins Start Selective
 
 With bound parameters on a skewed fixture, every golden BGP's plan starts from its most selective pattern, without an explicit `optimize()` call.

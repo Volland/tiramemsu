@@ -1,0 +1,10 @@
+---
+source: crates/tm-sparql/tests/lower_reifiers.rs
+expression: "ir(\"SELECT ?who WHERE { ?who v:doubts <<( v:bob v:says <<( v:alice v:worksAt v:acme )>> )>> }\")"
+---
+; Homomorphism Unbound SetOfTriples
+(project [?who]
+  (join
+    (triple <urn:tiramemsu:v:alice> <urn:tiramemsu:v:worksAt> <urn:tiramemsu:v:acme> :view now :eid ?~e1)
+    (triple <urn:tiramemsu:v:bob> <urn:tiramemsu:v:says> ?~e1 :view now :eid ?~e0)
+    (triple ?who <urn:tiramemsu:v:doubts> ?~e0 :view now)))

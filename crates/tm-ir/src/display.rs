@@ -580,7 +580,7 @@ mod tests {
         let t = |s: &str, p: &str, o: &str| {
             Op::Triple(TriplePattern::new(s, v(p).as_str(), o, View::now()))
         };
-        let corpus = vec![
+        let corpus = [
             Op::join(vec![t("?a", "worksAt", "?c"), t("?c", "name", "?n")]),
             Op::left_join(
                 t("?p", "name", "?n"),

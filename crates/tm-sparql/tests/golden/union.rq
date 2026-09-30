@@ -1,0 +1,1 @@
+SELECT ?p ?e ?t WHERE { { ?p v:email ?e } UNION { ?p v:phone ?t } }

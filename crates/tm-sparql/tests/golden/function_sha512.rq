@@ -1,0 +1,1 @@
+SELECT (SHA512(?n) AS ?x) WHERE { ?p v:name ?n }

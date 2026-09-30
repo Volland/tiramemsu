@@ -1,0 +1,1 @@
+SELECT ?s ?t WHERE { ?s v:at ?t } ORDER BY ?s

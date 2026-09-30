@@ -1,0 +1,4 @@
+; Homomorphism Unbound SetOfTriples
+(project [?n]
+  (orderLimit [(desc ?n)] :skip 1 :limit 2
+    (triple ?p <urn:tiramemsu:v:name> ?n :view now)))
