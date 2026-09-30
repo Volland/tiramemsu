@@ -21,7 +21,7 @@
   "scripts": {
     "build:native": "node scripts/build-native.mjs",
     "build": "tsc -p .",
-    "test": "vitest run --reporter=default --reporter=json --outputFile=test-results.json; node scripts/check-results.mjs test-results.json"
+    "test": "vitest run --reporter=default --reporter=json --outputFile=test-results.json && node scripts/check-results.mjs test-results.json"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
