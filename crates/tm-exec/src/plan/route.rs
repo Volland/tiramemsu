@@ -108,9 +108,9 @@ pub fn bound_by_non_paths(op: &Op) -> VarSet {
 }
 
 /// The variables bound before path `skip` runs: those of [`bound_by_non_paths`]
-/// plus the far endpoint (and path variable) of every *other* path whose one
-/// endpoint is bound, repeated until nothing changes (a path may start where
-/// another ends).
+/// plus the far endpoint (and path and graph variables) of every *other* path
+/// whose one endpoint is bound, repeated until nothing changes (a path may start
+/// where another ends).
 pub fn bound_before(base: &VarSet, all: &[PathPattern], skip: &PathPattern) -> VarSet {
     let mut bound = base.clone();
     loop {
@@ -124,6 +124,10 @@ pub fn bound_before(base: &VarSet, all: &[PathPattern], skip: &PathPattern) -> V
                 }
                 if let Some(b) = &p.bind_path {
                     changed |= bound.insert(b.clone());
+                }
+                // a path under an unbound graph variable enumerates the graphs
+                if let tm_ir::GraphSel::Var(g) = &p.graph {
+                    changed |= bound.insert(g.clone());
                 }
             }
         }
@@ -265,6 +269,7 @@ mod tests {
             max_hops: None,
             bind_path: None,
             view: tm_ir::View::NOW,
+            graph: tm_ir::GraphSel::Any,
         };
         assert_eq!(orient(&p, &bound).unwrap(), Orientation::Inverted);
         let fwd = PathPattern {

@@ -1,0 +1,6 @@
+---
+source: crates/tm-exec/tests/path_graphs.rs
+expression: text
+---
+SELECT p0."end" AS c0 FROM tm_path(?1, ?2, ?3, ?4, ?5, ?6) AS p0
+-- params: 6

@@ -1,7 +1,7 @@
 //! The neighbour fetcher: one batched, prepared statement per (hop shape, view
 //! shape), fed through `rarray(?1)` in chunks. The SQL text holds no data (ids, the
-//! predicate and the view's `t`/`d` are parameters), and every time predicate comes
-//! from the view-predicate function of `crate::scan`.
+//! predicate, the graph set and the view's `t`/`d` are parameters), and every time
+//! predicate comes from the view-predicate function of `crate::scan`.
 
 use std::collections::{HashMap, HashSet};
 
@@ -70,6 +70,19 @@ impl Rv {
     }
 }
 
+/// The graph set of a graph-scoped search.
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum Scope {
+    /// No graph filter.
+    All,
+    /// Every traversed statement needs a membership `(t.eid sys:inGraph g)`, `g` in
+    /// `ids`, visible in the view.
+    Graphs { in_graph: i64, ids: Vec<i64> },
+    /// No statement can be in the set (empty set, or `sys:inGraph` never written):
+    /// no hop is taken.
+    Nothing,
+}
+
 /// Fetches the neighbours of frontier nodes under one view.
 // @lat: [[query#Physical Planning#Path Engine]]
 pub struct Fetcher<'a> {
@@ -78,6 +91,7 @@ pub struct Fetcher<'a> {
     batch: usize,
     built: HashMap<Shape, Built>,
     rv: Option<Rv>,
+    scope: Scope,
 }
 
 impl<'a> Fetcher<'a> {
@@ -89,7 +103,38 @@ impl<'a> Fetcher<'a> {
             batch: DEFAULT_BATCH,
             built: HashMap::new(),
             rv: None,
+            scope: Scope::All,
         }
+    }
+
+    /// Restricts every hop to statements that are members of at least one of
+    /// `graphs` in the fetcher's view (`None`: no restriction). Graph-scoped
+    /// evaluation, `lat.md/query#Physical Planning#Path Engine`.
+    ///
+    /// # Errors
+    ///
+    /// A database error while looking up `sys:inGraph`.
+    pub fn with_graphs(mut self, graphs: Option<&[ObjectId]>) -> Result<Fetcher<'a>> {
+        self.built.clear();
+        self.scope = match graphs {
+            None => Scope::All,
+            Some([]) => Scope::Nothing,
+            Some(gs) => {
+                match TermReader::encode(self.exec, &Value::iri(tm_core::vocab::SYS_IN_GRAPH))? {
+                    None => Scope::Nothing,
+                    Some(ig) => {
+                        let mut ids: Vec<i64> = gs.iter().map(|g| g.raw()).collect();
+                        ids.sort_unstable();
+                        ids.dedup();
+                        Scope::Graphs {
+                            in_graph: ig.raw(),
+                            ids,
+                        }
+                    }
+                }
+            }
+        };
+        Ok(self)
     }
 
     /// Sets the chunk size (tests and tuning).
@@ -156,6 +201,23 @@ impl<'a> Fetcher<'a> {
                 },
             };
             conds.extend(view_predicates("t", &self.view, &mut pa));
+            if let Scope::Graphs { in_graph, ids } = &self.scope {
+                // the statement row `t` is the one traversed, also for a virtual hop
+                // (the statement whose part is stepped to or from); the membership is
+                // read in the same view, one seek on `(s, p)` of the spo index
+                let ig = pa.push(SqlValue::Integer(*in_graph));
+                let gs = pa.push(SqlValue::IntArray(ids.clone()));
+                let mut member = vec![
+                    "m.s = t.eid".to_string(),
+                    format!("m.p = {ig}"),
+                    format!("m.o IN (SELECT value FROM rarray({gs}))"),
+                ];
+                member.extend(view_predicates("m", &self.view, &mut pa));
+                conds.push(format!(
+                    "EXISTS (SELECT 1 FROM triple AS m WHERE {})",
+                    member.join(" AND ")
+                ));
+            }
             // the array drives the join: SQLite then probes the index of `t` once per
             // node instead of scanning `t` against an `IN` list
             let sql = format!(
@@ -233,6 +295,9 @@ impl<'a> Fetcher<'a> {
         let Some(shape) = shape_of(&letter.fetch, letter.dir) else {
             return Ok(out);
         };
+        if self.scope == Scope::Nothing {
+            return Ok(out);
+        }
         // nodes that can never take part in this hop are not sent
         let keep = |raw: i64| match ObjectId::from_raw(raw).tag() {
             Err(_) => false,

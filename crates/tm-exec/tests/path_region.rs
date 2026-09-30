@@ -124,6 +124,7 @@ fn end_bound_path_is_inverted() {
         max_hops: Some(15),
         bind_path: None,
         view: View::NOW,
+        graph: tm_ir::GraphSel::Any,
     });
     let q = b().query(p);
     // acme is not in the dictionary yet: the pattern short-circuits
@@ -251,6 +252,7 @@ fn end_bound_pattern_binds_the_path_forwards() {
         max_hops: Some(15),
         bind_path: Some("p".into()),
         view: View::NOW,
+        graph: tm_ir::GraphSel::Any,
     };
     let q = b().query(Op::Path(pat.clone()));
     let ex = explain(&t.db.now(), &q);
@@ -303,6 +305,7 @@ fn end_bound_pattern_binds_the_path_forwards() {
             max_hops: None,
             bind_path: None,
             view: View::NOW,
+            graph: tm_ir::GraphSel::Any,
         }),
     ]));
     assert_eq!(run(&t.db.now(), &same).len(), 1);
@@ -325,6 +328,7 @@ fn zero_length_match_of_an_unknown_constant() {
             max_hops: None,
             bind_path: None,
             view: View::NOW,
+            graph: tm_ir::GraphSel::Any,
         }))
     };
     let nobody = || TermOrVar::iri(vi("nobody"));
@@ -370,6 +374,7 @@ fn anchor_shapes_golden() {
             max_hops: max,
             bind_path: None,
             view: View::as_of_tx(1),
+            graph: tm_ir::GraphSel::Any,
         })
     };
     let a = || TermOrVar::iri(vi("a"));

@@ -226,6 +226,44 @@ fn paths_reach_through_a_chain() {
     assert!(r[0]["path"]["hops"].is_array());
 }
 
+// json-bridge "Path inside a graph"
+#[test]
+fn paths_stay_inside_the_listed_graphs() {
+    let (_d, db) = open();
+    db.call(
+        "transact",
+        &json!({ "ops": [
+            { "op": "assert", "s": v("a"), "p": v("knows"), "o": v("b"), "as": "ab" },
+            { "op": "assert", "s": v("b"), "p": v("knows"), "o": v("c") },
+            { "op": "addToGraph", "eid": {"ref": "ab"}, "graph": v("session12") },
+        ]}),
+    )
+    .unwrap();
+    let ends = |graphs: J| {
+        let r = db
+            .call(
+                "path",
+                &json!({ "start": v("a"), "path": "knows+", "graphs": graphs }),
+            )
+            .unwrap();
+        r.as_array()
+            .unwrap()
+            .iter()
+            .map(|row| row["end"].clone())
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(ends(json!([v("session12")])), vec![v("b")]);
+    assert_eq!(ends(json!(null)).len(), 2, "no filter");
+    // a graph that was never written names no graph: no hop is taken
+    assert!(ends(json!([v("nowhere")])).is_empty());
+    assert!(db
+        .call(
+            "path",
+            &json!({ "start": v("a"), "path": "knows+", "graphs": "session12" })
+        )
+        .is_err());
+}
+
 #[test]
 fn named_graphs_hold_statements_as_tags() {
     let (_d, db) = open();

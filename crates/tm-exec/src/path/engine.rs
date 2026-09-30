@@ -54,6 +54,10 @@ pub struct PathRequest<'a> {
     pub view: ViewSpec,
     /// Only rows for this end.
     pub end: Option<ObjectId>,
+    /// Graph-scoped evaluation: every traversed statement must be a member of at
+    /// least one of these graphs in the view. `None` = no graph filter; an empty set
+    /// leaves only zero-hop rows.
+    pub graphs: Option<Vec<ObjectId>>,
 }
 
 /// Reads the vocabulary from the database the first time a name needs it.
@@ -149,7 +153,9 @@ impl PathEngine {
             return Ok(());
         };
         let res = resolve(exec, &dfa)?;
-        let mut fetch = Fetcher::new(exec, view).with_batch(self.opts.batch);
+        let mut fetch = Fetcher::new(exec, view)
+            .with_batch(self.opts.batch)
+            .with_graphs(req.graphs.as_deref())?;
         let mut budget = StateBudget::new(self.opts.max_states);
         let mut ctx = Ctx {
             dfa: &dfa,

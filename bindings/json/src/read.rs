@@ -2,8 +2,8 @@
 
 use serde_json::{json, Map, Value as J};
 use tiramemsu::{
-    Db, Event, ObjectId, Op, PathDir, PathMode, PathRow, RdfTerm, RdfTriple, SparqlResult, TimeRef,
-    Triple, TxReport, View,
+    Db, Event, ObjectId, Op, PathArgs, PathDir, PathMode, PathRow, RdfTerm, RdfTriple,
+    SparqlResult, TimeRef, Triple, TxReport, View,
 };
 
 use crate::value::{params_from_json, value_from_json, value_to_json};
@@ -82,7 +82,26 @@ pub fn run(view: &View<'_>, op: &str, args: &J) -> Res<J> {
                 .get("maxHops")
                 .and_then(J::as_u64)
                 .map_or(u32::MAX, |n| n.min(u32::MAX as u64) as u32);
-            let rows = view.path(start, str_arg(args, "path")?, mode, max)?;
+            let graphs = match args.get("graphs") {
+                None | Some(J::Null) => None,
+                Some(J::Array(gs)) => {
+                    let mut ids = Vec::with_capacity(gs.len());
+                    for g in gs {
+                        // a term that is not stored names no graph
+                        if let Some(id) = view.encode(&value_from_json(g)?)? {
+                            ids.push(id);
+                        }
+                    }
+                    Some(ids)
+                }
+                Some(_) => return Err(arg("`graphs` must be a list of terms")),
+            };
+            let opts = PathArgs {
+                mode,
+                max_hops: max,
+                graphs,
+            };
+            let rows = view.path_with(start, str_arg(args, "path")?, &opts)?;
             Ok(J::Array(
                 rows.iter()
                     .map(|r| path_row_json(view, r))

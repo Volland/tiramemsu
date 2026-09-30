@@ -1,0 +1,6 @@
+---
+source: crates/tm-exec/tests/path_graphs.rs
+expression: text
+---
+SELECT x0.g AS c0, p0."end" AS c1 FROM (SELECT DISTINCT gm.o AS g FROM triple AS gm WHERE gm.p = ?6 AND gm.t_ret IS NULL AND EXISTS (SELECT 1 FROM triple AS ge WHERE ge.eid = gm.s AND ge.t_ret IS NULL)) AS x0, tm_path(?1, ?2, ?3, ?4, ?5, x0.g) AS p0
+-- params: 6

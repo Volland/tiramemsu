@@ -276,9 +276,47 @@ A statement in two graphs appears once in the default graph and once per members
 
 `asOf` shows a past membership, `history` lists a removed one, `validAt` honours a bounded membership, and a plain delete retracts a statement together with its memberships.
 
-### Property Paths Inside Graphs Are Rejected
+### Property Paths Run Inside Graphs
 
-A property path under `GRAPH` or a `FROM <g>` default graph, also inside an update `WHERE`, fails with `Unsupported("named graph path")` before any SQL runs, and the same path outside a graph still runs.
+A recursive path under `GRAPH <g>`, `GRAPH ?g` (enumerated, bound by a triple pattern, or bound outside the block), `FROM` and `FROM NAMED` follows only member statements, also in an update `WHERE`.
+
+A non-recursive path puts the graph on each triple of its translation, and the same path outside a graph reads the union.
+
+### Zero Length Paths Per Graph
+
+A nullable path gives its zero-length match once per graph in scope: once per graph under `GRAPH ?g` (also for a term in no statement), once under `GRAPH <g>` even for a graph with no member, and once for a `FROM` default graph.
+
+### Graph Paths Under asOf
+
+After a membership is removed, `GRAPH <g>` paths stop at it now, `SERVICE <tm:asOf/t>` still follows it, and `GRAPH ?g` enumerates the graphs of the view it runs in.
+
+### Paths Cross Layers Inside Graphs
+
+Virtual `sys:subject` and `sys:object` hops inside `GRAPH <g>`, forward and inverse, step only from and to statements that are members of `g`, and `GRAPH ?g` binds the one graph the whole path lies in.
+
+### Graph Scoped Paths Follow Membership
+
+Through `View::path_with`, a graph set confines every mode to member statements. A statement in two listed graphs is one hop, zero-hop rows ignore the set, and memberships are read in the hop's view (`asOf`, `history`).
+
+### Graph Scoped Virtual Hops
+
+A virtual hop needs the statement whose part it steps to or from in the graph set, in both directions, and a store that never wrote `sys:inGraph` gives only zero-hop rows.
+
+### Graph Filter Fetch Uses An Index Seek
+
+With a graph set, every fetch shape under `now`, `asOf` and `history` holds the membership `EXISTS` with no data in its text, and `EXPLAIN QUERY PLAN` shows a covering-index seek for the membership. The SQL and plans match `insta` snapshots.
+
+### tm_path Graphs Argument
+
+`tm_path` takes one graph as an integer, several as JSON text, NULL as no filter, `'[]'` as the empty set and a column as a correlated graph, keeps the pushed-down end, and rejects a malformed `graphs` with `tm_path: graphs:`.
+
+### Path Graph Selector Text And Validation
+
+The IR text form of a path prints `:graph` for a set or a variable and nothing for `Any`, the variable is in scope, and an empty set or a variable in a set is invalid.
+
+### Path Graph Selector SQL Snapshots
+
+The planner passes a set of one graph as an integer and several as JSON text, correlates a variable bound by a joined pattern and enumerates an unbound one, matching `insta` snapshots, and a path without a selector keeps its five-argument call.
 
 ### Graph Names Are Rejected When Invalid
 

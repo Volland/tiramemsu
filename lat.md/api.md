@@ -30,6 +30,7 @@ impl View {
     pub fn sparql(&self, q: &str) -> Result<SparqlResult>;        // SELECT | ASK | CONSTRUCT | update (current view only)
     pub fn cypher(&self, q: &str, params: &CypherParams) -> Result<CypherResult>;   // read-only; a write clause is Unsupported
     pub fn path(&self, start: ObjectId, path: &str, mode: PathMode, max_hops: u32) -> Result<Vec<PathRow>>;
+    pub fn path_with(&self, start: ObjectId, path: &str, args: &PathArgs) -> Result<Vec<PathRow>>; // + graphs
     pub fn triples(&self, s: Option<ObjectId>, p: Option<ObjectId>, o: Option<ObjectId>) -> Result<Vec<Triple>>;
     pub fn graphs(&self) -> Result<Vec<ObjectId>>;                             // graphs with a visible membership, or declared
     pub fn graph_members(&self, graph: ObjectId) -> Result<Vec<Eid>>;          // member statements in this view

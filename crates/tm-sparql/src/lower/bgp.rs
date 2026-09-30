@@ -77,7 +77,7 @@ impl Lowerer<'_> {
     /// Applies the active graph selection to a statement pattern. Annotation
     /// triples (subject is a reifier of this pattern) and virtual predicates are not
     /// statements of the graph: they read the default view.
-    fn select_graph(&mut self, t: TriplePattern, reifiers: &[Var]) -> TriplePattern {
+    pub(super) fn select_graph(&mut self, t: TriplePattern, reifiers: &[Var]) -> TriplePattern {
         let annotation =
             t.eid.is_none() && matches!(&t.s, TermOrVar::Var(v) if reifiers.contains(v));
         let virtual_pred =

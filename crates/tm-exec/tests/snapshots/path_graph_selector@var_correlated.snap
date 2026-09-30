@@ -1,0 +1,6 @@
+---
+source: crates/tm-exec/tests/path_graphs.rs
+expression: text
+---
+SELECT t1.o AS c0, t0.s AS c1, p0."end" AS c2 FROM triple AS t0, triple AS t1, tm_path(t0.s, ?4, ?5, ?6, ?7, t1.o) AS p0 WHERE t0.p = ?1 AND t0.o = ?2 AND t0.t_ret IS NULL AND t1.p = ?3 AND t1.t_ret IS NULL AND t0.eid = t1.s
+-- params: 7

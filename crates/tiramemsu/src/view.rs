@@ -247,7 +247,7 @@ impl<'a> View<'a> {
     /// property-path text plus `{m,n}`; `max_hops` is a hard bound for every mode
     /// (`u32::MAX` for none). Rows come in the deterministic order of the mode; `REACH`
     /// rows carry no path value. Inside `Db::with` the path sees the speculative
-    /// statements.
+    /// statements. [`View::path_with`] adds a graph filter.
     ///
     /// Path steps can cross layers through the virtual hops `sys:subject` and
     /// `sys:object` of a fact id, for example `supportedBy/(sys:subject|sys:object)`.
@@ -281,6 +281,49 @@ impl<'a> View<'a> {
         mode: PathMode,
         max_hops: u32,
     ) -> Result<Vec<PathRow>> {
+        self.path_with(
+            start,
+            path,
+            &PathArgs {
+                mode,
+                max_hops,
+                ..PathArgs::default()
+            },
+        )
+    }
+
+    /// Evaluates a path from `start` with the options of `args`: the mode, the hop
+    /// bound and an optional graph set. With `args.graphs`, every statement the path
+    /// traverses (the statement stepped over, or for `sys:subject`, `sys:object` and
+    /// `sys:predicate` the statement whose part is stepped to or from) must be a
+    /// member of at least one of the graphs, the membership being visible in this
+    /// view; zero-hop rows are kept. Otherwise as [`View::path`], which is the
+    /// shorthand with no graph set.
+    ///
+    /// # Errors
+    ///
+    /// As [`View::path`].
+    ///
+    /// ```
+    /// # use tiramemsu::*;
+    /// # let dir = tempfile::tempdir().unwrap();
+    /// # let db = Db::open(dir.path().join("m.db"), OpenOptions::default())?;
+    /// let v = |s: &str| Value::iri(format!("urn:tiramemsu:v:{s}"));
+    /// db.transact(TxOptions::default(), |tx| {
+    ///     let ab = tx.assert(v("a"), v("knows"), v("b"), Valid::ALWAYS)?;
+    ///     tx.assert(v("b"), v("knows"), v("c"), Valid::ALWAYS)?; // in no graph
+    ///     tx.add_to_graph(ab.eid(), v("session12"), AssertOpts::default())?;
+    ///     Ok(())
+    /// })?;
+    /// let view = db.now();
+    /// let a = view.encode(&v("a"))?.unwrap();
+    /// let g = view.encode(&v("session12"))?.unwrap();
+    /// let args = PathArgs { graphs: Some(vec![g]), ..PathArgs::default() };
+    /// let rows = view.path_with(a, "knows+", &args)?;
+    /// assert_eq!(rows.len(), 1); // only b: `b knows c` is in no graph
+    /// # Ok::<(), Error>(())
+    /// ```
+    pub fn path_with(&self, start: ObjectId, path: &str, args: &PathArgs) -> Result<Vec<PathRow>> {
         let engine = self
             .engine()?
             .path_engine()
@@ -295,10 +338,11 @@ impl<'a> View<'a> {
                 &PathRequest {
                     start,
                     path,
-                    mode,
-                    max_hops: Some(max_hops),
+                    mode: args.mode,
+                    max_hops: Some(args.max_hops),
                     view,
                     end: None,
+                    graphs: args.graphs.clone(),
                 },
             )
         })
@@ -307,5 +351,29 @@ impl<'a> View<'a> {
     /// Events with `t > since` visible to this view's snapshot (the whole log).
     pub fn events_since(&self, since: u64) -> Result<Vec<Event>> {
         self.exec(|e, _| read::events_since(e, since))
+    }
+}
+
+/// The options of [`View::path_with`]. `PathArgs::default()` is `REACH` with no hop
+/// bound and no graph filter.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PathArgs {
+    /// The path mode.
+    pub mode: PathMode,
+    /// A hard bound on the hop count for every mode (`u32::MAX` for none).
+    pub max_hops: u32,
+    /// Graph-scoped evaluation: every traversed statement must be a member of at
+    /// least one of these graphs. `None` = no graph filter; `Some(vec![])` leaves
+    /// only zero-hop rows.
+    pub graphs: Option<Vec<ObjectId>>,
+}
+
+impl Default for PathArgs {
+    fn default() -> PathArgs {
+        PathArgs {
+            mode: PathMode::Reachability,
+            max_hops: u32::MAX,
+            graphs: None,
+        }
     }
 }

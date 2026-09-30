@@ -109,6 +109,25 @@ pub struct PPath {
     pub view_text: String,
     /// Forward or inverted.
     pub note: RouteNote,
+    /// The graph selection (the `graphs` argument of the call).
+    pub graphs: PGraphs,
+    /// The resolved view (for the graph enumeration of [`PGraphs::Var`]).
+    pub view: ResolvedView,
+    /// The id of `sys:inGraph`; `None` when no membership was ever written.
+    pub in_graph: Option<ObjectId>,
+}
+
+/// The graph selection of a routed path.
+#[derive(Clone, Debug, PartialEq)]
+pub enum PGraphs {
+    /// No graph filter: the call gets no `graphs` argument.
+    Any,
+    /// Every traversed statement is in one of these graphs. Graphs missing from the
+    /// dictionary are dropped, so the list may be empty (only zero-hop rows).
+    Ids(Vec<ObjectId>),
+    /// The path lies in the graph bound to the variable: a column of the join when
+    /// a pattern of it binds the variable, otherwise each graph of the view in turn.
+    Var(Var),
 }
 
 /// A Values cell after encoding.

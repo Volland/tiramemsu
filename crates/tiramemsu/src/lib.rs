@@ -11,7 +11,7 @@ mod view;
 pub use cypher::TxCypher;
 pub use db::{Db, OpenOptions};
 pub use sparql::SparqlResult;
-pub use view::View;
+pub use view::{PathArgs, View};
 
 pub use tm_core::{
     codec, read, value, vocab, AssertOpts, Asserted, Capabilities, Clock, Dialect, Eid, Error,

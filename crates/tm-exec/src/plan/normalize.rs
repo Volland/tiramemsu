@@ -17,16 +17,16 @@ use tm_core::{codec, Executor, ObjectId, Result, SqlValue, Tag, Value};
 use tm_ir::display::path_text_canonical;
 use tm_ir::validate::scope;
 use tm_ir::{
-    AggFunc, Expr, GraphSet, IrQuery, Op, PathPattern, Semantics, TermOrVar, TriplePattern, TxSel,
-    ValidSel, Var, VarSet, View,
+    AggFunc, Expr, GraphSel, GraphSet, IrQuery, Op, PathPattern, Semantics, TermOrVar,
+    TriplePattern, TxSel, ValidSel, Var, VarSet, View,
 };
 
 use super::encode::{encode_value, position_ok, value_position_ok, Enc, Pos};
 use super::resolve::resolve;
 use super::route::{bound_before, bound_by_non_paths, orient, path_patterns, Orientation};
 use super::{
-    Cell, Node, PAgg, PConst, PExpr, PKey, PLookup, PObj, PPath, PTerm, PTriple, PValues, PVirtual,
-    PVolatile,
+    Cell, Node, PAgg, PConst, PExpr, PGraphs, PKey, PLookup, PObj, PPath, PTerm, PTriple, PValues,
+    PVirtual, PVolatile,
 };
 use crate::error::invalid;
 use crate::path::ast::nullable;
@@ -172,6 +172,30 @@ impl<'e> Planner<'e> {
         })
     }
 
+    /// The graph selection of a path: a set's graphs encoded (a graph missing from
+    /// the dictionary has no member and is dropped), a variable kept.
+    fn path_graphs(&mut self, g: &GraphSel) -> Result<PGraphs> {
+        Ok(match g {
+            GraphSel::Any => PGraphs::Any,
+            GraphSel::Var(v) => PGraphs::Var(v.clone()),
+            GraphSel::Set(gs) => {
+                let mut ids = Vec::with_capacity(gs.len());
+                for g in gs {
+                    match g {
+                        TermOrVar::Id(id) => ids.push(*id),
+                        TermOrVar::Const(v) => {
+                            if let Enc::Id(id) = self.encode(v)? {
+                                ids.push(id);
+                            }
+                        }
+                        other => return Err(invalid(format!("invalid graph {other:?}"))),
+                    }
+                }
+                PGraphs::Ids(ids)
+            }
+        })
+    }
+
     /// A path with an endpoint constant that is in no statement: only a nullable
     /// expression can match, by the zero-length path, so the other endpoint is
     /// bound to that very term (`:nobody :p* ?x` gives `?x = :nobody`). Paths whose
@@ -204,8 +228,34 @@ impl<'e> Planner<'e> {
                 let Some(view) = self.view(&p.view)? else {
                     return Ok(empty());
                 };
+                let graphs = self.path_graphs(&p.graph)?;
+                let in_graph = match &graphs {
+                    PGraphs::Var(_) => {
+                        match self.encode(&Value::iri(tm_core::vocab::SYS_IN_GRAPH))? {
+                            Enc::Id(id) => Some(id),
+                            _ => None,
+                        }
+                    }
+                    _ => None,
+                };
                 let (start, end) = match (self.endpoint(&p.start)?, self.endpoint(&p.end)?) {
                     (Ep::Term(s), Ep::Term(e)) => (s, e),
+                    // under a graph variable the zero-length row is per graph, so the
+                    // call still runs, from the constant's plan-local id (the engine
+                    // finds no neighbour and returns the zero-hop row)
+                    (s, e) if matches!(graphs, PGraphs::Var(_)) => {
+                        let mut term = |x: Ep| match x {
+                            Ep::Term(t) => Some(t),
+                            Ep::Missing(c) => Some(PTerm::Id(self.synthetic_id(&c.canonical()))),
+                            Ep::Never => None,
+                        };
+                        match (term(s), term(e)) {
+                            (Some(s), Some(e)) if nullable(&p.path) && p.bind_path.is_none() => {
+                                (s, e)
+                            }
+                            _ => return Ok(empty()),
+                        }
+                    }
                     (s, e) => return self.absent_endpoints(p, s, e, empty()),
                 };
                 let (arg, other, text, note) =
@@ -232,6 +282,9 @@ impl<'e> Planner<'e> {
                     bind_path: p.bind_path.clone(),
                     view_text: view_text(&view),
                     note,
+                    graphs,
+                    view,
+                    in_graph,
                 })
             }
             Op::Values(v) => {

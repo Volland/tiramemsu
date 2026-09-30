@@ -1,12 +1,13 @@
 //! Property paths (`path-lowering`). A path with `*`, `+` or `?` goes to the
 //! native path operator with `REACH` semantics; a path of only `/`, `|`, `^` and
 //! IRIs uses the SPARQL 1.1 translation to joins and unions of triple patterns, so
-//! it needs no bound endpoint. Negated property sets are `Unsupported`.
+//! it needs no bound endpoint. Both carry the graph selection of their block.
+//! Negated property sets are `Unsupported`.
 
 use spargebra::algebra::PropertyPathExpression as P;
 use spargebra::term::TermPattern;
 use tm_core::{Result, Value};
-use tm_ir::{Op, PathExpr, PathMode, PathPattern, TermOrVar, TriplePattern, View};
+use tm_ir::{GraphSel, Op, PathExpr, PathMode, PathPattern, TermOrVar, TriplePattern, View};
 
 use super::Lowerer;
 use crate::error::{unsupported, NEGATED_PROPERTY_SET, PROPERTY_PATH};
@@ -53,7 +54,9 @@ fn seq_or_alt(a: PathExpr, b: PathExpr, seq: bool) -> PathExpr {
 }
 
 impl Lowerer<'_> {
-    /// Lowers `subject path object` under `view`.
+    /// Lowers `subject path object` under `view`, in the active graph selection: a
+    /// recursive path filters every hop by it, the translation of a non-recursive
+    /// one puts it on each triple pattern.
     // @lat: [[query#Physical Planning#Path Engine#Path Lowering]]
     pub fn path(
         &mut self,
@@ -65,6 +68,9 @@ impl Lowerer<'_> {
         let s = self.simple_position(subject)?;
         let o = self.simple_position(object)?;
         if recursive(path) {
+            if matches!(self.active, GraphSel::Var(_)) {
+                self.graph_var_uses += 1;
+            }
             return Ok(Op::Path(PathPattern {
                 start: s,
                 end: o,
@@ -73,6 +79,7 @@ impl Lowerer<'_> {
                 max_hops: None,
                 bind_path: None,
                 view,
+                graph: self.active.clone(),
             }));
         }
         self.expand(s, path, o, view)
@@ -82,11 +89,14 @@ impl Lowerer<'_> {
     /// fresh variable, an alternative is a union, an inverse swaps its ends.
     fn expand(&mut self, s: TermOrVar, p: &P, o: TermOrVar, view: View) -> Result<Op> {
         Ok(match p {
-            P::NamedNode(n) => Op::Triple(TriplePattern::new(
-                s,
-                TermOrVar::Const(Value::Iri(n.as_str().to_string())),
-                o,
-                view,
+            P::NamedNode(n) => Op::Triple(self.select_graph(
+                TriplePattern::new(
+                    s,
+                    TermOrVar::Const(Value::Iri(n.as_str().to_string())),
+                    o,
+                    view,
+                ),
+                &[],
             )),
             P::Reverse(x) => self.expand(o, x, s, view)?,
             P::Sequence(a, b) => {

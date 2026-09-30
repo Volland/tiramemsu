@@ -338,26 +338,271 @@ fn membership_is_bitemporal_in_sparql() {
             || r.o != t3.db.now().encode(&g("1")).unwrap().unwrap()));
 }
 
-// @lat: [[tests#Named Graphs#Property Paths Inside Graphs Are Rejected]]
+/// `a knows b` and `b knows c` in `<g1>`, `c knows d` in `<g2>`, `a knows x` in no
+/// graph, `c type Person` in `<g2>`.
+fn knows() -> T {
+    let t = T::new();
+    t.upd(
+        "INSERT DATA { GRAPH <urn:g:1> { v:a v:knows v:b . v:b v:knows v:c } \
+         GRAPH <urn:g:2> { v:c v:knows v:d . v:c v:type v:Person } v:a v:knows v:x }",
+    );
+    t
+}
+
+fn pairs(t: &T, q: &str) -> Vec<(Option<Value>, Option<Value>)> {
+    let s = t.sel(q);
+    let (gc, xc) = (s.col("g").unwrap(), s.col("x").unwrap());
+    let mut out: Vec<_> = s
+        .rows
+        .iter()
+        .map(|r| (r[gc].clone(), r[xc].clone()))
+        .collect();
+    out.sort_by_key(|(g, x)| (format!("{g:?}"), format!("{x:?}")));
+    out
+}
+
+fn sorted_col(t: &T, q: &str, var: &str) -> Vec<Option<Value>> {
+    let mut c = t.col(q, var);
+    c.sort_by_key(|x| format!("{x:?}"));
+    c
+}
+
+// @lat: [[tests#Named Graphs#Property Paths Run Inside Graphs]]
 #[test]
-fn property_paths_inside_graphs_are_rejected() {
-    let t = store();
+fn property_paths_run_inside_graphs() {
+    let t = knows();
+    // GRAPH <g>: every hop is a member of g
+    assert_eq!(
+        sorted_col(
+            &t,
+            "SELECT ?x WHERE { GRAPH <urn:g:1> { v:a v:knows+ ?x } }",
+            "x"
+        ),
+        some(&[v("b"), v("c")])
+    );
+    assert!(t
+        .sel("SELECT ?x WHERE { GRAPH <urn:g:2> { v:a v:knows+ ?x } }")
+        .rows
+        .is_empty());
+    // GRAPH ?g with no other pattern: once per graph of the view
+    assert_eq!(
+        pairs(&t, "SELECT ?g ?x WHERE { GRAPH ?g { v:a v:knows+ ?x } }"),
+        vec![(Some(g("1")), Some(v("b"))), (Some(g("1")), Some(v("c")))]
+    );
+    assert_eq!(
+        pairs(&t, "SELECT ?g ?x WHERE { GRAPH ?g { v:c v:knows+ ?x } }"),
+        vec![(Some(g("2")), Some(v("d")))]
+    );
+    // GRAPH ?g bound by a triple pattern of the block: the path runs in that graph
+    assert_eq!(
+        pairs(
+            &t,
+            "SELECT ?g ?x WHERE { GRAPH ?g { ?s v:type v:Person . ?s v:knows* ?x } }"
+        ),
+        vec![(Some(g("2")), Some(v("c"))), (Some(g("2")), Some(v("d")))]
+    );
+    // a graph variable bound outside the block restricts the enumeration
+    assert_eq!(
+        pairs(
+            &t,
+            "SELECT ?g ?x WHERE { VALUES ?g { <urn:g:2> } GRAPH ?g { v:b v:knows* ?x } }"
+        ),
+        vec![(Some(g("2")), Some(v("b")))]
+    );
+    // FROM: the default graph is the union of the listed graphs
+    assert_eq!(
+        sorted_col(
+            &t,
+            "SELECT ?x FROM <urn:g:1> FROM <urn:g:2> WHERE { v:a v:knows+ ?x }",
+            "x"
+        ),
+        some(&[v("b"), v("c"), v("d")])
+    );
+    assert_eq!(
+        sorted_col(
+            &t,
+            "SELECT ?x FROM <urn:g:1> WHERE { v:a v:knows* ?x }",
+            "x"
+        ),
+        some(&[v("a"), v("b"), v("c")])
+    );
+    // FROM NAMED limits GRAPH, for a constant and a variable name
+    assert!(t
+        .sel("SELECT ?x FROM NAMED <urn:g:2> WHERE { GRAPH <urn:g:1> { v:a v:knows+ ?x } }")
+        .rows
+        .is_empty());
+    assert!(t
+        .sel("SELECT ?g ?x FROM NAMED <urn:g:2> WHERE { GRAPH ?g { v:a v:knows+ ?x } }")
+        .rows
+        .is_empty());
+    // a non-recursive path keeps the triple translation, with the graph on each triple
+    assert_eq!(
+        sorted_col(
+            &t,
+            "SELECT ?x WHERE { GRAPH <urn:g:1> { v:a v:knows/v:knows ?x } }",
+            "x"
+        ),
+        some(&[v("c")])
+    );
+    assert!(t
+        .sel("SELECT ?x WHERE { GRAPH <urn:g:1> { v:b v:knows/v:knows ?x } }")
+        .rows
+        .is_empty());
+    // outside a graph: the union, the statement in no graph included
+    assert_eq!(t.sel("SELECT ?x WHERE { v:a v:knows+ ?x }").rows.len(), 4);
+    // inside an update WHERE
+    let r = t.upd("INSERT { v:z v:reach ?x } WHERE { GRAPH <urn:g:1> { v:a v:knows+ ?x } }");
+    assert_eq!(r.asserted.len(), 2);
+}
+
+// @lat: [[tests#Named Graphs#Zero Length Paths Per Graph]]
+#[test]
+fn zero_length_paths_per_graph() {
+    let t = knows();
+    // once per graph in scope, also for a term that is in no statement
+    assert_eq!(
+        pairs(
+            &t,
+            "SELECT ?g ?x WHERE { GRAPH ?g { v:nobody v:knows* ?x } }"
+        ),
+        vec![
+            (Some(g("1")), Some(v("nobody"))),
+            (Some(g("2")), Some(v("nobody")))
+        ]
+    );
+    assert_eq!(
+        pairs(&t, "SELECT ?g ?x WHERE { GRAPH ?g { v:a v:knows? ?x } }"),
+        vec![
+            (Some(g("1")), Some(v("a"))),
+            (Some(g("1")), Some(v("b"))),
+            (Some(g("2")), Some(v("a")))
+        ]
+    );
+    assert_eq!(
+        t.col(
+            "SELECT ?x WHERE { GRAPH <urn:g:1> { v:nobody v:knows* ?x } }",
+            "x"
+        ),
+        some(&[v("nobody")])
+    );
+    // a graph with no member still gives the zero-length match (design Decision 5)
+    assert_eq!(
+        t.col(
+            "SELECT ?x WHERE { GRAPH <urn:never:used> { v:a v:knows* ?x } }",
+            "x"
+        ),
+        some(&[v("a")])
+    );
+    assert_eq!(
+        t.col(
+            "SELECT ?x FROM <urn:g:1> FROM <urn:g:2> WHERE { v:nobody v:knows* ?x }",
+            "x"
+        ),
+        some(&[v("nobody")])
+    );
+    // the path value is not asked for in SPARQL, and a non-nullable path from an
+    // absent term matches nothing, in any graph
+    assert!(t
+        .sel("SELECT ?g ?x WHERE { GRAPH ?g { v:nobody v:knows+ ?x } }")
+        .rows
+        .is_empty());
+}
+
+// @lat: [[tests#Named Graphs#Graph Paths Under asOf]]
+#[test]
+fn graph_paths_under_as_of() {
+    let t = knows();
     let before = t.last_t();
-    assert_unsupported(
-        t.err("SELECT ?x WHERE { GRAPH <urn:g:1> { v:a v:knows+ ?x } }"),
-        "named graph path",
+    // membership only: the statement stays live and in the default graph
+    t.upd("DELETE DATA { GRAPH <urn:g:1> { v:b v:knows v:c } }");
+    assert!(t.has(&v("b"), &v("knows"), &v("c")));
+    assert_eq!(
+        t.col(
+            "SELECT ?x WHERE { GRAPH <urn:g:1> { v:a v:knows+ ?x } }",
+            "x"
+        ),
+        some(&[v("b")])
     );
-    assert_unsupported(
-        t.err("SELECT ?x FROM <urn:g:1> WHERE { v:a v:knows+ ?x }"),
-        "named graph path",
+    let q = format!(
+        "SELECT ?x WHERE {{ SERVICE <{P}asOf/{before}> {{ GRAPH <urn:g:1> {{ v:a v:knows+ ?x }} }} }}"
     );
-    assert_unsupported(
-        t.err("INSERT { v:z v:k ?x } WHERE { GRAPH <urn:g:1> { v:a v:knows+ ?x } }"),
-        "named graph path",
+    assert_eq!(sorted_col(&t, &q, "x"), some(&[v("b"), v("c")]));
+    // the path existed in the graph then, not now
+    let q = format!(
+        "SELECT ?x WHERE {{ SERVICE <{P}asOf/{before}> {{ GRAPH <urn:g:1> {{ v:a v:knows+ ?x }} }} \
+         FILTER NOT EXISTS {{ GRAPH <urn:g:1> {{ v:a v:knows+ ?x }} }} }}"
     );
-    // outside a graph the path engine still works
-    assert!(t.sel("SELECT ?x WHERE { v:a v:knows+ ?x }").rows.is_empty());
-    assert_eq!(t.last_t(), before);
+    assert_eq!(t.col(&q, "x"), some(&[v("c")]));
+    // GRAPH ?g enumerates the graphs of the view it runs in
+    let q =
+        format!("SELECT ?g ?x FROM <{P}asOf/{before}> WHERE {{ GRAPH ?g {{ v:a v:knows+ ?x }} }}");
+    assert_eq!(
+        pairs(&t, &q),
+        vec![(Some(g("1")), Some(v("b"))), (Some(g("1")), Some(v("c")))]
+    );
+}
+
+// @lat: [[tests#Named Graphs#Paths Cross Layers Inside Graphs]]
+#[test]
+fn paths_cross_layers_inside_graphs() {
+    let t = T::new();
+    let g1 = g("1");
+    let g2 = g("2");
+    t.tx(|tx| {
+        let e1 = tx
+            .assert(v("alice"), v("worksAt"), v("acme"), Valid::ALWAYS)?
+            .eid();
+        let e7 = tx
+            .assert(v("belief9"), v("supportedBy"), e1, Valid::ALWAYS)?
+            .eid();
+        let e2 = tx
+            .assert(v("bob"), v("worksAt"), v("globex"), Valid::ALWAYS)?
+            .eid();
+        let e8 = tx
+            .assert(v("belief9"), v("supportedBy"), e2, Valid::ALWAYS)?
+            .eid();
+        tx.add_to_graph(e1, &g1, AssertOpts::default())?;
+        tx.add_to_graph(e7, &g1, AssertOpts::default())?;
+        // e2 is in g2 only: its virtual hops leave g1
+        tx.add_to_graph(e2, &g2, AssertOpts::default())?;
+        tx.add_to_graph(e8, &g1, AssertOpts::default())?;
+        Ok(())
+    });
+    assert_eq!(
+        sorted_col(
+            &t,
+            "SELECT ?x WHERE { GRAPH <urn:g:1> { v:belief9 v:supportedBy/(sys:subject|sys:object)+ ?x } }",
+            "x"
+        ),
+        some(&[v("acme"), v("alice")])
+    );
+    // in the union, both facts are reached
+    assert_eq!(
+        t.sel("SELECT ?x WHERE { v:belief9 v:supportedBy/(sys:subject|sys:object)+ ?x }")
+            .rows
+            .len(),
+        4
+    );
+    // GRAPH ?g: belief9's support is in g1 only, so only g1 gives rows
+    assert_eq!(
+        pairs(
+            &t,
+            "SELECT ?g ?x WHERE { GRAPH ?g { v:belief9 v:supportedBy/sys:subject+ ?x } }"
+        ),
+        vec![(Some(g("1")), Some(v("alice")))]
+    );
+    // the inverse virtual hop from an entity back to its statements
+    assert_eq!(
+        t.col(
+            "SELECT ?x WHERE { GRAPH <urn:g:1> { v:alice (^sys:subject/^v:supportedBy)+ ?x } }",
+            "x"
+        ),
+        some(&[v("belief9")])
+    );
+    assert!(t
+        .sel("SELECT ?x WHERE { GRAPH <urn:g:1> { v:bob (^sys:subject/^v:supportedBy)+ ?x } }")
+        .rows
+        .is_empty());
 }
 
 // @lat: [[tests#Named Graphs#Graph Names Are Rejected When Invalid]]

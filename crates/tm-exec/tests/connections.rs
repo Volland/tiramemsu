@@ -100,6 +100,7 @@ fn error_returns_the_connection() {
         max_hops: None,
         bind_path: None,
         view: tiramemsu::ir::View::NOW,
+        graph: tiramemsu::ir::GraphSel::Any,
     }));
     for _ in 0..3 {
         assert!(matches!(

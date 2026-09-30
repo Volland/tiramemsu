@@ -133,6 +133,20 @@ fn vars(vs: &[crate::var::Var]) -> String {
     format!("[{}]", v.join(" "))
 }
 
+/// The ` :graph …` suffix of a pattern's graph selector (nothing for `Any`).
+fn graph_text(g: &crate::op::GraphSel, out: &mut String) {
+    match g {
+        crate::op::GraphSel::Any => {}
+        crate::op::GraphSel::Set(gs) => {
+            let gs: Vec<String> = gs.iter().map(term).collect();
+            let _ = write!(out, " :graph ({})", gs.join(" "));
+        }
+        crate::op::GraphSel::Var(v) => {
+            let _ = write!(out, " :graph {v}");
+        }
+    }
+}
+
 fn write_op(out: &mut String, op: &Op, depth: usize, pretty: bool) {
     let nl = |out: &mut String, d: usize| {
         if pretty {
@@ -163,16 +177,7 @@ fn write_op(out: &mut String, op: &Op, depth: usize, pretty: bool) {
             if t.include_volatile {
                 out.push_str(" :volatile");
             }
-            match &t.graph {
-                crate::op::GraphSel::Any => {}
-                crate::op::GraphSel::Set(gs) => {
-                    let gs: Vec<String> = gs.iter().map(term).collect();
-                    let _ = write!(out, " :graph ({})", gs.join(" "));
-                }
-                crate::op::GraphSel::Var(v) => {
-                    let _ = write!(out, " :graph {v}");
-                }
-            }
+            graph_text(&t.graph, out);
             out.push(')');
         }
         Op::Path(p) => {
@@ -191,6 +196,7 @@ fn write_op(out: &mut String, op: &Op, depth: usize, pretty: bool) {
             if let Some(b) = &p.bind_path {
                 let _ = write!(out, " :bind {b}");
             }
+            graph_text(&p.graph, out);
             out.push(')');
         }
         Op::Values(v) => {
@@ -656,6 +662,7 @@ mod tests {
                 max_hops: Some(15),
                 bind_path: Some("p".into()),
                 view: View::history().valid_at(5),
+                graph: crate::op::GraphSel::Any,
             }),
             Op::unit().extend(
                 "x",

@@ -107,15 +107,28 @@ fn service_and_graph_lowering() {
         f.contains(":graph (<http://ex/a>)") && f.contains(":graph ?~g"),
         "{f}"
     );
-    // properties paths under a graph selection are refused before execution
-    unsupported(
+    // property paths carry the graph selection of their block
+    let p = ir(
         "SELECT ?x WHERE { GRAPH <http://ex/g> { <urn:tiramemsu:v:a> <urn:tiramemsu:v:k>+ ?x } }",
-        "named graph path",
     );
-    unsupported(
-        "SELECT ?x FROM <http://ex/g> WHERE { <urn:tiramemsu:v:a> <urn:tiramemsu:v:k>+ ?x }",
-        "named graph path",
+    assert!(
+        p.contains("(path <urn:tiramemsu:v:a> ?x") && p.contains(":graph (<http://ex/g>)"),
+        "{p}"
     );
+    let f = ir(
+        "SELECT ?x FROM <http://ex/g> FROM <http://ex/h> WHERE { <urn:tiramemsu:v:a> <urn:tiramemsu:v:k>+ ?x }",
+    );
+    assert!(f.contains(":graph (<http://ex/g> <http://ex/h>)"), "{f}");
+    let v = ir("SELECT ?x WHERE { GRAPH ?g { <urn:tiramemsu:v:a> <urn:tiramemsu:v:k>+ ?x } }");
+    assert!(
+        v.contains(":graph ?~g0") && v.contains("(extend ?g ?~g0"),
+        "a block with only a path binds the graph: {v}"
+    );
+    // a non-recursive path puts the selection on each triple of its translation
+    let s = ir(
+        "SELECT ?x WHERE { GRAPH <http://ex/g> { <urn:tiramemsu:v:a> <urn:tiramemsu:v:k>|<urn:tiramemsu:v:j> ?x } }",
+    );
+    assert_eq!(s.matches(":graph (<http://ex/g>)").count(), 2, "{s}");
     // a statement IRI is not a graph name
     assert!(matches!(
         err("SELECT * WHERE { GRAPH <urn:tiramemsu:stmt:1> { ?s ?p ?o } }"),
