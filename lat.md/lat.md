@@ -9,5 +9,6 @@ This directory defines the high-level concepts, business logic, and architecture
 - [[api]] — The Rust facade, errors, bindings, and MCP tools
 - [[bindings]] — The JSON bridge shared by the Node.js and Python packages: operations, views, terms, errors, and how each wrapper is tested
 - [[prior-art]] — Systems studied, and what was taken from or avoided in each
+- [[recipes]] — Tested queries that combine statement ids, layers, transaction metadata, paths and time scopes
 - [[tests]] — Test specifications for the core invariants
 - [[roadmap]] — Milestones mapped to OpenSpec changes, and benchmarks

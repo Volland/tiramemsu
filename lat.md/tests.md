@@ -315,3 +315,23 @@ A cardinality-one replacement written into a graph retracts the old statement an
 ### Cypher Keeps One Graph
 
 `USE GRAPH g1 MATCH …` and `USE g1 …` fail with `Unsupported("USE GRAPH")` before any write, and the time forms of `USE` are unaffected.
+
+## Recipes
+
+The queries of [[recipes]], run on small fixtures in `crates/tiramemsu/tests/recipes.rs`. They guard combinations of features, not one feature.
+
+### Evidence Chains Travel In Time
+
+A path from a belief through `v:supportedBy/v:derivedFrom*` returns the retracted derivation under `SERVICE <tm:asOf/t>` and not now, and `v:supportedBy/sys:subject` reaches the subject of the supporting fact.
+
+### Provenance From Transaction Metadata
+
+Facts are selected by the `sys:author` of the transaction that added them, and a retracted fact is joined to the `sys:reason` of the transaction that retracted it, in the history view.
+
+### Edit Lineage Follows Supersedes
+
+After two supersedes, `sys:supersedes+` from the current root returns both earlier versions, from a reifier variable and from the root's skolem IRI.
+
+### Contradictions Between Sources
+
+Two authors' facts with the same subject and predicate, different objects and overlapping valid time are reported once; a later episode that overlaps neither is not.

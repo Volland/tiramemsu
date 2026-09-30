@@ -1,0 +1,67 @@
+# Recipes
+
+Questions about memory answered with statement ids, layers, transaction metadata, paths and per-pattern time scopes. Each recipe is a tested query, and most need no special feature.
+
+Each part exists in some other system: edge annotations in RDF-star, transactions as entities in Datomic, bitemporal rows in XTDB, validity windows in Graphiti. What is unusual here is that they meet in one statement. Every statement and every layer on it has an id, both clocks, a structural link to what it annotates, and a row that is never deleted. So a single query can walk from a belief to its evidence, rewind that walk to an earlier transaction, and ask who wrote each step and why. See [[data-model#Layers]] and [[time-model]].
+
+The tests are in `crates/tiramemsu/tests/recipes.rs` unless noted.
+
+## Evidence Chains Through Time
+
+A path that starts at a belief and crosses into the statements it rests on, read as of any earlier transaction. See [[query#Physical Planning#Path Engine]] and [[query#Temporal Syntax]].
+
+```sparql
+SELECT ?src WHERE {
+  SERVICE <urn:tiramemsu:tm:asOf/150> {
+    v:belief9 v:supportedBy/v:derivedFrom* ?src } }
+```
+
+- `v:supportedBy` has a statement as its object, so the path lands on an eid and continues through `v:derivedFrom` links between statements.
+- The virtual hops `sys:subject`, `sys:object` and `sys:predicate` step from a statement to its parts: `v:belief9 v:supportedBy/sys:subject ?who` gives the person the supporting fact is about.
+- Under `asOf`, the walk sees the links as they were then, including links retracted since. Neo4j cannot point an edge at an edge, RDF-star stores cannot run property paths through quoted triples, and Datomic datoms have no identity to walk to.
+
+## Provenance From Transaction Metadata
+
+Who wrote a fact, and why it was retracted, with no annotation on the fact itself. The transaction is a node, and its metadata is ordinary triples ([[time-model#Transaction Time]]).
+
+```sparql
+# every employment fact written by agent7
+SELECT ?who ?c WHERE { ?who v:worksAt ?c ~ ?r . ?r tm:txAdded ?t . ?t sys:author v:agent7 }
+
+# why facts were forgotten
+SELECT ?who ?why FROM <urn:tiramemsu:tm:history> WHERE {
+  ?who v:worksAt ?c ~ ?r . ?r tm:txRetracted ?t . ?t sys:reason ?why }
+```
+
+`Tx::meta` writes `sys:author`, `sys:source` and `sys:reason` on the current transaction. `tm:txAdded` and `tm:txRetracted` are virtual predicates, so the hop from a statement to its transaction costs no join ([[query#Views and Scans#Virtual Predicates]]).
+
+## Edit Lineage
+
+The full correction history of a fact is a path over `sys:supersedes`, which every [[time-model#Operations#Supersede]] writes from the new root to the old one.
+
+```sparql
+SELECT ?old WHERE { v:alice v:age ?a ~ ?r . ?r sys:supersedes+ ?old }
+```
+
+A supersede replays the cascade set of the old root, and that set includes the earlier `sys:supersedes` link. So after two corrections, the current root links to both earlier versions, and `sys:supersedes+` returns the whole chain. A skolem IRI (`<urn:tiramemsu:stmt:N>`) of any version starts the same walk.
+
+## Contradictions Between Sources
+
+Two live statements with the same subject and predicate, different objects, overlapping valid time and different authors: a conflict between sources, found on read.
+
+These are the conflicts that `sys:cardinality sys:one` would have prevented on write, for predicates that do not declare it ([[data-model#Predicate Schema]]).
+
+```sparql
+SELECT ?s ?o1 ?o2 ?a1 ?a2 WHERE {
+  ?s v:worksAt ?o1 ~ ?r1 . ?s v:worksAt ?o2 ~ ?r2 .
+  FILTER(STR(?o1) < STR(?o2))
+  ?r1 tm:txAdded ?t1 . ?t1 sys:author ?a1 .
+  ?r2 tm:txAdded ?t2 . ?t2 sys:author ?a2 .
+  FILTER(?a1 != ?a2)
+  OPTIONAL { ?r1 tm:validFrom ?f1 } OPTIONAL { ?r1 tm:validTo ?u1 }
+  OPTIONAL { ?r2 tm:validFrom ?f2 } OPTIONAL { ?r2 tm:validTo ?u2 }
+  FILTER((!BOUND(?f1) || !BOUND(?u2) || ?f1 < ?u2) &&
+         (!BOUND(?f2) || !BOUND(?u1) || ?f2 < ?u1)) }
+```
+
+The overlap test is the same half-open test that assert uses ([[time-model#Operations#Assert]]); an unbound end is unbounded. Episodes that do not overlap, such as a later job, are not reported. `STR(?o1) < STR(?o2)` reports each pair once.
