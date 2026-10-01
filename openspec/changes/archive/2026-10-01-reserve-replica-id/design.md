@@ -14,7 +14,7 @@ The ObjectId is `(payload << 4) | tag` with a 60-bit payload ([[data-model#Objec
 
 ## Decision
 
-This needs the owner's decision. Two options:
+**Chosen: Option A, reserve origin bits** (decided 2026-10-01 by the owner, and implemented in this change). Option B is not withdrawn: it stays available for one-off imports such as fact bundles. The two options as they were weighed:
 
 ### Option A: reserve origin bits (recommended)
 
@@ -23,7 +23,7 @@ The high 12 bits of the 60-bit payload of `STMT`, `NODE`, `BNODE` and `TX` hold 
 - **Size:** origin 0 ids are identical to today's, so a single-file store pays nothing. Only foreign ids (origin ≠ 0) are large: `(1 << 48) << 4` needs an 8-byte varint, against 1–3 bytes for local ids. A merged store pays roughly +5 bytes per foreign id occurrence across the row and its nine index entries.
 - **Order:** local ids stay dense and ordered. Foreign ids sort after every local id of the same tag. Nothing in the engine relies on cross-origin order.
 - **Identity:** a statement keeps one id forever, in every file that holds it. A skolem IRI cited by an agent keeps working after a merge.
-- **Bound:** 4 096 origins and 2.8 × 10¹⁴ allocations per kind per origin. The allocation bound is far beyond the design scale (D1: 10⁴–10⁷ statements).
+- **Bound:** 4 096 origins and 2.8 × 10¹⁴ allocations per kind per origin (the largest number allocated is 2⁴⁸ − 1; `next_*` stops at 2⁴⁸). The allocation bound is far beyond the design scale (D1: 10⁴–10⁷ statements).
 - **Reversible:** if merging is never built, the reservation is a bound nobody reaches. Dropping it later is free, while adding it later requires a rewrite that the invariant triggers forbid.
 
 ### Option B: merge by translation (no reservation)
@@ -46,6 +46,8 @@ Option A. It is cheap now and impossible to add later, and the origin bits are w
 - [A reserved bound can be hit by a runaway allocator] → `IdSpaceExhausted` fails the transaction instead of corrupting identity. 2⁴⁸ allocations would take about 90 years at 10⁵ per second.
 
 ## Open Questions
+
+Both questions belong to the later merge change. For this change, `TX` reserves an origin like the other allocated tags (it costs nothing and keeps either answer open), and skolem IRIs keep the plain decimal payload, so `urn:tiramemsu:stmt:<n>` with a foreign origin parses and is then rejected.
 
 - Should `TX` carry an origin? Merged transactions from another file have their own `t` and `instant`, so a single gap-free `t` sequence per file conflicts with importing foreign transactions. The alternative is to keep foreign tx metadata as statements about a foreign `TX` id.
 - What should the skolem IRI form be for origin ≠ 0: `urn:tiramemsu:stmt:<origin>.<n>`, or a file UUID instead of the origin number?

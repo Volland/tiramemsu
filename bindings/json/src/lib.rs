@@ -88,6 +88,7 @@ impl BindError {
                 Error::InvalidTerm { .. } => "InvalidTerm",
                 Error::InvalidInterval { .. } => "InvalidInterval",
                 Error::NotUniquePredicate(_) => "NotUniquePredicate",
+                Error::IdSpaceExhausted { .. } => "IdSpaceExhausted",
                 Error::Reentrant => "Reentrant",
                 Error::ForeignFile(_) => "ForeignFile",
                 Error::Sqlite(_) => "Sqlite",

@@ -519,6 +519,7 @@ Every failure is a typed `Error` (`#[non_exhaustive]`, so keep a wildcard arm), 
 | `PathLimitExceeded` | A path search passed `path_max_states` |
 | `Reentrant` | A write or speculation started inside another on the same `Db` and thread |
 | `FormatVersion`, `ForeignFile` | The file is from a newer format, or is some other SQLite database |
+| `IdSpaceExhausted { kind }` | A node, blank node, statement or transaction counter passed 2⁴⁸ − 1 (about 2.8 × 10¹⁴ ids per kind) |
 | `Sqlite(_)`, `Custom(_)` | A SQLite failure with its result code (busy, I/O), or your own error returned from a transaction body |
 
 ## Open options

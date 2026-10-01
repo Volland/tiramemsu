@@ -73,7 +73,7 @@ Every failure is a typed error, and a failed transaction leaves no trace: no tx 
 | `InvalidGraphName { term }` | A graph name that is a literal, statement or transaction |
 | `GraphNotFound { graph }` / `GraphExists { graph }` | `CLEAR GRAPH` or `DROP GRAPH` on a graph with no membership and no declaration; `CREATE GRAPH` on a declared graph (both unless `SILENT`) |
 | `SchemaConflict { violating }` | A schema change is violated by existing live data |
-| `Parse { dialect, span, msg }` / `Unsupported { feature }` | A query is outside the v1 subset. `dialect` is SPARQL, Cypher or Path (the `tm_path` expression text). `Unsupported` also rejects what format 1 reserves for later milestones: tag 15 `SEALED` and the `sys:sensitive` flag (M6) |
+| `Parse { dialect, span, msg }` / `Unsupported { feature }` | A query is outside the v1 subset. `dialect` is SPARQL, Cypher or Path (the `tm_path` expression text). `Unsupported` also rejects what format 1 reserves for later milestones: tag 15 `SEALED` and the `sys:sensitive` flag (M6), and a `NODE`, `BNODE`, `STMT` or `TX` id with a non-zero origin ([[data-model#ObjectId#Origin Bits]]) |
 | `MissingCapability { capability }` | `Db::open` with the query engine on a host that lacks `functions` or `vtab`. See [[architecture#Executor]] |
 | `InvalidQuery { msg }` | A structurally invalid IR or query plan (e.g. an unbound variable in a projection) that is not a parse error |
 | `PathLimitExceeded { limit }` | A path search exceeds `OpenOptions.path_max_states` (default 1 000 000). Results are never silently truncated |
@@ -82,6 +82,7 @@ Every failure is a typed error, and a failed transaction leaves no trace: no tx 
 | `InvalidTerm { position, reason }` | A value of the wrong kind in a position (e.g. a literal as predicate, a non-IRI volatile key), or an unknown dictionary id |
 | `InvalidInterval` | `assert`/`create` with an empty valid interval (`v_from ≥ v_to`); `InvalidPatch` covers supersede |
 | `NotUniquePredicate(p)` | `upsert` on a predicate without `sys:unique` |
+| `IdSpaceExhausted { kind }` | A `NODE`, `BNODE`, `STMT` or `TX` counter would pass 2⁴⁸ − 1, the largest number format 1 allocates. See [[data-model#ObjectId#Origin Bits]] |
 | `Reentrant` | A write is started from inside a running transaction on the same `Db` |
 | `DeleteConnectedNode { node, relationships }` | Cypher `DELETE n` while `n` still has live relationships at the end of the query (use `DETACH DELETE`); it lists their eids |
 | `Eval { dialect, msg }` | A runtime expression error during query evaluation: a type error, integer division by zero, an unstorable property value or an invalid `@id` |

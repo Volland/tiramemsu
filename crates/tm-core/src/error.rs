@@ -217,6 +217,13 @@ pub enum Error {
     /// `upsert` on a predicate without `sys:unique true`.
     #[error("predicate {0} is not unique")]
     NotUniquePredicate(ObjectId),
+    /// An id counter is used up: the next `NODE`, `BNODE`, `STMT` or `TX` number
+    /// would pass 2⁴⁸ − 1 and spill into the origin bits. The transaction fails.
+    #[error("id space exhausted for {}: counters stop at 2^48 - 1", kind.name())]
+    IdSpaceExhausted {
+        /// The kind whose counter is used up.
+        kind: Tag,
+    },
     /// A write was started from inside a running write on the same database.
     #[error("re-entrant write on the same database")]
     Reentrant,

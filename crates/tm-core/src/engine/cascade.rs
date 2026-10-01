@@ -51,6 +51,7 @@ impl Tx<'_> {
     /// `Cascade` for an explicit retraction, else the same `kind`.
     /// Returns false when `root` is not live.
     pub(crate) fn retract_root(&mut self, root: Eid, kind: RetKind) -> Result<bool> {
+        root.oid().check_origin()?;
         if self.live(root)? != Some(true) {
             return Ok(false);
         }

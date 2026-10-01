@@ -83,6 +83,7 @@ impl Tx<'_> {
     /// ```
     // @lat: [[time-model#Operations#Supersede]]
     pub fn supersede(&mut self, root: Eid, patch: Patch) -> Result<Eid> {
+        root.oid().check_origin()?;
         let row = match self.load_row(root)? {
             Some((row, true)) => row,
             _ => return Err(Error::NotLive(root)),
@@ -114,7 +115,10 @@ impl Tx<'_> {
             None => self.check_value_type(row.p, new_o)?,
         }
         let set = self.cascade_set(root)?;
-        let sigma: HashMap<Eid, Eid> = set.iter().map(|m| (*m, self.alloc_eid())).collect();
+        let sigma: HashMap<Eid, Eid> = set
+            .iter()
+            .map(|m| Ok((*m, self.alloc_eid()?)))
+            .collect::<Result<_>>()?;
         let new_root = sigma[&root];
         if new_o == new_root.oid() {
             return Err(Error::SelfReference(new_root));
@@ -158,7 +162,7 @@ impl Tx<'_> {
             self.superseded.push((r.eid, new));
         }
         let link_p = self.sys(vocab::SYS_SUPERSEDES)?;
-        let link = self.alloc_eid();
+        let link = self.alloc_eid()?;
         self.insert_row(link, new_root.oid(), link_p, root.oid(), Valid::ALWAYS)?;
         Ok(new_root)
     }

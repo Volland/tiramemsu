@@ -7,6 +7,7 @@ use common::*;
 use std::cell::RefCell;
 
 use proptest::prelude::*;
+use tm_core::id::COUNTER_MAX;
 use tm_core::vocab::*;
 use tm_core::*;
 
@@ -85,6 +86,99 @@ host_test! {
         let res = db.try_tx(|tx| tx.create(sys("db"), sys("sensitive"), lit("x"), Valid::ALWAYS).map(|_| ()));
         assert_err!(res, Error::Unsupported { .. });
         assert_eq!(db.snapshot(), before);
+    }
+}
+
+host_test! {
+    /// ObjectId layout — Local ids have origin 0: every id a format 1 file
+    /// allocates has origin 0 and the same value as without origins.
+    fn local_ids_have_origin_0(db) {
+        let n = db.meta("next_stmt") as u64;
+        let mut node = None;
+        let r = db.tx(|tx| {
+            let id = tx.new_node()?;
+            node = Some(id);
+            tx.assert(id, iri("p"), Value::Int(1), Valid::ALWAYS)?;
+            Ok(())
+        });
+        let e = r.asserted[0];
+        assert_eq!(e, Eid::new(n));
+        assert_eq!(e.oid().raw(), ((n as i64) << 4) | 3);
+        assert_eq!((e.oid().origin(), e.oid().counter()), (Some(0), Some(n)));
+        let node = node.unwrap();
+        assert_eq!((node.origin(), node.tag().unwrap()), (Some(0), Tag::Node));
+        assert_eq!((r.t.oid().origin(), r.t.oid().counter()), (Some(0), Some(r.t.0)));
+        // statement number 42 keeps the id of the layout without origins
+        let e42 = intern(db, &Value::Stmt(Eid::new(42)));
+        assert_eq!((e42.raw(), e42.origin()), ((42 << 4) | 3, Some(0)));
+    }
+}
+
+// object-encoding "Foreign origin is rejected": a NODE, BNODE, STMT or TX id with
+// a non-zero origin is refused on every input and by every write, leaving no trace.
+// @lat: [[tests#ObjectId#Foreign Origin Is Rejected]]
+host_test! {
+    fn foreign_origin_is_rejected(db) {
+        let local = db
+            .tx(|tx| tx.assert(iri("a"), iri("p"), iri("b"), Valid::ALWAYS).map(|_| ()))
+            .asserted[0];
+        let before = db.snapshot();
+        let payload = (1u64 << 48) | 5;
+        let foreign = Eid::new(payload);
+        let skolem = Value::iri(format!("urn:tiramemsu:stmt:{payload}"));
+        let is_origin = |e: &Error| matches!(e, Error::Unsupported { feature } if feature.contains("origin 1"));
+        let check = |r: Result<TxReport>| match r {
+            Err(e) if is_origin(&e) => {}
+            other => panic!("expected the origin to be rejected, got {other:?}"),
+        };
+        // the skolem IRI parses to the foreign statement, which is refused
+        assert_eq!(skolem.canonical(), Value::Stmt(foreign));
+        check(db.try_tx(|tx| tx.assert(skolem.clone(), iri("p"), iri("b"), Valid::ALWAYS).map(|_| ())));
+        check(db.try_tx(|tx| tx.encode(&skolem).map(|_| ())));
+        // the id and its Value forms, in every position
+        check(db.try_tx(|tx| tx.assert(foreign, iri("p"), iri("b"), Valid::ALWAYS).map(|_| ())));
+        check(db.try_tx(|tx| tx.assert(foreign.oid(), iri("p"), iri("b"), Valid::ALWAYS).map(|_| ())));
+        check(db.try_tx(|tx| tx.assert(iri("a"), iri("p"), Value::Stmt(foreign), Valid::ALWAYS).map(|_| ())));
+        check(db.try_tx(|tx| tx.create(Value::Node(payload), iri("p"), iri("b"), Valid::ALWAYS).map(|_| ())));
+        check(db.try_tx(|tx| tx.create(Value::BNode(payload), iri("p"), iri("b"), Valid::ALWAYS).map(|_| ())));
+        check(db.try_tx(|tx| tx.assert(iri("a"), iri("p"), Value::Tx(TxId(payload)), Valid::ALWAYS).map(|_| ())));
+        check(db.try_tx(|tx| tx.assert(iri("a"), iri("p"), TxId(payload), Valid::ALWAYS).map(|_| ())));
+        check(db.try_tx(|tx| tx.set_volatile(Value::Node(payload), iri("k"), lit("v"))));
+        // operations that name a statement
+        check(db.try_tx(|tx| tx.retract(foreign).map(|_| ())));
+        check(db.try_tx(|tx| tx.confirm(foreign).map(|_| ())));
+        check(db.try_tx(|tx| tx.supersede(foreign, Patch { o: Some(iri("c")), ..Patch::default() }).map(|_| ())));
+        check(db.try_tx(|tx| tx.add_to_graph(foreign, iri("g"), AssertOpts::default()).map(|_| ())));
+        check(db.try_tx(|tx| tx.add_to_graph(local, Value::Node(payload), AssertOpts::default()).map(|_| ())));
+        check(db.try_tx(|tx| tx.remove_from_graph(foreign, iri("g")).map(|_| ())));
+        check(db.try_tx(|tx| tx.retract_matching(Some(foreign.oid()), None, None).map(|_| ())));
+        // a failed write leaves no trace, even after earlier successful operations
+        check(db.try_tx(|tx| {
+            tx.assert(iri("x"), iri("q"), lit("a long string to intern"), Valid::ALWAYS)?;
+            tx.assert(iri("x"), iri("q"), Value::Stmt(foreign), Valid::ALWAYS).map(|_| ())
+        }));
+        assert_eq!(db.snapshot(), before);
+        // a read lookup refuses it too
+        let got = db.read(|e| Ok(TermReader::encode(e, &skolem)));
+        assert!(matches!(&got, Err(e) if is_origin(e)), "{got:?}");
+        // bundle import
+        let val = BTerm::Value;
+        for (s, p, o) in [
+            (val(iri("x")), iri("p"), val(skolem.clone())),
+            (val(Value::Node(payload)), iri("p"), val(iri("y"))),
+            (val(iri("x")), skolem.clone(), val(iri("y"))),
+        ] {
+            let b = Bundle {
+                root: 0,
+                statements: vec![BundleStatement { local: 0, s, p, o, valid: Valid::ALWAYS }],
+            };
+            check(db.try_tx(|tx| tx.import_bundle(&b).map(|_| ())));
+        }
+        assert_eq!(db.snapshot(), before);
+        // the largest local counter is still accepted
+        let last = Eid::new(COUNTER_MAX);
+        assert!(last.oid().check_origin().is_ok());
+        assert_eq!(intern(db, &Value::Stmt(last)), last.oid());
     }
 }
 

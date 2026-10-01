@@ -12,6 +12,22 @@ use crate::error::{Error, Result};
 /// The feature name reported when the reserved tag 15 is met.
 pub const SEALED_FEATURE: &str = "SEALED (M6)";
 
+/// Width of the counter in the payload of `NODE`, `BNODE`, `STMT` and `TX` ids.
+/// The 12 payload bits above it hold the origin.
+pub const COUNTER_BITS: u32 = 48;
+
+/// The largest counter value format 1 allocates per kind: 2⁴⁸ − 1.
+pub const COUNTER_MAX: u64 = (1 << COUNTER_BITS) - 1;
+
+/// The largest origin a payload can name: 2¹² − 1.
+pub const ORIGIN_MAX: u16 = (1 << 12) - 1;
+
+/// The feature name reported when an id with a non-zero origin is met. Format 1
+/// writes only origin 0; other origins are reserved for merging files.
+pub fn origin_feature(origin: u16) -> String {
+    format!("origin {origin} (memory merge)")
+}
+
 /// The kind of value an ObjectId holds. Tag 15 (`SEALED`) is reserved for M6.
 #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[repr(u8)]
@@ -87,6 +103,12 @@ impl Tag {
             self,
             Tag::Iri | Tag::Node | Tag::BNode | Tag::Stmt | Tag::Tx
         )
+    }
+
+    /// True for the allocated kinds whose payload is `origin << 48 | counter`:
+    /// `NODE`, `BNODE`, `STMT` and `TX`.
+    pub fn is_allocated(self) -> bool {
+        matches!(self, Tag::Node | Tag::BNode | Tag::Stmt | Tag::Tx)
     }
 
     /// Upper-case tag name used in tag IRIs (`sys:INT`, `sys:STMT`, ...).
@@ -196,6 +218,43 @@ impl ObjectId {
     pub fn from_unsigned(tag: Tag, payload: u64) -> ObjectId {
         debug_assert!(payload < (1u64 << 60));
         ObjectId(((payload << 4) | tag as u64) as i64)
+    }
+
+    /// The origin of a `NODE`, `BNODE`, `STMT` or `TX` id: the high 12 payload bits
+    /// (`payload >> 48`). `None` for every other tag. Format 1 allocates only origin 0.
+    ///
+    /// ```
+    /// use tm_core::{Eid, ObjectId, Tag};
+    ///
+    /// assert_eq!(Eid::new(42).oid().origin(), Some(0));
+    /// assert_eq!(ObjectId::from_unsigned(Tag::Stmt, (1 << 48) | 5).origin(), Some(1));
+    /// assert_eq!(ObjectId::from_signed(Tag::Int, 5).origin(), None);
+    /// ```
+    pub fn origin(self) -> Option<u16> {
+        self.allocated()
+            .then(|| (self.unsigned_payload() >> COUNTER_BITS) as u16)
+    }
+
+    /// The counter of a `NODE`, `BNODE`, `STMT` or `TX` id: the low 48 payload bits.
+    /// `None` for every other tag.
+    pub fn counter(self) -> Option<u64> {
+        self.allocated()
+            .then(|| self.unsigned_payload() & COUNTER_MAX)
+    }
+
+    fn allocated(self) -> bool {
+        Tag::try_from(self.tag_bits()).is_ok_and(Tag::is_allocated)
+    }
+
+    /// Fails with `Unsupported` naming the origin when this is a `NODE`, `BNODE`,
+    /// `STMT` or `TX` id with a non-zero origin, which format 1 never writes.
+    pub fn check_origin(self) -> Result<()> {
+        match self.origin() {
+            Some(o) if o != 0 => Err(Error::Unsupported {
+                feature: origin_feature(o),
+            }),
+            _ => Ok(()),
+        }
     }
 
     /// The instant of a `DATETIME` id in epoch milliseconds: `id >> 15`.
@@ -342,6 +401,52 @@ mod tests {
             assert_eq!(*t as u8, i as u8);
             assert_eq!(Tag::try_from(i as u8).unwrap(), *t);
             assert_eq!(Tag::from_name(t.name()), Some(*t));
+        }
+    }
+
+    // @lat: [[tests#ObjectId#Origin And Counter Split]]
+    #[test]
+    fn origin_and_counter_split() {
+        // local ids: origin 0, the counter is the whole payload, the id is unchanged
+        let e = Eid::new(42).oid();
+        assert_eq!((e.origin(), e.counter()), (Some(0), Some(42)));
+        assert_eq!(e.raw(), (42 << 4) | 3);
+        assert!(e.check_origin().is_ok());
+        // the bounds of the counter
+        for tag in [Tag::Node, Tag::BNode, Tag::Stmt, Tag::Tx] {
+            let last = ObjectId::from_unsigned(tag, COUNTER_MAX);
+            assert_eq!(
+                (last.origin(), last.counter()),
+                (Some(0), Some(COUNTER_MAX))
+            );
+            assert!(last.check_origin().is_ok());
+            let first_foreign = ObjectId::from_unsigned(tag, COUNTER_MAX + 1);
+            assert_eq!(
+                (first_foreign.origin(), first_foreign.counter()),
+                (Some(1), Some(0))
+            );
+            let top = ObjectId::from_unsigned(tag, (1u64 << 60) - 1);
+            assert_eq!(
+                (top.origin(), top.counter()),
+                (Some(ORIGIN_MAX), Some(COUNTER_MAX))
+            );
+            assert_eq!(top.tag().unwrap(), tag);
+        }
+        let foreign = ObjectId::from_unsigned(Tag::Stmt, (1 << 48) | 5);
+        assert_eq!((foreign.origin(), foreign.counter()), (Some(1), Some(5)));
+        match foreign.check_origin() {
+            Err(Error::Unsupported { feature }) => assert!(feature.contains("origin 1")),
+            other => panic!("unexpected {other:?}"),
+        }
+        // other tags have no origin, whatever their payload
+        for id in [
+            ObjectId::from_signed(Tag::Int, -1),
+            ObjectId::from_unsigned(Tag::Iri, COUNTER_MAX + 1),
+            ObjectId::from_unsigned(Tag::ShortStr, (1u64 << 60) - 1),
+            ObjectId::from_raw((3 << 4) | 15),
+        ] {
+            assert_eq!((id.origin(), id.counter()), (None, None));
+            assert!(id.check_origin().is_ok());
         }
     }
 

@@ -278,7 +278,7 @@ impl TermDict {
     /// Encodes a value on the write path, interning dictionary terms.
     pub fn intern(&mut self, exec: &mut dyn Executor, v: &Value) -> Result<ObjectId> {
         match codec::encode(v) {
-            Encoded::Inline(id) => Ok(id),
+            Encoded::Inline(id) => id.check_origin().map(|_| id),
             Encoded::Term(spec) => {
                 let (k, dt) = self
                     .spec_key(exec, &spec, true)?
@@ -293,7 +293,7 @@ impl TermDict {
     /// Encodes a value without inserting; `None` if a needed term is absent.
     pub fn lookup_value(&mut self, exec: &mut dyn Executor, v: &Value) -> Result<Option<ObjectId>> {
         match codec::encode(v) {
-            Encoded::Inline(id) => Ok(Some(id)),
+            Encoded::Inline(id) => id.check_origin().map(|_| Some(id)),
             Encoded::Term(spec) => {
                 let Some((k, _)) = self.spec_key(exec, &spec, false)? else {
                     return Ok(None);
@@ -361,7 +361,7 @@ impl TermReader {
     /// Encodes a value for a read: lookup only, never inserts.
     pub fn encode(exec: &mut dyn Executor, v: &Value) -> Result<Option<ObjectId>> {
         match codec::encode(v) {
-            Encoded::Inline(id) => Ok(Some(id)),
+            Encoded::Inline(id) => id.check_origin().map(|_| Some(id)),
             Encoded::Term(spec) => {
                 let dt = match &spec.datatype {
                     None => None,

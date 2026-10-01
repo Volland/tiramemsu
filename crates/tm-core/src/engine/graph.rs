@@ -48,6 +48,7 @@ impl Tx<'_> {
         graph: impl IntoObject,
         opts: AssertOpts,
     ) -> Result<(Eid, bool)> {
+        eid.oid().check_origin()?;
         let g = self.graph_id(graph)?;
         let Some(row) = self.exec.first_row(
             "SELECT p, t_ret FROM triple WHERE eid = ?1",
@@ -78,6 +79,7 @@ impl Tx<'_> {
     /// Removes statement `eid` from `graph`: retracts its live memberships in
     /// `graph`. The statement stays live. Returns whether one was live.
     pub fn remove_from_graph(&mut self, eid: Eid, graph: impl IntoObject) -> Result<bool> {
+        eid.oid().check_origin()?;
         let g = self.graph_id(graph)?;
         let Some(ig) = self.sys_lookup(vocab::SYS_IN_GRAPH)? else {
             return Ok(false);

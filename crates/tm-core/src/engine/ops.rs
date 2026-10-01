@@ -102,6 +102,7 @@ impl Tx<'_> {
     /// asserts `(eid sys:confirmedBy tx)` and returns its eid.
     // @lat: [[time-model#Operations#Confirm]]
     pub fn confirm(&mut self, eid: Eid) -> Result<Eid> {
+        eid.oid().check_origin()?;
         if self.live(eid)? != Some(true) {
             return Err(Error::NotLive(eid));
         }
@@ -170,6 +171,7 @@ impl Tx<'_> {
         for (col, v) in [("s", s), ("p", p), ("o", o)] {
             if let Some(v) = v {
                 v.tag()?;
+                v.check_origin()?;
                 let ph = params.push(v.raw());
                 sql.push_str(&format!(" AND {col} = {ph}"));
             }
@@ -235,7 +237,7 @@ impl Tx<'_> {
             }
         }
         self.unique_and_cardinality(s, p, o, valid, flag.is_some_and(Flag::single_valued))?;
-        let eid = self.alloc_eid();
+        let eid = self.alloc_eid()?;
         if s == eid.oid() || o == eid.oid() {
             return Err(Error::SelfReference(eid));
         }

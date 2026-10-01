@@ -156,6 +156,7 @@ impl Bundle {
             return Err(malformed(format!("root {} is not a statement", self.root)));
         }
         for st in &self.statements {
+            crate::codec::encode(&st.p).check_origin()?;
             match &st.p {
                 Value::Iri(_) if !is_local_id(&st.p) => {}
                 other => {
@@ -174,10 +175,12 @@ impl Bundle {
                         )))
                     }
                     BTerm::Value(v) if is_local_id(v) => {
+                        // a foreign origin is reserved, as on every other input
+                        crate::codec::encode(v).check_origin()?;
                         return Err(malformed(format!(
                             "statement {} names {v}, an id local to another database",
                             st.local
-                        )))
+                        )));
                     }
                     _ => {}
                 }

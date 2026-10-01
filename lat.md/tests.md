@@ -202,6 +202,10 @@ Random sequences of every write operation never make an invariant trigger abort,
 
 The whole `tm-core` suite also runs on a host that declares no capability, and no SQL the core issues calls a user function, a virtual table or FTS5. See [[architecture#Executor]].
 
+### Id Counters Are Bounded
+
+With `next_stmt` seeded to 2⁴⁸ − 1 the statement is still allocated; at 2⁴⁸ assert and supersede fail with `IdSpaceExhausted { kind: STMT }` and leave no trace. `NODE`, `BNODE` and `TX` stop at 2⁴⁸ − 1 the same way.
+
 ## ObjectId
 
 Checks of the codec in [[data-model#ObjectId]].
@@ -221,6 +225,14 @@ For INT, DATE and DATETIME, integer order of the ObjectIds equals value order, n
 ### Reserved Tag Is Rejected
 
 Format 1 rejects tag 15 `SEALED` in stored values and the `sys:sensitive` schema flag, until M6. See [[time-model#Erasure]].
+
+### Origin And Counter Split
+
+`origin()` and `counter()` split the payload of `NODE`, `BNODE`, `STMT` and `TX` at bit 48, at the bounds 2⁴⁸ − 1 and 2⁶⁰ − 1; local ids keep their old value and other tags have no origin. See [[data-model#ObjectId#Origin Bits]].
+
+### Foreign Origin Is Rejected
+
+An id with origin 1 is refused with `Unsupported` naming the origin: as a skolem IRI, as a `Value`, as a raw id or eid in every write operation, in a read lookup and in a bundle import. Failed writes leave no trace.
 
 ## Query
 

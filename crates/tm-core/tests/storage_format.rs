@@ -271,6 +271,71 @@ host_test! {
     }
 }
 
+/// Sets one `meta` counter directly, as a fixture for the counter bound.
+fn seed_meta(db: &TestDb, key: &str, value: i64) {
+    db.raw()
+        .execute(
+            "UPDATE meta SET value = ?1 WHERE key = ?2",
+            rusqlite::params![value, key],
+        )
+        .unwrap();
+}
+
+// Engine metadata counters — Counter bound: the largest number ever allocated per
+// kind is 2^48 - 1; the next allocation fails with IdSpaceExhausted and leaves no trace.
+// @lat: [[tests#Storage Invariants#Id Counters Are Bounded]]
+host_test! {
+    fn counter_bound(db) {
+        const MAX: i64 = (1 << 48) - 1;
+        let is_exhausted = |r: &Result<TxReport>, k: Tag| {
+            matches!(r, Err(Error::IdSpaceExhausted { kind }) if *kind == k)
+        };
+        db.tx(|tx| tx.assert(iri("a"), iri("p"), iri("b"), Valid::ALWAYS).map(|_| ()));
+        // the last statement number is still allocated
+        seed_meta(db, "next_stmt", MAX);
+        let r = db.tx(|tx| tx.assert(iri("a"), iri("p"), iri("c"), Valid::ALWAYS).map(|_| ()));
+        assert_eq!(r.asserted, vec![Eid::new(MAX as u64)]);
+        assert_eq!(r.asserted[0].oid().origin(), Some(0));
+        assert_eq!(db.meta("next_stmt"), MAX + 1);
+        // next_stmt = 2^48: the next statement fails, with nothing written
+        let before = db.snapshot();
+        let r = db.try_tx(|tx| tx.assert(iri("a"), iri("p"), iri("fresh"), Valid::ALWAYS).map(|_| ()));
+        assert!(is_exhausted(&r, Tag::Stmt), "{r:?}");
+        assert_eq!(db.snapshot(), before);
+        // supersede allocates too
+        let e = Eid::new(1);
+        let r = db.try_tx(|tx| tx.supersede(e, Patch { o: Some(iri("d")), ..Patch::default() }).map(|_| ()));
+        assert!(is_exhausted(&r, Tag::Stmt), "{r:?}");
+        assert_eq!(db.snapshot(), before);
+        seed_meta(db, "next_stmt", 10);
+        // nodes and blank nodes
+        for (key, kind) in [("next_node", Tag::Node), ("next_bnode", Tag::BNode)] {
+            seed_meta(db, key, MAX);
+            let mut last = None;
+            db.tx(|tx| {
+                last = Some(if kind == Tag::Node { tx.new_node()? } else { tx.new_bnode()? });
+                Ok(())
+            });
+            assert_eq!(last.unwrap().counter(), Some(MAX as u64));
+            let before = db.snapshot();
+            let r = db.try_tx(|tx| {
+                let id = if kind == Tag::Node { tx.new_node()? } else { tx.new_bnode()? };
+                tx.assert(id, iri("p"), iri("b"), Valid::ALWAYS).map(|_| ())
+            });
+            assert!(is_exhausted(&r, kind), "{r:?}");
+            assert_eq!(db.snapshot(), before);
+        }
+        // transactions: t = 2^48 - 1 is the last one
+        seed_meta(db, "last_t", MAX - 1);
+        let r = db.tx(|tx| tx.assert(iri("a"), iri("p"), iri("e"), Valid::ALWAYS).map(|_| ()));
+        assert_eq!(r.t, TxId(MAX as u64));
+        let before = db.snapshot();
+        let r = db.try_tx(|tx| tx.assert(iri("a"), iri("p"), iri("f"), Valid::ALWAYS).map(|_| ()));
+        assert!(is_exhausted(&r, Tag::Tx), "{r:?}");
+        assert_eq!(db.snapshot(), before);
+    }
+}
+
 // Newer format versions are refused — File from a newer build.
 #[test]
 fn newer_format_version_is_refused() {

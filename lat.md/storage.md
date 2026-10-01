@@ -87,6 +87,7 @@ Format 1 reserves names for later milestones, so that no user migration clashes 
 One row per statement occurrence. The row is its own lifetime: `t_add` is the assert, and `t_ret` (with `ret_kind`) is the retract. Since eids are never reused, each eid has exactly one interval.
 
 - `eid` is the rowid and holds the full `STMT` ObjectId. Eids are allocated from `meta.next_stmt`, never from `max(rowid)`.
+- **Counter bound:** `NODE`, `BNODE`, `STMT` and `TX` numbers stop at 2⁴⁸ − 1, so `meta.next_*` reaches at most 2⁴⁸ and `last_t` at most 2⁴⁸ − 1. Allocating past the bound fails the transaction with `IdSpaceExhausted { kind }`; the high payload bits are the reserved origin ([[data-model#ObjectId#Origin Bits]]).
 - **Burned ids:** after a speculative `with` or a `dry_run` rolls back, the writer re-applies the advanced `meta` counters in a small commit. An id that was ever shown to a caller is then never issued again, even though its triple never existed. See [[time-model#Speculative Transactions]].
 - The valid-time columns are in every index key so that views combining time filters stay covering.
 - A row is only ever updated from `t_ret IS NULL` to a value. See [[storage#Invariant Triggers]].

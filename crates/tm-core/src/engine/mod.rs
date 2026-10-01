@@ -21,7 +21,7 @@ use std::time::Duration;
 use crate::clock::{Clock, SystemClock};
 use crate::error::{Error, Position, Result};
 use crate::exec::{Capabilities, Executor, Host, HostOptions, SqlValue};
-use crate::id::{Eid, ObjectId, Tag, TxId};
+use crate::id::{Eid, ObjectId, Tag, TxId, COUNTER_MAX};
 use crate::report::{RetKind, TxOptions, TxReport, Valid};
 use crate::storage::{self, meta::Counters, stats::Stats};
 use crate::term::TermDict;
@@ -359,20 +359,35 @@ pub trait IntoObject {
 impl IntoObject for ObjectId {
     fn into_object(self, _tx: &mut Tx<'_>) -> Result<ObjectId> {
         self.tag()?;
+        self.check_origin()?;
         Ok(self)
     }
 }
 
 impl IntoObject for Eid {
     fn into_object(self, _tx: &mut Tx<'_>) -> Result<ObjectId> {
+        self.oid().check_origin()?;
         Ok(self.oid())
     }
 }
 
 impl IntoObject for TxId {
     fn into_object(self, _tx: &mut Tx<'_>) -> Result<ObjectId> {
+        self.oid().check_origin()?;
         Ok(self.oid())
     }
+}
+
+/// Takes the next number from an id counter, failing with `IdSpaceExhausted` once
+/// the counter has handed out 2⁴⁸ − 1, so that no number reaches the origin bits.
+// @lat: [[data-model#ObjectId#Origin Bits]]
+fn bump(counter: &mut i64, kind: Tag) -> Result<u64> {
+    let n = *counter;
+    if !(0..=COUNTER_MAX as i64).contains(&n) {
+        return Err(Error::IdSpaceExhausted { kind });
+    }
+    *counter += 1;
+    Ok(n as u64)
 }
 
 impl IntoObject for Value {
@@ -396,7 +411,8 @@ impl<'a> Tx<'a> {
         opts: TxOptions,
     ) -> Result<Tx<'a>> {
         let c0 = Counters::load(exec)?;
-        let t = c0.last_t as u64 + 1;
+        // `t` is the next number after `last_t`, bounded like every id counter
+        let t = bump(&mut (c0.last_t + 1), Tag::Tx)?;
         let instant = clock.now_ms().max(c0.last_instant + 1);
         dict.begin(c0.next_term);
         exec.execute(
@@ -512,22 +528,18 @@ impl<'a> Tx<'a> {
 
     /// Allocates a fresh `NODE` id without writing any statement.
     pub fn new_node(&mut self) -> Result<ObjectId> {
-        let n = self.c.next_node;
-        self.c.next_node += 1;
-        Ok(ObjectId::from_unsigned(Tag::Node, n as u64))
+        let n = bump(&mut self.c.next_node, Tag::Node)?;
+        Ok(ObjectId::from_unsigned(Tag::Node, n))
     }
 
     /// Allocates a fresh `BNODE` id without writing any statement.
     pub fn new_bnode(&mut self) -> Result<ObjectId> {
-        let n = self.c.next_bnode;
-        self.c.next_bnode += 1;
-        Ok(ObjectId::from_unsigned(Tag::BNode, n as u64))
+        let n = bump(&mut self.c.next_bnode, Tag::BNode)?;
+        Ok(ObjectId::from_unsigned(Tag::BNode, n))
     }
 
-    fn alloc_eid(&mut self) -> Eid {
-        let e = Eid::new(self.c.next_stmt as u64);
-        self.c.next_stmt += 1;
-        e
+    fn alloc_eid(&mut self) -> Result<Eid> {
+        Ok(Eid::new(bump(&mut self.c.next_stmt, Tag::Stmt)?))
     }
 
     fn sys(&mut self, iri: &str) -> Result<ObjectId> {
@@ -572,6 +584,9 @@ impl<'a> Tx<'a> {
     /// Validates the kinds of `s`, `p`, `o`.
     fn check_positions(&mut self, s: ObjectId, p: ObjectId, o: ObjectId) -> Result<()> {
         let (st, pt, _) = (s.tag()?, p.tag()?, o.tag()?);
+        for id in [s, p, o] {
+            id.check_origin()?;
+        }
         if !st.is_subject() {
             return Err(Error::InvalidTerm {
                 position: Position::Subject,

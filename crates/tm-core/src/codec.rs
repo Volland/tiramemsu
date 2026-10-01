@@ -57,6 +57,17 @@ pub enum Encoded {
     Term(TermSpec),
 }
 
+impl Encoded {
+    /// Fails with `Unsupported` for an inline `NODE`, `BNODE`, `STMT` or `TX` id
+    /// with a non-zero origin (see [`ObjectId::check_origin`]).
+    pub fn check_origin(&self) -> Result<()> {
+        match self {
+            Encoded::Inline(id) => id.check_origin(),
+            Encoded::Term(_) => Ok(()),
+        }
+    }
+}
+
 /// Encodes a value, canonicalising it first.
 pub fn encode(v: &Value) -> Encoded {
     match v.canonical() {

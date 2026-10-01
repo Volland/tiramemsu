@@ -6,12 +6,12 @@ The obstacle is identity. `STMT`, `NODE`, `BNODE` and `TX` payloads are per-file
 
 The options differ in what they cost later. Reserving bits in the payload now costs one bounds check. Reserving them after files exist in the wild costs a migration that rewrites every eid, which [[time-model#Never Forget]] and the invariant triggers (`eids are never reused`, no rewrite of `eid`) forbid. This change only reserves; it does not specify merging.
 
-**Status: decision needed. Not implemented.** See design.md, Decision, for the options and the recommendation.
+**Status: decided (Option A, reserve origin bits) and implemented.** See design.md, Decision, for the options that were weighed.
 
 ## What Changes
 
 - The 60-bit payload of `STMT`, `NODE`, `BNODE` and `TX` ids is split into a 12-bit **origin** (high bits) and a 48-bit **counter**. Format 1 files always write origin 0, so every id allocated today is unchanged: same value, same varint size.
-- The `next_*` counters of `meta` are bounded at 2⁴⁸ − 1 (about 2.8 × 10¹⁴ allocations per kind). Allocating past the bound fails with a typed error instead of spilling into the origin bits.
+- The `NODE`, `BNODE`, `STMT` and `TX` counters are bounded: the largest number ever allocated is 2⁴⁸ − 1 (about 2.8 × 10¹⁴ allocations per kind), so `next_*` stops at 2⁴⁸. Allocating past the bound fails with a typed error instead of spilling into the origin bits.
 - Decoding, skolem IRIs and the codec are unchanged for origin 0. A payload with a non-zero origin is rejected by format 1 on input (skolem IRI parse, `Value::Stmt`, bundle import), as tag 15 `SEALED` is today.
 - Nothing about merging is specified here. A later change (`add-memory-merge`) would define the origin registry (`meta.origin`), how foreign statements keep their ids, conflict rules for `sys:one` and `sys:unique` (they become read-time policies across origins), and the skolem form `urn:tiramemsu:stmt:<origin>.<n>`.
 
@@ -22,7 +22,7 @@ The options differ in what they cost later. Reserving bits in the payload now co
 
 ### Modified Capabilities
 - `object-encoding`: the ObjectId layout reserves the high 12 payload bits of `STMT`, `NODE`, `BNODE` and `TX` as the origin, which format 1 fixes to 0.
-- `storage-format`: the engine counters are bounded at 2⁴⁸ − 1.
+- `storage-format`: the engine counters allocate at most 2⁴⁸ − 1 per kind.
 
 ## Impact
 

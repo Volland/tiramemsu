@@ -590,3 +590,22 @@ fn a_bundle_moves_between_bridge_databases() {
         .unwrap_err();
     assert_eq!(e.code(), "InvalidTerm");
 }
+
+#[test]
+fn reserved_origins_and_exhausted_counters_have_codes() {
+    let (_d, db) = open();
+    // a statement number with a non-zero origin (payload bits 48..60) is refused
+    let foreign = (1u64 << 48) | 5;
+    let e = db
+        .call(
+            "transact",
+            &json!({ "ops": [{ "op": "confirm", "eid": foreign }] }),
+        )
+        .unwrap_err();
+    assert_eq!(e.code(), "Unsupported");
+    assert!(e.to_string().contains("origin 1"), "{e}");
+    let e = tiramemsu_json::BindError::Db(tiramemsu::Error::IdSpaceExhausted {
+        kind: tiramemsu::Tag::Stmt,
+    });
+    assert_eq!(e.code(), "IdSpaceExhausted");
+}

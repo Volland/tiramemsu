@@ -168,10 +168,10 @@ Every value in `s`, `p`, `o` and `eid` is a signed 64-bit integer: a 60-bit payl
 | Tag | Name | Storage | Payload |
 |---|---|---|---|
 | 0 | `IRI` | dictionary | term id |
-| 1 | `NODE` | inline | counter (anonymous LPG node) |
-| 2 | `BNODE` | inline | counter (RDF blank node, skolemised on export) |
-| 3 | `STMT` | inline | statement counter (the eid) |
-| 4 | `TX` | inline | transaction number `t` |
+| 1 | `NODE` | inline | origin and counter (anonymous LPG node) |
+| 2 | `BNODE` | inline | origin and counter (RDF blank node, skolemised on export) |
+| 3 | `STMT` | inline | origin and statement counter (the eid) |
+| 4 | `TX` | inline | origin and transaction number `t` |
 | 5 | `INT` | inline | 60-bit signed integer |
 | 6 | `BOOL` | inline | 0 or 1 |
 | 7 | `DATETIME` | inline | `(epoch_ms << 11) \| tz`: signed epoch milliseconds (49 bits) and an 11-bit timezone code |
@@ -202,6 +202,17 @@ A range filter on one predicate seeks from `(v << 4) | TAG` and keeps rows with 
 For `DATETIME` the bound is `(ms << 15) | 7` (any offset), since the instant is the high part of the payload.
 
 Doubles and decimals are not inline. Their range queries go through the indexed `term.num` column and join back by id. See [[storage#Term Dictionary]].
+
+### Origin Bits
+
+The payload of the allocated tags `NODE`, `BNODE`, `STMT` and `TX` is `(origin << 48) | counter`: a 12-bit origin above a 48-bit counter. Format 1 writes only origin 0.
+
+The origin is reserved for merging agent files later without rewriting ids: a statement would keep one id, and one skolem IRI, in every file that holds it. Reserving it now is free, while adding it after files exist would need the eid rewrite that [[time-model#Never Forget]] forbids. Merging itself is not specified.
+
+- **Same ids today:** an origin 0 id equals the id of the layout without origins, so it has the same value, the same varint size and the same skolem IRI.
+- **Accessors:** [[crates/tm-core/src/id.rs#ObjectId#origin]] and [[crates/tm-core/src/id.rs#ObjectId#counter]] split the payload, and return `None` for the other tags.
+- **Foreign origins are rejected:** an id with origin ≠ 0 fails with `Unsupported { feature }` naming the origin, the way tag 15 `SEALED` does. This covers a skolem IRI such as `urn:tiramemsu:stmt:281474976710661` (origin 1, counter 5), a `Value::Stmt`/`Node`/`BNode`/`Tx`, a raw ObjectId or eid passed to any write operation, a read lookup, and a fact bundle on import ([[data-model#Fact Bundles]]). The check is [[crates/tm-core/src/id.rs#ObjectId#check_origin]].
+- **Bounded counters:** the largest number allocated per kind is 2⁴⁸ − 1 (about 2.8 × 10¹⁴, far beyond the 10⁴–10⁷ statements of D1). The next allocation fails the transaction with `IdSpaceExhausted { kind }` and leaves no trace, so a counter never spills into the origin bits. See [[storage#Triple Table]].
 
 ## Nodes and Identity
 
