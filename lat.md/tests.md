@@ -351,7 +351,7 @@ Asserting `sys:inGraph` through `Tx::assert` or `create` fails with `ReservedNam
 
 ### Graph Names Are Validated
 
-A literal or a statement as graph name fails with `InvalidGraphName` on every graph method and writes nothing, while IRI, `NODE` and `BNODE` names work.
+A literal or a transaction as graph name fails with `InvalidGraphName` on every graph method and writes nothing, while IRI, `NODE` and `BNODE` names work.
 
 ### Error Messages Name The Term
 
@@ -371,7 +371,7 @@ One statement added to two graphs keeps one eid and gets two memberships, adding
 
 ### Cascade And Supersede Drop Memberships
 
-Retracting a statement retracts its memberships with `ret_kind` cascade in the same transaction. Supersede and cardinality-one replacement do not copy memberships to the replacement.
+Retracting a statement retracts its memberships with `ret_kind` cascade in the same transaction. Supersede and cardinality-one replacement do not copy a statement's own memberships to the replacement.
 
 ### Membership Lookups Use Live Indexes
 
@@ -475,7 +475,7 @@ The planner passes a set of one graph as an integer and several as JSON text, co
 
 ### Graph Names Are Rejected When Invalid
 
-A statement or transaction IRI as graph name, in `GRAPH`, `FROM`, `CREATE` or a template, and a graph variable bound to a literal, fail with `InvalidGraphName` and write nothing.
+A transaction IRI as graph name, in `GRAPH`, `FROM`, `CREATE` or a template, and a graph variable bound to a literal, fail with `InvalidGraphName` and write nothing.
 
 ### SPARQL Insert Into A Graph
 
@@ -505,6 +505,22 @@ A failing graph operation or a rejected `LOAD`, `ADD`, `MOVE`, `COPY`, `CLEAR DE
 
 A cardinality-one replacement written into a graph retracts the old statement and its membership with kind cardinality, and the new statement is a member.
 
+### A Statement Holds A Subgraph
+
+A live statement is a graph name: `add_to_graph` with a statement graph is idempotent, `remove_from_graph` and `clear_graph` keep the members, and a retracted statement graph fails with `NotLive` and writes nothing.
+
+### Retracting A Statement Graph Keeps Its Members
+
+Retracting a statement that names a graph cascades to its memberships in the same transaction and leaves the members live; `asOf` before the retraction still shows the members.
+
+### Supersede Carries The Contents Of A Statement Graph
+
+Superseding an edge replays the memberships of its graph onto the new eid with the members keeping their eids, while the edge's own membership in another graph and a superseded member's membership are dropped.
+
+### SPARQL Statement Graphs
+
+`GRAPH <urn:tiramemsu:stmt:n>`, `GRAPH ?e` bound by `~ ?e`, `FROM`, a template graph bound to a statement and `CLEAR GRAPH` work on a statement graph; deleting the edge empties the graph, keeps the members, and blocks new contents.
+
 ### Cypher Keeps One Graph
 
 `USE GRAPH g1 MATCH …` and `USE g1 …` fail with `Unsupported("USE GRAPH")` before any write, and the time forms of `USE` are unaffected.
@@ -528,6 +544,10 @@ After two supersedes, `sys:supersedes+` from the current root returns both earli
 ### Contradictions Between Sources
 
 Two authors' facts with the same subject and predicate, different objects and overlapping valid time are reported once; a later episode that overlaps neither is not.
+
+### Metagraph Containers Nesting And Fold
+
+Nested graphs through `within*` and `GRAPH ?g` (also in Cypher, under a cycle and `asOf`), fold by `INSERT … WHERE`, an edge holding a subgraph through a supersede and a retraction, and n-ary role statements.
 
 ## Query Provenance
 

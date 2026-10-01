@@ -7,7 +7,7 @@
 <p align="center"><strong>Layered, never-forget memory for agents.</strong><br>
 An embedded graph database on SQLite. Every fact has an id, so facts can carry layers of provenance and belief, and every change is kept with when it was made and when it was true.</p>
 
-<p align="center"><a href="site/articles/layered-graphs.html">Layered graphs, explained</a> · <a href="site/articles/tiramemsu-vs-oxilite.html">Tiramemsu vs oxilite</a> · <a href="lat.md/">Design (lat.md)</a> · <a href="openspec/specs/">Specs (OpenSpec)</a></p>
+<p align="center"><a href="site/articles/layered-graphs.html">Layered graphs, explained</a> · <a href="site/articles/tiramemsu-vs-oxilite.html">Tiramemsu vs oxilite</a> · <a href="site/articles/metagraphs.html">Metagraphs</a> · <a href="lat.md/">Design (lat.md)</a> · <a href="openspec/specs/">Specs (OpenSpec)</a></p>
 
 > **Status: new.** Designed and implemented in September 2026 as one Rust library. It is not published to crates.io, has no server yet, and runs on rusqlite only. Node.js and Python packages exist in [`bindings/`](bindings/) but are not published either. What is measured and what is not is listed under [Status](#status).
 
@@ -25,7 +25,8 @@ A knowledge graph stores facts. An agent also needs to say *how sure am I*, *whe
 - **Memory verbs.** Idempotent `assert`, `create` for parallel edges, `supersede` (correct a fact and replay its layers), `confirm` (another source agrees), cardinality-one and unique predicates, and `with` / `dry_run` for changes that leave no trace.
 - **SPARQL and Cypher, one store.** SPARQL 1.1 with RDF 1.2 annotations, and openCypher, share one logical IR and one semantics table. A relationship is also a `:Statement` node, so Cypher can reach layers.
 - **Paths.** Reachability, trails and shortest paths through a native automaton search, also as a SQL table function (`tm_path`). Paths can cross layers, stay inside named graphs, and be time-respecting (valid time never goes backwards along the walk).
-- **Named graphs as tags.** A graph is a node and membership is one more layer statement. `GRAPH`, `FROM`, `FROM NAMED` and `WITH` work with no new column or table.
+- **Named graphs as tags.** A graph is a node, or a statement, and membership is one more layer statement. `GRAPH`, `FROM`, `FROM NAMED` and `WITH` work with no new column or table.
+- **Metagraphs.** Edges are vertices (statement ids), and vertices and edges are containers (graphs named by a node or a statement). Nesting, fold and unfold are ordinary statements, so they travel in time.
 - **Embedded.** One SQLite file (WAL, STRICT). The core reaches SQLite through a small synchronous executor trait.
 
 ### What agents are saying
@@ -60,6 +61,7 @@ Every statement and every layer on it has an id, both clocks, a structural link 
 | Can I hand this fact to another agent? | `View::bundle(eid)` exports it with its layers and evidence; `Tx::import_bundle` asserts it idempotently |
 | Can I stop layers from rotting? | `(v:confidence sys:subjectType sys:STMT)` rejects a confidence on anything but a statement |
 | What can I reach inside one session? | Recursive paths under `GRAPH <g>` / `GRAPH ?g` only cross the graph's statements |
+| What does this edge contain? | `GRAPH <urn:tiramemsu:stmt:n> { … }`: a statement names a graph, its contents follow a supersede and go with a retraction |
 | Could this have reached B, and when? | Time-respecting paths: valid time never goes backwards along the walk, and each row carries its earliest arrival |
 
 ## Architecture

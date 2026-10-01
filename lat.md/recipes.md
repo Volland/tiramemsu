@@ -151,6 +151,25 @@ SELECT ?g ?x WHERE { GRAPH ?g { v:alice v:knows+ ?x } }   # one row set per grap
 
 Membership is read in the path's own view, so under `asOf` the walk follows the graph as it was. `View::path_with` takes `PathArgs { graphs: Some(vec![g]), .. }`, and `tm_path` a sixth `graphs` argument. See [[query#Physical Planning#Path Engine]].
 
+## Metagraphs
+
+A metagraph needs edges that are vertices and vertices that are containers. Statement ids give the first, and graphs as tags give the second, for nodes and for statements ([[data-model#Named Graphs#Statement Graphs]]).
+
+```sparql
+# an edge that holds a subgraph, read through its reifier
+INSERT DATA { GRAPH <urn:tiramemsu:stmt:1> { v:drSmith v:role v:investigator } }
+SELECT ?s WHERE { v:p7 v:enrolledIn ?trial ~ ?e . GRAPH ?e { ?s ?p ?o } }
+
+# metavertices inside metavertices: find them with a path, open them with GRAPH
+SELECT ?who WHERE { ?g v:within* v:org . GRAPH ?g { ?who v:owns ?svc } }
+
+# fold is a write of tags (nothing is copied), unfold is a read
+INSERT { GRAPH v:episode1 { ?s v:owns ?o } } WHERE { ?s v:owns ?o }
+SELECT ?s ?p ?o WHERE { GRAPH v:episode1 { ?s ?p ?o } }
+```
+
+N-ary and set-to-set edges are role statements on a node or a statement (`v:alice v:meets v:bob {| v:with v:carol |}`), kept honest by typed layers. Containment and nesting are statements, so `asOf`, `validAt` and time-respecting paths apply to the structure too. In Cypher, `(r)-[:\`sys:inGraph\`]->(g)-[:within*0..]->(top)` reaches the same memberships, one row per path, so a cyclic nesting needs `DISTINCT`. The test is `metagraph_containers_nesting_and_fold`.
+
 ## Journeys Through Time
 
 A time-respecting path never goes back in valid time: each fact it crosses must still hold when the walk reaches it. It answers "could this have reached B?", and each row says the earliest instant it could have.

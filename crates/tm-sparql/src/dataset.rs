@@ -161,12 +161,12 @@ impl ViewScope {
     }
 }
 
-/// A graph name as a value: an IRI, `NODE` or `BNODE`. Any other term (a statement
-/// or transaction skolem IRI) fails with `InvalidGraphName`.
+/// A graph name as a value: an IRI, `NODE`, `BNODE` or statement. Any other term (a
+/// transaction skolem IRI) fails with `InvalidGraphName`.
 pub fn graph_name(iri: &str) -> Result<Value> {
     let v = Value::Iri(iri.to_string()).canonical();
     match v {
-        Value::Iri(_) | Value::Node(_) | Value::BNode(_) => Ok(v),
+        Value::Iri(_) | Value::Node(_) | Value::BNode(_) | Value::Stmt(_) => Ok(v),
         other => Err(Error::InvalidGraphName {
             term: other.to_string(),
         }),
@@ -357,8 +357,10 @@ mod tests {
             GraphDataset::from_dataset(Some(&n)).unwrap(),
             GraphDataset::default()
         );
-        // a statement IRI is not a graph name
-        let bad = ds(&["urn:tiramemsu:stmt:5"], None);
+        // a statement IRI is a graph name, a transaction IRI is not
+        let ok = ds(&["urn:tiramemsu:stmt:5"], None);
+        assert!(GraphDataset::from_dataset(Some(&ok)).is_ok());
+        let bad = ds(&["urn:tiramemsu:tx:5"], None);
         assert!(matches!(
             GraphDataset::from_dataset(Some(&bad)),
             Err(Error::InvalidGraphName { .. })

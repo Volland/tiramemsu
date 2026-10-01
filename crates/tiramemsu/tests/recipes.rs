@@ -219,3 +219,89 @@ fn contradictions_between_authors_with_overlapping_valid_time() {
         ]]
     );
 }
+
+// @lat: [[tests#Recipes#Metagraph Containers Nesting And Fold]]
+#[test]
+fn metagraph_containers_nesting_and_fold() {
+    let t = T::new();
+    // nested metavertices: team graphs inside payments inside org, team C outside
+    t.upd(
+        "INSERT DATA { \
+           GRAPH v:teamA { v:alice v:owns v:billing } \
+           GRAPH v:teamB { v:bob v:owns v:search } \
+           GRAPH v:teamC { v:carol v:owns v:ads } \
+           v:teamA v:within v:payments . v:payments v:within v:org . v:teamB v:within v:org }",
+    );
+    // a cycle does not change the answer
+    t.upd("INSERT DATA { v:org v:within v:payments }");
+    let deep =
+        "SELECT ?who WHERE { ?g v:within* v:org . GRAPH ?g { ?who v:owns ?svc } } ORDER BY ?who";
+    assert_eq!(t.col(deep, "who"), some(&[v("alice"), v("bob")]));
+    // Cypher reaches the same memberships through the dual view; a variable-length
+    // match gives one row per path, so the cycle needs DISTINCT
+    let r = t
+        .db
+        .now()
+        .cypher(
+            "MATCH (a)-[r:owns]->(b), (r)-[:`sys:inGraph`]->(g)-[:within*0..]->(top {`@id`: 'v:org'}) RETURN DISTINCT a, g",
+            &CypherParams::default(),
+        )
+        .unwrap();
+    assert_eq!(r.rows.len(), 2, "{:?}", r.rows);
+    // nesting is a statement, so it has both clocks
+    let before = t.last_t();
+    t.upd("DELETE DATA { v:teamB v:within v:org }");
+    assert_eq!(t.col(deep, "who"), some(&[v("alice")]));
+    let then = format!(
+        "SELECT ?who WHERE {{ SERVICE <urn:tiramemsu:tm:asOf/{before}> {{ \
+           ?g v:within* v:org . GRAPH ?g {{ ?who v:owns ?svc }} }} }} ORDER BY ?who"
+    );
+    assert_eq!(t.col(&then, "who"), some(&[v("alice"), v("bob")]));
+
+    // fold is a write of tags: no statement is copied
+    t.upd(
+        "INSERT { GRAPH v:episode1 { ?s v:owns ?o } . v:episode1 v:summarizes \"who owns what\" } \
+         WHERE { ?s v:owns ?o }",
+    );
+    assert_eq!(t.sel("SELECT ?s WHERE { ?s v:owns ?o }").rows.len(), 3);
+    // unfold is a read
+    assert_eq!(
+        t.sel("SELECT ?s ?p ?o WHERE { GRAPH v:episode1 { ?s ?p ?o } }")
+            .rows
+            .len(),
+        3
+    );
+
+    // an edge holds a subgraph, and keeps it through a correction
+    let r = t.upd("INSERT DATA { v:p7 v:enrolledIn v:trial3 }");
+    let edge = r.asserted[0];
+    t.upd(&format!(
+        "INSERT DATA {{ GRAPH {} {{ v:drSmith v:role v:investigator . v:site9 v:hosts v:p7 }} }}",
+        stmt_iri(edge)
+    ));
+    let inside =
+        "SELECT ?s WHERE { ?p v:enrolledIn ?trial ~ ?e . GRAPH ?e { ?s ?q ?o } } ORDER BY ?s";
+    assert_eq!(t.col(inside, "s"), some(&[v("drSmith"), v("site9")]));
+    t.tx(|tx| {
+        tx.supersede(edge, Patch::object(v("trial4")))?;
+        Ok(())
+    });
+    assert_eq!(t.col(inside, "s"), some(&[v("drSmith"), v("site9")]));
+    assert!(t.ask(
+        "ASK { v:p7 v:enrolledIn v:trial4 ~ ?e . GRAPH ?e { v:drSmith v:role v:investigator } }"
+    ));
+    // retracting the edge empties the container and keeps the facts
+    t.upd("DELETE DATA { v:p7 v:enrolledIn v:trial4 }");
+    assert!(t.col(inside, "s").is_empty());
+    assert!(t.has(&v("drSmith"), &v("role"), &v("investigator")));
+
+    // n-ary: the meeting is the edge, its extra participants are role statements
+    t.upd("INSERT DATA { v:alice v:meets v:bob {| v:with v:carol ; v:with v:dave |} }");
+    assert_eq!(
+        t.col(
+            "SELECT ?x WHERE { ?a v:meets ?b ~ ?e . ?e v:with ?x } ORDER BY ?x",
+            "x"
+        ),
+        some(&[v("carol"), v("dave")])
+    );
+}

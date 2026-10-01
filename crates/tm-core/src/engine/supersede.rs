@@ -144,11 +144,13 @@ impl Tx<'_> {
                 .and_then(|e| sigma.get(&e))
                 .map_or(id, |e| e.oid())
         };
-        // memberships are retracted with the old statement and never copied: adding
-        // the replacement to graphs is an explicit act of the writer
+        // a member's memberships are retracted with it and never copied: adding the
+        // replacement to graphs is an explicit act of the writer. A membership in a
+        // graph that is itself in the set (an edge's contents) follows the edge.
         let in_graph = self.sys_lookup(vocab::SYS_IN_GRAPH)?;
         for r in rows {
-            if Some(r.p) == in_graph {
+            if Some(r.p) == in_graph && !Eid::from_oid(r.o).is_some_and(|g| sigma.contains_key(&g))
+            {
                 continue;
             }
             let new = sigma[&r.eid];

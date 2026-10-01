@@ -55,11 +55,10 @@ host_test! {
 host_test! {
     fn graph_names_are_validated(db) {
         let e = add(db, "x");
-        let e2 = add(db, "y");
         let before = db.count("triple");
         let r = db.try_tx(|tx| tx.add_to_graph(e, lit("g"), AssertOpts::default()).map(|_| ()));
         assert_err!(r, Error::InvalidGraphName { term } if term.contains("\"g\""));
-        let r = db.try_tx(|tx| tx.add_to_graph(e, e2, AssertOpts::default()).map(|_| ()));
+        let r = db.try_tx(|tx| tx.add_to_graph(e, TxId(1), AssertOpts::default()).map(|_| ()));
         assert_err!(r, Error::InvalidGraphName { .. });
         let r = db.try_tx(|tx| tx.clear_graph(lit("g")).map(|_| ()));
         assert_err!(r, Error::InvalidGraphName { .. });
@@ -347,5 +346,100 @@ host_test! {
         // stat4 samples exist for the index that serves `GRAPH <g>`
         let n = db.scalar("SELECT count(*) FROM sqlite_stat4 WHERE tbl = 'triple' AND idx = 'live_pos'");
         assert!(n > 0, "sqlite_stat4 has no samples for live_pos");
+    }
+}
+
+fn stmt_members(db: &mut TestDb, spec: ViewSpec, graph: Eid) -> Vec<Eid> {
+    db.read(|x| read::graph_members(x, &spec, graph.oid()))
+}
+
+fn put(db: &mut TestDb, s: &str, p: &str, o: &str) -> Eid {
+    let mut e = None;
+    db.tx(|tx| {
+        e = Some(tx.assert(iri(s), iri(p), iri(o), Valid::ALWAYS)?.eid());
+        Ok(())
+    });
+    e.unwrap()
+}
+
+// @lat: [[tests#Named Graphs#A Statement Holds A Subgraph]]
+host_test! {
+    fn a_statement_holds_a_subgraph(db) {
+        let edge = put(db, "p7", "enrolledIn", "trial3");
+        let inv = put(db, "drSmith", "role", "investigator");
+        let site = put(db, "site9", "hosts", "p7");
+        db.tx(|tx| {
+            assert!(tx.add_to_graph(inv, edge, AssertOpts::default())?.1);
+            assert!(tx.add_to_graph(site, edge, AssertOpts::default())?.1);
+            // idempotent
+            assert!(!tx.add_to_graph(inv, edge, AssertOpts::default())?.1);
+            Ok(())
+        });
+        assert_eq!(stmt_members(db, ViewSpec::NOW, edge), vec![inv, site]);
+        assert!(db.read(|x| read::graphs(x, &ViewSpec::NOW)).contains(&edge.oid()));
+        // remove and clear work on a statement graph and keep the members
+        db.tx(|tx| { assert!(tx.remove_from_graph(site, edge)?); Ok(()) });
+        assert_eq!(stmt_members(db, ViewSpec::NOW, edge), vec![inv]);
+        db.tx(|tx| { assert_eq!(tx.clear_graph(edge)?.len(), 1); Ok(()) });
+        assert!(stmt_members(db, ViewSpec::NOW, edge).is_empty());
+        assert!(db.is_live(inv) && db.is_live(site) && db.is_live(edge));
+        // a retracted statement cannot gain contents
+        db.tx(|tx| tx.retract(edge).map(|_| ()));
+        let before = db.count("triple");
+        let r = db.try_tx(|tx| tx.add_to_graph(inv, edge, AssertOpts::default()).map(|_| ()));
+        assert_err!(r, Error::NotLive(g) if g == edge);
+        assert_eq!(db.count("triple"), before);
+    }
+}
+
+// @lat: [[tests#Named Graphs#Retracting A Statement Graph Keeps Its Members]]
+host_test! {
+    fn retracting_a_statement_graph_keeps_its_members(db) {
+        let edge = put(db, "p7", "enrolledIn", "trial3");
+        let inv = put(db, "drSmith", "role", "investigator");
+        let mut m = None;
+        let t_in = db.tx(|tx| { m = Some(tx.add_to_graph(inv, edge, AssertOpts::default())?.0); Ok(()) }).t;
+        let m = m.unwrap();
+        let rep = db.tx(|tx| tx.retract(edge).map(|_| ()));
+        assert_eq!(rep.memberships_retracted, vec![(m, RetKind::Cascade)]);
+        assert_eq!(db.row(m).t_ret, db.row(edge).t_ret, "same transaction");
+        assert!(db.is_live(inv));
+        assert!(stmt_members(db, ViewSpec::NOW, edge).is_empty());
+        let at = ViewSpec::as_of(TimeRef::Tx(t_in.0));
+        assert_eq!(stmt_members(db, at, edge), vec![inv]);
+    }
+}
+
+// @lat: [[tests#Named Graphs#Supersede Carries The Contents Of A Statement Graph]]
+host_test! {
+    fn supersede_carries_the_contents_of_a_statement_graph(db) {
+        let edge = put(db, "p7", "enrolledIn", "trial3");
+        let inv = put(db, "drSmith", "role", "investigator");
+        db.tx(|tx| {
+            tx.add_to_graph(inv, edge, AssertOpts::default())?;
+            // the edge is itself a member of an ordinary graph
+            tx.add_to_graph(edge, g("1"), AssertOpts::default())?;
+            Ok(())
+        });
+        let mut new = None;
+        db.tx(|tx| {
+            new = Some(tx.supersede(edge, Patch::object(iri("trial4")))?);
+            Ok(())
+        });
+        let new = new.unwrap();
+        // the contents follow the edge, and the member keeps its eid
+        assert_eq!(stmt_members(db, ViewSpec::NOW, new), vec![inv]);
+        assert!(stmt_members(db, ViewSpec::NOW, edge).is_empty());
+        assert!(db.is_live(inv));
+        // the edge's own membership in g1 is still dropped
+        assert!(members(db, ViewSpec::NOW, &g("1")).is_empty());
+        // superseding a member drops its membership in the statement graph
+        let mut inv2 = None;
+        db.tx(|tx| {
+            inv2 = Some(tx.supersede(inv, Patch::object(iri("monitor")))?);
+            Ok(())
+        });
+        assert!(stmt_members(db, ViewSpec::NOW, new).is_empty());
+        assert!(db.is_live(inv2.unwrap()));
     }
 }

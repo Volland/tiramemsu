@@ -77,7 +77,10 @@ pub fn run(plan: &UpdatePlan, tx: &mut Tx<'_>, select: &mut Select<'_>) -> Resul
 /// mentions it, so it has no membership and no declaration). A value that cannot
 /// name a graph fails with `InvalidGraphName`.
 fn known_graph(tx: &mut Tx<'_>, v: &Value) -> Result<Option<ObjectId>> {
-    if !matches!(v, Value::Iri(_) | Value::Node(_) | Value::BNode(_)) {
+    if !matches!(
+        v,
+        Value::Iri(_) | Value::Node(_) | Value::BNode(_) | Value::Stmt(_)
+    ) {
         return Err(Error::InvalidGraphName {
             term: v.to_string(),
         });

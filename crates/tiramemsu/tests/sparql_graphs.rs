@@ -611,10 +611,10 @@ fn invalid_graph_names_are_rejected() {
     let t = store();
     let before = t.last_t();
     for q in [
-        "SELECT * WHERE { GRAPH <urn:tiramemsu:stmt:1> { ?s ?p ?o } }",
+        "SELECT * WHERE { GRAPH <urn:tiramemsu:tx:1> { ?s ?p ?o } }",
         "SELECT * FROM <urn:tiramemsu:tx:1> WHERE { ?s ?p ?o }",
-        "INSERT DATA { GRAPH <urn:tiramemsu:stmt:1> { v:c v:p v:d } }",
-        "CREATE GRAPH <urn:tiramemsu:stmt:2>",
+        "INSERT DATA { GRAPH <urn:tiramemsu:tx:1> { v:c v:p v:d } }",
+        "CREATE GRAPH <urn:tiramemsu:tx:2>",
     ] {
         assert!(matches!(t.err(q), Error::InvalidGraphName { .. }), "{q}");
     }
@@ -622,4 +622,70 @@ fn invalid_graph_names_are_rejected() {
     let e = t.err("INSERT { GRAPH ?o { v:z v:p v:z } } WHERE { VALUES ?o { \"lit\" } }");
     assert!(matches!(e, Error::InvalidGraphName { .. }), "{e:?}");
     assert_eq!(t.last_t(), before);
+}
+
+// @lat: [[tests#Named Graphs#SPARQL Statement Graphs]]
+#[test]
+fn sparql_statement_graphs() {
+    let t = T::new();
+    let r = t.upd("INSERT DATA { v:p7 v:enrolledIn v:trial3 }");
+    let edge = r.asserted[0];
+    let name = format!("urn:tiramemsu:stmt:{}", edge.n());
+    t.upd(&format!(
+        "INSERT DATA {{ GRAPH <{name}> {{ v:drSmith v:role v:investigator . v:site9 v:hosts v:p7 }} }}"
+    ));
+    // a constant statement graph, and a graph variable bound by the reifier
+    assert_eq!(
+        t.col(
+            &format!("SELECT ?s WHERE {{ GRAPH <{name}> {{ ?s ?p ?o }} }} ORDER BY ?s"),
+            "s"
+        ),
+        some(&[v("drSmith"), v("site9")])
+    );
+    assert_eq!(
+        t.col(
+            "SELECT ?s WHERE { v:p7 v:enrolledIn v:trial3 ~ ?e . GRAPH ?e { ?s v:role ?r } }",
+            "s"
+        ),
+        some(&[v("drSmith")])
+    );
+    // GRAPH ?g binds the statement
+    assert_eq!(
+        t.col("SELECT ?g WHERE { GRAPH ?g { v:drSmith v:role ?r } }", "g"),
+        some(&[Value::Stmt(edge)])
+    );
+    // FROM a statement graph
+    assert_eq!(
+        t.col(
+            &format!("SELECT ?s FROM <{name}> WHERE {{ ?s v:hosts ?o }}"),
+            "s"
+        ),
+        some(&[v("site9")])
+    );
+    // a template graph bound to a statement
+    t.upd("INSERT { GRAPH ?e { v:consent v:version \"3\" } } WHERE { v:p7 v:enrolledIn v:trial3 ~ ?e }");
+    assert!(t.ask(&format!(
+        "ASK {{ GRAPH <{name}> {{ v:consent v:version \"3\" }} }}"
+    )));
+    // CLEAR keeps the members
+    t.upd(&format!("CLEAR GRAPH <{name}>"));
+    assert!(!t.ask(&format!("ASK {{ GRAPH <{name}> {{ ?s ?p ?o }} }}")));
+    assert!(t.has(&v("drSmith"), &v("role"), &v("investigator")));
+    // retracting the edge empties its graph and keeps the members
+    t.upd(&format!(
+        "INSERT DATA {{ GRAPH <{name}> {{ v:drSmith v:role v:investigator }} }}"
+    ));
+    let before = t.last_t();
+    t.upd("DELETE DATA { v:p7 v:enrolledIn v:trial3 }");
+    assert!(!t.ask(&format!("ASK {{ GRAPH <{name}> {{ ?s ?p ?o }} }}")));
+    assert!(t.has(&v("drSmith"), &v("role"), &v("investigator")));
+    assert!(t.ask(&format!(
+        "ASK {{ SERVICE <{P}asOf/{before}> {{ GRAPH <{name}> {{ v:drSmith v:role v:investigator }} }} }}"
+    )));
+    // a retracted statement cannot gain contents
+    let e = t.err(&format!(
+        "INSERT DATA {{ GRAPH <{name}> {{ v:x v:p v:y }} }}"
+    ));
+    assert!(matches!(e, Error::NotLive(_)), "{e:?}");
+    assert!(!t.has(&v("x"), &v("p"), &v("y")));
 }

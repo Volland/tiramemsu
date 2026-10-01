@@ -35,7 +35,8 @@
     <div class="card"><span class="tag">Correct</span><h3>Supersede, confirm, speculate</h3><p>Correct a fact and its layers are replayed on the new one. Confirm a fact from a new source. Try changes in a <code>with</code> block that leaves no trace.</p></div>
     <div class="card"><span class="tag">Query</span><h3>SPARQL and Cypher</h3><p>SPARQL 1.1 with RDF 1.2 annotations, and openCypher, share one IR and one semantics table. A relationship is also a <code>:Statement</code> node.</p></div>
     <div class="card"><span class="tag">Paths</span><h3>Native path engine</h3><p>Reachability, trails and shortest paths as an automaton search, also as a SQL table function. Paths can cross layers to reach what a belief is about.</p></div>
-    <div class="card"><span class="tag">Graphs</span><h3>Named graphs as tags</h3><p>A graph is a node and membership is one more layer statement. <code>GRAPH</code>, <code>FROM</code> and <code>WITH</code> work with no new column or table.</p></div>
+    <div class="card"><span class="tag">Graphs</span><h3>Named graphs as tags</h3><p>A graph is a node, or a statement, and membership is one more layer statement. <code>GRAPH</code>, <code>FROM</code> and <code>WITH</code> work with no new column or table.</p></div>
+    <div class="card"><span class="tag">Metagraphs</span><h3>Edges that hold graphs</h3><p>An edge is a node, and a node or an edge can hold a subgraph. Nest them, fold and unfold them, and ask how the structure looked last week. <a href="articles/metagraphs.html">Read more</a>.</p></div>
     <div class="card"><span class="tag">Embedded</span><h3>One file, one crate</h3><p>Rust library over bundled SQLite (WAL, STRICT). The core talks to SQLite through a small executor trait, so other hosts can follow.</p></div>
   </div>
 </div></section>
@@ -177,6 +178,7 @@ db.now().cypher(<span class="s">"MATCH (p)-[r:worksAt]-&gt;(o) RETURN p, o, r.co
 <section id="articles"><div class="wrap">
   <h2>Articles</h2>
   <ul class="list-articles">
+    <li class="card"><h3><a href="articles/metagraphs.html">Metagraphs from one row shape</a></h3><p>Edges that are vertices, vertices and edges that hold subgraphs, nesting, n-ary edges, fold and unfold, all as statements with two clocks.</p></li>
     <li class="card"><h3><a href="articles/layer-recipes.html">Questions only layers can answer</a></h3><p>Evidence through time, impact analysis, who wrote it and why it was forgotten, contradictions, cited answers and portable facts: tested recipes.</p></li>
     <li class="card"><h3><a href="articles/layered-graphs.html">Layered graphs, explained</a></h3><p>Why giving every fact an id turns provenance, confidence and beliefs into ordinary queries.</p></li>
     <li class="card"><h3><a href="articles/tiramemsu-vs-oxilite.html">How tiramemsu differs from oxilite</a></h3><p>Same author, same SQLite base, different answers to “what is a statement?”. With a benchmark.</p></li>

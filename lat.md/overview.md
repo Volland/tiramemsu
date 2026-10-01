@@ -30,7 +30,7 @@ Every row is a decision taken in the design interview of 2026-09-29, with the se
 
 Rows D19–D25 were added the same day, after a comparison with oxilite ([[prior-art#oxilite]]) and after measuring SQLite 3.53 plans on the schema ([[query#Physical Planning#Join Ordering]], [[storage#Measured Footprint]]). D26 follows a SQLite versus DuckDB benchmark on the same workload ([[prior-art#DuckDB]]).
 
-D35 was added on 2026-10-01: it reserves origin bits so that agent files can later merge without rewriting ids.
+D35 was added on 2026-10-01: it reserves origin bits so that agent files can later merge without rewriting ids. D36 was added the same day: a statement can name a graph, so an edge can hold a subgraph.
 
 | ID | Decision | Specified in |
 |---|---|---|
@@ -72,6 +72,7 @@ D35 was added on 2026-10-01: it reserves origin bits so that agent files can lat
 | D33 | Recursive paths filter by graph membership on every traversed statement, in the path's own view | [[query#Physical Planning#Path Engine]] |
 | D34 | Time-respecting paths use earliest-arrival semantics: a hop needs its fact to hold at the walk's time, which only moves forward | [[query#Physical Planning#Path Engine#Time-Respecting Search]] |
 | D35 | The high 12 payload bits of `NODE`, `BNODE`, `STMT` and `TX` are a reserved origin (format 1 writes 0 and rejects others); counters stop at 2⁴⁸ − 1 | [[data-model#ObjectId#Origin Bits]] |
+| D36 | A statement eid is a graph name: an edge holds a subgraph, its memberships cascade with it, and supersede replays them onto the new eid | [[data-model#Named Graphs#Statement Graphs]] |
 
 ## Open Inputs
 

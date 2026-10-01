@@ -129,9 +129,9 @@ fn service_and_graph_lowering() {
         "SELECT ?x WHERE { GRAPH <http://ex/g> { <urn:tiramemsu:v:a> <urn:tiramemsu:v:k>|<urn:tiramemsu:v:j> ?x } }",
     );
     assert_eq!(s.matches(":graph (<http://ex/g>)").count(), 2, "{s}");
-    // a statement IRI is not a graph name
+    // a transaction IRI is not a graph name (a statement IRI is)
     assert!(matches!(
-        err("SELECT * WHERE { GRAPH <urn:tiramemsu:stmt:1> { ?s ?p ?o } }"),
+        err("SELECT * WHERE { GRAPH <urn:tiramemsu:tx:1> { ?s ?p ?o } }"),
         tm_core::Error::InvalidGraphName { .. }
     ));
     match err("SELECT * WHERE { GRAPH <urn:tiramemsu:tm:asOf/150> { ?s ?p ?o } }") {

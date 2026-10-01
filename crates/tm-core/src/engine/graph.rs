@@ -13,7 +13,7 @@ use crate::report::{AssertOpts, Asserted, RetKind, Valid};
 use crate::vocab;
 
 impl Tx<'_> {
-    /// Validates a graph name: an `IRI`, `NODE` or `BNODE` id, otherwise
+    /// Validates a graph name: an `IRI`, `NODE`, `BNODE` or `STMT` id, otherwise
     /// `InvalidGraphName`.
     // @lat: [[data-model#Named Graphs]]
     fn graph_id(&mut self, graph: impl IntoObject) -> Result<ObjectId> {
@@ -21,6 +21,10 @@ impl Tx<'_> {
         match g.tag()? {
             Tag::Iri | Tag::Node | Tag::BNode => {
                 self.check_known(g, crate::error::Position::Object)?;
+                Ok(g)
+            }
+            Tag::Stmt => {
+                g.check_origin()?;
                 Ok(g)
             }
             _ => {
@@ -39,9 +43,10 @@ impl Tx<'_> {
 
     /// Adds live statement `eid` to `graph`: asserts `(eid sys:inGraph graph)`
     /// idempotently over `opts.valid` and returns the membership eid and whether it
-    /// is new. Fails with `InvalidGraphName` for a non-node graph, `NotLive` for a
-    /// retracted statement and `ReservedNamespace` for a statement whose predicate
-    /// is in `sys:` (schema and bookkeeping statements belong to no user graph).
+    /// is new. Fails with `InvalidGraphName` for a graph that is neither a node nor
+    /// a statement, `NotLive` for a retracted statement or a retracted statement
+    /// graph, and `ReservedNamespace` for a statement whose predicate is in `sys:`
+    /// (schema and bookkeeping statements belong to no user graph).
     pub fn add_to_graph(
         &mut self,
         eid: Eid,
@@ -50,6 +55,13 @@ impl Tx<'_> {
     ) -> Result<(Eid, bool)> {
         eid.oid().check_origin()?;
         let g = self.graph_id(graph)?;
+        // a statement graph must be live, so the cascade of its retraction reaches
+        // every membership in it
+        if let Some(ge) = Eid::from_oid(g) {
+            if self.live(ge)? != Some(true) {
+                return Err(Error::NotLive(ge));
+            }
+        }
         let Some(row) = self.exec.first_row(
             "SELECT p, t_ret FROM triple WHERE eid = ?1",
             &[SqlValue::Integer(eid.oid().raw())],

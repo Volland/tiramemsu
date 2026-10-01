@@ -121,11 +121,11 @@ INSERT DATA { GRAPH v:session12 { v:alice v:worksAt v:acme } }   # statement + m
 INSERT DATA { v:session12 v:startedBy v:agent7 }                  # metadata: an ordinary triple
 ```
 
-- **Graph names:** an `IRI`, `NODE` or `BNODE` id. A literal, statement or transaction is `InvalidGraphName`. A graph exists in a view while at least one membership of a visible statement is visible; `CREATE GRAPH` also declares it with `(g rdf:type sys:Graph)`, so empty graphs can be listed.
+- **Graph names:** an `IRI`, `NODE`, `BNODE` or `STMT` id. A literal or transaction is `InvalidGraphName`. A statement name makes an edge a container; see [[data-model#Named Graphs#Statement Graphs]]. A graph exists in a view while at least one membership of a visible statement is visible; `CREATE GRAPH` also declares it with `(g rdf:type sys:Graph)`, so empty graphs can be listed.
 - **Tags, not containers:** one statement keeps one eid however many graphs it is in, so assert stays idempotent and confidence on a fact belongs to the fact. `INSERT DATA` into two graphs gives one statement and two memberships.
 - **Membership is a statement:** it has its own eid, transaction time and valid time, accepts layers (`{| v:addedBy … |}`), and is read in the pattern's own view, so `asOf` shows the graph as it was and `validAt` honours a bounded membership. SPARQL memberships have unbounded valid time; `Tx::add_to_graph` can bound it.
 - **Engine-owned:** only `GRAPH` blocks, `WITH` and the `Tx` methods write `sys:inGraph`; a direct assert is `ReservedNamespace`. A statement whose predicate is in `sys:` (schema flags, bookkeeping) belongs to no graph.
-- **Delete is membership-only:** `DELETE … { GRAPH <g> { t } }`, `Tx::remove_from_graph`, `CLEAR GRAPH` and `DROP GRAPH` retract memberships and never the member statement. A plain delete retracts the statement, and the cascade retracts its memberships (`ret_kind` cascade). Superseding a member statement drops its memberships; the writer adds the replacement to graphs explicitly.
+- **Delete is membership-only:** `DELETE … { GRAPH <g> { t } }`, `Tx::remove_from_graph`, `CLEAR GRAPH` and `DROP GRAPH` retract memberships and never the member statement. A plain delete retracts the statement, and the cascade retracts its memberships (`ret_kind` cascade). Superseding a member statement drops its own memberships; the writer adds the replacement to graphs explicitly.
 - **Default graph is the union** of every visible statement (Decision D28, a deviation from W3C SPARQL, where it holds only triples outside named graphs). `FROM <g>` narrows it to members of `g`; `FROM NAMED` limits `GRAPH`. See [[query#Front Ends#SPARQL]].
 - **Paths inside a graph:** a path is in a graph set when every statement it traverses is a member of one of the graphs in the hop's view, so `GRAPH <g> { :a :knows+ ?x }` follows only `g`'s statements and `asOf` follows `g` as it was. See [[query#Physical Planning#Path Engine]].
 - **Metadata about a graph** is ordinary triples with the graph as subject. They are not members of the graph merely because of their subject.
@@ -133,6 +133,22 @@ INSERT DATA { v:session12 v:startedBy v:agent7 }                  # metadata: an
 - **Cost:** one extra row and its nine index entries per membership, about 1.9 times the file for a store where every live statement has one membership ([[storage#Graph Memberships]]). `GRAPH <g>` seeks `(p = sys:inGraph, o = g)` on the live `(p, o)` index and costs the size of the graph.
 
 Implementation: `crates/tm-core/src/engine/graph.rs` holds the `Tx` operations, [[crates/tm-core/src/read.rs#graph_members]] the reads behind `View::graphs` and `View::graph_members`, and the graph selector on `TriplePattern` lowers to a membership join in `tm-exec`.
+
+### Statement Graphs
+
+A statement eid can name a graph, so an edge holds a subgraph of its own: the second metagraph power, a vertex or edge as container (D36).
+
+```sparql
+INSERT DATA { v:p7 v:enrolledIn v:trial3 }                               # eid 1
+INSERT DATA { GRAPH <urn:tiramemsu:stmt:1> { v:drSmith v:role v:investigator } }
+SELECT ?s WHERE { v:p7 v:enrolledIn v:trial3 ~ ?e . GRAPH ?e { ?s ?p ?o } }
+```
+
+- **Liveness:** adding a membership needs the graph statement to be live, else `NotLive(graph)`. A membership's object is its graph, so retracting the edge cascades to every membership in it and leaves the members live: the container goes, the facts stay.
+- **Time:** transaction-time views agree without a join, because the edge and its memberships retract in one transaction. Valid time is not clamped: a membership keeps its own interval, like any layer.
+- **Supersede:** a membership whose graph is in the cascade set is replayed with its graph mapped through σ, so a corrected edge keeps its contents and the members keep their eids. A member's own memberships in other graphs are still dropped. See [[time-model#Operations#Supersede]].
+- **Everything else is unchanged:** `GRAPH ?g`, `FROM`, `WITH`, `CLEAR`, `DROP`, paths and `View::graphs` work as for node graphs; a statement graph renders as `urn:tiramemsu:stmt:<n>`.
+
 
 ## Fact Bundles
 

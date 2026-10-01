@@ -203,7 +203,9 @@ fn graph_management() {
 fn graph_updates_fail_atomically() {
     let t = store();
     let before = t.last_t();
-    let e = t.err("INSERT DATA { v:x v:p v:y } ; INSERT DATA { GRAPH <urn:tiramemsu:stmt:1> { v:c v:p v:d } }");
+    let e = t.err(
+        "INSERT DATA { v:x v:p v:y } ; INSERT DATA { GRAPH <urn:tiramemsu:tx:1> { v:c v:p v:d } }",
+    );
     assert!(matches!(e, Error::InvalidGraphName { .. }), "{e:?}");
     assert!(!t.has(&v("x"), &v("p"), &v("y")));
     assert_eq!(t.last_t(), before);

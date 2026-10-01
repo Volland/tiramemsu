@@ -155,7 +155,7 @@ Algorithm:
 1. Compute the cascade set C of `eid`. See [[time-model#Cascade]].
 2. Allocate a new eid for every member of C, forming the substitution map `σ = {old → new}`.
 3. Retract every member of C with `ret_kind = supersede`.
-4. Insert every member again with `s` and `o` rewritten through σ, content and valid time unchanged, except the root, which gets the patch.
+4. Insert every member again with `s` and `o` rewritten through σ, content and valid time unchanged, except the root, which gets the patch. A graph membership is replayed only when its graph is in C (the contents of a statement graph, [[data-model#Named Graphs#Statement Graphs]]); other memberships are dropped.
 5. Assert `(σ(eid) sys:supersedes eid)`.
 
 ```plantuml

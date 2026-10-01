@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Metagraphs from one row shape: tiramemsu</title>
+<meta name="description" content="How tiramemsu builds a metagraph from statement ids and graph tags: edges that are vertices, nodes and edges that hold subgraphs, nesting, n-ary edges, fold and unfold, all with two clocks.">
+<link rel="icon" href="../assets/logo.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+<header class="top"><div class="wrap">
+  <a class="brand" href="../"><img src="../assets/logo.svg" alt="">Tiramemsu</a>
+  <nav class="menu"><a href="../#features">Features</a><a href="../#start">Quick start</a><a href="./" aria-current="page">Articles</a><a href="https://github.com/Volland/tiramemsu">GitHub</a></nav>
+</div></header>
+
+<article class="post">
+<h1>Metagraphs from one row shape</h1>
+<p class="meta">Tiramemsu articles · 1 October 2026</p>
+
+<p>A metagraph has two powers. <strong>Edges are vertices</strong>: a relationship can be the subject or object of another relationship, to any depth. <strong>Vertices are containers</strong>: a vertex can hold a whole subgraph, and so can an edge. Agent memory needs both. A conversation holds the facts said in it. A project holds teams, which hold people and the services they own. An enrollment is an edge between a patient and a trial, and it has its own investigator and site.</p>
+<p>Tiramemsu gets both from the same two things: a statement row that has an address, and a layer statement that tags that address into a graph. There is no second table, id space or query language. Every query below runs in the test suite (<code>metagraph_containers_nesting_and_fold</code> in <code>crates/tiramemsu/tests/recipes.rs</code>).</p>
+
+<h2>A short definition</h2>
+<p>Basu and Blanning define a metagraph as a set of elements and a set of metaedges, where a metaedge links a <em>set</em> of elements to a set of elements and can itself be an element. Gapanyuk's annotated metagraph lets metavertices and metaedges carry annotations that are themselves metagraphs. Goertzel adds two operations: <strong>unfold</strong> opens a metavertex into the subgraph it stands for, and <strong>fold</strong> collapses a subgraph into one metavertex. The book <em>Metagraph for AI Agents</em> calls the reason for all this the <em>hypergraph wall</em>: a hyperedge connects many things, but it is a connection, not a thing, so nothing can be said about it.</p>
+
+<h2>Power one: edges are vertices</h2>
+<p>Every fact is a row <code>(eid, s, p, o)</code>, and the eid can stand anywhere a node can. Confidence, sources and beliefs are statements whose subject or object is another statement. <a href="layered-graphs.html">Layered graphs, explained</a> covers this part. In Cypher the same eid is both a relationship and a node:</p>
+<pre><code>MATCH (a)-[r:worksAt]-&gt;(c), (b:Belief)-[:supportedBy]-&gt;(r)
+RETURN a, c, r.confidence, b</code></pre>
+
+<h2>Power two: containers</h2>
+<p>A named graph in tiramemsu is a tag, not a box. Membership is one more layer statement on a fact's eid, <code>(e sys:inGraph g)</code>. One fact keeps one eid however many graphs hold it, so its confidence belongs to the fact, and removing it from a graph never deletes it. Read as a metagraph, a named graph is already a metavertex: a node with statements tagged into it.</p>
+<p>The graph name can be a node <em>or a statement</em>. So an edge can hold a subgraph of its own:</p>
+<figure>
+  <img src="../assets/metagraph.svg" alt="Left: the edge p7 enrolledIn trial3 with id e1 holds a graph with two statements. Right: teamA inside payments inside org, teamB inside org, teamC outside." width="760" height="400">
+  <figcaption>Left: the enrollment edge <code>e1</code> names a graph. Right: graphs nested by ordinary <code>v:within</code> statements.</figcaption>
+</figure>
+<pre><code>INSERT DATA { v:p7 v:enrolledIn v:trial3 }                       <span class="c"># gets eid 1</span>
+INSERT DATA { GRAPH &lt;urn:tiramemsu:stmt:1&gt; {
+  v:drSmith v:role v:investigator . v:site9 v:hosts v:p7 } }
+
+<span class="c"># open the edge through its reifier</span>
+SELECT ?s WHERE { v:p7 v:enrolledIn ?trial ~ ?e . GRAPH ?e { ?s ?p ?o } }</code></pre>
+<p>From Rust it is <code>tx.add_to_graph(member, edge_eid, AssertOpts::default())</code>. The container follows the edge's life:</p>
+<ul>
+  <li><strong>Retract the edge</strong> and every membership in its graph is retracted in the same transaction. The facts inside stay. The container is gone, not its contents.</li>
+  <li><strong>Correct the edge</strong> with <code>supersede</code> (say the trial id was a typo) and the contents move to the new version. The members keep their ids.</li>
+  <li><strong>A retracted edge</strong> cannot gain new contents: the write fails with <code>NotLive</code>.</li>
+</ul>
+<p class="note">Before this, the usual workaround was a context node: tag the edge with <code>v:context v:enroll1</code> and put the contents in <code>GRAPH v:enroll1</code>. That works, but the stand-in can drift from the edge it stands for, and a correction of the edge does not carry it along.</p>
+
+<h2>Metavertices inside metavertices</h2>
+<p>Nesting needs nothing special. It is an ordinary statement between two graphs, so "everything owned anywhere under the org" is a path that finds the metavertices and a <code>GRAPH</code> block that opens them:</p>
+<pre><code>INSERT DATA {
+  GRAPH v:teamA { v:alice v:owns v:billing }
+  GRAPH v:teamB { v:bob   v:owns v:search  }
+  GRAPH v:teamC { v:carol v:owns v:ads     }
+  v:teamA v:within v:payments . v:payments v:within v:org . v:teamB v:within v:org }
+
+SELECT ?who WHERE { ?g v:within* v:org . GRAPH ?g { ?who v:owns ?svc } }</code></pre>
+<p>That returns Alice (two levels down) and Bob (one level down), not Carol. A cycle such as <code>v:org v:within v:payments</code> does not change the answer, because the path engine keeps a visited set. Cypher reaches the same memberships through the dual view:</p>
+<pre><code>MATCH (a)-[r:owns]-&gt;(b), (r)-[:`sys:inGraph`]-&gt;(g)-[:within*0..]-&gt;(top {`@id`: 'v:org'})
+RETURN DISTINCT a, g</code></pre>
+<p>A variable-length Cypher match returns one row per path, so a cyclic nesting needs <code>DISTINCT</code>. SPARQL's <code>*</code> already gives each node once.</p>
+
+<h2>Edges between sets</h2>
+<p>A metaedge links a set to a set, and a hyperedge links many members at once. Rows in tiramemsu have exactly two ends, so the relationship becomes a thing and its ends become role statements on it. When the relationship is the main thing, use a node:</p>
+<pre><code>INSERT DATA {
+  v:m1  a v:Meeting ; v:participant v:alice, v:bob, v:carol ; v:decided v:d1 .
+  v:me1 v:from v:alice, v:bob ; v:to v:ads, v:search .   <span class="c"># a set-to-set metaedge</span>
+  v:m1  v:causes v:me1 }                                 <span class="c"># a metaedge between metaedges</span></code></pre>
+<p>When there is a natural binary core, the edge itself carries the extra ends, and gets the edge's lifetime and cascade for free:</p>
+<pre><code>INSERT DATA { v:alice v:meets v:bob {| v:with v:carol ; v:with v:dave |} }
+SELECT ?x WHERE { ?a v:meets ?b ~ ?e . ?e v:with ?x }</code></pre>
+<p>A typed layer, <code>(v:with sys:subjectType sys:STMT)</code>, makes the store refuse a role written on a plain node by mistake. Content-addressed hyperedges, where the id is a hash of the members, were rejected on purpose: they cannot say the same meeting happened twice.</p>
+
+<h2>Fold and unfold</h2>
+<p>With graphs as tags, both operations are plain writes and reads. <strong>Fold</strong> tags existing statements into a new metavertex. Assert is idempotent, so nothing is copied, and the three ownership facts below are still three facts, each now in its team's graph and in the episode:</p>
+<pre><code>INSERT { GRAPH v:episode1 { ?s v:owns ?o } . v:episode1 v:summarizes "who owns what" }
+WHERE  { ?s v:owns ?o }</code></pre>
+<p><strong>Unfold</strong> opens it. Add <code>View::dependents(e)</code> per member to bring the layers and the beliefs that cite it:</p>
+<pre><code>SELECT ?s ?p ?o WHERE { GRAPH v:episode1 { ?s ?p ?o } }</code></pre>
+
+<h2>The structure has two clocks</h2>
+<p>Containment, nesting and roles are all statements, so they all have transaction time and valid time. After team B moves out from under the org, the deep query returns only Alice. As of the transaction before the move, it still returns both:</p>
+<pre><code>DELETE DATA { v:teamB v:within v:org }
+
+SELECT ?who WHERE {
+  SERVICE &lt;urn:tiramemsu:tm:asOf/150&gt; { ?g v:within* v:org . GRAPH ?g { ?who v:owns ?svc } } }</code></pre>
+<p>Give the nesting a valid-time interval and <code>FROM &lt;urn:tiramemsu:tm:validAt/2024-06-01&gt;</code> answers "which teams were under the org in June 2024", whenever that was recorded. A <a href="time-travel.html">time-respecting path</a> over <code>v:within+</code> never steps into a nesting that had already ended. A memory that remembers being wrong about a fact also remembers being wrong about a structure.</p>
+
+<h2>What tiramemsu does not do</h2>
+<ul>
+  <li><strong>An edge as a predicate.</strong> The predicate is always an IRI. A role statement says the same thing without changing the indexes or the Cypher and RDF name mapping.</li>
+  <li><strong>Containers that own their contents.</strong> A fact in two graphs stays one fact with one confidence.</li>
+  <li><strong>Deep graph selectors and metavertex bundles</strong> are not built yet. Today a <code>within*</code> path does the first, and one <a href="layer-recipes.html">fact bundle</a> per member does the second.</li>
+</ul>
+<p>The design notes are in <a href="https://github.com/Volland/tiramemsu/blob/main/lat.md/data-model.md"><code>lat.md/data-model.md</code></a> (Named Graphs, Statement Graphs) and <a href="https://github.com/Volland/tiramemsu/blob/main/lat.md/recipes.md"><code>lat.md/recipes.md</code></a> (Metagraphs).</p>
+<p><a href="layer-recipes.html">Next: questions only layers can answer →</a></p>
+</article>
+
+<footer><div class="wrap">
+  <span>Tiramemsu · MIT OR Apache-2.0 · <a href="https://github.com/Volland/tiramemsu">github.com/Volland/tiramemsu</a></span>
+  <span><a href="../">Home</a> · <a href="./">All articles</a></span>
+  <span><a href="../impressum.html">Impressum</a> · <a href="../datenschutz.html">Datenschutz</a> · <a href="../agb.html">AGB</a></span>
+</div></footer>
+</body>
+</html>

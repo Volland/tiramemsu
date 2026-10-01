@@ -104,8 +104,7 @@ pub struct UpdatePlan {
 }
 
 /// A graph name of a `GRAPH` block, `CREATE`, `CLEAR` or `DROP`: a `tm:` IRI is a
-/// `Parse` error naming `SERVICE`, a statement or transaction IRI is
-/// `InvalidGraphName`.
+/// `Parse` error naming `SERVICE`, a transaction IRI is `InvalidGraphName`.
 fn graph_iri(n: &NamedNode) -> Result<Value> {
     if is_tm_iri(n.as_str()) {
         return Err(time_iri_in_graph(n.as_str()));
