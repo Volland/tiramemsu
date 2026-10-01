@@ -74,6 +74,17 @@ pub(super) fn convert_expr(ctx: &Ctx, e: &up::Expr) -> CResult<Expr> {
                 up::LiteralKind::Null => Lit::Null,
                 up::LiteralKind::Boolean(b) => Lit::Bool(*b),
                 up::LiteralKind::Integer(i) => Lit::Int(int_lit(&i.text, &i.radix, false, sp)?),
+                // `INF`, `INFINITY` and `NAN` are float keywords in the grammar; the
+                // suffix trim below would turn `inf` into `in`
+                up::LiteralKind::Float(f) if f.text.eq_ignore_ascii_case("nan") => {
+                    Lit::Float(f64::NAN)
+                }
+                up::LiteralKind::Float(f)
+                    if f.text.eq_ignore_ascii_case("inf")
+                        || f.text.eq_ignore_ascii_case("infinity") =>
+                {
+                    Lit::Float(f64::INFINITY)
+                }
                 up::LiteralKind::Float(f) => {
                     let t = f.text.replace('_', "");
                     let t = t.trim_end_matches(['f', 'F', 'd', 'D']);

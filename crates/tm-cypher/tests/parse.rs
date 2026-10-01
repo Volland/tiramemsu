@@ -319,10 +319,34 @@ fn inject(q: &str, k: u8) -> String {
     }
 }
 
+#[test]
+fn float_keywords_are_literals() {
+    for (q, want) in [
+        ("RETURN inf", f64::INFINITY),
+        ("RETURN Infinity", f64::INFINITY),
+    ] {
+        let ast = parse(q).unwrap();
+        let Clause::Return(r) = ast.parts[0].clauses.last().unwrap() else {
+            panic!()
+        };
+        assert!(
+            matches!(r.items[0].expr.kind, ExprKind::Lit(Lit::Float(x)) if x == want),
+            "{q}"
+        );
+    }
+    let ast = parse("RETURN NaN").unwrap();
+    let Clause::Return(r) = ast.parts[0].clauses.last().unwrap() else {
+        panic!()
+    };
+    assert!(matches!(r.items[0].expr.kind, ExprKind::Lit(Lit::Float(x)) if x.is_nan()));
+}
+
 proptest! {
     // Span refers to original text after extensions: blanking never moves bytes.
     #[test]
     fn blanking_preserves_offsets(k in 0u8..200, name in "[a-z]{1,6}", pad in 0usize..4) {
+        // literal keywords (`RETURN inf` is a float) are not variable names
+        prop_assume!(!["inf", "nan", "null", "true", "false"].contains(&name.as_str()));
         let base = format!("MATCH ({name}:P)-[r:T]->(m) WHERE {name}.x = 'it''s' RETURN {name}{}", " ".repeat(pad));
         let q = inject(&base, k);
         let p = prepass::run(&q).unwrap();
