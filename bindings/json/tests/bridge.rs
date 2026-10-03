@@ -1019,3 +1019,122 @@ fn text_recall_crosses_the_bridge_with_evidence_and_error_codes() {
         "InvalidArgument"
     );
 }
+
+// @lat: [[tests#Saved Answers#Bridge Saved Answers]]
+#[test]
+fn saved_answers_cross_the_bridge() {
+    let (_d, db) = open();
+    db.call(
+        "transact",
+        &json!({ "ops": [
+            { "op": "assert", "s": v("alice"), "p": v("worksAt"), "o": v("acme") }
+        ]}),
+    )
+    .unwrap();
+    let a = db
+        .call(
+            "saveAnswer",
+            &json!({ "name": "employer", "text": "SELECT ?o WHERE { v:alice v:worksAt ?o }" }),
+        )
+        .unwrap();
+    assert_eq!(a["status"], "fresh");
+    assert_eq!(a["language"], "sparql");
+    assert_eq!(a["view"], json!({ "kind": "now" }));
+    assert_eq!(a["dependencies"], json!([1]));
+    assert_eq!(a["coverage"], json!(["mutableView"]));
+    assert_eq!(a["checkpoint"], 1);
+    // the result has the shape of a live `sparql` call
+    assert_eq!(a["result"]["kind"], "select");
+    assert_eq!(a["result"]["rows"], json!([{ "o": v("acme") }]));
+    // a parameterized Cypher answer on a fixed view keeps its parameters and view
+    let c = db
+        .call(
+            "saveAnswer",
+            &json!({
+                "name": "who",
+                "language": "cypher",
+                "text": "MATCH (p)-[:worksAt]->(c) WHERE $min >= 0 RETURN count(*) AS n",
+                "params": { "min": 1 },
+                "view": { "kind": "asOf", "tx": 1 },
+            }),
+        )
+        .unwrap();
+    assert_eq!(c["params"], json!({ "min": 1 }));
+    assert_eq!(c["view"], json!({ "kind": "asOf", "tx": 1 }));
+    assert_eq!(c["coverage"], json!(["noProvenance"]));
+    assert_eq!(c["result"]["rows"], json!([[1]]));
+    // supersede the cited statement: stale with the triggering event, once
+    db.call(
+        "transact",
+        &json!({ "ops": [
+            { "op": "supersede", "eid": 1, "patch": { "o": v("globex") } }
+        ]}),
+    )
+    .unwrap();
+    let marks = db.call("checkSavedAnswers", &J::Null).unwrap();
+    assert_eq!(marks.as_array().unwrap().len(), 1);
+    assert_eq!(marks[0]["name"], "employer");
+    assert_eq!(marks[0]["status"], "stale");
+    assert_eq!(marks[0]["cause"], "supportRetracted");
+    assert_eq!(marks[0]["event"]["eid"], 1);
+    assert_eq!(marks[0]["event"]["kind"], "supersede");
+    assert_eq!(db.call("checkSavedAnswers", &J::Null).unwrap(), json!([]));
+    let stale = db
+        .call("savedAnswer", &json!({ "name": "employer" }))
+        .unwrap();
+    assert_eq!(stale["status"], "stale");
+    assert_eq!(stale["invalidation"], marks[0]);
+    // a cancelled refresh fails and keeps the mark and the checkpoint
+    db.call("cancel", &json!({ "key": "r1" })).unwrap();
+    let e = db
+        .call(
+            "refreshAnswer",
+            &json!({ "name": "employer", "budget": { "cancelKey": "r1" } }),
+        )
+        .unwrap_err();
+    assert_eq!(e.code(), "Cancelled");
+    let after = db
+        .call("savedAnswer", &json!({ "name": "employer" }))
+        .unwrap();
+    assert_eq!(after["status"], "stale");
+    assert_eq!(after["checkpoint"], 1);
+    assert!(after["error"].as_str().unwrap().contains("cancel"));
+    // a successful refresh clears it
+    let fresh = db
+        .call("refreshAnswer", &json!({ "name": "employer" }))
+        .unwrap();
+    assert_eq!(fresh["status"], "fresh");
+    assert_eq!(fresh["revision"], 2);
+    assert_eq!(fresh["result"]["rows"], json!([{ "o": v("globex") }]));
+    assert_eq!(fresh["error"], J::Null);
+    let all = db.call("savedAnswers", &J::Null).unwrap();
+    assert_eq!(all.as_array().unwrap().len(), 2);
+    assert_eq!(
+        db.call("deleteSavedAnswer", &json!({ "name": "who" }))
+            .unwrap(),
+        json!({ "deleted": true })
+    );
+    assert_eq!(
+        db.call("savedAnswer", &json!({ "name": "who" })).unwrap(),
+        J::Null
+    );
+    assert_eq!(
+        db.call("refreshAnswer", &json!({ "name": "who" }))
+            .unwrap_err()
+            .code(),
+        "SavedAnswerNotFound"
+    );
+    for (op, args) in [
+        (
+            "saveAnswer",
+            json!({ "text": "SELECT * WHERE { ?s ?p ?o }" }),
+        ),
+        (
+            "saveAnswer",
+            json!({ "name": "x", "language": "gql", "text": "MATCH" }),
+        ),
+        ("savedAnswer", json!({})),
+    ] {
+        assert_eq!(db.call(op, &args).unwrap_err().code(), "InvalidArgument");
+    }
+}

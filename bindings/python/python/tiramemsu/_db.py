@@ -26,6 +26,10 @@ from ._types import (
     import_progress_from_json,
     import_summary_from_json,
     report_from_json,
+    Invalidation,
+    invalidation_from_json,
+    SavedAnswer,
+    saved_answer_from_json,
     sparql_result_from_json,
     statement_from_json,
     term_from_json,
@@ -876,6 +880,67 @@ class Database:
         """Build the text index unless it is current; returns whether it built the
         whole index."""
         return bool(json.loads(_call(self._native, "enableTextIndex", ""))["built"])
+
+    def save_answer(
+        self,
+        name: str,
+        text: str,
+        *,
+        language: str = "sparql",
+        params: Optional[Dict[str, Any]] = None,
+        view: Optional["View"] = None,
+        budget: Optional[QueryBudget] = None,
+    ) -> SavedAnswer:
+        """Run a query and save its answer under *name* (replacing one of that name).
+
+        Stores the text, *params* and *view* (default: :meth:`now`) exactly as given,
+        the current ``@vocab`` and prefixes, the result, the statements it cited
+        (SPARQL SELECT provenance) and its ``coverage`` reasons. Writing it takes no
+        transaction number and logs no event.
+        """
+        args: Dict[str, Any] = {"name": name, "text": text, "language": language}
+        if params:
+            args["params"] = params
+        if view is not None:
+            args["view"] = view._view
+        if budget is not None:
+            args["budget"] = budget._to_json()
+        text_out = _call(self._native, "saveAnswer", json.dumps(args))
+        return saved_answer_from_json(json.loads(text_out))
+
+    def saved_answer(self, name: str) -> Optional[SavedAnswer]:
+        """The saved answer *name* as stored, or ``None``. Call
+        :meth:`check_saved_answers` first for current marks."""
+        j = json.loads(_call(self._native, "savedAnswer", json.dumps({"name": name})))
+        return None if j is None else saved_answer_from_json(j)
+
+    def saved_answers(self) -> List[SavedAnswer]:
+        """Every saved answer, by name."""
+        items: List[Any] = json.loads(_call(self._native, "savedAnswers", ""))
+        return [saved_answer_from_json(a) for a in items]
+
+    def check_saved_answers(self) -> List[Invalidation]:
+        """Process the events since each answer's cursor and return the new
+        invalidations: a retracted cited statement makes an answer ``"stale"``; any
+        other later transaction under a mutable view makes it ``"recheck"``.
+        Idempotent: nothing is reported twice."""
+        items: List[Any] = json.loads(_call(self._native, "checkSavedAnswers", ""))
+        return [invalidation_from_json(i) for i in items]
+
+    def refresh_answer(self, name: str, *, budget: Optional[QueryBudget] = None) -> SavedAnswer:
+        """Re-run a saved answer with its stored query, view and settings. Only a
+        success clears its mark and advances its checkpoint; a failure raises and
+        leaves it as it was (``error`` records why)."""
+        args: Dict[str, Any] = {"name": name}
+        if budget is not None:
+            args["budget"] = budget._to_json()
+        text_out = _call(self._native, "refreshAnswer", json.dumps(args))
+        return saved_answer_from_json(json.loads(text_out))
+
+    def delete_saved_answer(self, name: str) -> bool:
+        """Delete a saved answer; returns whether there was one."""
+        j = json.loads(_call(self._native, "deleteSavedAnswer", json.dumps({"name": name})))
+        return bool(j["deleted"])
 
     def optimize(self) -> None:
         """Refresh query-planner statistics after large imports."""

@@ -25,11 +25,18 @@ impl std::fmt::Debug for Migration {
     }
 }
 
-/// The migrations of this build: format 1 to 2 adds the text-index bookkeeping.
-pub const MIGRATIONS: &[Migration] = &[Migration {
-    from: 1,
-    apply: v1_to_v2,
-}];
+/// The migrations of this build: format 1 to 2 adds the text-index bookkeeping,
+/// format 2 to 3 the saved-answer tables.
+pub const MIGRATIONS: &[Migration] = &[
+    Migration {
+        from: 1,
+        apply: v1_to_v2,
+    },
+    Migration {
+        from: 2,
+        apply: v2_to_v3,
+    },
+];
 
 /// Format 1 to 2: the `meta` rows of the derived text index (OpenSpec change
 /// `add-text-retrieval`). `text_index` is the index version (0: not built) and
@@ -45,6 +52,17 @@ fn v1_to_v2(exec: &mut dyn Executor) -> Result<()> {
              (SELECT 1 FROM meta WHERE key = ?1)",
             &[SqlValue::from(key)],
         )?;
+    }
+    Ok(())
+}
+
+/// Format 2 to 3: the derived saved-answer records (OpenSpec change
+/// `add-saved-answer-invalidation`), `saved_answer` and `saved_answer_dep`. They
+/// are empty until an answer is saved; no graph row is read or written.
+// @lat: [[storage#Saved Answers]]
+fn v2_to_v3(exec: &mut dyn Executor) -> Result<()> {
+    for stmt in super::split_statements(super::DDL_SAVED_ANSWERS) {
+        exec.execute_batch(&stmt)?;
     }
     Ok(())
 }

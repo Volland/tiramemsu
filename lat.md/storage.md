@@ -216,7 +216,9 @@ High-churn state (`lastSeen`, counters, per-turn scores) lives in `volatile(s, k
 
 Migrations must respect [[time-model#Never Forget]]. They may add columns, indexes and tables, but never drop or rewrite triples.
 
-- **Format 2** is the current version. Its one migration ([[crates/tm-core/src/storage/migrate.rs#MIGRATIONS]]) inserts the `meta` rows `text_index = 0` and `text_stale = 0` of [[storage#Text Index]]. It runs on every host, creates no FTS5 table and touches no `triple`, `term` or `tx` row.
+- **Format 3** is the current version. The migrations are [[crates/tm-core/src/storage/migrate.rs#MIGRATIONS]].
+- **Format 2** inserts the `meta` rows `text_index = 0` and `text_stale = 0` of [[storage#Text Index]]. It runs on every host, creates no FTS5 table and touches no `triple`, `term` or `tx` row.
+- **Format 3** creates the empty derived tables of [[storage#Saved Answers]] and reads or writes no graph row.
 - A new file is created as format 1 and migrated forward like an old file, so fresh and migrated files have the same schema.
 - The bump is what keeps the derived index honest: a format-1 build, which would write strings without indexing them, refuses a format-2 file with `FormatVersion` instead of letting `term_fts` drift.
 
@@ -236,3 +238,29 @@ CREATE VIRTUAL TABLE term_fts USING fts5(text, lang UNINDEXED,
 - **Upkeep:** each new statement with a string object adds its value inside the write transaction (`Tx::index_text`, through [[crates/tm-core/src/text.rs#index_value]]), so speculations, dry runs and failed transactions roll their index rows back with everything else.
 - **Hosts without FTS5** never issue FTS5 SQL. While the index exists they set `text_stale` to the first string statement they write. The next writer with FTS5 (at open or at the start of a transaction) indexes every string statement from that eid and clears it; until then recall fails with `TextIndexUnavailable` rather than miss hits.
 - **Rebuild** ([[crates/tm-core/src/text.rs#rebuild]]) drops and refills `term_fts` from the statements in one write transaction. It reads `triple` and `term` and changes neither, nor `tx`; recall afterwards returns what it returned before. `text_index` stores the layout version, so a later tokenizer change is a rebuild, not a format migration.
+
+## Saved Answers
+
+Derived records of saved queries and their last results ([[query#Saved Answers]]). Format 3 creates the two tables; they stay empty until an answer is saved and never feed back into the graph.
+
+```sql
+CREATE TABLE saved_answer (
+  name TEXT PRIMARY KEY, layout INTEGER NOT NULL,       -- record layout version (1)
+  language TEXT NOT NULL, query TEXT NOT NULL,          -- 'sparql' | 'cypher', verbatim text
+  params TEXT NOT NULL, view TEXT NOT NULL,             -- JSON, exactly as saved
+  settings TEXT NOT NULL,                               -- JSON: @vocab and prefixes at save time
+  result TEXT NOT NULL, coverage TEXT NOT NULL,         -- JSON
+  checkpoint INTEGER NOT NULL, cursor INTEGER NOT NULL, -- t the result reflects; events processed
+  evaluated_at INTEGER NOT NULL, revision INTEGER NOT NULL,
+  status INTEGER NOT NULL,                              -- 0 fresh, 1 recheck, 2 stale
+  cause INTEGER, cause_t INTEGER, cause_eid INTEGER, cause_op INTEGER, cause_kind INTEGER,
+  error TEXT                                            -- last failed refresh
+) STRICT;
+CREATE TABLE saved_answer_dep (name TEXT NOT NULL, eid INTEGER NOT NULL,
+  PRIMARY KEY (name, eid)) STRICT, WITHOUT ROWID;      -- the cited statements
+CREATE INDEX saved_answer_dep_eid ON saved_answer_dep(eid);
+```
+
+- **Derived, not history:** rows are written by `Store::derived_write`, one `BEGIN IMMEDIATE` that allocates no transaction number, logs no event and changes no counter. No invariant trigger guards them, and deleting a saved answer deletes only its record.
+- **Layout version:** `layout` lets a later build change the record shape without a format bump; a build refuses a row of a layout it does not know with `Unsupported`.
+- **Why a format bump:** a format-2 build would leave the tables alone and still be correct, since the cursor replays the log, but the rule of [[storage#Format Versioning]] is that every schema addition is a migration.

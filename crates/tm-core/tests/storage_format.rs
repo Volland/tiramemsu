@@ -31,13 +31,18 @@ host_test! {
         let raw = db.raw();
         assert_eq!(
             names(&raw, "table"),
-            set(&["meta", "term", "tx", "triple", "volatile", "pred_multi"])
+            set(&[
+                "meta", "term", "tx", "triple", "volatile", "pred_multi",
+                // format 3: derived saved-answer records
+                "saved_answer", "saved_answer_dep",
+            ])
         );
         assert_eq!(
             names(&raw, "index"),
             set(&[
                 "term_key", "term_num", "tx_instant", "live_spo", "live_pos", "live_osp",
                 "hist_spo", "hist_pos", "hist_osp", "valid_p", "log_add", "log_ret",
+                "saved_answer_dep_eid",
             ])
         );
         assert_eq!(names(&raw, "view"), set(&["event"]));
@@ -91,7 +96,7 @@ fn interrupted_creation_leaves_no_half_initialised_file() {
             &[],
         )
         .unwrap();
-    assert_eq!(n, Some(6));
+    assert_eq!(n, Some(8));
 }
 
 host_test! {
@@ -124,8 +129,10 @@ host_test! {
             .unwrap()
             .map(Result::unwrap)
             .collect();
+        // format 1, plus the tables format 3 adds (format 2 adds only meta rows)
         let expected: BTreeSet<String> = storage::split_statements(storage::DDL_V1)
             .into_iter()
+            .chain(storage::split_statements(storage::DDL_SAVED_ANSWERS))
             .map(|s| s.trim_end_matches(';').trim().to_string())
             .collect();
         assert_eq!(stored, expected);
@@ -500,7 +507,7 @@ fn foreign_and_empty_files() {
     let mut s = Store::open(&MinimalHost::new(), &no_tables, StoreOptions::default()).unwrap();
     assert_eq!(
         s.executor().query_i64("SELECT count(*) FROM sqlite_schema WHERE type = 'table' AND name NOT LIKE 'sqlite_%'", &[]).unwrap(),
-        Some(6)
+        Some(8)
     );
 }
 

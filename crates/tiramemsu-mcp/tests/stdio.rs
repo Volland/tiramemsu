@@ -61,7 +61,11 @@ fn stdio_session_end_to_end() {
             "dependents",
             "export_bundle",
             "import_bundle",
-            "text_search"
+            "text_search",
+            "save_answer",
+            "saved_answers",
+            "check_answers",
+            "refresh_answer"
         ]
     );
     let call = |id: u64, name: &str, args: J| {

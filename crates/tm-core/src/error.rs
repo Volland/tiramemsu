@@ -267,6 +267,13 @@ pub enum Error {
         /// Why the index cannot answer.
         reason: String,
     },
+    /// A saved-answer operation named an answer that was never saved, or was
+    /// deleted.
+    #[error("saved answer not found: {name}")]
+    SavedAnswerNotFound {
+        /// The name that was looked up.
+        name: String,
+    },
     /// A SQLite file with user tables but no tiramemsu `meta` table.
     #[error("{0} is not a tiramemsu database")]
     ForeignFile(PathBuf),

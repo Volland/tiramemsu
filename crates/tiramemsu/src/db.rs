@@ -474,6 +474,22 @@ impl Db {
         self.lock()?.rebuild_text_index()
     }
 
+    /// Runs `f` on the writer in one write transaction for derived records (saved
+    /// answers): no transaction number, no event. Refused while a bulk import
+    /// holds the write lease and inside a running transaction.
+    pub(crate) fn derived_write<R>(
+        &self,
+        f: impl FnOnce(&mut dyn Executor) -> Result<R>,
+    ) -> Result<R> {
+        let _held = HeldGuard::acquire(self.id)?;
+        if self.import_active() {
+            return Err(Error::ImportInProgress);
+        }
+        armed(&mut *self.lock_bounded(false)?, |store| {
+            store.derived_write(f)
+        })
+    }
+
     /// True when commits of a bulk import session changed the data and the
     /// planner statistics have not been refreshed since (the session was cancelled
     /// or dropped, or its final analysis failed). The next ordinary commit or

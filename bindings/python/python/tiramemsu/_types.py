@@ -576,3 +576,102 @@ def text_hit_from_json(j: Dict[str, Any]) -> TextHit:
             added_at=int(e["addedAt"]),
         ),
     )
+
+
+@dataclass(frozen=True)
+class Invalidation:
+    """One logical invalidation of a saved answer, reported once by
+    :meth:`Database.check_saved_answers`."""
+
+    name: str
+    """The saved answer."""
+    status: str
+    """Its new status: ``"recheck"`` or ``"stale"``."""
+    cause: str
+    """``"supportRetracted"`` (stale), ``"insertion"``, ``"retraction"``,
+    ``"transaction"`` or ``"clock"`` (recheck)."""
+    t: Optional[int]
+    """The transaction of the trigger (``None`` for the clock)."""
+    event: Optional[Dict[str, Any]]
+    """The triggering event ``{t, eid, op, kind}`` (``None`` for the clock and
+    event-less transactions)."""
+
+
+def invalidation_from_json(j: Dict[str, Any]) -> Invalidation:
+    """Decode a bridge invalidation object."""
+    return Invalidation(
+        name=str(j["name"]),
+        status=str(j["status"]),
+        cause=str(j["cause"]),
+        t=None if j.get("t") is None else int(j["t"]),
+        event=j.get("event"),
+    )
+
+
+@dataclass(frozen=True)
+class SavedAnswer:
+    """A saved answer (see :meth:`Database.save_answer`): the query as saved, its last
+    successful result, and its freshness bookkeeping."""
+
+    name: str
+    language: str
+    """``"sparql"`` or ``"cypher"``."""
+    text: str
+    params: Dict[str, Any]
+    view: Dict[str, Any]
+    """The view descriptor as saved, e.g. ``{"kind": "asOf", "tx": 3}``."""
+    vocab: Optional[str]
+    """The ``@vocab`` at save time; refreshes reuse it."""
+    prefixes: List[List[str]]
+    result: Union["SparqlResult", CypherResult]
+    """The last successful result, as the live ``sparql`` or ``cypher`` call returns it."""
+    dependencies: List[int]
+    """The statements the result cited (SPARQL SELECT provenance)."""
+    coverage: List[str]
+    """Why the dependencies do not prove freshness (``"mutableView"``, ``"clock"``, ...)."""
+    checkpoint: int
+    """The last transaction the result reflects."""
+    cursor: int
+    """Events up to this transaction have been processed."""
+    evaluated_at: int
+    revision: int
+    status: str
+    """``"fresh"``, ``"recheck"`` or ``"stale"``."""
+    invalidation: Optional[Invalidation]
+    error: Optional[str]
+    """The error of the last failed refresh, until one succeeds."""
+
+    @property
+    def is_fresh(self) -> bool:
+        """True when the status is ``"fresh"``."""
+        return self.status == "fresh"
+
+
+def saved_answer_from_json(j: Dict[str, Any]) -> SavedAnswer:
+    """Decode a bridge saved-answer object."""
+    r = j["result"]
+    result: Union[SparqlResult, CypherResult]
+    if j["language"] == "sparql":
+        result = sparql_result_from_json(r)
+    else:
+        result = CypherResult(columns=list(r.get("columns") or []), rows=list(r.get("rows") or []))
+    inv = j.get("invalidation")
+    return SavedAnswer(
+        name=str(j["name"]),
+        language=str(j["language"]),
+        text=str(j["text"]),
+        params=dict(j.get("params") or {}),
+        view=dict(j["view"]),
+        vocab=j.get("vocab"),
+        prefixes=[list(p) for p in j.get("prefixes") or []],
+        result=result,
+        dependencies=[int(e) for e in j.get("dependencies") or []],
+        coverage=[str(c) for c in j.get("coverage") or []],
+        checkpoint=int(j["checkpoint"]),
+        cursor=int(j["cursor"]),
+        evaluated_at=int(j["evaluatedAt"]),
+        revision=int(j["revision"]),
+        status=str(j["status"]),
+        invalidation=None if inv is None else invalidation_from_json(inv),
+        error=j.get("error"),
+    )

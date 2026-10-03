@@ -894,3 +894,60 @@ class TestTextRecall:
         assert e.value.code == "TextIndexUnavailable"
         assert db.enable_text_index() is True
         assert len(db.now().text_search("indexed")) == 1
+
+
+# ------------------------------------------------------------------------- saved answers
+
+
+class TestSavedAnswers:
+    def test_stale_on_retracted_support_and_refresh(self, db: Database) -> None:
+        with db.transact() as tx:
+            tx.assert_(iri("alice"), iri("worksAt"), iri("acme"))
+        a = db.save_answer("employer", "SELECT ?o WHERE { v:alice v:worksAt ?o }")
+        assert a.is_fresh
+        assert a.dependencies == [1]
+        assert a.coverage == ["mutableView"]
+        assert isinstance(a.result, SparqlSelectResult)
+        assert [r["o"] for r in a.result] == [iri("acme")]
+        # a parameterized Cypher answer on a fixed view keeps both
+        c = db.save_answer(
+            "count",
+            "MATCH (p)-[:worksAt]->(c) WHERE $min >= 0 RETURN count(*) AS n",
+            language="cypher",
+            params={"min": 1},
+            view=db.as_of(tx=1),
+        )
+        assert c.params == {"min": 1}
+        assert c.view == {"kind": "asOf", "tx": 1}
+        assert c.result.rows == [[1]]
+        # a new matching row asks for a recheck; the retraction makes it stale
+        with db.transact() as tx:
+            tx.assert_(iri("alice"), iri("worksAt"), iri("globex"))
+        first = db.check_saved_answers()
+        assert [(m.name, m.status, m.cause) for m in first] == [
+            ("employer", "recheck", "insertion")
+        ]
+        with db.transact() as tx:
+            tx.retract(1)
+        second = db.check_saved_answers()
+        assert len(second) == 1
+        assert (second[0].status, second[0].cause) == ("stale", "supportRetracted")
+        assert second[0].event is not None and second[0].event["eid"] == 1
+        assert db.check_saved_answers() == []
+        # a failed refresh keeps the mark and the checkpoint
+        db.cancel("refresh-1")
+        with pytest.raises(TiramemsuError) as e:
+            db.refresh_answer("employer", budget=QueryBudget(cancel_key="refresh-1"))
+        assert e.value.code == "Cancelled"
+        stale = db.saved_answer("employer")
+        assert stale is not None and stale.status == "stale" and stale.checkpoint == 1
+        assert stale.error is not None
+        fresh = db.refresh_answer("employer")
+        assert fresh.is_fresh and fresh.revision == 2 and fresh.error is None
+        assert [r["o"] for r in fresh.result] == [iri("globex")]
+        assert [s.name for s in db.saved_answers()] == ["count", "employer"]
+        assert db.delete_saved_answer("count") is True
+        assert db.saved_answer("count") is None
+        with pytest.raises(TiramemsuError) as e:
+            db.refresh_answer("count")
+        assert e.value.code == "SavedAnswerNotFound"

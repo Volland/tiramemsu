@@ -429,3 +429,17 @@ YIELD statement, subject, predicate, text, score, rank, confidence
 
 - **SPARQL:** the `tm:text*` patterns on one subject variable form one recall ([[crates/tm-sparql/src/lower/bgp.rs]]); `GRAPH <g>` and `FROM` restrict it, `SERVICE <tm:asOf/…>` times it, and `GRAPH ?g` around it is `InvalidQuery`. Recall rows add no query provenance.
 - **Cypher:** the procedure ([[crates/tm-cypher/src/exec/text.rs]]) joins the recall with the hit's statement and yields it in node form; `USE AS OF` and the other time clauses apply.
+
+## Saved Answers
+
+A saved answer stores a query with its parameters, view and last result, and turns later events into conservative `recheck` and `stale` marks, so an agent knows when a remembered answer can no longer be trusted.
+
+The facade API is in [[crates/tiramemsu/src/saved.rs]]: `Db::save_answer(name, &SavedQuery)`, `saved_answer`, `saved_answers`, `check_saved_answers`, `refresh_answer`, `delete_saved_answer`, with `_with` variants that take a `QueryBudget`. Records live in [[storage#Saved Answers]].
+
+- **Identity:** the query text, the language (SPARQL `SELECT`/`ASK` or read-only Cypher), the Cypher parameters (stored losslessly) and the `ViewSpec`, exactly as given, plus the `@vocab` and prefix table read at save time. A refresh reuses all of them, never the current defaults. Updates, `CONSTRUCT` and SPARQL with parameters are `Unsupported`.
+- **Dependencies:** SPARQL `SELECT` runs with provenance ([[query#Front Ends#SPARQL#Query Provenance]]); the union of the rows' eids is the dependency set. `ASK` and Cypher cite nothing.
+- **Coverage reasons** say why the dependencies do not prove freshness: `mutableView` (now, history, or an as-of point not yet in the past, for the view or any pattern's own scope), `noProvenance`, `negativePattern` (`NOT EXISTS`, `MINUS`), `existsPattern`, `recursivePath`, `virtualPredicate`, `volatile` and `clock`. They come from walking the lowered IR (for Cypher, the IR the run executed), the provenance gaps, a second lowering at another instant to detect `NOW()`, and a conservative text scan for Cypher clock functions.
+- **Checkpoint and cursor:** both start at the `last_t` read before the evaluation, so a commit racing the evaluation is re-processed, never skipped. The checkpoint is the state the result reflects; the cursor is how far the log was processed.
+- **Invalidation** (`check_saved_answers`, one derived write): for each answer with `mutableView`, the first retraction in `(cursor, head]` of a cited statement makes it `Stale` with that event (explicit, cascade, supersede or cardinality); otherwise the first event of any kind, or a transaction without events (volatile values), makes a fresh answer `Recheck`. Relevance is never analysed: any insertion may add a row, satisfy a `NOT EXISTS` or fill an `OPTIONAL`. Without `mutableView` events are ignored; `clock` still makes a fresh answer `Recheck` once the clock has moved.
+- **Replayable:** marks only move towards `Stale`, the cursor and the marks commit together, and the result is a function of status, cursor and log. A crash before commit replays the same range to the same marks, and a processed range is never seen again, so every `Invalidation` is reported once.
+- **Refresh:** only a successful re-run sets `Fresh`, replaces result, dependencies and coverage, advances checkpoint and cursor and increments `revision`. A failed one (an error, cancellation, a deadline) processes pending events, records `error`, and keeps the old result, status and checkpoint.

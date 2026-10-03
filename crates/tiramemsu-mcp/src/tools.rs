@@ -280,6 +280,57 @@ index (start the server with --text-index).",
             ("view", Schema::View, false),
         ],
     },
+    Tool {
+        name: "save_answer",
+        title: "Save an answer",
+        description: "Run a read-only SPARQL (SELECT, ASK) or openCypher query on a view and save its \
+answer under a name, with the statements it cited. Later writes mark it: stale when a cited statement is \
+retracted or superseded, recheck when anything else could have changed it (check_answers). Saving the \
+same name replaces the answer. It writes only the derived answer record, never the facts.",
+        writes: true,
+        idempotent: true,
+        args: &[
+            ("name", Schema::Text("The answer's name."), true),
+            (
+                "language",
+                Schema::Enum("The query language.", &["sparql", "cypher"]),
+                true,
+            ),
+            ("text", Schema::Text("The query text."), true),
+            ("params", Schema::Object("Cypher parameters ($name)."), false),
+            ("view", Schema::View, false),
+        ],
+    },
+    Tool {
+        name: "saved_answers",
+        title: "Read saved answers",
+        description: "Read one saved answer by name, or all of them: the query, view and result as saved, \
+the cited statements, the coverage reasons that keep them from proving freshness, the checkpoint, and the \
+status (fresh, recheck or stale) with the event that caused it. Run check_answers first for current marks.",
+        writes: false,
+        idempotent: true,
+        args: &[("name", Schema::Text("Only this answer."), false)],
+    },
+    Tool {
+        name: "check_answers",
+        title: "Check saved answers",
+        description: "Process the events since the last check and return the new invalidations, each once: \
+stale (a cited statement was retracted or superseded) or recheck (another write, or the clock, may have \
+changed the answer). Fixed historical views stay fresh. Only refresh_answer makes an answer fresh again.",
+        writes: true,
+        idempotent: true,
+        args: &[],
+    },
+    Tool {
+        name: "refresh_answer",
+        title: "Refresh a saved answer",
+        description: "Re-run a saved answer with its saved query, parameters and view. On success the \
+result, citations and checkpoint are replaced and the answer is fresh; on failure it keeps its old result \
+and mark, and records the error.",
+        writes: true,
+        idempotent: false,
+        args: &[("name", Schema::Text("The answer's name."), true)],
+    },
 ];
 
 fn tool(name: &str) -> Option<&'static Tool> {
@@ -477,6 +528,29 @@ fn run(db: &Database, config: &Config, t: &Tool, args: &J) -> Result<J, ToolErro
             let (r, v) = read("textSearch", c)?;
             Ok(json!({ "view": v, "hits": r }))
         }
+        "save_answer" => {
+            let mut c = Map::new();
+            for k in ["name", "language", "text", "params", "view"] {
+                if let Some(v) = get(k) {
+                    c.insert(k.into(), v);
+                }
+            }
+            c.insert("budget".into(), budget.clone());
+            Ok(json!({ "answer": db.call("saveAnswer", &J::Object(c))? }))
+        }
+        "saved_answers" => match get("name") {
+            Some(name) => {
+                let a = db.call("savedAnswer", &json!({ "name": name }))?;
+                Ok(json!({ "answers": if a.is_null() { json!([]) } else { json!([a]) } }))
+            }
+            None => Ok(json!({ "answers": db.call("savedAnswers", &J::Null)? })),
+        },
+        "check_answers" => Ok(json!({ "invalidations": db.call("checkSavedAnswers", &J::Null)? })),
+        "refresh_answer" => {
+            let name = get("name").unwrap_or(J::Null);
+            let a = db.call("refreshAnswer", &json!({ "name": name, "budget": budget }))?;
+            Ok(json!({ "answer": a }))
+        }
         other => Err(ToolError::arg(format!("unknown tool {other:?}"))),
     }
 }
@@ -629,7 +703,13 @@ mod tests {
         let names: Vec<_> = ro.iter().map(|d| d["name"].as_str().unwrap()).collect();
         assert_eq!(
             names,
-            ["query", "dependents", "export_bundle", "text_search"]
+            [
+                "query",
+                "dependents",
+                "export_bundle",
+                "text_search",
+                "saved_answers"
+            ]
         );
         assert!(ro
             .iter()

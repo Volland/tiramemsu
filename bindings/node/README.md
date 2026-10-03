@@ -171,6 +171,7 @@ Every failure throws a `TiramemsuError` with a `code`:
 | `InvalidPatch` | A `supersede` patch tried to change the subject or predicate |
 | `IdSpaceExhausted` | An id counter passed 2^48 − 1 |
 | `ImportInProgress` | A write, or a second import session, while a bulk import session is open |
+| `SavedAnswerNotFound` | `refreshAnswer` of a name that was never saved |
 | `Sqlite` | A SQLite failure, such as a locked or unreadable file |
 
 ## Options
@@ -208,6 +209,20 @@ db.now().cypher("CALL tiramemsu.text.search('lisbon') YIELD statement, score RET
 ```
 
 `textSearch(text, { mode, graphs, predicates, limit, confidence })` ranks by lexical score, then confidence, confirmations, authors and recency, then eid. It throws `TextIndexUnavailable` without an index and `MissingCapability` on a SQLite without FTS5.
+
+## Saved answers
+
+Save a query's answer and let later writes mark it. A retracted or superseded cited statement makes it `stale`; any other write under a current view makes it `recheck`; only a successful `refreshAnswer` makes it `fresh` again.
+
+```ts
+db.saveAnswer("employer", { text: "SELECT ?o WHERE { v:alice v:worksAt ?o }" });
+db.saveAnswer("then", { language: "cypher", text: "MATCH (p)-[:worksAt]->(c) RETURN count(*) AS n", view: db.asOf({ tx: 1 }) });
+db.transact((tx) => { tx.assert(alice, worksAt, globex); });
+for (const m of db.checkSavedAnswers()) console.log(m.name, m.status, m.cause, m.event); // each once
+const a = db.refreshAnswer("employer"); // { status: "fresh", result, dependencies, coverage, checkpoint, ... }
+```
+
+`savedAnswer(name)` and `savedAnswers()` read the records, `deleteSavedAnswer(name)` removes one, and `saveAnswer` / `refreshAnswer` take a budget. A failed refresh throws and keeps the old result, mark and checkpoint (`error` says why); an unknown name throws `SavedAnswerNotFound`.
 
 ## Bulk import
 

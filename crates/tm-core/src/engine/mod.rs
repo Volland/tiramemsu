@@ -200,18 +200,33 @@ impl Store {
                 capability: "fts5".to_string(),
             });
         }
-        self.exec.begin_immediate()?;
-        match f(self.exec.as_mut()) {
-            Ok(r) => match self.exec.commit() {
-                Ok(()) => Ok(r),
-                Err(e) => {
-                    let _ = self.exec.rollback();
-                    Err(e)
-                }
-            },
-            Err(e) => {
-                let _ = self.exec.rollback();
+        self.derived_write(f)
+    }
+
+    /// Runs `f` in one write transaction that is not a graph transaction: no
+    /// transaction number, no event, no counter change. Only for derived records
+    /// (the text index, saved answers); `f` must not write `triple`, `term` or
+    /// `tx`. Errors and unwinding callbacks roll everything back.
+    pub fn derived_write<R>(
+        &mut self,
+        f: impl FnOnce(&mut dyn Executor) -> Result<R>,
+    ) -> Result<R> {
+        let exec = self.exec.as_mut();
+        exec.begin_immediate()?;
+        let res = catch_unwind(AssertUnwindSafe(|| {
+            let r = f(exec)?;
+            exec.commit()?;
+            Ok(r)
+        }));
+        match res {
+            Ok(Ok(r)) => Ok(r),
+            Ok(Err(e)) => {
+                let _ = exec.rollback();
                 Err(e)
+            }
+            Err(panic) => {
+                let _ = exec.rollback();
+                resume_unwind(panic)
             }
         }
     }

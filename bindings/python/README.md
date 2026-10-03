@@ -171,6 +171,7 @@ Every failure raises `TiramemsuError` with a `.code`:
 | `ImportInProgress` | A write, or a second import session, while a bulk import session is open |
 | `TextIndexUnavailable` | `text_search` before the text index was built (`text_index=True` or `rebuild_text_index()`) |
 | `MissingCapability` | `text_search` on a SQLite without FTS5 |
+| `SavedAnswerNotFound` | `refresh_answer` of a name that was never saved |
 | `Sqlite` | A SQLite failure, such as a locked or unreadable file |
 
 ## Options
@@ -212,6 +213,23 @@ db.now().cypher("CALL tiramemsu.text.search('lisbon') YIELD statement, score RET
 ```
 
 `text_search(text, mode="all"|"any"|"phrase", graphs=, predicates=, limit=, confidence=)` returns `TextHit`s ranked by lexical score, then confidence, confirmations, authors and recency, then eid. Views apply: `db.as_of(...)` recalls what was believed then.
+
+## Saved answers
+
+Save a query's answer and let later writes mark it. A retracted or superseded cited statement makes it `"stale"`; any other write under a current view makes it `"recheck"`; only a successful `refresh_answer` makes it `"fresh"` again.
+
+```python
+db.save_answer("employer", "SELECT ?o WHERE { v:alice v:worksAt ?o }")
+db.save_answer("then", "MATCH (p)-[:worksAt]->(c) RETURN count(*) AS n",
+               language="cypher", view=db.as_of(tx=1))
+with db.transact() as tx:
+    tx.assert_(alice, works_at, globex)
+for m in db.check_saved_answers():       # each invalidation is reported once
+    print(m.name, m.status, m.cause, m.event)
+a = db.refresh_answer("employer")        # SavedAnswer: status, result, dependencies, coverage, ...
+```
+
+`saved_answer(name)` and `saved_answers()` read the records, `delete_saved_answer(name)` removes one, and `save_answer` / `refresh_answer` take `budget=`. A failed refresh raises and keeps the old result, mark and checkpoint (`error` says why); an unknown name raises `SavedAnswerNotFound`.
 
 ## Bulk import
 

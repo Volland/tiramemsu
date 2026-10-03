@@ -101,8 +101,17 @@ fn read_only_refuses_writes_before_a_transaction() {
         .collect();
     assert_eq!(
         names,
-        ["query", "dependents", "export_bundle", "text_search"]
+        [
+            "query",
+            "dependents",
+            "export_bundle",
+            "text_search",
+            "saved_answers"
+        ]
     );
+    for name in ["save_answer", "check_answers", "refresh_answer"] {
+        assert_eq!(tool_error(&rpc_call(&mut ro, name, json!({}))), "ReadOnly");
+    }
     let r = ro.call_tool("dependents", &json!({ "eid": eid })).unwrap();
     // a statement stands on itself: retracting it retracts it
     assert_eq!(r["dependents"], json!([eid]));
@@ -482,7 +491,7 @@ fn protocol_handshake_and_errors() {
         json!({ "jsonrpc": "2.0", "id": 3, "method": "tools/list" }),
     )
     .unwrap();
-    assert_eq!(r["result"]["tools"].as_array().unwrap().len(), 8);
+    assert_eq!(r["result"]["tools"].as_array().unwrap().len(), 12);
     // protocol errors
     let code = |r: Option<J>| r.unwrap()["error"]["code"].as_i64().unwrap();
     let raw: J = serde_json::from_str(&server.handle("{not json").unwrap()).unwrap();
@@ -522,4 +531,51 @@ fn protocol_handshake_and_errors() {
         server.call_tool("nope", &J::Null).unwrap_err().code,
         "UnknownTool"
     );
+}
+
+// @lat: [[tests#Saved Answers#MCP Saved Answer Tools]]
+#[test]
+fn saved_answer_tools_mark_and_refresh() {
+    let dir = tempfile::tempdir().unwrap();
+    let server = open(&dir);
+    let eid = seed(&server);
+    let saved = server
+        .call_tool(
+            "save_answer",
+            &json!({ "name": "employer", "language": "sparql",
+                     "text": "SELECT ?o WHERE { v:alice v:worksAt ?o }" }),
+        )
+        .unwrap();
+    assert_eq!(saved["answer"]["status"], "fresh");
+    assert_eq!(saved["answer"]["dependencies"], json!([eid]));
+    // an update is not an answer
+    let r = server.call_tool(
+        "save_answer",
+        &json!({ "name": "w", "language": "sparql", "text": "INSERT DATA { v:a v:p v:b }" }),
+    );
+    assert_eq!(r.unwrap_err().code, "Unsupported");
+    server
+        .call_tool(
+            "supersede",
+            &json!({ "eid": eid, "patch": { "o": v("globex") } }),
+        )
+        .unwrap();
+    let marks = server.call_tool("check_answers", &json!({})).unwrap();
+    assert_eq!(marks["invalidations"][0]["status"], "stale");
+    assert_eq!(marks["invalidations"][0]["cause"], "supportRetracted");
+    let again = server.call_tool("check_answers", &json!({})).unwrap();
+    assert_eq!(again["invalidations"], json!([]));
+    let read = server
+        .call_tool("saved_answers", &json!({ "name": "employer" }))
+        .unwrap();
+    assert_eq!(read["answers"][0]["status"], "stale");
+    let fresh = server
+        .call_tool("refresh_answer", &json!({ "name": "employer" }))
+        .unwrap();
+    assert_eq!(fresh["answer"]["status"], "fresh");
+    assert_eq!(fresh["answer"]["result"]["rows"][0]["o"], v("globex"));
+    let all = server.call_tool("saved_answers", &json!({})).unwrap();
+    assert_eq!(all["answers"].as_array().unwrap().len(), 1);
+    let missing = server.call_tool("refresh_answer", &json!({ "name": "nope" }));
+    assert_eq!(missing.unwrap_err().code, "SavedAnswerNotFound");
 }

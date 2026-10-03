@@ -19,9 +19,15 @@
 //! one chunk like `transact`, and `importProgress`, `importFinish` and
 //! `importCancel` take the `session`. See [`tiramemsu::BulkImport`].
 //!
+//! Saved answers (`saveAnswer`, `savedAnswer`, `savedAnswers`,
+//! `checkSavedAnswers`, `refreshAnswer`, `deleteSavedAnswer`) store a query with
+//! its result and report later events as `recheck` or `stale` marks. See
+//! [`tiramemsu::SavedAnswer`].
+//!
 // @lat: [[api#Bindings]]
 
 mod read;
+mod saved;
 mod tx;
 pub mod value;
 
@@ -105,6 +111,7 @@ impl BindError {
                 Error::Reentrant => "Reentrant",
                 Error::ImportInProgress => "ImportInProgress",
                 Error::TextIndexUnavailable { .. } => "TextIndexUnavailable",
+                Error::SavedAnswerNotFound { .. } => "SavedAnswerNotFound",
                 Error::Cancelled => "Cancelled",
                 Error::DeadlineExceeded { .. } => "DeadlineExceeded",
                 Error::PoolTimeout { .. } => "PoolTimeout",
@@ -332,6 +339,10 @@ impl Database {
     /// `budget`, and `cancel` (`key`) stops the call running with that `cancelKey`.
     /// Bulk imports are `importBegin`, `importChunk` (`session`, `ops`, `options`,
     /// `budget`), `importProgress`, `importFinish` and `importCancel` (`session`).
+    /// Saved answers are `saveAnswer` (`name`, `language`, `text`, `params`,
+    /// `view`, `budget`), `savedAnswer` (`name`), `savedAnswers`,
+    /// `checkSavedAnswers` (the new invalidations), `refreshAnswer` (`name`,
+    /// `budget`) and `deleteSavedAnswer` (`name`).
     pub fn call(&self, op: &str, args: &J) -> Res<J> {
         match op {
             "sparql" | "cypher" | "triples" | "path" | "events" | "graphs" | "graphMembers"
@@ -363,6 +374,13 @@ impl Database {
             }
             "importBegin" | "importChunk" | "importProgress" | "importFinish" | "importCancel" => {
                 self.import(op, args)
+            }
+            "saveAnswer" | "refreshAnswer" => {
+                let (budget, _entry) = self.budget(args.get("budget"))?;
+                saved::run(&self.db, op, args, budget.as_ref())
+            }
+            "savedAnswer" | "savedAnswers" | "checkSavedAnswers" | "deleteSavedAnswer" => {
+                saved::run(&self.db, op, args, None)
             }
             "with" => tx::with(&self.db, args),
             "optimize" => {

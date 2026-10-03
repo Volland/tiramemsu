@@ -378,6 +378,75 @@ export interface QueryBudget {
   cancelKey?: string;
 }
 
+/** The freshness of a saved answer: only a successful `refreshAnswer` returns it to `fresh`. */
+export type AnswerStatus = "fresh" | "recheck" | "stale";
+
+/**
+ * Why the cited statements of a saved answer do not prove its freshness:
+ * `mutableView`, `noProvenance`, `negativePattern`, `existsPattern`,
+ * `recursivePath`, `virtualPredicate`, `volatile` or `clock`.
+ */
+export type CoverageReason =
+  | "mutableView"
+  | "noProvenance"
+  | "negativePattern"
+  | "existsPattern"
+  | "recursivePath"
+  | "virtualPredicate"
+  | "volatile"
+  | "clock";
+
+/** What to save with `Database.saveAnswer`. */
+export interface SavedQueryInput {
+  /** The query text (SPARQL SELECT or ASK, or read-only Cypher). */
+  text: string;
+  /** Default `"sparql"`. */
+  language?: "sparql" | "cypher";
+  /** Cypher parameters (SPARQL takes none). */
+  params?: Record<string, unknown>;
+  /** The view the query runs on (default: `db.now()`). */
+  view?: View;
+}
+
+/** One logical invalidation, reported once by `Database.checkSavedAnswers`. */
+export interface Invalidation {
+  name: string;
+  status: AnswerStatus;
+  /** `supportRetracted` (stale), `insertion`, `retraction`, `transaction` or `clock` (recheck). */
+  cause: "supportRetracted" | "insertion" | "retraction" | "transaction" | "clock";
+  /** The transaction of the trigger (`null` for the clock). */
+  t: number | null;
+  /** The triggering event (`null` for the clock and event-less transactions). */
+  event: EventRow | null;
+}
+
+/** A saved answer: the query as saved, its last result, and its freshness bookkeeping. */
+export interface SavedAnswer {
+  name: string;
+  language: "sparql" | "cypher";
+  text: string;
+  params: Record<string, unknown>;
+  view: { kind: string; tx?: number; instant?: number; validAt?: number };
+  /** The `@vocab` at save time; refreshes reuse it. */
+  vocab: string | null;
+  prefixes: Array<[string, string]>;
+  /** The last successful result, shaped like a live `sparql` or `cypher` call. */
+  result: SparqlResult | CypherResult;
+  /** The statements the result cited (SPARQL SELECT provenance). */
+  dependencies: number[];
+  coverage: CoverageReason[];
+  /** The last transaction the result reflects. */
+  checkpoint: number;
+  /** Events up to this transaction have been processed. */
+  cursor: number;
+  evaluatedAt: number;
+  revision: number;
+  status: AnswerStatus;
+  invalidation: Invalidation | null;
+  /** The error of the last failed refresh, until one succeeds. */
+  error: string | null;
+}
+
 /** A time reference for `Database.asOf`. */
 export type TimeRef = { tx: number } | { instant: Date | number | string };
 
@@ -406,6 +475,11 @@ export class View {
    */
   withBudget(budget: QueryBudget): View {
     return new View(this._db, this._view, budget);
+  }
+
+  /** @internal The view descriptor (saved answers store it). */
+  _descriptor(): ViewJson {
+    return this._view;
   }
 
   /** @internal The view (and budget) every read sends. */
@@ -881,6 +955,54 @@ export class Database {
   /** Builds the text index unless it is current; returns whether it built the whole index. */
   enableTextIndex(): boolean {
     return (callNative(this._db, "enableTextIndex", {}) as { built: boolean }).built;
+  }
+
+  /**
+   * Runs a query and saves its answer under `name` (replacing one of that name): the
+   * text, parameters and view as given, the current `@vocab` and prefixes, the result,
+   * the statements it cited, and why they do not prove freshness (`coverage`).
+   */
+  saveAnswer(name: string, query: SavedQueryInput, budget?: QueryBudget): SavedAnswer {
+    const args: Record<string, unknown> = { name, text: query.text };
+    if (query.language) args.language = query.language;
+    if (query.params) args.params = query.params;
+    if (query.view) args.view = query.view._descriptor();
+    if (budget) args.budget = budget;
+    return callNative(this._db, "saveAnswer", args) as SavedAnswer;
+  }
+
+  /** The saved answer `name` as stored, or `null`. Call `checkSavedAnswers` first for current marks. */
+  savedAnswer(name: string): SavedAnswer | null {
+    return callNative(this._db, "savedAnswer", { name }) as SavedAnswer | null;
+  }
+
+  /** Every saved answer, by name. */
+  savedAnswers(): SavedAnswer[] {
+    return callNative(this._db, "savedAnswers", {}) as SavedAnswer[];
+  }
+
+  /**
+   * Processes the events since each answer's cursor and returns the new invalidations:
+   * a retracted cited statement makes an answer `stale`; any other later transaction
+   * under a mutable view makes it `recheck`. Idempotent: nothing is reported twice.
+   */
+  checkSavedAnswers(): Invalidation[] {
+    return callNative(this._db, "checkSavedAnswers", {}) as Invalidation[];
+  }
+
+  /**
+   * Re-runs a saved answer with its stored query, view and settings. Only success clears
+   * its mark and advances its checkpoint; a failure throws and leaves it as it was.
+   */
+  refreshAnswer(name: string, budget?: QueryBudget): SavedAnswer {
+    const args: Record<string, unknown> = { name };
+    if (budget) args.budget = budget;
+    return callNative(this._db, "refreshAnswer", args) as SavedAnswer;
+  }
+
+  /** Deletes a saved answer; returns whether there was one. */
+  deleteSavedAnswer(name: string): boolean {
+    return (callNative(this._db, "deleteSavedAnswer", { name }) as { deleted: boolean }).deleted;
   }
 
   /** Refreshes the query planner's statistics (run after large imports). */

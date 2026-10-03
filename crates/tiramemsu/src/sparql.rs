@@ -107,6 +107,13 @@ impl View<'_> {
     /// The environment for SPARQL text on this view: the view descriptor, the
     /// database `@vocab` and prefix table, and the start instant for `NOW()`.
     fn sparql_env(&self) -> Result<Env> {
+        self.sparql_env_with(None)
+    }
+
+    /// [`View::sparql_env`] with the `@vocab` and prefix table given instead of
+    /// read from the database (saved answers re-run with the settings they were
+    /// saved with).
+    pub(crate) fn sparql_env_with(&self, settings: Option<&Settings>) -> Result<Env> {
         let mut env = Env::new(self.descriptor());
         env.speculative = self.db().is_none();
         env.now_ms = match self.db() {
@@ -115,7 +122,10 @@ impl View<'_> {
                 .duration_since(std::time::UNIX_EPOCH)
                 .map_or(0, |d| d.as_millis() as i64),
         };
-        let (vocab_iri, prefixes) = self.exec(|e, _| read_settings(e))?;
+        let (vocab_iri, prefixes) = match settings {
+            Some(s) => s.clone(),
+            None => self.exec(|e, _| read_settings(e))?,
+        };
         if let Some(v) = vocab_iri {
             env.vocab = v;
         }
@@ -218,7 +228,7 @@ impl View<'_> {
     /// Runs a `SELECT` with provenance: the instrumented query and its sibling
     /// lookups in one read, so both see the same state, and under one operation
     /// budget, so the lookups draw on what the main query left.
-    fn run_provenance(&self, plan: &QueryPlan) -> Result<SparqlResult> {
+    pub(crate) fn run_provenance(&self, plan: &QueryPlan) -> Result<SparqlResult> {
         let p = tm_sparql::provenance::instrument(plan)?;
         let engine = self.engine()?;
         let mode = if self.db().is_some() {
@@ -253,7 +263,7 @@ impl View<'_> {
         Ok(SparqlResult::Update(report))
     }
 
-    fn run_plan(&self, plan: &QueryPlan) -> Result<SparqlResult> {
+    pub(crate) fn run_plan(&self, plan: &QueryPlan) -> Result<SparqlResult> {
         let r = self.execute_ir(&plan.query, &Params::new())?;
         let sol = to_solutions(&r)?;
         Ok(match &plan.form {

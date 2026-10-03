@@ -37,7 +37,8 @@ statement, so sources, confidence and beliefs are layers on facts. Nothing is de
 corrects a fact and keeps the old one visible in asOf and history views. Terms are JSON: \
 {\"iri\": \"urn:tiramemsu:v:alice\"} is v:alice in SPARQL and Cypher, a plain string is a string \
 literal, and {\"stmt\": eid} names a statement. Use query for SPARQL or Cypher reads, text_search \
-for recall by words, and assert, confirm, supersede and import_bundle to write.";
+for recall by words, and assert, confirm, supersede and import_bundle to write. save_answer keeps \
+an answer; check_answers says when it is stale or needs a recheck, and refresh_answer re-runs it.";
 
 /// A memory server over one database file: a JSON-RPC 2.0 message in, a message
 /// out, with no transport of its own. [`Server::serve`] drives it over lines of

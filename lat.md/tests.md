@@ -882,3 +882,61 @@ A query past `--max-rows` fails with `ResultLimitExceeded` as a tool error and t
 ### Stdio Session End To End
 
 The binary started with `--db` and `--text-index` answers a full session line by line over stdio (handshake, list, assert, a parse error, a query with provenance, text search) and exits cleanly when stdin closes.
+
+## Saved Answers
+
+Saved answers and conservative invalidation (`add-saved-answer-invalidation`): identity, recheck and stale marks, replayable checkpoints, refreshes and the format-3 migration ([[query#Saved Answers]]).
+
+### Save A Parameterized Query
+
+A Cypher answer with parameters (string, integer, offset date-time, list) on an as-of, valid-at view is recovered unchanged after reopening.
+
+Its refresh uses the saved `@vocab` even after the database's changed, and SPARQL with parameters is refused.
+
+### Negative Condition Requests Recheck
+
+An answer using `NOT EXISTS` reports `negativePattern`; inserting a statement that matches the negated pattern marks it `recheck` with the insertion event, and the refresh drops the row.
+
+### Additional Matching Row Requests Recheck
+
+A new statement that adds a row to a saved current-view `SELECT` marks it `recheck` with that event while every cited statement is still live; the checkpoint stays until the refresh lists both rows.
+
+### Retracted Support Marks Stale
+
+An explicit retraction of a cited statement upgrades `recheck` answers to `stale` with the retract event, a supersede is reported with kind `supersede`, and answers already stale are not reported again.
+
+### Restart Replays Without Duplicates
+
+After reopening, the check reports a retraction made after the persisted cursor exactly once and nothing on later checks; a copy of the file whose consumer never ran reaches the same record by replay.
+
+### Failed Refresh Keeps Stale
+
+A refresh under a cancelled budget fails with `Cancelled` and leaves the old result, the stale mark, its event and the checkpoint, recording the error; a later check does not clear it, and only a successful refresh does.
+
+### Fixed Historical Views Stay Fresh
+
+As-of answers at a past transaction or instant have no coverage reason and stay fresh across retractions and insertions; an as-of point after the head is mutable, and `NOW()` or Cypher `datetime()` answers become `recheck` with cause `clock`.
+
+### Coverage Reasons Are Explicit
+
+Recursive paths, `FILTER EXISTS`, `MINUS`, virtual predicates, `ASK` and Cypher (with `volatile` when node properties are read) report their reasons; updates, `CONSTRUCT` and an empty name are refused.
+
+### Saved Answers Never Touch History
+
+Saving, checking, refreshing and deleting answers leave the counters, `tx`, `triple` and the event log unchanged; a volatile-only transaction marks `recheck` with cause `transaction`.
+
+The calls refuse to run during a bulk import or inside a transaction.
+
+### Migration To Format 3 Keeps Every Row
+
+Opening a format-2 file migrates it to format 3 with the saved-answer tables and leaves every `triple`, `term` and `tx` row byte for byte, also after an answer is saved.
+
+### Bridge Saved Answers
+
+The JSON bridge saves SPARQL and parameterized Cypher answers with results shaped like live calls, and reports a supersede once as `stale`.
+
+A cancelled refresh keeps the mark, a successful one clears it, and argument and missing-name errors keep their codes.
+
+### MCP Saved Answer Tools
+
+The MCP `save_answer`, `check_answers`, `saved_answers` and `refresh_answer` tools mark a superseded answer stale once and refresh it; an update is `Unsupported`, and read-only mode offers only `saved_answers`.

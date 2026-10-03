@@ -12,12 +12,16 @@ use crate::exec::{Executor, Host, HostOptions, SqlValue};
 /// The format version this build writes and reads. Format 2 adds the bookkeeping
 /// of the derived text index (`meta.text_index`, `meta.text_stale`), so that a
 /// format-1 build, which would not keep `term_fts` current, refuses the file.
-pub const FORMAT_VERSION: i64 = 2;
+/// Format 3 adds the derived saved-answer tables ([`DDL_SAVED_ANSWERS`]).
+pub const FORMAT_VERSION: i64 = 3;
 
 /// The format-1 DDL: tables, indexes, the `event` view and the invariant triggers.
 // @lat: [[storage#Schema]]
 // @lat: [[storage#Invariant Triggers]]
 pub const DDL_V1: &str = include_str!("ddl_v1.sql");
+
+/// The format-3 DDL: the derived `saved_answer` and `saved_answer_dep` tables.
+pub const DDL_SAVED_ANSWERS: &str = include_str!("ddl_saved_answers.sql");
 
 /// Names reserved by format 1 for later milestones (never created by format 1).
 pub const RESERVED_NAMES: [&str; 2] = ["seal_key", "term_fts"];

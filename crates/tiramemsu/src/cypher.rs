@@ -99,6 +99,52 @@ impl Runner for ViewRunner<'_, '_> {
     }
 }
 
+/// What a read-only Cypher run touched, for saved answers: every IR query it ran
+/// and whether it read volatile values.
+#[derive(Default)]
+pub(crate) struct CypherTrace {
+    pub(crate) queries: Vec<IrQuery>,
+    pub(crate) volatile: bool,
+}
+
+/// A [`ViewRunner`] that records what it runs into a [`CypherTrace`].
+struct TracingRunner<'v, 'a, 't> {
+    inner: ViewRunner<'v, 'a>,
+    trace: &'t mut CypherTrace,
+}
+
+impl Runner for TracingRunner<'_, '_, '_> {
+    fn run_ir(&mut self, q: &IrQuery, params: &Params) -> Result<Rows> {
+        self.trace.queries.push(q.clone());
+        self.inner.run_ir(q, params)
+    }
+
+    fn now_ms(&self) -> i64 {
+        self.inner.now_ms()
+    }
+
+    fn object_id(&mut self, v: &Value) -> Result<Option<i64>> {
+        self.inner.object_id(v)
+    }
+
+    fn volatile_of(&mut self, s: &Value) -> Result<Vec<(String, Value)>> {
+        self.trace.volatile = true;
+        self.inner.volatile_of(s)
+    }
+
+    fn path_max_hops(&self) -> u32 {
+        self.inner.path_max_hops()
+    }
+
+    fn writable(&self) -> bool {
+        false
+    }
+
+    fn with_tx(&mut self, f: &mut dyn FnMut(&mut Tx<'_>) -> Result<()>) -> Result<()> {
+        self.inner.with_tx(f)
+    }
+}
+
 /// A runner over a write transaction: reads see the transaction's own writes.
 struct TxRunner<'t, 'a> {
     tx: &'t mut Tx<'a>,
@@ -188,6 +234,31 @@ impl View<'_> {
             let mut runner = ViewRunner { view: self };
             tm_cypher::exec::run(&prog, params, &mut runner).map_err(|e| e.into_core(text))
         })
+    }
+}
+
+impl View<'_> {
+    /// [`View::cypher`] with the given `@vocab` and prefix table, recording into
+    /// `trace` what the run touched (saved answers). Not wrapped in an operation:
+    /// the caller runs it under the view's budget.
+    pub(crate) fn cypher_traced(
+        &self,
+        text: &str,
+        params: &CypherParams,
+        settings: &crate::sparql::Settings,
+        trace: &mut CypherTrace,
+    ) -> Result<CypherResult> {
+        let ctx = CompileCtx {
+            vocab: vocab_of(settings.clone()),
+            view: self.descriptor(),
+            writable: false,
+        };
+        let prog = tm_cypher::compile(text, params, &ctx).map_err(|e| e.into_core(text))?;
+        let mut runner = TracingRunner {
+            inner: ViewRunner { view: self },
+            trace,
+        };
+        tm_cypher::exec::run(&prog, params, &mut runner).map_err(|e| e.into_core(text))
     }
 }
 

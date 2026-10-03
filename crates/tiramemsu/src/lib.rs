@@ -8,6 +8,7 @@ mod cypher;
 mod db;
 mod import;
 mod pool;
+mod saved;
 mod sparql;
 mod view;
 
@@ -16,6 +17,10 @@ pub use bundle::{BundleFormat, BUNDLE_FORMAT};
 pub use cypher::TxCypher;
 pub use db::{Db, OpenOptions};
 pub use import::{BulkImport, ImportProgress, ImportSummary};
+pub use saved::{
+    AnswerStatus, CoverageReason, Invalidation, InvalidationCause, QueryLanguage, SavedAnswer,
+    SavedQuery, SAVED_ANSWER_LAYOUT,
+};
 pub use sparql::{SparqlOptions, SparqlResult};
 pub use view::{PathArgs, View};
 

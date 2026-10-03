@@ -353,7 +353,7 @@ fn path_row_json(view: &View<'_>, r: &PathRow) -> Res<J> {
     }))
 }
 
-fn event_json(e: &Event) -> J {
+pub(crate) fn event_json(e: &Event) -> J {
     json!({
         "t": e.t.0,
         "eid": e.eid.n(),
@@ -382,7 +382,7 @@ pub fn report_json(r: &TxReport) -> J {
     })
 }
 
-fn sparql_json(r: &SparqlResult) -> J {
+pub(crate) fn sparql_json(r: &SparqlResult) -> J {
     match r {
         SparqlResult::Solutions(s) => {
             let rows = s.rows.iter().map(|row| {

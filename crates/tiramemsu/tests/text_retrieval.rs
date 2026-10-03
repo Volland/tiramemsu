@@ -712,9 +712,8 @@ fn migrating_a_format_1_file_keeps_every_term_statement_and_transaction() {
     };
     assert_eq!(version(&p), 1);
     let before = raw_rows(&p);
-    let db = open(&p); // migrates to format 2 and builds the index
+    let db = open(&p); // migrates to the current format and builds the index
     assert_eq!(version(&p), storage::FORMAT_VERSION);
-    assert_eq!(storage::FORMAT_VERSION, 2);
     assert_eq!(raw_rows(&p), before);
     assert_eq!(
         db.history()
@@ -738,7 +737,7 @@ fn migrating_a_format_1_file_keeps_every_term_statement_and_transaction() {
     assert!(matches!(
         r,
         Err(Error::FormatVersion {
-            found: 2,
+            found: storage::FORMAT_VERSION,
             supported: 1
         })
     ));

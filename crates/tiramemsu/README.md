@@ -524,6 +524,7 @@ Every failure is a typed `Error` (`#[non_exhaustive]`, so keep a wildcard arm), 
 | `ImportInProgress` | A write, or a second import session, while a bulk import session holds the write lease |
 | `MissingCapability { capability }` | The host lacks a capability: `functions`/`vtab` for the query engine at open, `fts5` for text recall |
 | `TextIndexUnavailable { reason }` | Text recall before the text index was built, or while it lacks strings a host without FTS5 wrote |
+| `SavedAnswerNotFound { name }` | `refresh_answer` of a name that was never saved, or was deleted |
 | `FormatVersion`, `ForeignFile` | The file is from a newer format, or is some other SQLite database |
 | `IdSpaceExhausted { kind }` | A node, blank node, statement or transaction counter passed 2⁴⁸ − 1 (about 2.8 × 10¹⁴ ids per kind) |
 | `Sqlite(_)`, `Custom(_)` | A SQLite failure with its result code (busy, I/O), or your own error returned from a transaction body |
@@ -645,7 +646,35 @@ db.now().cypher("CALL tiramemsu.text.search('lisbon') YIELD statement, score RET
 # Ok::<(), Error>(())
 ```
 
-Plain and language-tagged strings are searchable; typed literals are not. Words match as whole tokens, case- and accent-insensitive (`TextMode::All`, `Any` or `Phrase`, a trailing `*` for a prefix). Hits are ranked by lexical score, then confidence (absent last), confirmations, distinct authors and recency, with the statement eid as the final tie-break. A retracted statement is absent from `now()` and present `as_of` before its retraction. On a SQLite without FTS5 recall fails with `MissingCapability` and everything else works. Building the index never touches history; files with it use storage format 2.
+Plain and language-tagged strings are searchable; typed literals are not. Words match as whole tokens, case- and accent-insensitive (`TextMode::All`, `Any` or `Phrase`, a trailing `*` for a prefix). Hits are ranked by lexical score, then confidence (absent last), confirmations, distinct authors and recency, with the statement eid as the final tie-break. A retracted statement is absent from `now()` and present `as_of` before its retraction. On a SQLite without FTS5 recall fails with `MissingCapability` and everything else works. Building the index never touches history; it needs storage format 2 or later.
+
+## Saved answers
+
+An agent that remembers an answer needs to know when to stop trusting it. `Db::save_answer` runs a query and stores it with its parameters, view, the `@vocab` and prefixes of the moment, its result and the statements it cited (SPARQL `SELECT` provenance). `Db::check_saved_answers` then reads the event log since each answer's cursor, once: a retracted or superseded cited statement makes the answer `Stale` with that event, and any other later transaction under a mutable view makes it `Recheck`, because a new row, a `NOT EXISTS` or an `OPTIONAL` may have changed it. Only `Db::refresh_answer`, a successful re-run, makes it `Fresh` again.
+
+```rust
+# use tiramemsu::*;
+# let dir = tempfile::tempdir().unwrap();
+# let db = Db::open(dir.path().join("m.db"), OpenOptions::default())?;
+db.now().sparql("INSERT DATA { v:alice v:worksAt v:acme }")?;
+let q = SavedQuery::sparql("SELECT ?o WHERE { v:alice v:worksAt ?o }");
+let saved = db.save_answer("employer", &q)?;
+assert_eq!(saved.coverage, [CoverageReason::MutableView]); // a now view can change
+
+db.now().sparql("INSERT DATA { v:alice v:worksAt v:globex }")?;
+let marks = db.check_saved_answers()?;
+assert_eq!((marks[0].status, marks[0].cause), (AnswerStatus::Recheck, InvalidationCause::Insertion));
+assert!(db.check_saved_answers()?.is_empty()); // each invalidation is reported once
+
+let fresh = db.refresh_answer("employer")?;
+assert_eq!(fresh.solutions()?.unwrap().rows.len(), 2);
+
+// an answer on a past transaction stays fresh: history does not change
+db.save_answer("then", &q.clone().on(ViewSpec::as_of(TimeRef::Tx(1))))?;
+# Ok::<(), Error>(())
+```
+
+`SavedAnswer::coverage` lists why the cited statements cannot prove freshness: `MutableView`, `NoProvenance` (`ASK`, Cypher), `NegativePattern`, `ExistsPattern`, `RecursivePath`, `VirtualPredicate`, `Volatile` and `Clock` (`NOW()` makes even a historical answer `Recheck` once the clock moves). A failed refresh (an error, a cancelled `QueryBudget`) keeps the old result, its mark and its checkpoint, and records `error`. Saved answers are derived records in tables added by storage format 3: saving, checking and refreshing never take a transaction number or touch history.
 
 ## Concurrency
 

@@ -31,6 +31,14 @@ impl Db {
     pub fn import_active(&self) -> bool;
     pub fn enable_text_index(&self) -> Result<bool>;                        // build unless current; catch up
     pub fn rebuild_text_index(&self) -> Result<u64>;                        // drop + refill term_fts; history untouched
+    pub fn save_answer(&self, name: &str, q: &SavedQuery) -> Result<SavedAnswer>;  // run + store; derived record
+    pub fn save_answer_with(&self, name: &str, q: &SavedQuery, budget: Option<&QueryBudget>) -> Result<SavedAnswer>;
+    pub fn saved_answer(&self, name: &str) -> Result<Option<SavedAnswer>>;
+    pub fn saved_answers(&self) -> Result<Vec<SavedAnswer>>;
+    pub fn check_saved_answers(&self) -> Result<Vec<Invalidation>>;       // process events once; recheck / stale
+    pub fn refresh_answer(&self, name: &str) -> Result<SavedAnswer>;      // only success clears a mark
+    pub fn refresh_answer_with(&self, name: &str, budget: Option<&QueryBudget>) -> Result<SavedAnswer>;
+    pub fn delete_saved_answer(&self, name: &str) -> Result<bool>;
 }
 
 impl BulkImport<'_> {
@@ -72,6 +80,7 @@ impl View {
 - Query budgets ([[query#Query Budgets]]): `QueryBudget { timeout, cancel, reader_timeout, max_rows, max_bytes }` (all `Option`, `Default` bounds nothing), `CancelToken::{new, cancel, is_cancelled}`, and `QueryBudget::run(f)`, which bounds a sequence of calls as one operation. Hosts receive the stop conditions through `Executor::set_interrupt(Option<Interrupt>)`, a default no-op.
 - Bulk import ([[query#Bulk Import]]): `ImportProgress { chunks, rejected, asserted, existing, retracted, txs, elapsed, maintenance }` and `ImportSummary { progress, analyzed, maintenance_error, statistics_due }`. Dropping a `BulkImport` equals `cancel`.
 - Text recall ([[query#Text Recall]]): `TextQuery { text, mode: TextMode::{All, Any, Phrase}, graphs, predicates, limit, confidence }` (`TextQuery::new(text)` for the defaults) and `TextHit { eid, s, p, o, text, lang, lexical, rank, evidence: TextEvidence { confidence: Option<f64>, confirmations, authors, t_add, added_at } }`, ordered by `text::RANK_POLICY`. The index is opt-in: `OpenOptions::text_index` or `Db::rebuild_text_index`.
+- Saved answers ([[query#Saved Answers]]): `SavedQuery { language: QueryLanguage::{Sparql, Cypher}, text, params, view }` (`SavedQuery::sparql(text)`, `SavedQuery::cypher(text, params)`, `.on(view)`), and `SavedAnswer { name, query, vocab, prefixes, result, dependencies, coverage, checkpoint, cursor, evaluated_at, revision, status, invalidation, error }` with `solutions()` and `boolean()`. `AnswerStatus::{Fresh, Recheck, Stale}`, `CoverageReason` and `Invalidation { name, status, cause: InvalidationCause, t, event }`.
 - `values(s, key)` is how M0 exposes volatile state before a query language exists. See [[storage#Volatile Table]].
 - `Patch::from_fields` builds a patch from named fields for bindings and rejects `s` and `p` with `InvalidPatch`.
 
@@ -97,6 +106,7 @@ Every failure is a typed error, and a failed transaction leaves no trace: no tx 
 | `Parse { dialect, span, msg }` / `Unsupported { feature }` | A query is outside the v1 subset. `dialect` is SPARQL, Cypher or Path (the `tm_path` expression text). `Unsupported` also rejects what format 1 reserves for later milestones: tag 15 `SEALED` and the `sys:sensitive` flag (M6), and a `NODE`, `BNODE`, `STMT` or `TX` id with a non-zero origin ([[data-model#ObjectId#Origin Bits]]) |
 | `MissingCapability { capability }` | `Db::open` with the query engine on a host that lacks `functions` or `vtab`, or text recall and index maintenance on a host without `fts5`. See [[architecture#Executor]] |
 | `TextIndexUnavailable { reason }` | Text recall when the text index was never built, has another layout version, or lacks strings a host without FTS5 wrote. See [[storage#Text Index]] |
+| `SavedAnswerNotFound { name }` | `refresh_answer` of a name that was never saved, or was deleted. See [[query#Saved Answers]] |
 | `InvalidQuery { msg }` | A structurally invalid IR or query plan (e.g. an unbound variable in a projection) that is not a parse error |
 | `Cancelled` | A budgeted operation's `CancelToken` was cancelled. Read resources are released; a write rolls back |
 | `DeadlineExceeded { timeout }` | A budgeted operation ran past its `timeout`, including time spent waiting for a connection |
@@ -144,7 +154,7 @@ Bindings wrap the facade crate one to one. Python, Node and the MCP server are i
 | Python | `tiramemsu-python`, package `tiramemsu` (PyO3, maturin wheel) | Done. Transactions take a list of op dicts, or a context manager |
 | Node | `tiramemsu-node`, package `@tiramemsu/node` (napi-rs) | Done. Sync API; queries return plain JS objects |
 | WASM | `tiramemsu-wasm` | SQLite compiled to WASM with an OPFS VFS; single-threaded, reader = writer |
-| MCP | `tiramemsu-mcp` (stdio JSON-RPC server, binary of the same name) | Done. Tools: `assert`, `confirm`, `supersede`, `query`, `dependents`, `export_bundle`, `import_bundle`, `text_search`; see [[api#MCP Tools]] |
+| MCP | `tiramemsu-mcp` (stdio JSON-RPC server, binary of the same name) | Done. Tools: `assert`, `confirm`, `supersede`, `query`, `dependents`, `export_bundle`, `import_bundle`, `text_search`, and the saved-answer tools; see [[api#MCP Tools]] |
 | SQLite extension | later | Only the `tm_path` table function and time helpers; no write API |
 
 ## MCP Tools
@@ -156,6 +166,7 @@ Register it with `claude mcp add tiramemsu -- tiramemsu-mcp --db ./memory.db`, o
 - **Protocol:** JSON-RPC 2.0, one message per line; `initialize`, `ping`, `tools/list`, `tools/call`, notifications ignored, batches answered. Revision `2025-06-18`, with `2025-03-26` and `2024-11-05` accepted; `structuredContent` from `2025-06-18` on. The layer is hand-rolled over `serde_json`, so no protocol crate reaches `tm-core` or the facade. It lives in [[crates/tiramemsu-mcp/src/lib.rs#Server]].
 - **Configuration** comes only from the command line ([[crates/tiramemsu-mcp/src/config.rs#parse_args]]): `--db` (required), `--read-only`, `--text-index`, and `--timeout-ms` (30000), `--reader-timeout-ms`, `--max-rows` (10000), `--max-bytes` (8 MiB), `0` meaning unbounded. The bounds are one `QueryBudget` per tool call ([[query#Query Budgets]]).
 - **Tools:** `assert` (`s`, `p`, `o`, `validFrom`, `validTo`, `onExisting`, `graph`), `confirm` (`eid`), `supersede` (`eid`, `patch`), `import_bundle` (`bundle`) write one transaction each; `query` (`language`: `sparql` or `cypher`, `text`, `params`, `view`, `provenance`), `dependents` and `export_bundle` (`eid`, `view`) and `text_search` ([[query#Text Recall]]) read. Terms and views use the bridge's JSON forms.
+- **Saved answers** ([[query#Saved Answers]]): `save_answer` (`name`, `language`, `text`, `params`, `view`), `check_answers` and `refresh_answer` (`name`) write only derived records and are left out in read-only mode; `saved_answers` (optional `name`) reads.
 - **Write policy:** read-only mode leaves the write tools out of `tools/list` and refuses them with `ReadOnly` before arguments are parsed or a transaction starts. `query` only reads: SPARQL runs with `SparqlOptions::query_only` and Cypher on a view, so an update is `Unsupported`; there is no SQL.
 - **Path policy:** arguments are checked against each tool's declared keys; `path`, `db`, `database`, `file` and similar are `PathNotAllowed`, anything else undeclared is `InvalidArgument`. Free text is data and never changes authorization.
 - **Auditable results:** every read echoes its `view` (default `{"kind": "now"}`). A SPARQL `SELECT` runs with provenance unless `provenance: false`, and `provenance.coverage` is `complete`, `incomplete` with `gaps` from `Solutions::provenance_gaps` (a recursive path), or `unavailable` (Cypher, `ASK`, `CONSTRUCT`, or not requested). An unsupported combination is an error, never retried another way.

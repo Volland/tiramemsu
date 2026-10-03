@@ -582,3 +582,55 @@ describe("text recall", () => {
     } finally { cleanup(dir); }
   });
 });
+
+// ---- saved answers ---------------------------------------------------------
+
+describe("saved answers", () => {
+  it("marks a saved answer stale when its support is retracted, and refreshes it", () => {
+    const { db, dir } = tempDb();
+    try {
+      const r = db.transact((tx) => { tx.assert(alice, worksAt, acme); });
+      const a = db.saveAnswer("employer", { text: "SELECT ?o WHERE { v:alice v:worksAt ?o }" });
+      expect(a.status).toBe("fresh");
+      expect(a.dependencies).toEqual([r.asserted[0]]);
+      expect(a.coverage).toEqual(["mutableView"]);
+      expect(a.result).toMatchObject({ kind: "select", rows: [{ o: acme }] });
+      // a parameterized Cypher answer on a fixed view keeps both
+      const c = db.saveAnswer("count", {
+        language: "cypher",
+        text: "MATCH (p)-[:worksAt]->(c) WHERE $min >= 0 RETURN count(*) AS n",
+        params: { min: 1 },
+        view: db.asOf({ tx: 1 }),
+      });
+      expect(c.params).toEqual({ min: 1 });
+      expect(c.view).toEqual({ kind: "asOf", tx: 1 });
+      // a new matching row: recheck; then the retraction: stale
+      db.transact((tx) => { tx.assert(alice, worksAt, globex); });
+      const first = db.checkSavedAnswers();
+      expect(first.map((m) => [m.name, m.status, m.cause])).toEqual([["employer", "recheck", "insertion"]]);
+      db.transact((tx) => { tx.retract(r.asserted[0]); });
+      const second = db.checkSavedAnswers();
+      expect(second).toHaveLength(1);
+      expect(second[0].status).toBe("stale");
+      expect(second[0].cause).toBe("supportRetracted");
+      expect(second[0].event).toMatchObject({ eid: r.asserted[0], op: "retract", kind: "explicit" });
+      expect(db.checkSavedAnswers()).toEqual([]);
+      // a failed refresh keeps the mark
+      db.cancel("refresh-1");
+      let code: string | undefined;
+      try { db.refreshAnswer("employer", { cancelKey: "refresh-1" }); } catch (e) { code = (e as TiramemsuError).code; }
+      expect(code).toBe("Cancelled");
+      expect(db.savedAnswer("employer")!.status).toBe("stale");
+      expect(db.savedAnswer("employer")!.checkpoint).toBe(1);
+      const fresh = db.refreshAnswer("employer");
+      expect(fresh.status).toBe("fresh");
+      expect(fresh.revision).toBe(2);
+      expect(fresh.result).toMatchObject({ rows: [{ o: globex }] });
+      expect(db.savedAnswers().map((s) => s.name)).toEqual(["count", "employer"]);
+      expect(db.deleteSavedAnswer("count")).toBe(true);
+      expect(db.savedAnswer("count")).toBeNull();
+      try { db.refreshAnswer("count"); } catch (e) { code = (e as TiramemsuError).code; }
+      expect(code).toBe("SavedAnswerNotFound");
+    } finally { cleanup(dir); }
+  });
+});

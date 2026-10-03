@@ -19,6 +19,7 @@ Reads take a view and return rows; writes are one transaction each; anything tha
 - **Transaction ops:** `assert`, `create`, `retract`, `retractMatching`, `supersede`, `confirm`, `meta`, `upsert`, `newNode`, the five graph ops, `importBundle` (`bundle`; returns `{"root", "statements": [{"id", "eid", "new"}]}`, and `as` names the imported root) and `cypher`. An op may carry `"as": name`, and a later op may use `{"ref": name}` as a statement id or as a subject or object, which is how a layer is written on a statement created earlier in the same transaction.
 - **Housekeeping:** `optimize`, `info` (with `importActive` and `statisticsDue`), `cancel` (`key`, see [[bindings#JSON Bridge#Budgets]]), `rebuildTextIndex` and `enableTextIndex` (see [[bindings#JSON Bridge#Text Recall]]).
 - **Bulk import:** `importBegin`, `importChunk`, `importProgress`, `importFinish` and `importCancel`, see [[bindings#JSON Bridge#Bulk Import]].
+- **Saved answers:** `saveAnswer`, `savedAnswer`, `savedAnswers`, `checkSavedAnswers`, `refreshAnswer` and `deleteSavedAnswer`, see [[bindings#JSON Bridge#Saved Answers]].
 
 ### Budgets
 
@@ -43,6 +44,14 @@ Progress is `{"chunks", "rejected", "asserted", "existing", "retracted", "txs", 
 Arguments are `text`, `mode` (`"all"`, `"any"`, `"phrase"`), `graphs` and `predicates` (lists of terms; a term that is not stored matches nothing), `limit` and `confidence` (a predicate term). Each hit is `{"eid", "s", "p", "o", "text", "lang", "score", "rank", "evidence": {"confidence", "confirmations", "authors", "tAdd", "addedAt"}}`, with an absent confidence as `null`.
 
 The open option `textIndex: true` builds the index at open. `rebuildTextIndex` returns `{"values": n}` and `enableTextIndex` returns `{"built": bool}`. Errors are `TextIndexUnavailable` and `MissingCapability`; an unknown option is `InvalidArgument`. Node's `View.sparql` takes `{ provenance, queryOnly }` and returns `provenanceGaps`; Python's `View.sparql` takes `provenance` and `query_only` and returns `provenance_gaps`. Node exposes `View.textSearch`, `Database.rebuildTextIndex` and `enableTextIndex`; Python `View.text_search`, `Database.rebuild_text_index` and `enable_text_index`.
+
+### Saved Answers
+
+The saved-answer calls of [[query#Saved Answers]], in [[bindings/json/src/saved.rs#run]]: save a query, check events into marks once, refresh, read and delete.
+
+`saveAnswer` takes `name`, `text`, `language` (`"sparql"` default, or `"cypher"`), `params`, `view` and `budget`; `refreshAnswer` takes `name` and `budget`; `savedAnswer` and `deleteSavedAnswer` take `name`. An answer is `{"name", "language", "text", "params", "view", "vocab", "prefixes", "result", "dependencies", "coverage", "checkpoint", "cursor", "evaluatedAt", "revision", "status", "invalidation", "error"}`, where `result` has the shape of a live `sparql` or `cypher` call. `checkSavedAnswers` returns the new invalidations `{"name", "status", "cause", "t", "event"}`, and an unknown name on refresh is `SavedAnswerNotFound`.
+
+Node exposes `Database.saveAnswer(name, {text, language, params, view}, budget)`, `savedAnswer`, `savedAnswers`, `checkSavedAnswers`, `refreshAnswer` and `deleteSavedAnswer`; Python `Database.save_answer(name, text, language=, params=, view=, budget=)`, `saved_answer`, `saved_answers`, `check_saved_answers`, `refresh_answer` and `delete_saved_answer`, returning `SavedAnswer` and `Invalidation` dataclasses.
 
 ### Views
 
