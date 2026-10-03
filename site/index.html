@@ -173,7 +173,7 @@ db.now().cypher(<span class="s">"MATCH (p)-[r:worksAt]-&gt;(o) RETURN p, o, r.co
   <h3 id="agent">Use it from an agent</h3>
   <p class="sub">No code needed: register the MCP server and the agent gets tools such as <code>assert</code>, <code>query</code>, <code>text_search</code> and <code>check_answers</code>. <a href="articles/mcp-memory.html">How it works →</a></p>
 <pre><code><span class="c"># install from the repository, then register it with Claude Code</span>
-cargo install --git https://github.com/Volland/tiramemsu tiramemsu-mcp
+cargo install tiramemsu-mcp
 claude mcp add tiramemsu -- tiramemsu-mcp --db ./memory.db --text-index</code></pre>
 </div></section>
 
@@ -181,12 +181,12 @@ claude mcp add tiramemsu -- tiramemsu-mcp --db ./memory.db --text-index</code></
   <h2>Where it stands</h2>
   <p class="sub">Tiramemsu is new: designed in September 2026 and implemented in one pass. Here is what is measured, and what is not.</p>
   <div class="grid">
-    <div class="card"><h3>58 000 lines of Rust</h3><p>Seven crates, 927 tests, 30 capability specs written before the code (OpenSpec) and a design graph kept in sync (lat.md).</p></div>
+    <div class="card"><h3>88 000 lines of Rust</h3><p>Nine crates plus four bindings, 1 297 tests, 48 capability specs written before the code (OpenSpec) and a design graph kept in sync (lat.md).</p></div>
     <div class="card"><h3>SPARQL</h3><p>634 of 781 in-scope W3C tests pass (66 more are skipped: named-graph data, unsupported formats). Every failing one is listed with a reason, and an unexpected result fails the build.</p></div>
     <div class="card"><h3>Cypher</h3><p>2 615 of 3 880 openCypher TCK scenarios (67 %). Temporal types, <code>CALL</code> and a few dual-view cases are deferred and listed.</p></div>
     <div class="card"><h3>Speed</h3><p>Raw SQLite lookups on its schema take about 4 µs at 11 million statements. Statements cost about 150 bytes each with all indexes. <a href="articles/tiramemsu-vs-oxilite.html#numbers">Details and caveats</a>.</p></div>
   </div>
-  <p class="note"><strong>Known limits.</strong> As-of lookups slow down as one key collects many updates. Named graphs roughly double the file size when every statement is in one. Decimals come back as doubles in SPARQL. There is no network server and no WASM host yet; the MCP server is local and speaks stdio only. Neither the crates nor the Node.js and Python packages are published yet.</p>
+  <p class="note"><strong>Known limits.</strong> As-of lookups slow down as one key collects many updates. Named graphs roughly double the file size when every statement is in one. Decimals come back as doubles in SPARQL. There is no network server; the MCP server is local and speaks stdio only. In the browser the database uses a rollback journal and refuses query budgets and bulk import. The crates are on crates.io and the Python package on PyPI; the Node.js and browser packages are not on npm yet.</p>
 </div></section>
 
 <section id="articles"><div class="wrap">

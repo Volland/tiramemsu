@@ -278,7 +278,7 @@ print(imp.summary.progress.chunks, imp.summary.analyzed, imp.summary.maintenance
 - The API is synchronous, like the Rust core. Reads run in parallel on a small connection pool, and writes serialize on one writer.
 - Nothing is ever deleted: the SQLite file rejects `DELETE`. Forgetting means retracting, and the past stays exact.
 - Results cross the native boundary as JSON, which is fine for agent memory and not meant for million-row result sets.
-- There is no MCP server, WASM build or network server yet.
+- There is no network server. For agents, the separate `tiramemsu-mcp` crate serves a database file over MCP (stdio), and `tm-wasm` runs the engine in the browser.
 
 ## License
 

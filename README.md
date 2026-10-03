@@ -9,7 +9,7 @@ An embedded graph database on SQLite. Every fact has an id, so facts can carry l
 
 <p align="center"><a href="site/articles/layered-graphs.html">Layered graphs, explained</a> · <a href="site/articles/tiramemsu-vs-oxilite.html">Tiramemsu vs oxilite</a> · <a href="site/articles/metagraphs.html">Metagraphs</a> · <a href="lat.md/">Design (lat.md)</a> · <a href="openspec/specs/">Specs (OpenSpec)</a></p>
 
-> **Status: new.** Designed and implemented in September 2026 as one Rust library. It is not published to crates.io, has no server yet, and runs on rusqlite natively and on SQLite compiled to WebAssembly in the browser. Node.js, Python and WebAssembly packages exist in [`bindings/`](bindings/) but are not published either. What is measured and what is not is listed under [Status](#status).
+> **Status: new.** Designed and implemented in September and October 2026 as one Rust library, released as 0.3.0 on crates.io (`tiramemsu`, plus the `tiramemsu-mcp` server) and PyPI (`tiramemsu`); the Node.js package `@tiramemsu/node` is built in [`bindings/`](bindings/) but not yet on npm. There is no network server; it runs on rusqlite natively and on SQLite compiled to WebAssembly in the browser. What is measured and what is not is listed under [Status](#status).
 
 ## Why
 
@@ -163,7 +163,7 @@ scripts/wasm-interop.sh                # a file handed native -> WASM -> native
 
 | | |
 |---|---|
-| Size | About 68 000 lines of Rust in 7 crates, 1 109 tests, 38 capability specs |
+| Size | About 88 000 lines of Rust in 9 crates and 4 bindings, 1 297 tests, 48 capability specs |
 | SPARQL | 634 of 781 in-scope W3C tests pass (66 more are skipped: named-graph data and unsupported formats). Every failing one is listed with a reason in `crates/tm-sparql/tests/w3c/expected-deviations.toml`, and an unexpected result fails the build |
 | Cypher | 2 615 of 3 880 openCypher TCK scenarios (67 %). Temporal types, `CALL`, and a few dual-view cases are deferred and listed in `crates/tm-cypher/tests/tck/allowlist.txt` |
 | Speed | Raw SQLite lookups on the schema take about 4 µs at 11 million statements; about 150 bytes per statement with all indexes. See [`bench/`](bench/) |
@@ -172,7 +172,7 @@ scripts/wasm-interop.sh                # a file handed native -> WASM -> native
 
 ## How it differs from oxilite
 
-[oxilite](https://github.com/Volland/oxilite) is a shipped, Oxigraph-compatible RDF database on SQLite by the same author. It stores quads and uses reifiers for annotations, keeps history in a change log, and runs on D1, WebAssembly and more. Tiramemsu stores statements with ids, keeps lifetime in the row and is bitemporal, but it is new, runs on rusqlite and in the browser on SQLite compiled to WebAssembly (not on D1), and has none of oxilite's reasoning or validation, and its Node.js and Python packages are not published yet. [The article](site/articles/tiramemsu-vs-oxilite.html) has the details and a benchmark.
+[oxilite](https://github.com/Volland/oxilite) is a shipped, Oxigraph-compatible RDF database on SQLite by the same author. It stores quads and uses reifiers for annotations, keeps history in a change log, and runs on D1, WebAssembly and more. Tiramemsu stores statements with ids, keeps lifetime in the row and is bitemporal, but it is new, runs on rusqlite and in the browser on SQLite compiled to WebAssembly (not on D1), and has none of oxilite's reasoning or validation. [The article](site/articles/tiramemsu-vs-oxilite.html) has the details and a benchmark.
 
 ## Repository
 

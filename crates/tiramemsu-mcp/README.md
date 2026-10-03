@@ -2,7 +2,7 @@
 
 **A local MCP server that gives an agent a tiramemsu memory file as typed tools.**
 
-[Tiramemsu](https://github.com/Volland/tiramemsu) is a bitemporal, never-forget triple store on one SQLite file: every fact is a statement with its own id, layers (sources, confidence, beliefs) are statements about statements, and corrections keep the old version visible in time. `tiramemsu-mcp` serves one such file to an MCP client (Claude Code, Claude Desktop, or any client that speaks MCP over stdio) as eight tools. It is a separate, opt-in package: the database crates carry no protocol code.
+[Tiramemsu](https://github.com/Volland/tiramemsu) is a bitemporal, never-forget triple store on one SQLite file: every fact is a statement with its own id, layers (sources, confidence, beliefs) are statements about statements, and corrections keep the old version visible in time. `tiramemsu-mcp` serves one such file to an MCP client (Claude Code, Claude Desktop, or any client that speaks MCP over stdio) as fourteen tools. It is a separate, opt-in package: the database crates carry no protocol code.
 
 ## Install
 

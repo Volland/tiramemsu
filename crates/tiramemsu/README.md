@@ -32,9 +32,9 @@ The default build is the full facade. The query engine and each query front end 
 
 ```toml
 # core only: transactions, views, bundles, text recall; no query engine, no parser
-tiramemsu = { version = "0.2", default-features = false }
+tiramemsu = { version = "0.3", default-features = false }
 # SPARQL and paths, no Cypher parser
-tiramemsu = { version = "0.2", default-features = false, features = ["sparql"] }
+tiramemsu = { version = "0.3", default-features = false, features = ["sparql"] }
 ```
 
 A disabled API is absent, not a runtime error. The file format does not depend on the features: a file written by a core-only build opens in a default build and the reverse, with the same statements and temporal semantics. Build `OpenOptions` with `..OpenOptions::default()`, because its query-engine fields exist only with `exec`. The JSON bridge, the MCP server and the Node and Python bindings always enable the full facade.
@@ -787,7 +787,7 @@ No code path deletes a statement, a term or a transaction. The only change to a 
 
 ## What it is not
 
-- Not a server. It is a library in your process; there is no network protocol, MCP server or Python, Node or WASM binding yet.
+- Not a server. It is a library in your process with no network protocol. Agents reach it over MCP through the separate [`tiramemsu-mcp`](https://crates.io/crates/tiramemsu-mcp) stdio server; Python and Node.js bindings and a WebAssembly host ([`tm-wasm`](https://crates.io/crates/tm-wasm)) wrap the same engine.
 - Two SQLite hosts: rusqlite (`RusqliteHost`, the default) and SQLite compiled to WebAssembly ([`tm-wasm`](https://crates.io/crates/tm-wasm), memory or OPFS storage in a Web Worker, rollback journal, no reader pool). Cloudflare D1 is unsupported because the engine reads before it writes. `Db::open_with_host` takes any `Host` implementation.
 - Not multi-writer. One writer at a time, by design.
 - Not a reasoner or validator: no RDFS/OWL inference and no SHACL. Predicate flags are the whole schema.
