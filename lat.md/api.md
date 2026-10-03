@@ -68,6 +68,7 @@ impl View {
     pub fn decode(&self, id: ObjectId) -> Result<Value>;
     pub fn events_since(&self, t: u64) -> Result<Vec<Event>>;
     pub fn text_search(&self, q: &TextQuery) -> Result<Vec<TextHit>>;         // ranked recall with evidence
+    pub fn explain_sparql(&self, q: &str) -> Result<Explain>;                 // routing + reasons, SQL, query plan
 }
 ```
 
@@ -83,6 +84,7 @@ impl View {
 - Bulk import ([[query#Bulk Import]]): `ImportProgress { chunks, rejected, asserted, existing, retracted, txs, elapsed, maintenance }` and `ImportSummary { progress, analyzed, maintenance_error, statistics_due }`. Dropping a `BulkImport` equals `cancel`.
 - Text recall ([[query#Text Recall]]): `TextQuery { text, mode: TextMode::{All, Any, Phrase}, graphs, predicates, limit, confidence }` (`TextQuery::new(text)` for the defaults) and `TextHit { eid, s, p, o, text, lang, lexical, rank, evidence: TextEvidence { confidence: Option<f64>, confirmations, authors, t_add, added_at } }`, ordered by `text::RANK_POLICY`. The index is opt-in: `OpenOptions::text_index` or `Db::rebuild_text_index`.
 - Saved answers ([[query#Saved Answers]]): `SavedQuery { language: QueryLanguage::{Sparql, Cypher}, text, params, view }` (`SavedQuery::sparql(text)`, `SavedQuery::cypher(text, params)`, `.on(view)`), and `SavedAnswer { name, query, vocab, prefixes, result, dependencies, coverage, checkpoint, cursor, evaluated_at, revision, status, invalidation, error }` with `solutions()` and `boolean()`. `AnswerStatus::{Fresh, Recheck, Stale}`, `CoverageReason` and `Invalidation { name, status, cause: InvalidationCause, t, event }`.
+- Cyclic joins ([[query#Physical Planning#LFTJ]]): `OpenOptions { planner: PlannerOptions { lftj: LftjConfig { enabled: true, min_rows_estimate: 0 } }, .. }` installs `LftjOperator` (`tm_lftj`) and routes pure cyclic BGPs to it. `View::explain_ir` and `View::explain_sparql` return `Explain { regions: Vec<RegionInfo { kind: RegionKind, note: RouteNote, aliases, query_plan }>, sql, params, query_plan, short_circuit }`; the LFTJ notes are `CyclicLftjDisabled`, `LftjUnavailable`, `LftjUnsupportedShape`, `LftjBelowEstimate` and `LftjNative`.
 - `values(s, key)` is how M0 exposes volatile state before a query language exists. See [[storage#Volatile Table]].
 - `Patch::from_fields` builds a patch from named fields for bindings and rejects `s` and `p` with `InvalidPatch`.
 
@@ -140,7 +142,7 @@ The error enum is `#[non_exhaustive]`. Each OpenSpec change adds the variants it
 | `busy_timeout` | 5 s | `add-core-store` |
 | `term_cache_capacity` | 16 384 | `add-core-store` / `add-query-ir-and-sql-planner` |
 | `optimize_every` | 1000 commits (also after a commit inserting that many statements) | `add-core-store` |
-| `planner` | default routing (LFTJ off) | `add-query-ir-and-sql-planner` |
+| `planner` | default routing (LFTJ off); `planner.lftj = LftjConfig { enabled, min_rows_estimate }` opts in to the native cyclic-join operator ([[query#Physical Planning#LFTJ]]) | `add-query-ir-and-sql-planner` / `add-lftj-operator` |
 | `query_engine` | true; false opens the `tm-core` tier only, for hosts without `functions` or `vtab` | `add-query-ir-and-sql-planner` |
 | `path_max_hops` | 15 | `add-path-engine` |
 | `path_max_states` | 1 000 000 | `add-path-engine` |

@@ -45,7 +45,7 @@ D35 was added on 2026-10-01: it reserves origin bits so that agent files can lat
 | D8 | Retract cascades recursively over subject and object positions | [[time-model#Cascade]] |
 | D9 | One `triple` table carries its own lifetime `t_add`/`t_ret`; ids never reused | [[storage#Triple Table]] |
 | D10 | 64-bit ObjectId with a 4-bit low tag | [[data-model#ObjectId]] |
-| D12 | Hybrid execution: SQL codegen + native paths + deferred LFTJ | [[query#Physical Planning]] |
+| D12 | Hybrid execution: SQL codegen + native paths + opt-in LFTJ | [[query#Physical Planning]] |
 | D13 | SPARQL and Cypher built in parallel over one IR with differential tests | [[query#Front Ends]] |
 | Q14 | Cypher dual view: an eid is both a relationship and a `:Statement` node | [[query#Front Ends#Cypher Dual View]] |
 | Q15 | One `@vocab` base plus a versioned prefix table | [[data-model#Vocabulary Mapping]] |

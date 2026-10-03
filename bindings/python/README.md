@@ -181,7 +181,15 @@ Every failure raises `TiramemsuError` with a `.code`:
 
 ## Options
 
-`Database(path, readers=, busy_timeout_ms=, term_cache_capacity=, optimize_every=, path_max_hops=, path_max_states=, reader_timeout_ms=, text_index=)`. It works as a context manager, and Python threads can query one `Database` in parallel, because the GIL is released during each call.
+`Database(path, readers=, busy_timeout_ms=, term_cache_capacity=, optimize_every=, path_max_hops=, path_max_states=, reader_timeout_ms=, text_index=, lftj=, lftj_min_rows=)`. It works as a context manager, and Python threads can query one `Database` in parallel, because the GIL is released during each call.
+
+`lftj=True` routes pure cyclic patterns (triangles and longer cycles) to the native leapfrog-triejoin operator once some pattern matches at least `lftj_min_rows` statements (default 100000; 0 = always). Results are the same either way; `view.explain_sparql(text)` shows the route and, when a region stayed in SQL, why:
+
+```python
+db = Database("memory.db", lftj=True, lftj_min_rows=0)
+plan = db.now().explain_sparql("SELECT * WHERE { ?a v:knows ?b . ?b v:knows ?c . ?c v:knows ?a }")
+[(r["kind"], r["note"]) for r in plan["regions"]]  # [("nativeLftj", "lftjNative"), ...]
+```
 
 ## Budgets
 

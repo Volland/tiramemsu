@@ -20,6 +20,7 @@ use tm_ir::{Semantics, Var};
 use crate::error::unsupported;
 use crate::native::{OperatorRegistry, PlannerOptions};
 use crate::plan::analyze::{Dom, VClass};
+use crate::plan::route::Estimator;
 use crate::plan::Node;
 use crate::result::{RegionInfo, RegionKind, RouteNote};
 use crate::scan::ResolvedView;
@@ -97,8 +98,8 @@ pub struct Item {
 pub struct IsoPat {
     /// Match group.
     pub group: u32,
-    /// Its triple alias.
-    pub alias: String,
+    /// The SQL of its eid (`t0.eid`, or a column of a native region).
+    pub eid: String,
     /// Its constant predicate.
     pub pred: Option<ObjectId>,
     /// On the optional side of a LEFT JOIN.
@@ -168,6 +169,9 @@ pub struct Gen<'a> {
     pub opts: &'a PlannerOptions,
     /// Plan-local terms of constants missing from the dictionary, by ObjectId.
     pub synthetic: Vec<(ObjectId, tm_core::Value)>,
+    /// The estimate of the LFTJ routing policy, reading the planning snapshot
+    /// (`None`: no estimate, so a positive `min_rows_estimate` keeps SQL).
+    pub estimator: Option<&'a mut Estimator<'a>>,
 }
 
 impl<'a> Gen<'a> {
@@ -182,6 +186,7 @@ impl<'a> Gen<'a> {
             reg,
             opts,
             synthetic: Vec::new(),
+            estimator: None,
         }
     }
 

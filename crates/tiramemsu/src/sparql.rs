@@ -1,7 +1,7 @@
 //! `View::sparql`: SPARQL queries and updates through the `tm-sparql` front end.
 
 use tm_core::{Error, Result, TxOptions};
-use tm_exec::{CacheMode, QueryResult};
+use tm_exec::{CacheMode, Explain, QueryResult};
 use tm_ir::Params;
 use tm_sparql::env::Env;
 use tm_sparql::lower::{QueryForm, QueryPlan};
@@ -231,6 +231,37 @@ impl View<'_> {
                 Prepared::Update(plan) => self.run_update(&plan),
             }
         })
+    }
+
+    /// Explains SPARQL query text without running it: how each region is routed
+    /// (generated SQL, the native path operator or the native cyclic-join
+    /// operator) with the reason in [`RouteNote`](crate::RouteNote), the SQL text,
+    /// its parameters and SQLite's `EXPLAIN QUERY PLAN`. Planning lookups run in
+    /// one snapshot, as for [`View::explain_ir`].
+    ///
+    /// # Errors
+    ///
+    /// The parse and planning errors of [`View::sparql`];
+    /// `Unsupported("explain of a SPARQL update")` for an update request.
+    ///
+    /// ```
+    /// # use tiramemsu::*;
+    /// # let dir = tempfile::tempdir().unwrap();
+    /// # let db = Db::open(dir.path().join("m.db"), OpenOptions::default())?;
+    /// db.now().sparql("INSERT DATA { v:a v:knows v:b . v:b v:knows v:c . v:c v:knows v:a }")?;
+    /// let ex = db.now().explain_sparql(
+    ///     "SELECT * WHERE { ?x v:knows ?y . ?y v:knows ?z . ?z v:knows ?x }",
+    /// )?;
+    /// // LFTJ is off by default, so the cycle stays in SQL and says why
+    /// assert!(ex.regions.iter().any(|r| r.note == RouteNote::CyclicLftjDisabled));
+    /// # Ok::<(), Error>(())
+    /// ```
+    pub fn explain_sparql(&self, text: &str) -> Result<Explain> {
+        let env = self.sparql_env()?;
+        match tm_sparql::prepare(text, &env)? {
+            Prepared::Query(plan) => self.explain_ir(&plan.query, &Params::new()),
+            Prepared::Update(_) => Err(Error::unsupported("explain of a SPARQL update")),
+        }
     }
 
     /// Runs a `SELECT` with provenance: the instrumented query and its sibling

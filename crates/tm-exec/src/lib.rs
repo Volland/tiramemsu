@@ -6,6 +6,7 @@ pub mod decode;
 pub mod error;
 pub mod exec;
 pub mod host;
+pub mod lftj;
 pub mod native;
 pub mod path;
 pub mod plan;
@@ -25,6 +26,7 @@ use tm_ir::{IrQuery, Params};
 
 pub use decode::{CacheMode, TermCache};
 pub use exec::{ExecContext, Prepared};
+pub use lftj::LftjOperator;
 pub use native::{LftjConfig, NativeKind, NativeOperator, OperatorRegistry, PlannerOptions};
 pub use path::{
     Hop, Path, PathEngine, PathOperator, PathOptions, PathRequest, PathRow, TimeRespecting,

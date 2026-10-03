@@ -720,6 +720,17 @@ class View:
         rows: List[Any] = json.loads(self._call("textSearch", args))
         return [text_hit_from_json(r) for r in rows]
 
+    def explain_sparql(self, text: str) -> Dict[str, Any]:
+        """Explain SPARQL query text without running it.
+
+        Returns ``{"regions": [{"kind", "note", "aliases", "queryPlan"}], "sql",
+        "shortCircuit", "queryPlan"}``: where each region runs (``"sql"``,
+        ``"nativePath"`` or ``"nativeLftj"``) and why (``"lftjNative"``,
+        ``"cyclicLftjDisabled"``, ``"lftjBelowEstimate"``, ...), the generated SQL and
+        SQLite's ``EXPLAIN QUERY PLAN``.  Raises ``Unsupported`` for an update.
+        """
+        return dict(json.loads(self._call("explainSparql", {"text": text})))
+
     def values(self, s: Any, key: Any) -> List[Any]:
         """Return all objects ``o`` where ``(s, key, o)`` exists in this view."""
         items: List[Any] = json.loads(
@@ -753,6 +764,8 @@ class Database:
         path_max_states: Optional[int] = None,
         reader_timeout_ms: Optional[int] = None,
         text_index: Optional[bool] = None,
+        lftj: Optional[bool] = None,
+        lftj_min_rows: Optional[int] = None,
     ) -> None:
         options: Dict[str, Any] = {}
         if readers is not None:
@@ -771,6 +784,10 @@ class Database:
             options["readerTimeoutMs"] = reader_timeout_ms
         if text_index is not None:
             options["textIndex"] = bool(text_index)
+        if lftj is not None:
+            options["lftj"] = bool(lftj)
+        if lftj_min_rows is not None:
+            options["lftjMinRows"] = lftj_min_rows
         opts_str: Optional[str] = json.dumps(options) if options else None
         try:
             self._native = Native(path, opts_str)

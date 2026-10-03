@@ -1,6 +1,7 @@
 //! Region routing (design D7): path patterns go to the native path operator (the
-//! `tm_path` table-valued function), everything else to SQL. A cyclic BGP stays
-//! in SQL while LFTJ is disabled or has no operator (M4).
+//! `tm_path` table-valued function), a pure cyclic BGP to the LFTJ operator (the
+//! `tm_lftj` table-valued function) when the policy of [`route_bgp`] and
+//! [`lftj_route`] agrees, everything else to SQL.
 
 use std::collections::BTreeSet;
 
@@ -8,8 +9,10 @@ use tm_core::Result;
 use tm_ir::{Expr, IrQuery, Op, PathPattern, TermOrVar, Var, VarSet};
 
 use crate::error::{unsupported, NO_PATH_OPERATOR};
+use crate::lftj::{plan_region, LftjPattern, RegionPlan};
 use crate::native::{OperatorRegistry, PlannerOptions};
 use crate::plan::analyze::is_cyclic;
+use crate::plan::Node;
 use crate::result::RouteNote;
 
 /// How a path is called.
@@ -213,8 +216,12 @@ pub fn precheck(q: &IrQuery, reg: &OperatorRegistry) -> Result<()> {
     Ok(())
 }
 
-/// The route of a basic graph pattern given as the variable sets of its triple
-/// patterns: always SQL in M1, with a note when it is cyclic.
+/// The first routing step of a basic graph pattern given as the variable sets of
+/// its triple patterns: `None` when it is acyclic, `CyclicLftjDisabled` while
+/// LFTJ is off, `LftjUnavailable` when it is on but no LFTJ operator is
+/// registered, and otherwise `LftjNative` — a candidate that [`lftj_route`] still
+/// checks for shape and estimate.
+// @lat: [[query#Physical Planning#LFTJ#Routing Policy]]
 pub fn route_bgp(
     edges: &[BTreeSet<Var>],
     opts: &PlannerOptions,
@@ -223,12 +230,50 @@ pub fn route_bgp(
     if edges.len() < 3 || !is_cyclic(edges) {
         return RouteNote::None;
     }
-    if opts.lftj.enabled {
-        // M4 plugs an operator in here; until then the region stays in SQL
-        let _ = reg.lftj();
+    if !opts.lftj.enabled {
+        return RouteNote::CyclicLftjDisabled;
+    }
+    if reg.lftj().is_none() {
         return RouteNote::LftjUnavailable;
     }
-    RouteNote::CyclicLftjDisabled
+    RouteNote::LftjNative
+}
+
+/// The estimate a candidate region is checked with: the largest number of
+/// statements one of its patterns matches in its own view, counted up to a cap.
+pub type Estimator<'a> = dyn FnMut(&[LftjPattern], u64) -> Result<u64> + 'a;
+
+/// The second routing step of a candidate region (`route_bgp` gave `LftjNative`):
+/// its plan when every input is a stored-triple pattern, the output fits the
+/// operator and the estimate reaches `min_rows_estimate`; otherwise the note of
+/// the SQL fallback (`LftjUnsupportedShape` or `LftjBelowEstimate`).
+pub fn lftj_route(
+    inputs: &[Node],
+    iso: bool,
+    opts: &PlannerOptions,
+    estimate: Option<&mut Estimator<'_>>,
+) -> Result<std::result::Result<RegionPlan, RouteNote>> {
+    let mut triples = Vec::with_capacity(inputs.len());
+    for n in inputs {
+        match n {
+            Node::Triple(t) => triples.push(t),
+            _ => return Ok(Err(RouteNote::LftjUnsupportedShape)),
+        }
+    }
+    let Ok(plan) = plan_region(&triples, iso) else {
+        return Ok(Err(RouteNote::LftjUnsupportedShape));
+    };
+    let min = opts.lftj.min_rows_estimate;
+    if min > 0 {
+        let est = match estimate {
+            Some(f) => f(&plan.spec.patterns, min)?,
+            None => 0,
+        };
+        if est < min {
+            return Ok(Err(RouteNote::LftjBelowEstimate));
+        }
+    }
+    Ok(Ok(plan))
 }
 
 #[cfg(test)]
@@ -307,6 +352,9 @@ mod tests {
         let mut on = opts;
         on.lftj.enabled = true;
         assert_eq!(route_bgp(&tri, &on, &reg), RouteNote::LftjUnavailable);
+        reg.add(std::sync::Arc::new(crate::lftj::LftjOperator));
+        assert_eq!(route_bgp(&tri, &on, &reg), RouteNote::LftjNative);
+        assert_eq!(route_bgp(&tri, &opts, &reg), RouteNote::CyclicLftjDisabled);
         assert_eq!(route_bgp(&tri[..2], &opts, &reg), RouteNote::None);
     }
 }

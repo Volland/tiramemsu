@@ -1026,3 +1026,75 @@ A cancelled refresh keeps the mark, a successful one clears it, and argument and
 ### MCP Saved Answer Tools
 
 The MCP `save_answer`, `check_answers`, `saved_answers` and `refresh_answer` tools mark a superseded answer stale once and refresh it; an update is `Unsupported`, and read-only mode offers only `saved_answers`.
+
+## Cyclic Joins
+
+The native cyclic-join operator of [[query#Physical Planning#LFTJ]] against the SQL route on the same file: rows and multiplicities, routing with reasons, budgets and the triangle harness. Tests are in `tm-exec/tests/lftj.rs` unless noted.
+
+### Parallel Statements Match SQL
+
+Over a cyclic graph with parallel statements, set semantics, bag semantics, a bound eid, and a filter, `DISTINCT` and a count above the region return the SQL rows with the same multiplicities, and bag rows outnumber set rows.
+
+### Cypher Bag Of Eids Matches SQL
+
+Cypher semantics with relationship isomorphism inside the region, bound relationship variables and a fourth grouped pattern match SQL; isomorphism removes rows, and Cypher text returns the same bag on both handles.
+
+### Mixed Temporal Views Match SQL
+
+Triangles whose patterns mix now, as-of, history and valid-at views over a history with retractions and bounded valid times match SQL in set and bag modes, with several non-empty mixes.
+
+### Graph Membership Matches SQL
+
+A `GRAPH` constant and a `GRAPH ?g` variable on every pattern, read as membership access paths, match SQL, the variable form also under bag semantics.
+
+### Provenance Matches SQL
+
+SPARQL text routes natively, explain lists the call with its query-plan rows, and rows with `provenance` eids equal the SQL route's.
+
+### No Installed Operator Falls Back
+
+A query engine with LFTJ enabled and no registered operator keeps the region in SQL with `LftjUnavailable` and returns the SQL rows.
+
+### Unsupported Region Stays SQL
+
+A cycle closed only through `OPTIONAL` (IR and SPARQL text) and a cycle through a virtual predicate stay SQL with `LftjUnsupportedShape`, and acyclic BGPs carry no note.
+
+### Optional Side Composes
+
+A pure cycle on the optional side of a `LEFT JOIN` is its own native region, materialised once through its unflattened derived table, and the composed query matches SQL.
+
+### Estimate Policy Gates Routing
+
+A threshold one above the largest pattern keeps SQL with `LftjBelowEstimate`, the exact count routes natively, and a pattern's own as-of view counts its statements in that view.
+
+### Disabled By Default
+
+Default options leave LFTJ off: cyclic regions report `CyclicLftjDisabled`, the SQL has no `tm_lftj` call, and the table function is not installed.
+
+### Cancellation Returns No Rows
+
+A token cancelled as the statement starts fails the native join with `Cancelled`, a passed deadline with `DeadlineExceeded`, and every pooled reader answers in full afterwards.
+
+### Result Limits Apply
+
+A row budget below the triangle count fails with `ResultLimitExceeded(Rows)`, a byte budget with `ResultLimitExceeded(Bytes)`, and a budget equal to the count returns every row.
+
+### Random Histories Match SQL
+
+Property test: random transactions of creates (parallel statements included) and retractions over two predicates, with a random view per pattern, match SQL in set, bag and isomorphism modes.
+
+### Triangle Harness Verifies Counts
+
+`tiramemsu/tests/lftj_triangles.rs`: the `examples/triangles.rs` harness loads uniform, skewed and layered graphs, refuses to time unless both routes count the same triangles, and counts a layered graph exactly.
+
+### Bridge Exposes LFTJ Routing
+
+The JSON bridge's `lftj` and `lftjMinRows` open options route natively or report `lftjBelowEstimate`, `explainSparql` names kinds and notes, rows equal the SQL route, and bad options and updates keep their codes.
+
+### Bindings Expose LFTJ Routing
+
+Node: `Database.open(path, { lftj, lftjMinRows })` and `View.explainSparql` report `cyclicLftjDisabled` by default and `lftjNative` when enabled, with identical rows.
+
+### Python Exposes LFTJ Routing
+
+Python: `Database(path, lftj=, lftj_min_rows=)` and `View.explain_sparql` report the default note, the native route and the estimate fallback, with identical rows.

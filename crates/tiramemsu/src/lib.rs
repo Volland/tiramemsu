@@ -37,8 +37,8 @@ pub use tm_cypher as cypher_frontend;
 pub use tm_cypher::{CypherParams, CypherResult, CypherValue};
 pub use tm_exec::path::row::{Dir as PathDir, HopKind};
 pub use tm_exec::{
-    ExecStats, Explain, Hop, LftjConfig, NativeKind, NativeOperator, Path, PathRow, PlannerOptions,
-    QueryResult, RegionInfo, RegionKind, ResultValue, RouteNote, TimeRespecting,
+    ExecStats, Explain, Hop, LftjConfig, LftjOperator, NativeKind, NativeOperator, Path, PathRow,
+    PlannerOptions, QueryResult, RegionInfo, RegionKind, ResultValue, RouteNote, TimeRespecting,
 };
 pub use tm_ir as ir;
 pub use tm_ir::{IrQuery, Params, PathCompleteness, PathMode};

@@ -69,6 +69,7 @@ assert!(e.short_circuit && e.sql.is_none());
 - [`virtual_pred::VirtualPred`]: `sys:subject`, `tm:txAdded` and the other computed predicates.
 - [`decode`]: [`TermCache`], [`CacheMode`] and ObjectId decoding.
 - [`native`]: [`NativeOperator`], [`OperatorRegistry`], [`NativeKind`], [`PlannerOptions`], [`LftjConfig`].
+- [`lftj`]: [`LftjOperator`], the `tm_lftj` table function: a leapfrog triejoin over sorted per-pattern access paths, its plan text and the routing estimate.
 - [`host`]: capability check and installation. [`path`]: [`PathEngine`], [`PathRequest`], [`PathRow`], the `tm_path` table function.
 - [`udf`], [`udf_fn`]: the SQL scalar and aggregate helper functions registered on every connection.
 
@@ -80,7 +81,7 @@ assert!(e.short_circuit && e.sql.is_none());
 - **Join order needs statistics.** Constants are bound parameters, so SQLite orders joins well only with `ANALYZE` data (STAT4). `tm-exec` does not generate hints; the database layer (`tiramemsu`'s `Db`) keeps statistics current. If you drive this crate against your own connection, run `ANALYZE` on populated files or expect slow plans on skewed data. Stale statistics change speed, never results.
 - **Set versus bag.** Under `SetOfTriples` duplicate `(s, p, o)` are removed only for predicates listed in the `pred_multi` table (predicates that have ever held two statements with the same triple). Other predicates skip the extra lookup. Under `BagOfEids` every statement matches.
 - **Virtual predicates** are read from the statement row, not stored, and cost no joins. They are also how paths cross layers (`sys:subject`, `sys:object`, `sys:predicate`).
-- **Native operators.** Regions that SQL handles badly run as table-valued functions behind [`NativeOperator`]. Only the path operator exists; LFTJ routing is a config placeholder and never produces a region today. Text recall ([`tm_ir::TextPattern`]) compiles to the `tm_text` table function ([`text`]), registered on every connection, which runs `tm_core::text::search` on the calling connection. Hosts must provide the `functions` and `vtab` capabilities; [`host::install`] fails with `MissingCapability` rather than degrade.
+- **Native operators.** Regions that SQL handles badly run as table-valued functions behind [`NativeOperator`]. Two exist: the path operator (`tm_path`) and the opt-in cyclic-join operator (`tm_lftj`, [`LftjOperator`]). A pure cyclic BGP goes to LFTJ only when [`LftjConfig::enabled`] is set, the operator is registered, every input is a stored-triple pattern and some pattern reaches `min_rows_estimate` statements in its view; otherwise explain's [`RouteNote`] says which condition failed. Both routes return the same rows. Text recall ([`tm_ir::TextPattern`]) compiles to the `tm_text` table function ([`text`]), registered on every connection, which runs `tm_core::text::search` on the calling connection. Hosts must provide the `functions` and `vtab` capabilities; [`host::install`] fails with `MissingCapability` rather than degrade.
 - **Errors** are the shared `tm_core::Error`: `InvalidQuery`, `Unsupported`, `Sqlite`, `MissingCapability`, `PathLimitExceeded`.
 - **Explain** returns each region's kind, the SQL, bound parameters and `EXPLAIN QUERY PLAN` with the real parameters.
 

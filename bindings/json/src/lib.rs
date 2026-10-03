@@ -164,8 +164,10 @@ impl Drop for CancelEntry<'_> {
 impl Database {
     /// Opens (creating if needed) the database file at `path`. `options` may carry
     /// `readers`, `busyTimeoutMs`, `termCacheCapacity`, `optimizeEvery`,
-    /// `pathMaxHops`, `pathMaxStates`, `readerTimeoutMs` and `textIndex` (a
-    /// boolean: build the text index at open); anything else is rejected.
+    /// `pathMaxHops`, `pathMaxStates`, `readerTimeoutMs`, `textIndex` (a
+    /// boolean: build the text index at open), `lftj` (a boolean: route pure cyclic
+    /// patterns to the native cyclic-join operator) and `lftjMinRows` (its
+    /// estimate threshold); anything else is rejected.
     pub fn open(path: &str, options: &J) -> Res<Database> {
         let mut opts = OpenOptions::default();
         if let Some(o) = options.as_object() {
@@ -174,6 +176,12 @@ impl Database {
                     opts.text_index = v
                         .as_bool()
                         .ok_or_else(|| arg("option textIndex must be a boolean"))?;
+                    continue;
+                }
+                if k == "lftj" {
+                    opts.planner.lftj.enabled = v
+                        .as_bool()
+                        .ok_or_else(|| arg("option lftj must be a boolean"))?;
                     continue;
                 }
                 let n = v
@@ -187,6 +195,7 @@ impl Database {
                     "pathMaxHops" => opts.path_max_hops = n as u32,
                     "pathMaxStates" => opts.path_max_states = n as usize,
                     "readerTimeoutMs" => opts.reader_timeout = Some(Duration::from_millis(n)),
+                    "lftjMinRows" => opts.planner.lftj.min_rows_estimate = n,
                     other => return Err(arg(format!("unknown option {other:?}"))),
                 }
             }
@@ -331,8 +340,10 @@ impl Database {
     /// `maxHops`), `events` (`since`), `graphs`, `graphMembers` (`graph`), `values`
     /// (`s`, `key`), `dependents` (`eid`: what stands on a statement) and `bundle`
     /// (`eid`: the statement with its layers and evidence, as `tiramemsu-bundle/1`
-    /// JSON) and `textSearch` (`text`, `mode`, `graphs`, `predicates`, `limit`,
-    /// `confidence`: ranked text recall). `rebuildTextIndex` and `enableTextIndex`
+    /// JSON), `textSearch` (`text`, `mode`, `graphs`, `predicates`, `limit`,
+    /// `confidence`: ranked text recall) and `explainSparql` (`text`: the routing
+    /// of each region with its reason, the SQL and `EXPLAIN QUERY PLAN`, without
+    /// running the query). `rebuildTextIndex` and `enableTextIndex`
     /// maintain the derived text index. Writes are `transact` (`ops`, `options`; the ops include `importBundle`),
     /// `cypherWrite` (`text`, `params`, `options`) and `with` (`ops`, `queries`), plus
     /// `optimize` and `info`. Reads, `transact` and `cypherWrite` take an optional
@@ -346,7 +357,7 @@ impl Database {
     pub fn call(&self, op: &str, args: &J) -> Res<J> {
         match op {
             "sparql" | "cypher" | "triples" | "path" | "events" | "graphs" | "graphMembers"
-            | "values" | "dependents" | "bundle" | "textSearch" => {
+            | "values" | "dependents" | "bundle" | "textSearch" | "explainSparql" => {
                 let view = read::view_from_json(&self.db, args.get("view").unwrap_or(&J::Null))?;
                 let (budget, _entry) = self.budget(args.get("budget"))?;
                 match &budget {

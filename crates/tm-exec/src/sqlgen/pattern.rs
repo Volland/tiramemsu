@@ -70,7 +70,7 @@ impl Gen<'_> {
             if let Some(g) = t.iso_group {
                 r.iso.push(IsoPat {
                     group: g,
-                    alias: a.clone(),
+                    eid: format!("{a}.eid"),
                     pred: match t.p {
                         PTerm::Id(id) => Some(id),
                         PTerm::Var(_) => None,

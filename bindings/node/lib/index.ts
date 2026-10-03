@@ -367,6 +367,40 @@ export interface OpenOptions {
   readerTimeoutMs?: number;
   /** Build the derived text index at open so `View.textSearch` can run (default: false; ignored without FTS5). */
   textIndex?: boolean;
+  /**
+   * Route pure cyclic patterns (triangles and longer cycles) to the native leapfrog-triejoin
+   * operator when the estimate policy agrees (default: false). Results are identical either way.
+   */
+  lftj?: boolean;
+  /** The LFTJ estimate threshold: some pattern must match at least this many statements (default 100000; 0 = always). */
+  lftjMinRows?: number;
+}
+
+/** How one region of an explained query runs and why. */
+export interface ExplainRegion {
+  kind: "sql" | "nativePath" | "nativeLftj";
+  note:
+    | "none"
+    | "cyclicLftjDisabled"
+    | "lftjUnavailable"
+    | "lftjUnsupportedShape"
+    | "lftjBelowEstimate"
+    | "lftjNative"
+    | "pathForward"
+    | "pathInverted";
+  /** The SQL aliases of the region (`t0`, … or `p0`). */
+  aliases: string[];
+  /** The `EXPLAIN QUERY PLAN` rows of this region. */
+  queryPlan: string[];
+}
+
+/** The explained plan of a query (`View.explainSparql`); the query is not run. */
+export interface Explain {
+  regions: ExplainRegion[];
+  /** The generated SQL, or `null` when the query is empty by construction. */
+  sql: string | null;
+  shortCircuit: boolean;
+  queryPlan: string[];
 }
 
 /** Options for `View.textSearch`. */
@@ -664,6 +698,15 @@ export class View {
       p: fromJson(h.p),
       o: fromJson(h.o),
     }));
+  }
+
+  /**
+   * Explains SPARQL query text without running it: where each region runs (generated SQL,
+   * the native path operator or the native cyclic-join operator) and why, plus the SQL and
+   * SQLite's `EXPLAIN QUERY PLAN`. Throws `Unsupported` for an update.
+   */
+  explainSparql(text: string): Explain {
+    return callNative(this._db, "explainSparql", { ...this._base(), text }) as Explain;
   }
 
   /** All object values for a given subject and predicate. */

@@ -181,7 +181,15 @@ Every failure throws a `TiramemsuError` with a `code`:
 
 ## Options
 
-`Database.open(path, options?)` accepts `readers`, `busyTimeoutMs`, `termCacheCapacity`, `optimizeEvery`, `pathMaxHops`, `pathMaxStates`, `readerTimeoutMs` and `textIndex` (a boolean). Anything else is rejected.
+`Database.open(path, options?)` accepts `readers`, `busyTimeoutMs`, `termCacheCapacity`, `optimizeEvery`, `pathMaxHops`, `pathMaxStates`, `readerTimeoutMs`, `textIndex` (a boolean), `lftj` (a boolean) and `lftjMinRows`. Anything else is rejected.
+
+`lftj: true` routes pure cyclic patterns (triangles and longer cycles) to the native leapfrog-triejoin operator once some pattern matches at least `lftjMinRows` statements (default 100000; 0 = always). Results are the same either way; `view.explainSparql(text)` shows the route and, when a region stayed in SQL, why:
+
+```ts
+const db = Database.open("memory.db", { lftj: true, lftjMinRows: 0 });
+const plan = db.now().explainSparql("SELECT * WHERE { ?a v:knows ?b . ?b v:knows ?c . ?c v:knows ?a }");
+plan.regions.map((r) => [r.kind, r.note]); // [["nativeLftj", "lftjNative"], ...]
+```
 
 ## Budgets
 

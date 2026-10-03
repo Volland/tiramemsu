@@ -990,3 +990,33 @@ class TestSavedAnswers:
         with pytest.raises(TiramemsuError) as e:
             db.refresh_answer("count")
         assert e.value.code == "SavedAnswerNotFound"
+
+
+# ------------------------------------------------------------------ native cyclic joins
+
+
+class TestCyclicJoins:
+    # @lat: [[tests#Cyclic Joins#Python Exposes LFTJ Routing]]
+    def test_lftj_option_explain_and_identical_rows(self, tmp_path: Any) -> None:
+        path = str(tmp_path / "t.db")
+        tri = "SELECT ?x ?y ?z WHERE { ?x v:k ?y . ?y v:k ?z . ?z v:k ?x }"
+        plain = Database(path)
+        plain.now().sparql("INSERT DATA { v:a v:k v:b . v:b v:k v:c . v:c v:k v:a . v:a v:k v:c }")
+        base = plain.now().explain_sparql(tri)
+        assert any(r["note"] == "cyclicLftjDisabled" for r in base["regions"])
+
+        def rows(db: Database) -> List[str]:
+            r = db.now().sparql(tri)
+            assert isinstance(r, SparqlSelectResult)
+            return sorted(repr(sorted(row.items())) for row in r)
+
+        want = rows(plain)
+        assert len(want) == 3
+        native = Database(path, lftj=True, lftj_min_rows=0)
+        ex = native.now().explain_sparql(tri)
+        region = next(r for r in ex["regions"] if r["kind"] == "nativeLftj")
+        assert region["note"] == "lftjNative"
+        assert "tm_lftj(" in ex["sql"]
+        assert rows(native) == want
+        gated = Database(path, lftj=True, lftj_min_rows=1000)
+        assert gated.now().explain_sparql(tri)["regions"][0]["note"] == "lftjBelowEstimate"

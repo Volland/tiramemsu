@@ -100,7 +100,7 @@ pub enum RegionKind {
     Sql,
     /// The native path operator, as the `tm_path` table-valued function.
     NativePath,
-    /// The LFTJ operator (M4; never produced in M1).
+    /// The LFTJ operator, as the `tm_lftj` table-valued function.
     NativeLftj,
 }
 
@@ -114,6 +114,16 @@ pub enum RouteNote {
     CyclicLftjDisabled,
     /// A cyclic BGP routed to SQL because LFTJ is enabled but no operator exists.
     LftjUnavailable,
+    /// A cyclic region routed to SQL because its shape is outside what the LFTJ
+    /// operator supports: an input other than a stored-triple pattern (virtual
+    /// predicates, volatile values, paths, filters, optional or union algebra), a
+    /// cycle closed only through `OPTIONAL`, or more than 32 output variables.
+    LftjUnsupportedShape,
+    /// A cyclic BGP routed to SQL because no pattern reaches
+    /// `LftjConfig::min_rows_estimate` statements in its view.
+    LftjBelowEstimate,
+    /// A cyclic BGP routed to the LFTJ operator.
+    LftjNative,
     /// A path called from its bound start.
     PathForward,
     /// A path called from its bound end with the inverse path.

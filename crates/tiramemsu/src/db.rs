@@ -13,8 +13,8 @@ use tm_core::{
     ViewSpec,
 };
 use tm_exec::{
-    NativeKind, NativeOperator, OperatorRegistry, PathEngine, PathOperator, PathOptions,
-    PlannerOptions, QueryEngine,
+    LftjOperator, NativeKind, NativeOperator, OperatorRegistry, PathEngine, PathOperator,
+    PathOptions, PlannerOptions, QueryEngine,
 };
 use tm_rusqlite::RusqliteHost;
 
@@ -50,7 +50,11 @@ pub struct OpenOptions {
     /// Run `PRAGMA optimize` every this many commits, and after a commit that
     /// inserted at least this many statements (default 1000).
     pub optimize_every: u64,
-    /// Query planner options (default: SQL routing, LFTJ off).
+    /// Query planner options (default: SQL routing, LFTJ off). Setting
+    /// `planner.lftj.enabled` installs the native cyclic-join operator
+    /// ([`LftjOperator`], the `tm_lftj` table function) and lets the planner route
+    /// pure cyclic BGPs to it when the estimate reaches
+    /// `planner.lftj.min_rows_estimate`; see [`LftjConfig`](crate::LftjConfig).
     pub planner: PlannerOptions,
     /// Open the query engine (default true). It needs the host capabilities
     /// `functions` and `vtab`; opening fails with `MissingCapability` on a host
@@ -234,6 +238,10 @@ impl Db {
                     ..PathOptions::default()
                 }));
                 reg.add(Arc::new(PathOperator::new(engine)));
+            }
+            // the cyclic-join operator is installed only when LFTJ routing is on
+            if opts.planner.lftj.enabled {
+                reg.add(Arc::new(LftjOperator));
             }
             for op in &opts.native_operators {
                 reg.add(op.clone());

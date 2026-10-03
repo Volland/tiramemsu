@@ -1266,3 +1266,78 @@ fn temporal_path_syntax_and_completeness_cross_the_bridge() {
         .unwrap_err();
     assert_eq!(e.code(), "InvalidArgument");
 }
+
+// cyclic-join-execution over the bridge: `lftj` opts in, `explainSparql` names the
+// native route or the fallback reason, and both routes return the same rows
+// @lat: [[tests#Cyclic Joins#Bridge Exposes LFTJ Routing]]
+#[test]
+fn lftj_option_and_explain_over_the_bridge() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("m.db");
+    let path = path.to_str().unwrap();
+    let plain = Database::open(path, &J::Null).unwrap();
+    plain
+        .call(
+            "sparql",
+            &json!({ "text": "INSERT DATA { v:a v:k v:b . v:b v:k v:c . v:c v:k v:a . v:a v:k v:c }" }),
+        )
+        .unwrap();
+    let tri = "SELECT ?x ?y ?z WHERE { ?x v:k ?y . ?y v:k ?z . ?z v:k ?x }";
+    let ex = plain
+        .call("explainSparql", &json!({ "text": tri }))
+        .unwrap();
+    let notes: Vec<&J> = ex["regions"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|r| &r["note"])
+        .collect();
+    assert!(notes.contains(&&json!("cyclicLftjDisabled")), "{ex}");
+    assert_eq!(ex["shortCircuit"], false);
+    assert!(ex["sql"].as_str().unwrap().starts_with("SELECT"));
+    let rows = |db: &Database| {
+        let r = db.call("sparql", &json!({ "text": tri })).unwrap();
+        let mut rows: Vec<String> = r["rows"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(J::to_string)
+            .collect();
+        rows.sort();
+        rows
+    };
+    let want = rows(&plain);
+    assert_eq!(want.len(), 3);
+    drop(plain);
+    // estimate threshold above the data: SQL with the reason
+    let gated = Database::open(path, &json!({ "lftj": true, "lftjMinRows": 1000 })).unwrap();
+    let ex = gated
+        .call("explainSparql", &json!({ "text": tri }))
+        .unwrap();
+    assert_eq!(ex["regions"][0]["kind"], "sql", "{ex}");
+    assert_eq!(ex["regions"][0]["note"], "lftjBelowEstimate");
+    drop(gated);
+    let native = Database::open(path, &json!({ "lftj": true, "lftjMinRows": 0 })).unwrap();
+    let ex = native
+        .call("explainSparql", &json!({ "text": tri }))
+        .unwrap();
+    let lftj = ex["regions"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|r| r["kind"] == "nativeLftj")
+        .unwrap_or_else(|| panic!("{ex}"));
+    assert_eq!(lftj["note"], "lftjNative");
+    assert!(ex["sql"].as_str().unwrap().contains("tm_lftj("));
+    assert_eq!(rows(&native), want);
+    // a typed option error
+    let e = Database::open(path, &json!({ "lftj": 1 })).err().unwrap();
+    assert_eq!(e.code(), "InvalidArgument");
+    let e = native
+        .call(
+            "explainSparql",
+            &json!({ "text": "INSERT DATA { v:a v:k v:a }" }),
+        )
+        .unwrap_err();
+    assert_eq!(e.code(), "Unsupported");
+}

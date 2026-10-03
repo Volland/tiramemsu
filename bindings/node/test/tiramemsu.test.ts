@@ -674,3 +674,30 @@ describe("saved answers", () => {
     } finally { cleanup(dir); }
   });
 });
+
+// ---- native cyclic joins --------------------------------------------------------
+
+describe("native cyclic joins", () => {
+  // @lat: [[tests#Cyclic Joins#Bindings Expose LFTJ Routing]]
+  it("opts in with lftj, explains the route and returns the SQL rows", () => {
+    const dir = mkdtempSync(join(tmpdir(), "tiramemsu-test-"));
+    try {
+      const path = join(dir, "t.db");
+      const tri = "SELECT ?x ?y ?z WHERE { ?x v:k ?y . ?y v:k ?z . ?z v:k ?x }";
+      const plain = Database.open(path);
+      plain.now().sparql("INSERT DATA { v:a v:k v:b . v:b v:k v:c . v:c v:k v:a . v:a v:k v:c }");
+      const base = plain.now().explainSparql(tri);
+      expect(base.regions.some((r) => r.note === "cyclicLftjDisabled")).toBe(true);
+      const rows = (db: Database) =>
+        ((db.now().sparql(tri) as { rows: unknown[] }).rows.map((r) => JSON.stringify(r))).sort();
+      const want = rows(plain);
+      expect(want).toHaveLength(3);
+      const native = Database.open(path, { lftj: true, lftjMinRows: 0 });
+      const ex = native.now().explainSparql(tri);
+      const region = ex.regions.find((r) => r.kind === "nativeLftj");
+      expect(region?.note).toBe("lftjNative");
+      expect(ex.sql).toContain("tm_lftj(");
+      expect(rows(native)).toEqual(want);
+    } finally { cleanup(dir); }
+  });
+});

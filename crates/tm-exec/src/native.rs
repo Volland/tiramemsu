@@ -1,5 +1,5 @@
 //! The native-operator interface: operators that SQL reaches as table-valued
-//! functions (`tm_path`, later LFTJ), their registry, and the planner options.
+//! functions (`tm_path`, `tm_lftj`), their registry, and the planner options.
 
 use std::sync::Arc;
 
@@ -11,7 +11,8 @@ pub enum NativeKind {
     /// The path operator behind `tm_path(start, path, mode, max_hops, view)`,
     /// returning `(start, "end", hops, path_json)`.
     Path,
-    /// A leapfrog-triejoin operator (M4).
+    /// The leapfrog-triejoin operator behind `tm_lftj(spec)`, returning `c0 … c31`
+    /// ([`LftjOperator`](crate::LftjOperator)).
     Lftj,
 }
 
@@ -75,7 +76,7 @@ impl OperatorRegistry {
         self.ops.iter().find(|o| o.kind() == NativeKind::Path)
     }
 
-    /// The LFTJ operator, if registered (never in M1).
+    /// The LFTJ operator, if registered.
     pub fn lftj(&self) -> Option<&Arc<dyn NativeOperator>> {
         self.ops.iter().find(|o| o.kind() == NativeKind::Lftj)
     }
@@ -86,23 +87,39 @@ impl OperatorRegistry {
     }
 }
 
-/// LFTJ routing (M4). With `enabled` and no operator, cyclic BGPs still go to SQL.
+/// LFTJ routing (opt-in). A region goes to the native cyclic-join operator only
+/// when all of these hold, and otherwise stays in SQL with the reason as its
+/// [`RouteNote`](crate::RouteNote):
 ///
-/// No LFTJ operator ships yet, so this only changes the [`RouteNote`](crate::RouteNote) reported
-/// by explain.
+/// 1. `enabled` is set (else `CyclicLftjDisabled`);
+/// 2. an LFTJ operator is registered (else `LftjUnavailable`; the `tiramemsu`
+///    facade registers [`LftjOperator`](crate::LftjOperator) when `enabled`);
+/// 3. the region is a cyclic join of stored-triple patterns only, with at most 32
+///    output variables (else `LftjUnsupportedShape`);
+/// 4. the estimate policy agrees: some pattern of the region matches at least
+///    `min_rows_estimate` statements in its own view, counted with a capped scan
+///    in the planning snapshot (else `LftjBelowEstimate`). `0` skips the estimate.
+///
+/// Results are identical on both routes; only speed differs.
 ///
 /// # Example
 ///
 /// ```
-/// use tm_exec::LftjConfig;
+/// use tm_exec::{LftjConfig, PlannerOptions};
 ///
 /// assert!(!LftjConfig::default().enabled);
+/// let opts = PlannerOptions {
+///     lftj: LftjConfig { enabled: true, min_rows_estimate: 0 },
+/// };
+/// assert!(opts.lftj.enabled);
 /// ```
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct LftjConfig {
-    /// Route cyclic BGPs to LFTJ when an operator exists (default false).
+    /// Route pure cyclic BGPs to LFTJ when an operator exists and the estimate
+    /// agrees (default false).
     pub enabled: bool,
-    /// Minimum estimated rows before LFTJ is considered.
+    /// The estimate a region needs before LFTJ takes it: the largest number of
+    /// statements one of its patterns matches (default 100 000; 0 = always).
     pub min_rows_estimate: u64,
 }
 

@@ -18,6 +18,7 @@ Reads take a view and return rows; writes are one transaction each; anything tha
 - **Temporal paths and completeness:** `sparql` `params` is `{"name": time}` (epoch ms or an RFC 3339 date or date-time), the starts of `SERVICE <urn:tiramemsu:tm:timeRespecting/$name>` ([[query#Temporal Path Syntax]]). With `pathCompleteness: true`, a `select` result and a `cypher` result gain `"pathCompleteness": {"kind": "exhaustive" | "bound" | "cap", "maxHops": n | null, "complete": bool}` or `null` when no path ran; without it the responses are unchanged.
 - **Writes:** `transact` (a list of op objects in one transaction), `cypherWrite`, and `with` (speculation: ops applied hypothetically, then queries run on the result, then everything discarded). They are in [[bindings/json/src/tx.rs#transact]].
 - **Transaction ops:** `assert`, `create`, `retract`, `retractMatching`, `supersede`, `confirm`, `meta`, `upsert`, `newNode`, the five graph ops, `importBundle` (`bundle`; returns `{"root", "statements": [{"id", "eid", "new"}]}`, and `as` names the imported root) and `cypher`. An op may carry `"as": name`, and a later op may use `{"ref": name}` as a statement id or as a subject or object, which is how a layer is written on a statement created earlier in the same transaction.
+- **Explain:** `explainSparql` (`text`, plus `view` and `budget`), see [[bindings#JSON Bridge#Explain]].
 - **Housekeeping:** `optimize`, `info` (with `importActive` and `statisticsDue`), `cancel` (`key`, see [[bindings#JSON Bridge#Budgets]]), `rebuildTextIndex` and `enableTextIndex` (see [[bindings#JSON Bridge#Text Recall]]).
 - **Bulk import:** `importBegin`, `importChunk`, `importProgress`, `importFinish` and `importCancel`, see [[bindings#JSON Bridge#Bulk Import]].
 - **Saved answers:** `saveAnswer`, `savedAnswer`, `savedAnswers`, `checkSavedAnswers`, `refreshAnswer` and `deleteSavedAnswer`, see [[bindings#JSON Bridge#Saved Answers]].
@@ -45,6 +46,14 @@ Progress is `{"chunks", "rejected", "asserted", "existing", "retracted", "txs", 
 Arguments are `text`, `mode` (`"all"`, `"any"`, `"phrase"`), `graphs` and `predicates` (lists of terms; a term that is not stored matches nothing), `limit` and `confidence` (a predicate term). Each hit is `{"eid", "s", "p", "o", "text", "lang", "score", "rank", "evidence": {"confidence", "confirmations", "authors", "tAdd", "addedAt"}}`, with an absent confidence as `null`.
 
 The open option `textIndex: true` builds the index at open. `rebuildTextIndex` returns `{"values": n}` and `enableTextIndex` returns `{"built": bool}`. Errors are `TextIndexUnavailable` and `MissingCapability`; an unknown option is `InvalidArgument`. Node's `View.sparql` takes `{ provenance, queryOnly }` and returns `provenanceGaps`; Python's `View.sparql` takes `provenance` and `query_only` and returns `provenance_gaps`. Node exposes `View.textSearch`, `Database.rebuildTextIndex` and `enableTextIndex`; Python `View.text_search`, `Database.rebuild_text_index` and `enable_text_index`.
+
+### Explain
+
+`explainSparql` explains SPARQL query text without running it, so a caller can see whether a cyclic pattern took the native cyclic-join route ([[query#Physical Planning#LFTJ]]) and why not.
+
+It returns `{"regions": [{"kind", "note", "aliases", "queryPlan"}], "sql", "shortCircuit", "queryPlan"}` from [[bindings/json/src/read.rs#explain_json]]. Kinds are `sql`, `nativePath` and `nativeLftj`; notes are `none`, `cyclicLftjDisabled`, `lftjUnavailable`, `lftjUnsupportedShape`, `lftjBelowEstimate`, `lftjNative`, `pathForward` and `pathInverted`. An update is `Unsupported`.
+
+The open options `lftj` (boolean) and `lftjMinRows` (non-negative integer) set `OpenOptions::planner.lftj`. Node exposes `Database.open(path, { lftj, lftjMinRows })` and `View.explainSparql(text)` with `Explain` and `ExplainRegion` types; Python `Database(path, lftj=, lftj_min_rows=)` and `View.explain_sparql(text)`, which returns the dictionary.
 
 ### Saved Answers
 

@@ -27,7 +27,7 @@ package "Physical layer" {
   [Planner / router] as PLAN
   [SQL codegen] as SQLGEN
   [Path operator\n(automaton BFS/DFS)] as PATH
-  [LFTJ operator\n(deferred, M4)] as LFTJ
+  [LFTJ operator\n(opt-in, tm_lftj)] as LFTJ
 }
 
 package "Core" {
@@ -72,7 +72,7 @@ The Rust workspace is split by layer so each front end compiles against the IR o
 | `tm-core` | ObjectId codec, term dictionary, SQLite schema and migrations, tx engine, views, event log, volatile table, predicate schema, the `Executor` trait | nothing SQLite-specific ([[architecture#Executor]]) |
 | `tm-rusqlite` | The first executor host: `rusqlite` with bundled SQLite, UDF and virtual-table registration | `rusqlite` (bundled), `tm-core` |
 | `tm-ir` | Logical algebra, semantic flags, view descriptors | `tm-core` (ids, views) |
-| `tm-exec` | Planner/router, SQL codegen, path operator, `tm_path` table function, later LFTJ | `tm-ir`, `tm-core` |
+| `tm-exec` | Planner/router, SQL codegen, path operator, `tm_path` table function, opt-in LFTJ operator (`tm_lftj`) | `tm-ir`, `tm-core` |
 | `tm-sparql` | SPARQL 1.1 (+1.2 annotations) → IR, results as SPARQL JSON/terms | `spargebra`, `tm-ir` |
 | `tm-cypher` | openCypher subset + extensions → IR, results as Cypher values | a Cypher parser, `tm-ir` |
 | `tiramemsu` | Facade: `Db`, `View`, `Tx`, `QueryResult`; the only crate bindings use | all of the above |

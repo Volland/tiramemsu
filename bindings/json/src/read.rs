@@ -4,9 +4,9 @@ use std::collections::HashMap;
 
 use serde_json::{json, Map, Value as J};
 use tiramemsu::{
-    BundleFormat, Db, Eid, Event, ObjectId, Op, Params, PathArgs, PathCompleteness, PathDir,
-    PathMode, PathRow, RdfTerm, RdfTriple, SparqlOptions, SparqlResult, TextMode, TextQuery,
-    TimeRef, TimeRespecting, Triple, TxReport, View,
+    BundleFormat, Db, Eid, Event, Explain, ObjectId, Op, Params, PathArgs, PathCompleteness,
+    PathDir, PathMode, PathRow, RdfTerm, RdfTriple, RegionKind, RouteNote, SparqlOptions,
+    SparqlResult, TextMode, TextQuery, TimeRef, TimeRespecting, Triple, TxReport, View,
 };
 
 use crate::value::{eid_from_json, params_from_json, value_from_json, value_to_json};
@@ -205,8 +205,44 @@ pub fn run(view: &View<'_>, op: &str, args: &J) -> Res<J> {
         }
         "bundle" => Ok(view.bundle(eid_arg(args)?)?.to_json()),
         "textSearch" => text_search(view, args),
+        "explainSparql" => Ok(explain_json(&view.explain_sparql(str_arg(args, "text")?)?)),
         other => Err(arg(format!("unknown read operation {other:?}"))),
     }
+}
+
+/// An explained plan: `{regions: [{kind, note, aliases, queryPlan}], sql,
+/// shortCircuit, queryPlan}` with camelCase kinds (`sql`, `nativePath`,
+/// `nativeLftj`) and route notes (`none`, `cyclicLftjDisabled`, `lftjUnavailable`,
+/// `lftjUnsupportedShape`, `lftjBelowEstimate`, `lftjNative`, `pathForward`,
+/// `pathInverted`). Parameters are not included.
+// @lat: [[bindings#JSON Bridge#Explain]]
+pub fn explain_json(ex: &Explain) -> J {
+    let kind = |k: RegionKind| match k {
+        RegionKind::Sql => "sql",
+        RegionKind::NativePath => "nativePath",
+        RegionKind::NativeLftj => "nativeLftj",
+    };
+    let note = |n: RouteNote| match n {
+        RouteNote::None => "none",
+        RouteNote::CyclicLftjDisabled => "cyclicLftjDisabled",
+        RouteNote::LftjUnavailable => "lftjUnavailable",
+        RouteNote::LftjUnsupportedShape => "lftjUnsupportedShape",
+        RouteNote::LftjBelowEstimate => "lftjBelowEstimate",
+        RouteNote::LftjNative => "lftjNative",
+        RouteNote::PathForward => "pathForward",
+        RouteNote::PathInverted => "pathInverted",
+    };
+    json!({
+        "regions": ex.regions.iter().map(|r| json!({
+            "kind": kind(r.kind),
+            "note": note(r.note),
+            "aliases": r.aliases,
+            "queryPlan": r.query_plan,
+        })).collect::<Vec<_>>(),
+        "sql": ex.sql,
+        "shortCircuit": ex.short_circuit,
+        "queryPlan": ex.query_plan,
+    })
 }
 
 /// `textSearch`: `{text, mode?, graphs?, predicates?, limit?, confidence?}` to the

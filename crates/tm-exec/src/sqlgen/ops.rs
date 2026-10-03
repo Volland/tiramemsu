@@ -4,11 +4,12 @@
 use std::collections::BTreeSet;
 
 use tm_core::{Result, SqlValue};
-use tm_ir::{AggFunc, Missing, Var};
+use tm_ir::{AggFunc, MatchMode, Missing, Var};
 
 use super::{Col, Gen, IsoPat, Item, Rel, Select};
+use crate::plan::analyze::is_cyclic;
 use crate::plan::analyze::{Dom, VClass};
-use crate::plan::route::route_bgp;
+use crate::plan::route::{lftj_route, route_bgp};
 use crate::plan::{Cell, Node, PAgg, PExpr, PTerm, PValues};
 use crate::result::{RegionKind, RouteNote};
 
@@ -45,6 +46,36 @@ fn vars_of(n: &Node) -> BTreeSet<Var> {
         _ => {}
     }
     out
+}
+
+/// The variable sets of the stored-triple patterns of a join tree (through joins,
+/// optional sides, filters and projections).
+fn triple_edges(n: &Node, out: &mut Vec<BTreeSet<Var>>) {
+    match n {
+        Node::Triple(_) => out.push(vars_of(n)),
+        Node::Join(xs, _) => xs.iter().for_each(|x| triple_edges(x, out)),
+        Node::LeftJoin(l, r, _) => {
+            triple_edges(l, out);
+            triple_edges(r, out);
+        }
+        Node::Filter(i, _) | Node::Project(i, _, _) | Node::PadMissing(i, _) => {
+            triple_edges(i, out)
+        }
+        _ => {}
+    }
+}
+
+/// True when the patterns of both sides form a cycle that neither side has alone.
+fn cycle_through_optional(left: &Node, right: &Node) -> bool {
+    let (mut l, mut r) = (Vec::new(), Vec::new());
+    triple_edges(left, &mut l);
+    triple_edges(right, &mut r);
+    let cyclic = |e: &[BTreeSet<Var>]| e.len() >= 3 && is_cyclic(e);
+    if cyclic(&l) || cyclic(&r) {
+        return false;
+    }
+    l.extend(r);
+    cyclic(&l)
 }
 
 impl Gen<'_> {
@@ -119,13 +150,9 @@ impl Gen<'_> {
                         continue;
                     }
                 }
-                let ne = format!("{}.eid <> {}.eid", a.alias, b.alias);
+                let ne = format!("{} <> {}", a.eid, b.eid);
                 acc.conds.push(if a.optional || b.optional {
-                    format!(
-                        "({x}.eid IS NULL OR {y}.eid IS NULL OR {ne})",
-                        x = a.alias,
-                        y = b.alias
-                    )
+                    format!("({x} IS NULL OR {y} IS NULL OR {ne})", x = a.eid, y = b.eid)
                 } else {
                     ne
                 });
@@ -151,17 +178,31 @@ impl Gen<'_> {
     pub fn join(&mut self, inputs: &[Node], null_safe: &[Var]) -> Result<Rel> {
         let pure = !inputs.is_empty() && inputs.iter().all(leaf);
         let saved = self.bgp_ctx;
+        let edges: Vec<BTreeSet<Var>> = inputs
+            .iter()
+            .filter(|n| matches!(n, Node::Triple(_)))
+            .map(vars_of)
+            .collect();
         if pure {
-            let edges: Vec<BTreeSet<Var>> = inputs
-                .iter()
-                .filter(|n| matches!(n, Node::Triple(_)))
-                .map(vars_of)
-                .collect();
-            let note = route_bgp(&edges, self.opts, self.reg);
+            let mut note = route_bgp(&edges, self.opts, self.reg);
+            if note == RouteNote::LftjNative {
+                let iso = self.sem.match_mode == MatchMode::RelIsomorphism;
+                let est = self.estimator.as_deref_mut();
+                match lftj_route(inputs, iso, self.opts, est)? {
+                    Ok(plan) => return self.lftj_region(inputs, &plan),
+                    Err(fallback) => note = fallback,
+                }
+            }
             self.bgp_ctx = Some(self.new_region(RegionKind::Sql, note));
         } else if inputs.iter().any(leaf) {
-            // patterns joined with non-leaf inputs (paths, ...) still form one SQL region
-            self.bgp_ctx = Some(self.new_region(RegionKind::Sql, RouteNote::None));
+            // patterns joined with non-leaf inputs (paths, ...) still form one SQL
+            // region; a cycle among them is a shape LFTJ does not take
+            let note = match route_bgp(&edges, self.opts, self.reg) {
+                RouteNote::LftjNative => RouteNote::LftjUnsupportedShape,
+                RouteNote::LftjUnavailable => RouteNote::LftjUnavailable,
+                _ => RouteNote::None,
+            };
+            self.bgp_ctx = Some(self.new_region(RegionKind::Sql, note));
         } else {
             self.bgp_ctx = None;
         }
@@ -217,8 +258,17 @@ impl Gen<'_> {
 
     /// `left LEFT JOIN right ON <shared vars> AND <right view preds> AND <cond>`.
     pub fn left_join(&mut self, left: &Node, right: &Node, cond: Option<&PExpr>) -> Result<Rel> {
+        let first_region = self.regions.len();
         let mut l = self.compile(left)?;
         let r = self.compile(right)?;
+        if self.opts.lftj.enabled && cycle_through_optional(left, right) {
+            // a cycle closed only through OPTIONAL stays in SQL, with the reason
+            for reg in &mut self.regions[first_region..] {
+                if reg.kind == RegionKind::Sql && reg.note == RouteNote::None {
+                    reg.note = RouteNote::LftjUnsupportedShape;
+                }
+            }
+        }
         let simple = r.items.len() == 1 && r.items[0].on.is_none();
         let (item_sql, mut on, rcols, riso) = if simple {
             let item = r.items.into_iter().next().expect("one item");
@@ -265,7 +315,7 @@ impl Gen<'_> {
         for b in riso {
             for a in &l.iso {
                 if a.group == b.group && !matches!((a.pred, b.pred), (Some(p), Some(q)) if p != q) {
-                    on.push(format!("{}.eid <> {}.eid", a.alias, b.alias));
+                    on.push(format!("{} <> {}", a.eid, b.eid));
                 }
             }
             l.iso.push(IsoPat {

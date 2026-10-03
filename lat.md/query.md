@@ -1,6 +1,6 @@
 # Query
 
-SPARQL and Cypher compile to one logical IR. A planner routes each part of a plan to generated SQL, the native path operator, or later a leapfrog-triejoin (LFTJ) operator. Time is a property of every triple pattern.
+SPARQL and Cypher compile to one logical IR. A planner routes each part of a plan to generated SQL, the native path operator, or an opt-in leapfrog-triejoin (LFTJ) operator. Time is a property of every triple pattern.
 
 ## Logical IR
 
@@ -154,8 +154,8 @@ start
 while (region left?) is (yes)
   if (region is PathPattern?) then (yes)
     :native path operator\n(exposed as tm_path TVF);
-  elseif (BGP is cyclic AND LFTJ enabled AND\nbenchmark threshold met?) then (yes)
-    :LFTJ operator (M4);
+  elseif (pure cyclic BGP AND LFTJ enabled AND\noperator installed AND estimate agrees?) then (yes)
+    :native LFTJ operator\n(exposed as tm_lftj TVF);
   else (no)
     :SQL codegen\n(joins over triple aliases);
   endif
@@ -272,9 +272,41 @@ P --> Planner : rows (start, end, hops, path_json)
 
 ### LFTJ
 
-Leapfrog triejoin (worst-case-optimal) for cyclic patterns is deferred to milestone M4. It is built only if the triangle benchmark shows SQL nested loops are too slow.
+An opt-in worst-case-optimal join for pure cyclic basic graph patterns, behind `NativeKind::Lftj`. Results equal the SQL route row for row; only speed differs. See [[crates/tm-exec/src/lftj/mod.rs#call]].
 
-If built, each trie iterator seeks into a covering index with prepared statements, batching range reads and galloping in memory to amortise the per-statement cost. See [[prior-art#MillenniumDB]] and [[roadmap#Benchmarks]].
+The operator is [[crates/tm-exec/src/lftj/mod.rs#LftjOperator]], registered as the eponymous table function `tm_lftj(spec)` with output columns `c0 … c31`. The generator compiles a routed region to one call whose plan text ([[crates/tm-exec/src/lftj/spec.rs#LftjSpec]]) lists the patterns in join order, so the operator holds no state. The call sits in an unflattened derived table (`LIMIT -1`), so SQLite materialises it once when it lands in an inner loop, for example on the optional side of a `LEFT JOIN`. Filters, projections, aggregates and optional parts around the region stay in SQL. The triangle evidence is in [[roadmap#Benchmarks]]; the prior art is [[prior-art#MillenniumDB]].
+
+#### Routing Policy
+
+A cyclic BGP goes native only when every condition holds; otherwise it stays SQL and explain names the first condition that failed as the region's `RouteNote`.
+
+1. **Enabled:** `OpenOptions::planner.lftj.enabled` (default false), else `CyclicLftjDisabled`.
+2. **Installed:** an LFTJ operator is registered, else `LftjUnavailable`. The facade registers it only when LFTJ is enabled, so default databases do not even have `tm_lftj`.
+3. **Applicable:** every input of the join is a stored-triple pattern and at most 32 variables are returned, else `LftjUnsupportedShape`. Virtual predicates, volatile values, paths, a cycle closed only through `OPTIONAL` and a cycle among non-pattern inputs keep SQL with this note.
+4. **Estimate:** some pattern matches at least `min_rows_estimate` statements (default 100 000) in its own view, counted with a capped `count(*)` in the planning snapshot, else `LftjBelowEstimate`. `0` routes without counting.
+
+A routed region is `RegionKind::NativeLftj` with `RouteNote::LftjNative`; `View::explain_ir` and `View::explain_sparql` show it with the call's `EXPLAIN QUERY PLAN` rows. Routing is [[crates/tm-exec/src/plan/route.rs#route_bgp]] then [[crates/tm-exec/src/plan/route.rs#lftj_route]].
+
+#### Access Paths
+
+Each pattern becomes one sorted access path read through the calling statement's connection, so the operator sees that statement's snapshot, or the speculative state inside `with`.
+
+The scan is the pattern compiled by the same generator as a SQL pattern: its constants, its own view predicates ([[query#Views and Scans]]) and, under set semantics, the canonical-eid predicate, ordered by its variables in join order. A `GRAPH` selector is already a membership pattern `(e sys:inGraph g)` with its own view, so graph constraints are access paths too. Two patterns of one query may use different transaction and valid times.
+
+#### Join And Semantics
+
+[[crates/tm-exec/src/lftj/join.rs#leapfrog]] binds one variable at a time and leapfrogs the sorted access paths of the patterns containing it with galloping seeks.
+
+- **Order:** subject, object and predicate variables first, most shared and connected first; then eid variables; then hidden eids. Any order gives the same rows.
+- **Multiplicity:** every pattern has an eid variable, a hidden one when the query binds none, so parallel statements keep their rows under Cypher's bag of eids, while SPARQL's canonical-eid predicate leaves one row per `(s, p, o)`.
+- **Isomorphism:** Cypher patterns of one match group need distinct eids unless their constant predicates differ, as `tI.eid <> tJ.eid` requires on the SQL route; grouped eids are output columns so patterns outside the region stay distinct from them too.
+- **Provenance:** provenance eid variables are ordinary eid variables, so `SparqlOptions::provenance` reports the same eids on both routes.
+
+#### Budgets And Limits
+
+The operator polls the operation budget of [[query#Query Budgets]] while it scans and joins; cancellation or a deadline fails the statement with the typed error and returns no rows.
+
+Row and byte budgets count the rows the statement returns, as on the SQL route, and fail with `ResultLimitExceeded` before a partial result exists. The call materialises its output rows before SQLite reads them, so memory grows with the region's output, not just its inputs; a count over millions of triangles holds them all for the duration of the statement.
 
 ## Front Ends
 

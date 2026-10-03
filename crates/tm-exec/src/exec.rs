@@ -9,6 +9,7 @@ use tm_core::{budget, Executor, Result, SqlValue, Value};
 use tm_ir::{IrQuery, Var};
 
 use crate::decode::{CacheMode, Decoder};
+use crate::lftj::LftjPattern;
 use crate::plan::analyze::Dom;
 use crate::plan::normalize::Planner;
 use crate::plan::{Cell, Node, PValues};
@@ -91,7 +92,10 @@ fn plan(engine: &QueryEngine, exec: &mut dyn Executor, p: &Prepared) -> Result<P
             synthetic,
         });
     }
+    // the LFTJ estimate reads the same snapshot as planning
+    let mut estimate = |ps: &[LftjPattern], cap: u64| crate::lftj::estimate(&mut *exec, ps, cap);
     let mut gen = Gen::new(p.query.semantics, &engine.registry, &engine.options);
+    gen.estimator = Some(&mut estimate);
     gen.set_synthetic(&synthetic);
     let (sql, doms) = gen.root(&node, &p.columns)?;
     Ok(Planned {

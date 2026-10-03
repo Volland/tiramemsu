@@ -1,14 +1,16 @@
 //! Native regions as FROM items: `tm_path(start, path, mode, max_hops, view[,
 //! graphs]) AS pN` with a correlated or bound start (design D7), preceded by the
-//! graph enumeration of a `GRAPH ?g` path whose graph no joined pattern binds.
+//! graph enumeration of a `GRAPH ?g` path whose graph no joined pattern binds, and
+//! `tm_lftj(plan) AS pN` for a cyclic BGP routed to the LFTJ operator.
 
 use tm_core::{Result, SqlValue};
 use tm_ir::Var;
 
-use super::{Col, Gen, Item, Rel};
+use super::{Col, Gen, IsoPat, Item, Rel, Select};
+use crate::lftj::{self, RegionPlan};
 use crate::plan::analyze::{Dom, VClass};
-use crate::plan::{PGraphs, PPath, PTerm, PText};
-use crate::result::RouteNote;
+use crate::plan::{Node, PGraphs, PPath, PTerm, PText};
+use crate::result::{RegionKind, RouteNote};
 use crate::scan::view_predicates;
 
 impl Gen<'_> {
@@ -175,5 +177,61 @@ impl Gen<'_> {
             member.join(" AND "),
             stmt.join(" AND ")
         )
+    }
+}
+
+impl Gen<'_> {
+    /// Compiles a pure cyclic BGP routed to the LFTJ operator: one
+    /// `tm_lftj(plan) AS pN` call whose columns bind the region's variables.
+    ///
+    /// The call sits in a derived table that SQLite cannot flatten (`LIMIT -1`), so
+    /// in the inner loop of a join it is materialised once instead of being called
+    /// again for every outer row. Under relationship isomorphism the eids of the
+    /// grouped patterns are columns too, so patterns outside the region can be
+    /// kept distinct from them.
+    pub fn lftj_region(&mut self, inputs: &[Node], plan: &RegionPlan) -> Result<Rel> {
+        let a = self.alias('p');
+        let rid = self.new_region(RegionKind::NativeLftj, RouteNote::LftjNative);
+        self.regions[rid].aliases.push(a.clone());
+        let spec = self.params.push(SqlValue::Text(plan.spec.to_text()));
+        let mut inner = Rel {
+            items: vec![Item {
+                sql: format!("{}({spec}) AS {a}", lftj::NAME),
+                on: None,
+            }],
+            ..Rel::default()
+        };
+        let col_var = |i: usize| match &plan.columns[i] {
+            Some(v) => v.clone(),
+            None => Var::new(format!("~lftj{rid}c{i}")),
+        };
+        for i in 0..plan.columns.len() {
+            inner.set(&col_var(i), Col::term(format!("{a}.c{i}"), false));
+        }
+        let mut r = self.derive(
+            inner,
+            Select {
+                limit: Some("-1".to_string()),
+                ..Select::default()
+            },
+            Vec::new(),
+        );
+        for (n, c) in inputs.iter().zip(&plan.iso_columns) {
+            if let (Node::Triple(t), Some(c)) = (n, c) {
+                let eid = r.col(&col_var(*c)).map(|c| c.sql.clone());
+                if let (Some(group), Some(eid)) = (t.iso_group, eid) {
+                    r.iso.push(IsoPat {
+                        group,
+                        eid,
+                        pred: match t.p {
+                            PTerm::Id(id) => Some(id),
+                            PTerm::Var(_) => None,
+                        },
+                        optional: false,
+                    });
+                }
+            }
+        }
+        Ok(r)
     }
 }
