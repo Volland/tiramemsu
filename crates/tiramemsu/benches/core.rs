@@ -3,7 +3,7 @@
 //!
 //! - churn: N updates per key (N = 1, 10, 100, 1000), now vs as-of lookups;
 //! - supersede cost as a function of the cascade-set size;
-//! - executor-trait overhead against a direct `rusqlite` loop (design D-17).
+//! - facade overhead against direct `rusqlite` reads with equal decoding and snapshots.
 
 use std::path::Path;
 
@@ -100,14 +100,44 @@ fn supersede_cost(c: &mut Criterion) {
     g.finish();
 }
 
-fn executor_overhead(c: &mut Criterion) {
-    let mut g = c.benchmark_group("executor_overhead");
+fn direct_point(conn: &rusqlite::Connection, s: i64, p: i64) -> Vec<Triple> {
+    conn.execute_batch("BEGIN").unwrap();
+    let rows = {
+        let mut st = conn
+            .prepare_cached(
+                "SELECT eid, s, p, o, t_add, t_ret, v_from, v_to, ret_kind FROM triple \
+             WHERE s = ?1 AND p = ?2 AND t_ret IS NULL ORDER BY eid",
+            )
+            .unwrap();
+        st.query_map([s, p], |r| {
+            Ok(Triple {
+                eid: Eid::from_oid(ObjectId::from_raw(r.get(0)?)).unwrap(),
+                s: ObjectId::from_raw(r.get(1)?),
+                p: ObjectId::from_raw(r.get(2)?),
+                o: ObjectId::from_raw(r.get(3)?),
+                t_add: TxId(r.get::<_, i64>(4)? as u64),
+                t_ret: r.get::<_, Option<i64>>(5)?.map(|t| TxId(t as u64)),
+                v_from: r.get(6)?,
+                v_to: r.get(7)?,
+                ret_kind: r.get::<_, Option<i64>>(8)?.and_then(RetKind::from_i64),
+            })
+        })
+        .unwrap()
+        .map(Result::unwrap)
+        .collect()
+    };
+    conn.execute_batch("COMMIT").unwrap();
+    rows
+}
+
+fn facade_overhead(c: &mut Criterion) {
+    let mut g = c.benchmark_group("facade_overhead");
     g.sample_size(20);
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("exec.db");
     let db = churned(&path, 200, 1);
     let p = db.now().encode(&v("score")).unwrap().unwrap().raw();
-    g.bench_function("trait_query", |b| {
+    g.bench_function("facade_query", |b| {
         b.iter(|| {
             db.read_sql("SELECT count(*) FROM triple WHERE p = 0")
                 .unwrap()
@@ -120,7 +150,7 @@ fn executor_overhead(c: &mut Criterion) {
         .iter()
         .map(|t| t.s.raw())
         .collect();
-    g.bench_function("trait_point_lookups", |b| {
+    g.bench_function("facade_point_lookups", |b| {
         b.iter(|| {
             for s in &ids {
                 db.now()
@@ -134,26 +164,29 @@ fn executor_overhead(c: &mut Criterion) {
         })
     });
     let conn = rusqlite::Connection::open(&path).unwrap();
+    conn.set_prepared_statement_cache_capacity(256);
+    for s in &ids {
+        assert_eq!(
+            direct_point(&conn, *s, p),
+            db.now()
+                .triples(
+                    Some(ObjectId::from_raw(*s)),
+                    Some(ObjectId::from_raw(p)),
+                    None
+                )
+                .unwrap(),
+            "benchmark sides must return identical full triples",
+        );
+    }
     g.bench_function("direct_point_lookups", |b| {
         b.iter(|| {
-            let mut st = conn
-                .prepare_cached(
-                    "SELECT eid, s, p, o, t_add, t_ret, v_from, v_to, ret_kind FROM triple \
-                     WHERE s = ?1 AND p = ?2 AND t_ret IS NULL ORDER BY eid",
-                )
-                .unwrap();
             for s in &ids {
-                let rows: Vec<i64> = st
-                    .query_map([*s, p], |r| r.get::<_, i64>(0))
-                    .unwrap()
-                    .map(Result::unwrap)
-                    .collect();
-                std::hint::black_box(rows);
+                std::hint::black_box(direct_point(&conn, *s, p));
             }
         })
     });
     g.finish();
 }
 
-criterion_group!(benches, churn, supersede_cost, executor_overhead);
+criterion_group!(benches, churn, supersede_cost, facade_overhead);
 criterion_main!(benches);

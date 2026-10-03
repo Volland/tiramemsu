@@ -513,3 +513,211 @@ fn views_values_and_optimize() {
         TxId(7)
     );
 }
+
+// @lat: [[tests#Recovery#Transaction Panic]]
+#[test]
+fn caught_transaction_panic_restores_writer_and_dictionary() {
+    let (_d, p) = tmp();
+    let db = open(&p);
+    let value = lit("dictionary entry created inside a panicking transaction");
+    let panic = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let _ = db.transact(TxOptions::default(), |tx| {
+            tx.assert(v("panic"), v("p"), &value, Valid::ALWAYS)?;
+            std::panic::panic_any("transaction panic payload");
+        });
+    }));
+    assert_eq!(
+        panic.unwrap_err().downcast_ref::<&str>(),
+        Some(&"transaction panic payload")
+    );
+    assert!(db.history().triples(None, None, None).unwrap().is_empty());
+    assert!(db.events_since(0).unwrap().is_empty());
+    assert!(db.now().encode(&value).unwrap().is_none());
+    let report = db
+        .transact(TxOptions::default(), |tx| {
+            tx.assert(v("panic"), v("p"), &value, Valid::ALWAYS)
+                .map(|_| ())
+        })
+        .unwrap();
+    assert_eq!(report.t, TxId(1));
+    let triple = db.now().triples(None, None, None).unwrap()[0];
+    assert_eq!(db.now().decode(triple.o).unwrap(), value);
+}
+
+// @lat: [[tests#Recovery#Speculative Panic]]
+#[test]
+fn caught_speculative_panics_leave_no_trace_and_burn_ids() {
+    for stage in ["dry_run", "operations", "query"] {
+        let (_d, p) = tmp();
+        let db = open(&p);
+        let mut allocated = None;
+        let panic = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let mut ops = |tx: &mut Tx<'_>| {
+                let node = tx.new_node()?;
+                let blank = tx.new_bnode()?;
+                let term = tx.encode(lit("speculative dictionary entry"))?;
+                let eid = tx.create(
+                    node,
+                    v("p"),
+                    lit("speculative dictionary entry"),
+                    Valid::ALWAYS,
+                )?;
+                allocated = Some((node, blank, term, eid));
+                if stage != "query" {
+                    std::panic::panic_any("speculative panic payload");
+                }
+                Ok(())
+            };
+            if stage == "dry_run" {
+                let _ = db.transact(
+                    TxOptions {
+                        dry_run: true,
+                        ..Default::default()
+                    },
+                    ops,
+                );
+            } else {
+                let _: Result<()> = db.with(&mut ops, |view| {
+                    assert_eq!(view.triples(None, None, None)?.len(), 1);
+                    std::panic::panic_any("speculative panic payload");
+                });
+            }
+        }));
+        assert_eq!(
+            panic.unwrap_err().downcast_ref::<&str>(),
+            Some(&"speculative panic payload")
+        );
+        assert!(db.history().triples(None, None, None).unwrap().is_empty());
+        assert!(db.events_since(0).unwrap().is_empty());
+        assert!(db
+            .now()
+            .encode(&lit("speculative dictionary entry"))
+            .unwrap()
+            .is_none());
+        let (old_node, old_blank, old_term, old_eid) = allocated.unwrap();
+        let report = db
+            .transact(TxOptions::default(), |tx| {
+                let node = tx.new_node()?;
+                assert!(
+                    node.unsigned_payload() > old_node.unsigned_payload(),
+                    "{stage}"
+                );
+                let blank = tx.new_bnode()?;
+                assert!(
+                    blank.unsigned_payload() > old_blank.unsigned_payload(),
+                    "{stage}"
+                );
+                let term = tx.encode(lit("speculative dictionary entry"))?;
+                assert!(
+                    term.unsigned_payload() > old_term.unsigned_payload(),
+                    "{stage}"
+                );
+                let eid = tx.create(
+                    node,
+                    v("p"),
+                    lit("speculative dictionary entry"),
+                    Valid::ALWAYS,
+                )?;
+                assert!(eid.n() > old_eid.n(), "{stage}");
+                Ok(())
+            })
+            .unwrap();
+        assert_eq!(report.t, TxId(1));
+    }
+}
+
+// @lat: [[tests#Recovery#Read Panic]]
+#[test]
+fn caught_read_panics_preserve_reader_and_writer_reads() {
+    for readers in [0, 1] {
+        let (_d, p) = tmp();
+        let db = Arc::new(
+            Db::open(
+                &p,
+                OpenOptions {
+                    readers,
+                    ..Default::default()
+                },
+            )
+            .unwrap(),
+        );
+        db.transact(Default::default(), |tx| {
+            tx.assert(v("a"), v("p"), v("b"), Valid::ALWAYS).map(|_| ())
+        })
+        .unwrap();
+        for _ in 0..3 {
+            db.set_query_hook(Some(Arc::new(|| {
+                std::panic::panic_any("read panic payload")
+            })));
+            let panic = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                let _ = db.now().sparql("SELECT ?o WHERE { v:a v:p ?o }");
+            }));
+            assert_eq!(
+                panic.unwrap_err().downcast_ref::<&str>(),
+                Some(&"read panic payload")
+            );
+            db.set_query_hook(None);
+            let (sender, receiver) = std::sync::mpsc::channel();
+            let worker_db = db.clone();
+            let worker = thread::spawn(move || {
+                sender
+                    .send(worker_db.now().triples(None, None, None))
+                    .unwrap();
+            });
+            let rows = receiver
+                .recv_timeout(Duration::from_secs(2))
+                .expect("reader lost or transaction left open")
+                .unwrap();
+            assert_eq!(rows.len(), 1);
+            worker.join().unwrap();
+        }
+    }
+}
+
+// @lat: [[tests#Recovery#Read Commit Failure]]
+#[test]
+fn failed_read_commit_rolls_back_before_reuse() {
+    struct ReaderHost(minimal::MinimalHost);
+    impl Host for ReaderHost {
+        fn capabilities(&self) -> Capabilities {
+            Capabilities {
+                reader_pool: true,
+                ..Default::default()
+            }
+        }
+        fn open_writer(
+            &self,
+            path: &std::path::Path,
+            opts: &HostOptions,
+        ) -> Result<Box<dyn Executor>> {
+            self.0.open_writer(path, opts)
+        }
+        fn open_reader(
+            &self,
+            path: &std::path::Path,
+            opts: &HostOptions,
+        ) -> Result<Box<dyn Executor>> {
+            self.0.test_reader(path, opts)
+        }
+    }
+    for readers in [0, 1] {
+        let (_d, p) = tmp();
+        let host = minimal::MinimalHost::new();
+        let probe = host.probe.clone();
+        let db = Db::open_with_host(
+            ReaderHost(host),
+            &p,
+            OpenOptions {
+                readers,
+                query_engine: false,
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        probe.clear_log();
+        probe.inject("COMMIT", 0, SqlError::BUSY);
+        assert!(db.now().triples(None, None, None).is_err());
+        assert_eq!(probe.count("ROLLBACK"), 1);
+        assert!(db.now().triples(None, None, None).unwrap().is_empty());
+    }
+}

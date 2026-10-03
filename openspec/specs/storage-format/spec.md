@@ -169,6 +169,8 @@ Opening an existing SQLite file that contains user tables but no tiramemsu `meta
 ### Requirement: One writer connection and a pool of readers
 An open database SHALL use exactly one connection for all writes and a configurable number of additional read-only connections for reads, all on the same WAL file. Every read operation SHALL run inside a single read transaction so that it observes one consistent committed snapshot.
 
+Read errors, commit errors, and unwinding callbacks SHALL trigger rollback before connection reuse. A checked-out reader SHALL be returned before the original panic is resumed, so a caught unwind does not reduce reader capacity. Cleanup SHALL preserve the original returned error or panic payload.
+
 #### Scenario: Reads do not block on a running write
 - **WHEN** a long transaction is in progress on the writer and another thread reads through a now view
 - **THEN** the read completes without waiting for the write to finish
@@ -177,3 +179,13 @@ An open database SHALL use exactly one connection for all writes and a configura
 #### Scenario: Read snapshot is consistent
 - **WHEN** a transaction that retracts one statement and asserts another commits while a single lookup is running
 - **THEN** the lookup returns either both old values or both new values, never a mix
+
+#### Scenario: Read callback panics
+- **WHEN** query execution panics while holding a read transaction and the caller catches the unwind
+- **THEN** the active read transaction is rolled back and any checked-out reader is returned to the pool before the original panic is resumed
+- **AND** subsequent reads on the same handle succeed without reducing configured reader capacity
+
+#### Scenario: Read commit fails
+- **WHEN** a read transaction commit returns an error on the writer or on a pooled reader
+- **THEN** rollback is attempted before the connection is reused and the commit error is returned
+- **AND** a subsequent read succeeds when rollback succeeds

@@ -23,6 +23,8 @@ A speculative transaction SHALL take the single writer, open a savepoint, run th
 ### Requirement: Speculation leaves no trace
 After a speculative transaction finishes, whether its operations or callback succeeded or failed, the savepoint SHALL be rolled back and released. The `triple`, `term`, `tx` and `volatile` tables SHALL be unchanged, no transaction number SHALL be consumed, and no event SHALL appear in the log.
 
+Unwinding callbacks SHALL receive the same cleanup, including dictionary rollback and burning allocated ids, before the original panic payload is resumed.
+
 #### Scenario: Tables unchanged after speculation
 - **WHEN** a speculative transaction asserts statements with new long strings, supersedes a statement and sets a volatile value
 - **THEN** afterwards the `triple`, `term`, `tx` and `volatile` tables have exactly their previous contents
@@ -61,6 +63,12 @@ After the savepoint is rolled back, the writer SHALL re-apply the advanced `next
 #### Scenario: Burned ids survive a reopen
 - **WHEN** a speculative transaction burns ids, the database is closed and reopened, and a statement is created
 - **THEN** its eid is larger than every eid burned before the reopen
+
+#### Scenario: Speculative operations or query panic
+- **WHEN** a dry-run callback, speculative operations callback, or speculative query callback panics after allocating ids
+- **THEN** the savepoint is rolled back and released, the dictionary cache is restored, and allocated node, blank-node, statement, and term ids are burned
+- **AND** no graph history or event is committed and no transaction number is consumed
+- **AND** the original panic payload is resumed after cleanup and subsequent operations can use the same handle
 
 ### Requirement: Speculation holds the single writer and starts from now
 A speculative transaction SHALL hold the writer for its whole duration, so committed transactions from other callers wait until it finishes. Speculation SHALL always start from the latest committed state; there is no way to speculate from a past transaction and no persistent branch.

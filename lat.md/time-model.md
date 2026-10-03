@@ -253,5 +253,6 @@ Scheduled as milestone M6 (`add-crypto-shredding`). Format 1 reserves tag 15 `SE
 - Implementation: take the writer lock, `SAVEPOINT spec`, run the operations with the full engine (schema, cascade, supersede), run the caller's queries **on the writer connection** so they see the uncommitted state, then `ROLLBACK TO spec; RELEASE spec`.
 - `TxOptions.dry_run` uses the same mechanism and returns the `TxReport` without committing.
 - Ids allocated during speculation are burned: the id counters are advanced for real after the rollback, so no id seen inside `with` is ever reissued. No tx row is written.
+- Panics in operations or queries follow the same cleanup: capture advanced counters, roll back, burn ids, then resume the original panic. Ordinary transaction panics roll back their dictionary state and counters without burning ids.
 - It holds the single write lock, so it is meant for short speculation, not long-lived sandboxes.
 - Speculation always starts from "now". Branching the past is not supported, as in Datomic.

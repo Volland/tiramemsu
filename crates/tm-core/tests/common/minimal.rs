@@ -82,6 +82,15 @@ pub struct MinimalHost {
 }
 
 impl MinimalHost {
+    /// A fault-injecting reader for facade pool recovery tests. This does not
+    /// change the capabilities of the minimal host itself.
+    pub fn test_reader(&self, path: &Path, opts: &HostOptions) -> Result<Box<dyn Executor>> {
+        Ok(Box::new(MinimalExec {
+            inner: self.inner.open_reader(path, opts)?,
+            probe: self.probe.clone(),
+        }))
+    }
+
     pub fn new() -> MinimalHost {
         MinimalHost {
             inner: RusqliteHost::new(),

@@ -12,3 +12,4 @@ This directory defines the high-level concepts, business logic, and architecture
 - [[recipes]] — Tested queries that combine statement ids, layers, transaction metadata, paths and time scopes
 - [[tests]] — Test specifications for the core invariants
 - [[roadmap]] — Milestones mapped to OpenSpec changes, and benchmarks
+- [[project-review]] — Measured architecture review, resource-safety findings, and proposed feature priorities

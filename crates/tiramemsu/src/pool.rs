@@ -1,5 +1,6 @@
 //! The pool of read-only executors (only when the host declares `reader_pool`).
 
+use std::panic::{catch_unwind, resume_unwind, AssertUnwindSafe};
 use std::sync::{Condvar, Mutex};
 
 use tm_core::{Executor, Result};
@@ -37,24 +38,23 @@ impl ReaderPool {
                 idle = self.available.wait(idle).unwrap_or_else(|p| p.into_inner());
             }
         };
-        let r = (|| {
+        let r = catch_unwind(AssertUnwindSafe(|| {
             exec.begin_read()?;
-            match f(exec.as_mut()) {
-                Ok(r) => {
-                    exec.commit()?;
-                    Ok(r)
-                }
-                Err(e) => {
-                    let _ = exec.rollback();
-                    Err(e)
-                }
-            }
-        })();
+            let r = f(exec.as_mut())?;
+            exec.commit()?;
+            Ok(r)
+        }));
+        if !matches!(&r, Ok(Ok(_))) {
+            let _ = exec.rollback();
+        }
         self.idle
             .lock()
             .unwrap_or_else(|p| p.into_inner())
             .push(exec);
         self.available.notify_one();
-        r
+        match r {
+            Ok(r) => r,
+            Err(panic) => resume_unwind(panic),
+        }
     }
 }

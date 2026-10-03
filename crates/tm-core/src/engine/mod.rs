@@ -14,6 +14,7 @@ mod supersede;
 mod volatile;
 
 use std::collections::{HashMap, HashSet};
+use std::panic::{catch_unwind, resume_unwind, AssertUnwindSafe};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
@@ -143,18 +144,25 @@ impl Store {
         self.exec.as_mut()
     }
 
-    /// Runs `f` inside one read transaction on the writer.
+    /// Runs `f` inside one read transaction on the writer. Errors and unwinding
+    /// callbacks roll back the snapshot before returning or resuming the panic.
     pub fn read<R>(&mut self, f: impl FnOnce(&mut dyn Executor) -> Result<R>) -> Result<R> {
         let exec = self.exec.as_mut();
         exec.begin_read()?;
-        match f(exec) {
-            Ok(r) => {
-                exec.commit()?;
-                Ok(r)
-            }
-            Err(e) => {
+        let res = catch_unwind(AssertUnwindSafe(|| {
+            let r = f(exec)?;
+            exec.commit()?;
+            Ok(r)
+        }));
+        match res {
+            Ok(Ok(r)) => Ok(r),
+            Ok(Err(e)) => {
                 let _ = exec.rollback();
                 Err(e)
+            }
+            Err(panic) => {
+                let _ = exec.rollback();
+                resume_unwind(panic)
             }
         }
     }
@@ -173,6 +181,11 @@ impl Store {
     /// Any error returned by `f` or by an operation inside it (for example
     /// [`Error::UniqueViolation`]) aborts and rolls back the transaction; a host
     /// failure is reported as [`Error::Sqlite`].
+    ///
+    /// # Panics
+    ///
+    /// A callback panic is resumed with its original payload after rolling back
+    /// the transaction and dictionary state.
     ///
     /// # Example
     ///
@@ -207,13 +220,13 @@ impl Store {
             return self.run_speculative(opts, f, |tx, _| Ok(tx.report()));
         }
         self.exec.begin_immediate()?;
-        let res = (|| {
+        let res = catch_unwind(AssertUnwindSafe(|| {
             let mut tx = Tx::begin(self.exec.as_mut(), &mut self.dict, &*self.clock, opts)?;
             f(&mut tx)?;
             tx.finish_commit()
-        })();
+        }));
         match res {
-            Ok(report) => {
+            Ok(Ok(report)) => {
                 if let Err(e) = self.exec.commit() {
                     let _ = self.exec.rollback();
                     self.dict.rollback();
@@ -224,10 +237,15 @@ impl Store {
                 self.stats.after_commit(self.exec.as_mut(), inserted);
                 Ok(report)
             }
-            Err(e) => {
+            Ok(Err(e)) => {
                 let _ = self.exec.rollback();
                 self.dict.rollback();
                 Err(e)
+            }
+            Err(panic) => {
+                let _ = self.exec.rollback();
+                self.dict.rollback();
+                resume_unwind(panic)
             }
         }
     }
@@ -239,6 +257,7 @@ impl Store {
     /// Use it to ask "what would the graph look like if" without changing anything:
     /// `query` runs on the writer and sees the uncommitted state. Nothing is
     /// committed and no transaction number is consumed.
+    /// Callback panics are resumed after rollback and burning allocated ids.
     // @lat: [[time-model#Speculative Transactions]]
     pub fn speculate<R>(
         &mut self,
@@ -261,16 +280,21 @@ impl Store {
         }
         let mut c0 = None;
         let mut c1 = None;
-        let res = (|| {
+        let res = catch_unwind(AssertUnwindSafe(|| {
             let mut tx = Tx::begin(self.exec.as_mut(), &mut self.dict, &*self.clock, opts)?;
             c0 = Some(tx.c0);
-            let r = (|| {
+            // Capture counters before propagating a callback panic: ids that the
+            // caller saw during speculation must remain burned after rollback.
+            let r = catch_unwind(AssertUnwindSafe(|| {
                 ops(&mut tx)?;
                 after(&mut tx, ())
-            })();
+            }));
             c1 = Some(tx.counters());
-            r
-        })();
+            match r {
+                Ok(r) => r,
+                Err(panic) => resume_unwind(panic),
+            }
+        }));
         // roll the savepoint back, then burn the advanced id counters
         let rolled = self
             .exec
@@ -293,9 +317,15 @@ impl Store {
             if let Some(c1) = c1 {
                 let _ = self.burn_after_failure(c1);
             }
-            return Err(res.err().unwrap_or(e));
+            return match res {
+                Ok(r) => Err(r.err().unwrap_or(e)),
+                Err(panic) => resume_unwind(panic),
+            };
         }
-        res
+        match res {
+            Ok(r) => r,
+            Err(panic) => resume_unwind(panic),
+        }
     }
 
     fn burn_after_failure(&mut self, c1: Counters) -> Result<()> {

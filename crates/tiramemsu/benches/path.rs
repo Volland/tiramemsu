@@ -1,5 +1,5 @@
 //! Path benchmarks (`lat.md/roadmap#Benchmarks`, "Paths"): shortest-path latency
-//! between random bound pairs, 3-hop trails (`p{1,3}` and the relationship wildcard),
+//! from random bound starts to all reachable endpoints, 3-hop trails (`p{1,3}` and the relationship wildcard),
 //! reachability over a chain and a small-world graph, all-shortest paths on a grid,
 //! and the `rarray` chunk sizes. No targets are asserted.
 //!
@@ -100,7 +100,6 @@ fn path_latency(c: &mut Criterion) {
         .max()
         .unwrap();
     let starts = ids(&db, "p", nodes, 64);
-    let ends = ids(&db, "p", nodes, 64);
     let views: Vec<(&str, View<'_>)> = vec![
         ("now", db.now()),
         ("asof", db.as_of(TimeRef::Tx(last))),
@@ -110,7 +109,7 @@ fn path_latency(c: &mut Criterion) {
     g.sample_size(10);
     for (name, view) in views.iter().take(2) {
         g.bench_with_input(
-            BenchmarkId::new("any_shortest_pairs", name),
+            BenchmarkId::new("any_shortest_all_endpoints", name),
             view,
             |b, view| {
                 let mut i = 0;
@@ -119,7 +118,7 @@ fn path_latency(c: &mut Criterion) {
                     let rows = view
                         .path(starts[i % 64], "link+", PathMode::AnyShortest, 6)
                         .unwrap();
-                    rows.iter().filter(|r| r.end == ends[i % 64]).count()
+                    rows.len()
                 })
             },
         );
@@ -135,7 +134,7 @@ fn path_latency(c: &mut Criterion) {
                     i += 1;
                     view.path(starts[i % 64], expr, PathMode::Trail, 3)
                         .map(|r| r.len())
-                        .unwrap_or(0)
+                        .expect("trail benchmark must not hide search errors")
                 })
             });
         }

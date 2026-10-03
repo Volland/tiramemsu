@@ -98,6 +98,7 @@ One writer connection behind a mutex and a pool of reader connections, all on on
 
 - **Writer:** every transaction, speculative `with`, and schema change goes through the single writer. Transactions are serialised, which gives MERGE and `sys:unique` checks their atomicity. See [[time-model#Operations]].
 - **Readers:** each query takes a reader connection and runs inside one read transaction, so it sees a consistent WAL snapshot.
+- **Recovery:** returned errors, failed read commits, and unwinding callbacks roll back active snapshots. A pooled executor is returned before the original panic is resumed, so caught panics do not reduce reader capacity.
 - **Historical reads** never conflict with writes: rows are only ever appended or have `t_ret` set once, and `asOf(t)` for `t` ≤ the last committed tx is stable forever. See [[time-model#Never Forget]].
 - The `tx` counter is read and incremented inside the writer transaction, so `t` is gap-free and strictly increasing.
 

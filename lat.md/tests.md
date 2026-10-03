@@ -174,6 +174,26 @@ Through the facade, a belief's bundle written as JSON text and read back imports
 
 The bridge read `bundle` feeds a `transact` op `importBundle` on another database; `as` names the imported root, memberships and valid times arrive, and a malformed bundle fails.
 
+## Recovery
+
+Callback panics and failed read commits must release transactions and preserve reusable database connections without changing committed history.
+
+### Transaction Panic
+
+A caught transaction panic preserves its payload, rolls back facts and dictionary entries, and leaves the writer usable with gap-free transaction numbering.
+
+### Speculative Panic
+
+Panics in dry runs, speculative operations, and speculative queries leave no graph or event trace, preserve their payload, and burn allocated node, blank-node, term, and statement ids.
+
+### Read Panic
+
+Caught query panics on a pooled reader or the writer roll back the snapshot, return reader capacity, and permit repeated subsequent reads.
+
+### Read Commit Failure
+
+An injected read-commit error on either the writer or a pooled reader triggers rollback before connection reuse; the next read succeeds.
+
 ## Storage Invariants
 
 Checks of the SQLite-level guarantees in [[storage#Invariant Triggers]] and [[storage#Query Shapes]].
@@ -644,4 +664,3 @@ This holds for `retract_matching` too. Retracting the last value lifts the const
 ### Bridge Reports Subject Type Mismatch
 
 A `transact` call that violates `sys:subjectType` fails with code `SubjectTypeMismatch` and commits none of its operations.
-

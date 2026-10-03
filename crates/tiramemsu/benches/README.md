@@ -3,6 +3,8 @@
 `cargo bench -p tiramemsu --bench <core|sparql|path>`. No targets are asserted; the numbers below
 are recorded to steer tuning (`lat.md/roadmap#Benchmarks`).
 
+The `facade_overhead` group compares full `Triple` decoding with a read transaction per lookup on both sides. It includes facade locking, pooling, and executor work; it does not isolate dynamic dispatch. The direct and facade result vectors are checked for equality before timing. SPARQL measurements include text parsing and planning.
+
 ## path (add-path-engine, M3)
 
 `PATH_BENCH_STATEMENTS` sets the power-law graph (default 100 000 statements, 5 statements per
@@ -11,7 +13,7 @@ Apple laptop, bundled SQLite, `--warm-up-time 1 --measurement-time 2`, 100 000 s
 
 | Group | Shape | Now | AsOf | ValidAt |
 |---|---|---|---|---|
-| `shortest` | `link+` ANY_SHORTEST from a random start, at most 6 hops | 5.9 ms | 6.5 ms | not run |
+| `shortest` | `link+` ANY_SHORTEST to all endpoints from a random start, at most 6 hops | 5.9 ms | 6.5 ms | not run |
 | `trail3` | `link{1,3}` TRAIL from a random start | 118 µs | 145 µs | 144 µs |
 | `trail3` | `sys:anyRelationship{1,3}` TRAIL | 95 µs | 134 µs | 95 µs |
 | `reach` | `next+` REACH over a 100 000-hop chain | 1.38 s | | |
@@ -20,6 +22,8 @@ Apple laptop, bundled SQLite, `--warm-up-time 1 --measurement-time 2`, 100 000 s
 
 A long chain is the worst case: every hop is one layer and so one statement (about 14 µs per
 layer). Wide frontiers amortise the statement cost over up to a whole chunk.
+
+The shortest benchmark is named `any_shortest_all_endpoints`; older runs labeled it `any_shortest_pairs` but filtered destinations only after the full search. Trail failures now abort a run rather than count as zero-result samples. The table above records the older run and is not a fresh measurement of the patch.
 
 ### `rarray` chunk sizes
 

@@ -88,6 +88,8 @@ A transaction SHALL accept options `dry_run` (default false) and `max_cascade` (
 ### Requirement: Atomic failure leaves no trace
 If any operation fails, or the caller's transaction body returns an error, the whole transaction SHALL be rolled back and the error returned to the caller: no `tx` row, no statement, no retraction, no dictionary term, no volatile change and no change to any `meta` counter SHALL remain.
 
+An unwinding transaction callback SHALL undergo the same rollback and dictionary cleanup before its original panic payload is resumed. Catching that unwind SHALL leave the handle usable when rollback succeeds.
+
 #### Scenario: Error after successful operations
 - **WHEN** a transaction asserts a statement with a new long string, retracts another statement, and then fails with a unique violation
 - **THEN** the error is returned
@@ -100,6 +102,12 @@ If any operation fails, or the caller's transaction body returns an error, the w
 #### Scenario: Ids from a failed transaction may be reissued
 - **WHEN** a transaction that allocated statement id 20 fails, and the next transaction creates a statement
 - **THEN** the new statement may receive id 20, because the failed transaction left the counters unchanged
+
+#### Scenario: Transaction callback panics
+- **WHEN** the caller catches a Rust unwind after its transaction callback writes facts and dictionary terms and then panics
+- **THEN** the original panic payload is resumed after rollback
+- **AND** no transaction, fact, term, volatile change, or counter change from the body remains
+- **AND** the same handle can commit a subsequent transaction with the next gap-free number
 
 ### Requirement: Single writer serialisation
 All transactions, dry runs, speculative transactions and schema changes on a database SHALL be executed one at a time through a single writer, in a SQLite write transaction taken with an immediate lock, so that each one observes every effect of the transactions committed before it. Concurrent callers SHALL be serialised rather than rejected.
