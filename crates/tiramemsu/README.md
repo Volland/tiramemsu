@@ -438,7 +438,7 @@ assert_eq!(db.now().dependents(job)?.len(), 3);
 // citations: the statement ids behind each row
 let r = db.now().sparql_with(
     "SELECT ?c WHERE { v:alice v:worksAt ?c }",
-    &SparqlOptions { provenance: true },
+    &SparqlOptions { provenance: true, ..Default::default() },
 )?;
 assert_eq!(r.solutions().unwrap().provenance(0), Some(&[job][..]));
 

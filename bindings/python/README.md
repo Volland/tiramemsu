@@ -122,7 +122,7 @@ Times accept a `datetime`, a `date`, epoch milliseconds or an RFC 3339 string. `
 
 | Method | Returns |
 |---|---|
-| `view.sparql(text, provenance=False)` | A select result (iterate it for rows of variable to term; `.vars` lists the variables, `.provenance` the statements behind each row), an ask, a graph, or an update result |
+| `view.sparql(text, provenance=False, query_only=False)` | A select result (iterate it for rows of variable to term; `.vars` lists the variables, `.provenance` the statements behind each row, `.provenance_gaps` what they leave out), an ask, a graph, or an update result |
 | `view.cypher(text, params=None)` | A result with `columns` and `rows` |
 | `view.triples(s=, p=, o=)` | `Statement` values with `eid`, `s`, `p`, `o`, `t_add`, `t_ret`, `valid_from`, `valid_to`, `ret_kind` |
 | `view.path(start, expr, mode="reach", max_hops=None, graphs=None, time_respecting=False)` | Endpoints with hop counts and `arrival`. `mode` is `"reach"`, `"trail"`, `"anyShortest"` or `"allShortest"` |
@@ -133,7 +133,7 @@ Times accept a `datetime`, a `date`, epoch milliseconds or an RFC 3339 string. `
 
 `expr` is SPARQL property-path syntax with the predeclared prefixes `v:`, `sys:`, `tm:`, `rdf:` and `xsd:`, for example `v:knows+`. SPARQL supports RDF 1.2 annotations: `{| v:confidence ?c |}` reads a layer.
 
-With `provenance=True` a select result's `.provenance` holds, for each row, the `Stmt` values that produced it. `graphs` keeps every hop of a path inside the listed graphs. `time_respecting=True` (or a time to start after) makes each hop start no earlier than the previous one, and every row then carries its earliest `arrival` in epoch milliseconds.
+With `provenance=True` a select result's `.provenance` holds, for each row, the `Stmt` values that produced it, and `.provenance_gaps` lists the query parts whose statements are not cited (`["recursivePath"]` for a `+` or `*` path; empty means complete). `query_only=True` makes an update raise `Unsupported` before anything runs. `graphs` keeps every hop of a path inside the listed graphs. `time_respecting=True` (or a time to start after) makes each hop start no earlier than the previous one, and every row then carries its earliest `arrival` in epoch milliseconds.
 
 ## Terms
 

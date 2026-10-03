@@ -795,6 +795,18 @@ The SPARQL JSON document gains a `"provenance"` member between `head` and `resul
 
 The JSON bridge `sparql` operation with `"provenance": true` returns a `"provenance"` array parallel to `"rows"`, omits it otherwise, and rejects a non-boolean argument.
 
+### Provenance Reports Its Gaps
+
+A recursive path puts `ProvenanceGap::RecursivePath` in `Solutions::provenance_gaps` and makes `provenance_complete()` false; fixed-length paths stay complete, a text match cites its statement, and plain queries report no verdict.
+
+### Query Only Refuses Updates
+
+With `SparqlOptions::query_only`, `INSERT DATA`, `DELETE WHERE` and `CLEAR` fail with `Unsupported("update in a query-only call")` before any transaction, while `SELECT` and `ASK` still run.
+
+### Bridge Reports Provenance Gaps And Query Only
+
+The bridge `sparql` operation returns `"provenanceGaps"` beside `"provenance"` (`["recursivePath"]` for a `+` path), and `"queryOnly": true` refuses an update with `Unsupported` and commits nothing.
+
 ## Typed Layers
 
 Checks of the `sys:subjectType` flag of [[data-model#Predicate Schema]] in the core, through both front ends and through the JSON bridge.
@@ -826,3 +838,47 @@ This holds for `retract_matching` too. Retracting the last value lifts the const
 ### Bridge Reports Subject Type Mismatch
 
 A `transact` call that violates `sys:subjectType` fails with code `SubjectTypeMismatch` and commits none of its operations.
+
+## MCP Adapter
+
+The `tiramemsu-mcp` stdio server of [[api#MCP Tools]]: configuration, write policy, typed tools, bounded auditable queries and the JSON-RPC layer, in process and through the binary.
+
+### Command Line Configures The Server
+
+`--db`, `--read-only`, `--text-index` and the budget flags map to `Config`, `0` turns a bound off, the defaults bound every call, and a missing `--db`, an unknown flag or a bad number is refused.
+
+### Read Only Refuses Writes Before A Transaction
+
+In read-only mode `supersede`, `assert`, `confirm` and `import_bundle` fail with `ReadOnly` before their arguments are parsed, the history rows and last transaction are unchanged, and `tools/list` offers only the read tools.
+
+### Requests Cannot Name Another Database
+
+A tool argument named `path`, `db`, `database` or `file` fails with `PathNotAllowed`, any undeclared argument or the language `sql` is `InvalidArgument`, and no other file is created.
+
+### Repeated Assert Returns The Existing Statement
+
+Asserting the same fact again with overlapping valid time returns the first eid with `new: false`; `confirm`, `supersede` (then `NotLive` on the old eid), `dependents` on an as-of view and `graph` keep their existing semantics.
+
+### Malformed Bundle Commits Nothing
+
+`import_bundle` with an unknown format, a non-object or a broken statement fails with `InvalidArgument` and leaves history unchanged, while the exported bundle imports into a fresh memory.
+
+### Query Reports View And Provenance Coverage
+
+A `+` path query reports coverage `incomplete` with gap `recursivePath`; a plain `SELECT` on an as-of view echoes that view and is `complete`; `ASK`, Cypher and `provenance: false` are `unavailable`; provenance on `ASK` is `Unsupported`.
+
+### Queries Cannot Write
+
+The `query` tool refuses SPARQL `INSERT DATA` and `DELETE WHERE` and a Cypher `CREATE` with `Unsupported`, and the store stays empty.
+
+### Budget Errors Leave The Server Serving
+
+A query past `--max-rows` fails with `ResultLimitExceeded` as a tool error and the next request runs; a 1 ms deadline gives `DeadlineExceeded`; a missing text index gives `TextIndexUnavailable`.
+
+### Protocol Handshake And Errors
+
+`initialize` echoes a supported revision and answers an unknown one with `2025-06-18`, `structuredContent` appears from that revision on, notifications get no answer, and parse, method, tool and request errors carry their JSON-RPC codes.
+
+### Stdio Session End To End
+
+The binary started with `--db` and `--text-index` answers a full session line by line over stdio (handshake, list, assert, a parse error, a query with provenance, text search) and exits cleanly when stdin closes.

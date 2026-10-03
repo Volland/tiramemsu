@@ -1291,6 +1291,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "tiramemsu-mcp"
+version = "0.2.0"
+dependencies = [
+ "serde_json",
+ "tempfile",
+ "tiramemsu",
+ "tiramemsu-json",
+]
+
+[[package]]
 name = "tiramemsu-node"
 version = "0.2.0"
 dependencies = [

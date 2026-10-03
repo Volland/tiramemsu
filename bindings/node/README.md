@@ -124,7 +124,7 @@ A view chooses when you look and when the fact was true. Every read takes a view
 
 | Method | Returns |
 |---|---|
-| `view.sparql(text, { provenance? })` | `{ kind: "select", vars, rows, provenance? }`, `{ kind: "ask", value }`, `{ kind: "graph", triples }` or `{ kind: "update", report }` |
+| `view.sparql(text, { provenance?, queryOnly? })` | `{ kind: "select", vars, rows, provenance?, provenanceGaps? }`, `{ kind: "ask", value }`, `{ kind: "graph", triples }` or `{ kind: "update", report }` |
 | `view.cypher(text, params?)` | `{ columns, rows }` |
 | `view.triples({ s?, p?, o? })` | Statements with `eid`, the three terms, `tAdd`, `tRet`, `validFrom`, `validTo`, `retKind` |
 | `view.path(start, expr, { mode?, maxHops?, graphs?, timeRespecting? })` | Endpoints with hop counts and `arrival`. `mode` is `reach`, `trail`, `anyShortest` or `allShortest` |
@@ -135,7 +135,7 @@ A view chooses when you look and when the fact was true. Every read takes a view
 
 `expr` is SPARQL property-path syntax with the predeclared prefixes `v:`, `sys:`, `tm:`, `rdf:` and `xsd:`, for example `v:knows+`. SPARQL supports RDF 1.2 annotations: `{| v:confidence ?c |}` reads a layer.
 
-With `provenance: true` a SELECT result also carries, for each row, the statements (`{ stmt }` terms) that produced it. `graphs` keeps every hop of a path inside the listed graphs. `timeRespecting: true` (or `{ after: time }`) makes each hop start no earlier than the previous one, and every row then carries its earliest `arrival` in epoch milliseconds.
+With `provenance: true` a SELECT result also carries, for each row, the statements (`{ stmt }` terms) that produced it, and `provenanceGaps` lists the query parts whose statements are not cited (`["recursivePath"]` for a `+` or `*` path; empty means complete). `queryOnly: true` makes an update fail with `Unsupported` before anything runs. `graphs` keeps every hop of a path inside the listed graphs. `timeRespecting: true` (or `{ after: time }`) makes each hop start no earlier than the previous one, and every row then carries its earliest `arrival` in epoch milliseconds.
 
 ## Terms
 

@@ -1,0 +1,32 @@
+[package]
+name = "tiramemsu-mcp"
+description = "A local stdio MCP server exposing a tiramemsu memory file as typed agent tools"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+readme = "README.md"
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+keywords = ["mcp", "agent-memory", "graph-database", "sqlite", "sparql"]
+categories = ["database-implementations", "command-line-utilities"]
+rust-version.workspace = true
+
+[lib]
+name = "tiramemsu_mcp"
+path = "src/lib.rs"
+
+[[bin]]
+name = "tiramemsu-mcp"
+path = "src/main.rs"
+
+[dependencies]
+tiramemsu = { workspace = true }
+tiramemsu-json = { workspace = true }
+serde_json = "1"
+
+[dev-dependencies]
+tempfile = "3"
+
+[lints]
+workspace = true

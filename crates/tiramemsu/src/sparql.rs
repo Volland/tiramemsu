@@ -74,6 +74,7 @@ fn to_solutions(r: &QueryResult) -> Result<Solutions> {
         vars,
         rows,
         provenance: None,
+        provenance_gaps: Vec::new(),
     })
 }
 
@@ -89,12 +90,17 @@ fn to_solutions(r: &QueryResult) -> Result<Solutions> {
 /// };
 /// assert!(opts.provenance);
 /// assert!(!SparqlOptions::default().provenance);
+/// assert!(!SparqlOptions::default().query_only);
 /// ```
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct SparqlOptions {
     /// Attach to each `SELECT` row the eids of the stored statements that matched
     /// to produce it ([`Solutions::provenance`]). Off by default.
     pub provenance: bool,
+    /// Refuse an update request with `Unsupported("update in a query-only call")`
+    /// before anything runs, so text from an untrusted caller can only read. Off
+    /// by default.
+    pub query_only: bool,
 }
 
 impl View<'_> {
@@ -153,7 +159,10 @@ impl View<'_> {
     /// taken, annotations, `GRAPH` memberships and `SERVICE` time scopes (an eid
     /// matched in an as-of scope may be retracted now). Statements only tested by
     /// `FILTER EXISTS`, `NOT EXISTS` or `MINUS`, virtual predicates and recursive
-    /// property paths add none. The rows themselves are those of [`View::sparql`];
+    /// property paths add none; a query with a recursive path lists
+    /// [`ProvenanceGap::RecursivePath`](crate::ProvenanceGap) in
+    /// [`Solutions::provenance_gaps`], and [`Solutions::provenance_complete`] is
+    /// then `Some(false)`. The rows themselves are those of [`View::sparql`];
     /// several eids with the same `(s, p, o)` are one SPARQL triple and are all
     /// listed. `DISTINCT` merges rows and unions their provenance, and a group's
     /// provenance is the union over its rows.
@@ -162,7 +171,9 @@ impl View<'_> {
     ///
     /// The errors of [`View::sparql`], and with `provenance`:
     /// `Unsupported("provenance for ASK")`, `("provenance for CONSTRUCT")` and
-    /// `("provenance for updates")`, before anything runs.
+    /// `("provenance for updates")`, before anything runs. With `query_only`, an
+    /// update request is `Unsupported("update in a query-only call")`, also before
+    /// anything runs.
     ///
     /// ```
     /// # use tiramemsu::*;
@@ -178,6 +189,13 @@ impl View<'_> {
     /// // without the option there is no provenance
     /// let plain = db.now().sparql("SELECT ?c WHERE { v:alice v:worksAt ?o . ?o v:in ?c }")?;
     /// assert_eq!(plain.solutions().unwrap().provenance(0), None);
+    /// // a recursive path leaves its statements uncited
+    /// let r = db.now().sparql_with("SELECT ?c WHERE { v:alice (v:worksAt/v:in)+ ?c }", &opts)?;
+    /// assert_eq!(r.solutions().unwrap().provenance_complete(), Some(false));
+    /// // query-only text cannot write
+    /// let read = SparqlOptions { query_only: true, ..Default::default() };
+    /// let e = db.now().sparql_with("INSERT DATA { v:a v:p v:b }", &read);
+    /// assert!(matches!(e, Err(Error::Unsupported { .. })));
     /// # Ok::<(), Error>(())
     /// ```
     pub fn sparql_with(&self, text: &str, opts: &SparqlOptions) -> Result<SparqlResult> {
@@ -186,6 +204,9 @@ impl View<'_> {
             match tm_sparql::prepare(text, &env)? {
                 Prepared::Query(plan) if opts.provenance => self.run_provenance(&plan),
                 Prepared::Query(plan) => self.run_plan(&plan),
+                Prepared::Update(_) if opts.query_only => {
+                    Err(Error::unsupported(tm_sparql::error::UPDATE_QUERY_ONLY))
+                }
                 Prepared::Update(_) if opts.provenance => {
                     Err(Error::unsupported(tm_sparql::error::PROVENANCE_UPDATE))
                 }

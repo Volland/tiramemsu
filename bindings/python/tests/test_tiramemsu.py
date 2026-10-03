@@ -686,9 +686,17 @@ class TestProvenanceDependentsBundles:
         r = db.now().sparql(q, provenance=True)
         assert isinstance(r, SparqlSelectResult)
         assert r.provenance == [[Stmt(1)]]
+        assert r.provenance_gaps == []
         plain = db.now().sparql(q)
         assert isinstance(plain, SparqlSelectResult)
         assert plain.provenance is None
+        assert plain.provenance_gaps is None
+        path = db.now().sparql(SPARQL_PREFIX + "SELECT ?o WHERE { v:a v:p+ ?o }", provenance=True)
+        assert isinstance(path, SparqlSelectResult)
+        assert path.provenance_gaps == ["recursivePath"]
+        with pytest.raises(TiramemsuError) as e:
+            db.now().sparql(SPARQL_PREFIX + "INSERT DATA { v:x v:y v:z }", query_only=True)
+        assert e.value.code == "Unsupported"
 
     def test_dependents_preview_a_retraction(self, db: Database) -> None:
         ctx = db.transact()

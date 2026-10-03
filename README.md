@@ -30,6 +30,7 @@ A knowledge graph stores facts. An agent also needs to say *how sure am I*, *whe
 - **Bulk import.** An opt-in import session commits chunks as ordinary atomic transactions, holds the write lease, skips the per-commit `ANALYZE`, and refreshes planner statistics once when finished. Progress counts committed rows and rejected chunks; cancelling keeps every committed chunk.
 - **Text recall.** Opt-in FTS5 recall over string values (inline short strings included): `View::text_search`, SPARQL `?e tm:textMatch "words"` and Cypher `CALL tiramemsu.text.search(...)` share one operation. Hits respect as-of, history, valid time and graphs, and carry a lexical score plus evidence (confidence, confirmations, authors, when added); absent evidence is reported as absent, and ties break on the statement id.
 - **Bounded calls.** Opt-in query budgets: a deadline, cancellation from another thread, a reader-pool timeout and row or byte limits per operation. A stopped write commits nothing, and an over-budget result is an error, never a truncated answer.
+- **MCP server.** `tiramemsu-mcp` serves one memory file to Claude Code, Claude Desktop or any MCP client over stdio (`claude mcp add tiramemsu -- tiramemsu-mcp --db ./memory.db`): typed `assert`, `confirm`, `supersede`, `query`, `dependents`, bundle and `text_search` tools, a read-only mode, per-call budgets, and query results that name their view and say whether their provenance is complete.
 - **Embedded.** One SQLite file (WAL, STRICT). The core reaches SQLite through a small synchronous executor trait.
 
 ### What agents are saying
@@ -158,7 +159,7 @@ lat check                              # design graph and code refs stay in sync
 | Cypher | 2 615 of 3 880 openCypher TCK scenarios (67 %). Temporal types, `CALL`, and a few dual-view cases are deferred and listed in `crates/tm-cypher/tests/tck/allowlist.txt` |
 | Speed | Raw SQLite lookups on the schema take about 4 µs at 11 million statements; about 150 bytes per statement with all indexes. See [`bench/`](bench/) |
 
-**Known limits.** As-of lookups slow down as one key collects many updates. A membership per statement roughly doubles the file. SPARQL decimals come back as doubles. Time-respecting paths have no SPARQL or Cypher syntax yet (API and `tm_path` only), and recursive paths add no statement ids to query provenance. There is no MCP server, WASM binding or network server yet. The comparison with oxilite's change-log approach to history is not benchmarked head to head.
+**Known limits.** As-of lookups slow down as one key collects many updates. A membership per statement roughly doubles the file. SPARQL decimals come back as doubles. Time-respecting paths have no SPARQL or Cypher syntax yet (API and `tm_path` only), and recursive paths add no statement ids to query provenance (results say so: `provenance_gaps`). There is no WASM binding or network server yet; the MCP server is local stdio only. The comparison with oxilite's change-log approach to history is not benchmarked head to head.
 
 ## How it differs from oxilite
 

@@ -381,8 +381,18 @@ describe("provenance, dependents and bundles", () => {
       const r = db.now().sparql("SELECT ?o WHERE { v:a v:p ?o }", { provenance: true });
       if (r.kind !== "select") throw new Error("expected select");
       expect(r.provenance).toEqual([[stmt(1)]]);
+      expect(r.provenanceGaps).toEqual([]);
       const plain = db.now().sparql("SELECT ?o WHERE { v:a v:p ?o }");
       expect(plain.kind === "select" && plain.provenance).toBeFalsy();
+      const path = db.now().sparql("SELECT ?o WHERE { v:a v:p+ ?o }", { provenance: true });
+      expect(path.kind === "select" && path.provenanceGaps).toEqual(["recursivePath"]);
+      try {
+        db.now().sparql("INSERT DATA { v:x v:y v:z }", { queryOnly: true });
+        throw new Error("expected a refusal");
+      } catch (e) {
+        expect(e).toBeInstanceOf(TiramemsuError);
+        expect((e as TiramemsuError).code).toBe("Unsupported");
+      }
     } finally { cleanup(dir); }
   });
 

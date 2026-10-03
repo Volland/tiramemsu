@@ -27,3 +27,5 @@ tm-ir = { path = "crates/tm-ir", version = "0.2.0" }
 tm-exec = { path = "crates/tm-exec", version = "0.2.0" }
 tm-sparql = { path = "crates/tm-sparql", version = "0.2.0" }
 tm-cypher = { path = "crates/tm-cypher", version = "0.2.0" }
+tiramemsu-json = { path = "bindings/json", version = "0.2.0" }
+tiramemsu-mcp = { path = "crates/tiramemsu-mcp", version = "0.2.0" }

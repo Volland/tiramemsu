@@ -137,22 +137,27 @@ The error enum is `#[non_exhaustive]`. Each OpenSpec change adds the variants it
 
 ## Bindings
 
-Bindings wrap the facade crate one to one. Python and Node are implemented over a shared JSON bridge ([[bindings]]); the others are designed and ordered later. See [[overview#Open Inputs]].
+Bindings wrap the facade crate one to one. Python, Node and the MCP server are implemented over a shared JSON bridge ([[bindings]]); the others are designed and ordered later. See [[overview#Open Inputs]].
 
 | Binding | Crate | Notes |
 |---|---|---|
 | Python | `tiramemsu-python`, package `tiramemsu` (PyO3, maturin wheel) | Done. Transactions take a list of op dicts, or a context manager |
 | Node | `tiramemsu-node`, package `@tiramemsu/node` (napi-rs) | Done. Sync API; queries return plain JS objects |
 | WASM | `tiramemsu-wasm` | SQLite compiled to WASM with an OPFS VFS; single-threaded, reader = writer |
-| MCP | `tiramemsu-mcp` (stdio JSON-RPC server) | Tools: `cypher`, `sparql`, `assert`, `retract`, `supersede`, `history`, `as_of`, `schema` |
+| MCP | `tiramemsu-mcp` (stdio JSON-RPC server, binary of the same name) | Done. Tools: `assert`, `confirm`, `supersede`, `query`, `dependents`, `export_bundle`, `import_bundle`, `text_search`; see [[api#MCP Tools]] |
 | SQLite extension | later | Only the `tm_path` table function and time helpers; no write API |
 
 ## MCP Tools
 
-The MCP server is the likely first consumer for LLM agents. Its tools are thin wrappers around `View` and `Tx`, with time as an explicit argument.
+`tiramemsu-mcp` is a separate, publishable crate and binary: a local stdio MCP server over one configured file, with typed memory tools mapped onto the JSON bridge ([[bindings#JSON Bridge]]).
 
-- `cypher(query, params?, as_of?, valid_at?)` and `sparql(query, as_of?, valid_at?)` return rows as JSON.
-- `assert(s, p, o, valid_from?, valid_to?, meta?)`, `retract(eid, reason?)` and `supersede(eid, patch, reason?)` return the `TxReport`.
-- `assert` and `sparql` take an optional `graph`: `assert` adds the statement to that graph (`Tx::add_to_graph`), and a search or `sparql` call filters to it (`FROM <graph>`). The MCP crate does not exist yet, so this is the contract it implements.
-- `history(node_or_eid)` returns the event rows and the tx metadata that touch it.
-- `schema()` lists predicates with their flags and usage counts.
+Register it with `claude mcp add tiramemsu -- tiramemsu-mcp --db ./memory.db`, or in Claude Desktop's `claude_desktop_config.json` as `{"mcpServers": {"tiramemsu": {"command": "tiramemsu-mcp", "args": ["--db", "/abs/memory.db"]}}}`. The crate README lists every flag and tool.
+
+- **Protocol:** JSON-RPC 2.0, one message per line; `initialize`, `ping`, `tools/list`, `tools/call`, notifications ignored, batches answered. Revision `2025-06-18`, with `2025-03-26` and `2024-11-05` accepted; `structuredContent` from `2025-06-18` on. The layer is hand-rolled over `serde_json`, so no protocol crate reaches `tm-core` or the facade. It lives in [[crates/tiramemsu-mcp/src/lib.rs#Server]].
+- **Configuration** comes only from the command line ([[crates/tiramemsu-mcp/src/config.rs#parse_args]]): `--db` (required), `--read-only`, `--text-index`, and `--timeout-ms` (30000), `--reader-timeout-ms`, `--max-rows` (10000), `--max-bytes` (8 MiB), `0` meaning unbounded. The bounds are one `QueryBudget` per tool call ([[query#Query Budgets]]).
+- **Tools:** `assert` (`s`, `p`, `o`, `validFrom`, `validTo`, `onExisting`, `graph`), `confirm` (`eid`), `supersede` (`eid`, `patch`), `import_bundle` (`bundle`) write one transaction each; `query` (`language`: `sparql` or `cypher`, `text`, `params`, `view`, `provenance`), `dependents` and `export_bundle` (`eid`, `view`) and `text_search` ([[query#Text Recall]]) read. Terms and views use the bridge's JSON forms.
+- **Write policy:** read-only mode leaves the write tools out of `tools/list` and refuses them with `ReadOnly` before arguments are parsed or a transaction starts. `query` only reads: SPARQL runs with `SparqlOptions::query_only` and Cypher on a view, so an update is `Unsupported`; there is no SQL.
+- **Path policy:** arguments are checked against each tool's declared keys; `path`, `db`, `database`, `file` and similar are `PathNotAllowed`, anything else undeclared is `InvalidArgument`. Free text is data and never changes authorization.
+- **Auditable results:** every read echoes its `view` (default `{"kind": "now"}`). A SPARQL `SELECT` runs with provenance unless `provenance: false`, and `provenance.coverage` is `complete`, `incomplete` with `gaps` from `Solutions::provenance_gaps` (a recursive path), or `unavailable` (Cypher, `ASK`, `CONSTRUCT`, or not requested). An unsupported combination is an error, never retried another way.
+- **Errors** are tool results with `isError` and `{"code", "message"}`: the bridge codes plus `ReadOnly` and `PathNotAllowed`; a malformed bundle is `InvalidArgument` and commits nothing. Protocol faults are JSON-RPC errors (`-32700`, `-32600`, `-32601`, `-32602` for an unknown tool), and the server keeps serving after any of them.
+- **Not included:** HTTP or remote transport, multi-user authorization, `retract`, `history` and `schema` tools (SPARQL on a history view covers history), and automatic extraction or embeddings.

@@ -318,7 +318,8 @@ impl Database {
 
     /// Runs one operation.
     ///
-    /// Reads take `{"view": ..., ...}` and are `sparql` (`text`), `cypher` (`text`,
+    /// Reads take `{"view": ..., ...}` and are `sparql` (`text`, `provenance`,
+    /// `queryOnly`), `cypher` (`text`,
     /// `params`), `triples` (`s`, `p`, `o`), `path` (`start`, `path`, `mode`,
     /// `maxHops`), `events` (`since`), `graphs`, `graphMembers` (`graph`), `values`
     /// (`s`, `key`), `dependents` (`eid`: what stands on a statement) and `bundle`

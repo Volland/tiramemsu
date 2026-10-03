@@ -498,17 +498,22 @@ class View:
             args["budget"] = self._budget._to_json()
         return _call(self._native, op, json.dumps(args))
 
-    def sparql(self, text: str, *, provenance: bool = False) -> SparqlResult:
+    def sparql(
+        self, text: str, *, provenance: bool = False, query_only: bool = False
+    ) -> SparqlResult:
         """Run a SPARQL query on this view.
 
         Returns :class:`~._types.SparqlSelectResult`,
         :class:`~._types.SparqlAskResult`, :class:`~._types.SparqlGraphResult`, or
         :class:`~._types.SparqlUpdateResult` depending on the query form.  With
-        *provenance*, a SELECT result also lists the statements behind each row.
+        *provenance*, a SELECT result also lists the statements behind each row;
+        with *query_only*, an update raises ``Unsupported`` before anything runs.
         """
         args: Dict[str, Any] = {"text": text}
         if provenance:
             args["provenance"] = True
+        if query_only:
+            args["queryOnly"] = True
         result_text = self._call("sparql", args)
         return sparql_result_from_json(json.loads(result_text))
 

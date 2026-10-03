@@ -483,8 +483,10 @@ fn sparql_rows_can_carry_provenance() {
         .unwrap();
     assert_eq!(r["rows"], json!([{ "o": v("b") }]));
     assert_eq!(r["provenance"], json!([[{ "stmt": 1 }]]));
+    assert_eq!(r["provenanceGaps"], json!([]));
     let plain = db.call("sparql", &json!({ "text": text })).unwrap();
     assert!(plain.get("provenance").is_none());
+    assert!(plain.get("provenanceGaps").is_none());
     let e = db
         .call(
             "sparql",
@@ -496,6 +498,56 @@ fn sparql_rows_can_carry_provenance() {
         .call("sparql", &json!({ "text": text, "provenance": "yes" }))
         .unwrap_err();
     assert_eq!(e.code(), "InvalidArgument");
+}
+
+// add-mcp-adapter "Incomplete provenance" and query-only text on the bridge
+// @lat: [[tests#Query Provenance#Bridge Reports Provenance Gaps And Query Only]]
+#[test]
+fn sparql_reports_provenance_gaps_and_refuses_updates_when_query_only() {
+    let (_d, db) = open();
+    db.call(
+        "transact",
+        &json!({ "ops": [
+            { "op": "assert", "s": v("a"), "p": v("knows"), "o": v("b") },
+            { "op": "assert", "s": v("b"), "p": v("knows"), "o": v("c") }
+        ] }),
+    )
+    .unwrap();
+    let r = db
+        .call(
+            "sparql",
+            &json!({ "text": "SELECT ?x WHERE { v:a v:knows+ ?x }", "provenance": true }),
+        )
+        .unwrap();
+    assert_eq!(r["rows"].as_array().unwrap().len(), 2);
+    assert_eq!(r["provenance"], json!([[], []]));
+    assert_eq!(r["provenanceGaps"], json!(["recursivePath"]));
+    let e = db
+        .call(
+            "sparql",
+            &json!({ "text": "INSERT DATA { v:x v:y v:z }", "queryOnly": true }),
+        )
+        .unwrap_err();
+    assert_eq!(e.code(), "Unsupported");
+    assert_eq!(
+        db.call("events", &J::Null)
+            .unwrap()
+            .as_array()
+            .unwrap()
+            .len(),
+        2
+    );
+    let e = db
+        .call("sparql", &json!({ "text": "ASK {}", "queryOnly": 1 }))
+        .unwrap_err();
+    assert_eq!(e.code(), "InvalidArgument");
+    let r = db
+        .call(
+            "sparql",
+            &json!({ "text": "ASK { v:a v:knows v:b }", "queryOnly": true }),
+        )
+        .unwrap();
+    assert_eq!(r, json!({ "kind": "ask", "value": true }));
 }
 
 #[test]

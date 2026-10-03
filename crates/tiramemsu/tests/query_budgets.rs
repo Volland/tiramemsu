@@ -741,7 +741,10 @@ fn provenance_lookups_draw_on_the_same_operation_budget() {
         plain
     );
     // with provenance the sibling lookups need rows too, from the same budget
-    let opts = SparqlOptions { provenance: true };
+    let opts = SparqlOptions {
+        provenance: true,
+        ..Default::default()
+    };
     let r = db.now().with_budget(&budget).sparql_with(q, &opts);
     assert!(
         matches!(

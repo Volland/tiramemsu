@@ -10,9 +10,11 @@
 //!
 //! What counts: the patterns that produced the row, including matched `OPTIONAL`
 //! parts, the `UNION` branch taken, `GRAPH` memberships, annotations, fixed-length
-//! paths and `SERVICE` time scopes. What does not: statements only tested by
-//! `FILTER EXISTS`, `NOT EXISTS` or `MINUS` (expressions are never walked),
-//! virtual predicates and recursive path regions.
+//! paths, text matches (`tm:textMatch`) and `SERVICE` time scopes. What does not:
+//! statements only tested by `FILTER EXISTS`, `NOT EXISTS` or `MINUS`
+//! (expressions are never walked), virtual predicates (their subject statement
+//! counts) and recursive path regions, which [`ProvenancePlan::gaps`] records so
+//! that a caller can tell complete provenance from incomplete.
 
 // @lat: [[query#Front Ends#SPARQL#Query Provenance]]
 
@@ -29,7 +31,7 @@ use tm_ir::{
 use crate::error::{unsupported, PROVENANCE_ASK, PROVENANCE_CONSTRUCT, PROVENANCE_EMPTY_DISTINCT};
 use crate::lower::vars::is_internal;
 use crate::lower::{QueryForm, QueryPlan};
-use crate::results::Solutions;
+use crate::results::{ProvenanceGap, Solutions};
 
 /// Canonical eids per sibling lookup (one `VALUES` row each).
 const SIBLING_BATCH: usize = 500;
@@ -67,6 +69,9 @@ pub struct ProvenancePlan {
     pub skip: usize,
     /// Top-level `LIMIT` after `DISTINCT`, applied while assembling.
     pub limit: Option<usize>,
+    /// The parts of the query whose statements are not cited (recursive paths),
+    /// ascending and without duplicates; empty when the provenance is complete.
+    pub gaps: Vec<ProvenanceGap>,
 }
 
 /// Rewrites a lowered `SELECT` so that its rows carry provenance.
@@ -114,6 +119,7 @@ pub fn instrument(plan: &QueryPlan) -> Result<ProvenancePlan> {
         distinct: pass.distinct,
         skip: pass.skip,
         limit: pass.limit,
+        gaps: pass.gaps.into_iter().collect(),
     })
 }
 
@@ -125,6 +131,7 @@ struct Pass {
     distinct: bool,
     skip: usize,
     limit: Option<usize>,
+    gaps: BTreeSet<ProvenanceGap>,
 }
 
 /// Adds the columns of `more` that `cols` does not have yet (a variable bound on
@@ -283,7 +290,22 @@ impl Pass {
     fn op(&mut self, op: Op) -> Result<(Op, Vec<ProvColumn>)> {
         Ok(match op {
             Op::Triple(t) => self.triple(t),
-            op @ (Op::Path(_) | Op::Text(_) | Op::Values(_)) => (op, Vec::new()),
+            Op::Path(p) => {
+                // `REACH` carries no eids: the endpoints are uncited
+                self.gaps.insert(ProvenanceGap::RecursivePath);
+                (Op::Path(p), Vec::new())
+            }
+            Op::Text(t) => {
+                // the matching statement's eid is bound already, like a reifier
+                let c = ProvColumn {
+                    var: t.eid.clone(),
+                    view: t.view,
+                    siblings: false,
+                    list: false,
+                };
+                (Op::Text(t), vec![c])
+            }
+            op @ Op::Values(_) => (op, Vec::new()),
             Op::Join(j) => {
                 let mut inputs = Vec::with_capacity(j.inputs.len());
                 let mut cols = Vec::new();
@@ -533,6 +555,7 @@ impl ProvenancePlan {
                     .map(|s| s.into_iter().collect())
                     .collect(),
             ),
+            provenance_gaps: self.gaps.clone(),
         })
     }
 
@@ -626,6 +649,18 @@ mod tests {
         assert_eq!(names(&p), ["r"]);
     }
 
+    // a recursive path is a gap; a fixed-length path and a text match are not
+    #[test]
+    fn recursive_paths_are_gaps() {
+        let p = plan("SELECT ?x WHERE { v:a v:knows+ ?x }").unwrap();
+        assert_eq!(p.gaps, [ProvenanceGap::RecursivePath]);
+        let p = plan("SELECT ?x WHERE { v:a v:knows/v:knows ?x }").unwrap();
+        assert!(p.gaps.is_empty());
+        let p = plan("SELECT ?e WHERE { ?e tm:textMatch \"lisbon\" }").unwrap();
+        assert!(p.gaps.is_empty());
+        assert_eq!(names(&p), ["e"]);
+    }
+
     // query-provenance "Time scopes and graphs": the membership eid is a column
     #[test]
     fn graph_patterns_bind_the_membership() {
@@ -692,6 +727,7 @@ mod tests {
                 vec![iri("c"), stmt(4)],
             ],
             provenance: None,
+            provenance_gaps: Vec::new(),
         };
         let mut calls = 0;
         let sol = p
@@ -709,6 +745,7 @@ mod tests {
                         vec![stmt(4), stmt(4)],
                     ],
                     provenance: None,
+                    provenance_gaps: Vec::new(),
                 })
             })
             .unwrap();

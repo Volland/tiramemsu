@@ -39,4 +39,4 @@ pub use tm_ir as ir;
 pub use tm_ir::{IrQuery, Params, PathMode};
 pub use tm_rusqlite::RusqliteHost;
 pub use tm_sparql as sparql_frontend;
-pub use tm_sparql::results::{RdfTerm, RdfTriple, Solutions};
+pub use tm_sparql::results::{ProvenanceGap, RdfTerm, RdfTriple, Solutions};

@@ -447,6 +447,7 @@ class SparqlSelectResult:
         vars_: List[str],
         rows: List[Dict[str, Any]],
         provenance: Optional[List[List[Any]]] = None,
+        provenance_gaps: Optional[List[str]] = None,
     ) -> None:
         self.vars: List[str] = vars_
         self._rows = rows
@@ -456,6 +457,11 @@ class SparqlSelectResult:
             else [[term_from_json(e) for e in row] for row in provenance]
         )
         """With ``provenance=True``: the statements behind each row, parallel to the rows."""
+        self.provenance_gaps: Optional[List[str]] = (
+            None if provenance_gaps is None else list(provenance_gaps)
+        )
+        """With ``provenance=True``: the query parts whose statements are not cited
+        (``"recursivePath"``); empty when the provenance is complete."""
 
     def __iter__(self) -> Iterator[Dict[str, Any]]:
         for row in self._rows:
@@ -498,7 +504,7 @@ def sparql_result_from_json(j: Dict[str, Any]) -> SparqlResult:
     if kind == "select":
         vars_: List[str] = list(j.get("vars") or [])
         rows: List[Dict[str, Any]] = list(j.get("rows") or [])
-        return SparqlSelectResult(vars_, rows, j.get("provenance"))
+        return SparqlSelectResult(vars_, rows, j.get("provenance"), j.get("provenanceGaps"))
     if kind == "ask":
         return SparqlAskResult(bool(j.get("value", False)))
     if kind == "graph":

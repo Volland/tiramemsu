@@ -6,7 +6,10 @@ use sparql_common::*;
 use tiramemsu::*;
 
 fn on() -> SparqlOptions {
-    SparqlOptions { provenance: true }
+    SparqlOptions {
+        provenance: true,
+        ..Default::default()
+    }
 }
 
 /// A SELECT with provenance on `view`.
@@ -175,6 +178,81 @@ fn tested_statements_are_not_cited() {
     assert!(got.iter().all(|(_, p)| p.is_empty()));
     let got = check(&t, "SELECT ?x WHERE { v:a v:knows+ ?x . ?x v:knows ?y }");
     assert_eq!(got, vec![(some(&[v("b")]), vec![e[4]])]);
+}
+
+// add-mcp-adapter "Incomplete provenance": a recursive path is a gap the
+// solutions report, while fixed-length paths and text matches are cited
+// @lat: [[tests#Query Provenance#Provenance Reports Its Gaps]]
+#[test]
+fn provenance_reports_its_gaps() {
+    let t = T::new();
+    let mut e = Vec::new();
+    t.tx(|tx| {
+        e.push(put(tx, v("a"), v("knows"), v("b"))?);
+        e.push(put(tx, v("b"), v("knows"), v("c"))?);
+        e.push(put(tx, v("a"), v("note"), Value::str("lisbon offsite"))?);
+        Ok(())
+    });
+    let gaps = |q: &str| {
+        let s = prov_on(&t.db.now(), q);
+        (s.provenance_gaps.clone(), s.provenance_complete())
+    };
+    assert_eq!(
+        gaps("SELECT ?x WHERE { v:a v:knows+ ?x }"),
+        (vec![ProvenanceGap::RecursivePath], Some(false))
+    );
+    assert_eq!(
+        gaps("SELECT ?x WHERE { v:a v:knows* ?x . ?x v:knows ?y }"),
+        (vec![ProvenanceGap::RecursivePath], Some(false))
+    );
+    assert_eq!(
+        gaps("SELECT ?x WHERE { v:a v:knows/v:knows ?x }"),
+        (vec![], Some(true))
+    );
+    // without provenance there is no verdict
+    let plain = t.sel("SELECT ?x WHERE { v:a v:knows+ ?x }");
+    assert_eq!(plain.provenance_complete(), None);
+    assert!(plain.provenance_gaps.is_empty());
+    // a text match cites the statement it matched
+    t.db.enable_text_index().unwrap();
+    let s = prov_on(
+        &t.db.now(),
+        "SELECT ?e WHERE { ?e tm:textMatch \"lisbon\" }",
+    );
+    assert_eq!(s.provenance(0), Some(&[e[2]][..]));
+    assert_eq!(s.provenance_complete(), Some(true));
+}
+
+// add-mcp-adapter "Read-only mutation": query-only text cannot write
+// @lat: [[tests#Query Provenance#Query Only Refuses Updates]]
+#[test]
+fn query_only_refuses_updates() {
+    let t = T::new();
+    let read = SparqlOptions {
+        query_only: true,
+        ..Default::default()
+    };
+    for q in [
+        "INSERT DATA { v:a v:p v:b }",
+        "DELETE WHERE { ?s ?p ?o }",
+        "CLEAR GRAPH <urn:g>",
+    ] {
+        let r = t.db.now().sparql_with(q, &read);
+        assert!(
+            matches!(&r, Err(Error::Unsupported { feature }) if feature == "update in a query-only call"),
+            "{q}: {r:?}"
+        );
+    }
+    assert!(t.live().is_empty());
+    assert_eq!(t.last_t(), 0);
+    // queries of every form still run
+    t.upd("INSERT DATA { v:a v:p v:b }");
+    assert!(t.db.now().sparql_with("ASK { v:a v:p v:b }", &read).is_ok());
+    assert!(t
+        .db
+        .now()
+        .sparql_with("SELECT ?o WHERE { v:a v:p ?o }", &read)
+        .is_ok());
 }
 
 // query-provenance "Modifiers, aggregates and subqueries": DISTINCT, LIMIT,

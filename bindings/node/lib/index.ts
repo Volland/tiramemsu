@@ -178,6 +178,11 @@ export type SparqlResult =
       rows: SelectRow[];
       /** With `{ provenance: true }`: the statements behind each row, parallel to `rows`. */
       provenance?: StmtTerm[][];
+      /**
+       * With `{ provenance: true }`: the query parts whose statements are not cited
+       * (`"recursivePath"`); empty when the provenance is complete.
+       */
+      provenanceGaps?: string[];
     }
   | { kind: "ask"; value: boolean }
   | { kind: "graph"; triples: Array<{ s: Term; p: Term; o: Term }> }
@@ -274,6 +279,7 @@ function decodeSparql(r: Record<string, unknown>): SparqlResult {
     });
     const out: SparqlResult = { kind: "select", vars: r.vars as string[], rows };
     if (r.provenance) out.provenance = r.provenance as StmtTerm[][];
+    if (r.provenanceGaps) out.provenanceGaps = r.provenanceGaps as string[];
     return out;
   }
   if (r.kind === "ask") return { kind: "ask", value: r.value as boolean };
@@ -409,11 +415,13 @@ export class View {
 
   /**
    * SPARQL query (SELECT, ASK, CONSTRUCT, DESCRIBE, or UPDATE). With `provenance`, a SELECT
-   * result also lists the statements that produced each row.
+   * result also lists the statements that produced each row; with `queryOnly`, an update
+   * fails with code `Unsupported` before anything runs.
    */
-  sparql(text: string, opts?: { provenance?: boolean }): SparqlResult {
+  sparql(text: string, opts?: { provenance?: boolean; queryOnly?: boolean }): SparqlResult {
     const args: Record<string, unknown> = { ...this._base(), text };
     if (opts?.provenance) args.provenance = true;
+    if (opts?.queryOnly) args.queryOnly = true;
     return decodeSparql(callNative(this._db, "sparql", args) as Record<string, unknown>);
   }
 

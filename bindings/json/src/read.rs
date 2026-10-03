@@ -44,14 +44,16 @@ pub fn run(view: &View<'_>, op: &str, args: &J) -> Res<J> {
     match op {
         "sparql" => {
             let text = str_arg(args, "text")?;
-            let provenance = match args.get("provenance") {
-                None | Some(J::Null) => false,
-                Some(J::Bool(b)) => *b,
-                Some(_) => return Err(arg("provenance must be a boolean")),
+            let flag = |key: &str| match args.get(key) {
+                None | Some(J::Null) => Ok(false),
+                Some(J::Bool(b)) => Ok(*b),
+                Some(_) => Err(arg(format!("{key} must be a boolean"))),
             };
-            Ok(sparql_json(
-                &view.sparql_with(text, &SparqlOptions { provenance })?,
-            ))
+            let opts = SparqlOptions {
+                provenance: flag("provenance")?,
+                query_only: flag("queryOnly")?,
+            };
+            Ok(sparql_json(&view.sparql_with(text, &opts)?))
         }
         "cypher" => {
             let text = str_arg(args, "text")?;
@@ -404,6 +406,8 @@ fn sparql_json(r: &SparqlResult) -> J {
                             .collect::<Vec<_>>()
                     })
                     .collect();
+                // the query parts whose statements are not cited; empty: complete
+                out["provenanceGaps"] = s.provenance_gaps.iter().map(|g| g.name()).collect();
             }
             out
         }

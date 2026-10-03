@@ -26,6 +26,7 @@ pub use term::{RdfTerm, RdfTriple};
 ///     vars: vec!["who".into(), "age".into()],
 ///     rows: vec![vec![Some(Value::iri("urn:tiramemsu:v:alice")), None]],
 ///     provenance: None,
+///     provenance_gaps: Vec::new(),
 /// };
 /// assert_eq!(s.col("age"), Some(1));
 /// assert!(s.get(0, "who").is_some());
@@ -42,6 +43,38 @@ pub struct Solutions {
     /// that matched to produce each row, ascending and without duplicates. `None`
     /// unless the query ran with provenance (`query-provenance`).
     pub provenance: Option<Vec<Vec<Eid>>>,
+    /// The parts of the query whose statements `provenance` cannot cite, ascending
+    /// and without duplicates: empty when the provenance is complete or absent.
+    /// Read the verdict with [`Solutions::provenance_complete`].
+    pub provenance_gaps: Vec<ProvenanceGap>,
+}
+
+/// A part of a query whose matched statements provenance does not list, so rows
+/// that went through it carry incomplete provenance (`query-provenance`).
+///
+/// The check is static: a query containing the part is incomplete even when no
+/// row went through it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[non_exhaustive]
+pub enum ProvenanceGap {
+    /// A recursive property path (`*`, `+`, `?`): its endpoints come from a
+    /// reachability search that carries no statement ids.
+    RecursivePath,
+}
+
+impl ProvenanceGap {
+    /// The gap's stable name, as the JSON bridge reports it (`"recursivePath"`).
+    ///
+    /// ```
+    /// use tm_sparql::results::ProvenanceGap;
+    ///
+    /// assert_eq!(ProvenanceGap::RecursivePath.name(), "recursivePath");
+    /// ```
+    pub fn name(self) -> &'static str {
+        match self {
+            ProvenanceGap::RecursivePath => "recursivePath",
+        }
+    }
 }
 
 impl Solutions {
@@ -66,11 +99,32 @@ impl Solutions {
     ///     vars: vec!["c".into()],
     ///     rows: vec![vec![Some(Value::iri("urn:tiramemsu:v:paris"))]],
     ///     provenance: Some(vec![vec![Eid::new(1), Eid::new(2)]]),
+    ///     provenance_gaps: Vec::new(),
     /// };
     /// assert_eq!(s.provenance(0), Some(&[Eid::new(1), Eid::new(2)][..]));
     /// assert_eq!(s.provenance(1), None);
     /// ```
     pub fn provenance(&self, row: usize) -> Option<&[Eid]> {
         self.provenance.as_ref()?.get(row).map(Vec::as_slice)
+    }
+
+    /// Whether the provenance lists every statement that matched: `None` when the
+    /// query ran without provenance, `Some(false)` when it has
+    /// [`provenance_gaps`](Solutions::provenance_gaps).
+    ///
+    /// ```
+    /// use tm_sparql::results::{ProvenanceGap, Solutions};
+    ///
+    /// let mut s = Solutions::default();
+    /// assert_eq!(s.provenance_complete(), None);
+    /// s.provenance = Some(Vec::new());
+    /// assert_eq!(s.provenance_complete(), Some(true));
+    /// s.provenance_gaps = vec![ProvenanceGap::RecursivePath];
+    /// assert_eq!(s.provenance_complete(), Some(false));
+    /// ```
+    pub fn provenance_complete(&self) -> Option<bool> {
+        self.provenance
+            .as_ref()
+            .map(|_| self.provenance_gaps.is_empty())
     }
 }

@@ -2,7 +2,7 @@
 
 The Node.js and Python packages are thin wrappers over one Rust JSON bridge, so both behave the same and a new facade feature reaches both through a single change. The layout follows oxilite's bindings.
 
-The bridge crate `tiramemsu-json` sits beside the two native crates under `bindings/`, and none of the three inherits the workspace's `unsafe_code = "forbid"`, because the napi and pyo3 macros expand to `unsafe`. See [[api#Bindings]] for the list of planned bindings.
+The bridge crate `tiramemsu-json` sits beside the two native crates under `bindings/` and is publishable, because the MCP server ([[api#MCP Tools]]) is built on it too; and none of the three inherits the workspace's `unsafe_code = "forbid"`, because the napi and pyo3 macros expand to `unsafe`. See [[api#Bindings]] for the list of planned bindings.
 
 ## JSON Bridge
 
@@ -14,7 +14,7 @@ The bridge is [[bindings/json/src/lib.rs#Database]]. `call_text(op, args)` retur
 
 Reads take a view and return rows; writes are one transaction each; anything that would surprise a caller is an error, never a silent default.
 
-- **Reads:** `sparql`, `cypher`, `triples`, `path`, `events`, `graphs`, `graphMembers`, `values`, `dependents` (`eid`, see [[time-model#Cascade#Dependents]]) and `bundle` (`eid`, returns the `tiramemsu-bundle/1` JSON of [[data-model#Fact Bundles#Bundle Formats]]), each with `{"view": …}` plus its own arguments. They are [[bindings/json/src/read.rs#run]]. `path` takes `start`, `path`, `mode`, `maxHops`, an optional `graphs` list of terms (a term that is not stored names no graph) and `timeRespecting: true | {"after": time}`, and every row carries `arrival` (epoch ms or `null`).
+- **Reads:** `sparql` (`text`, `provenance`, `queryOnly`; with provenance the result adds `provenance` and `provenanceGaps`), `cypher`, `triples`, `path`, `events`, `graphs`, `graphMembers`, `values`, `dependents` (`eid`, see [[time-model#Cascade#Dependents]]) and `bundle` (`eid`, returns the `tiramemsu-bundle/1` JSON of [[data-model#Fact Bundles#Bundle Formats]]), each with `{"view": …}` plus its own arguments. They are [[bindings/json/src/read.rs#run]]. `path` takes `start`, `path`, `mode`, `maxHops`, an optional `graphs` list of terms (a term that is not stored names no graph) and `timeRespecting: true | {"after": time}`, and every row carries `arrival` (epoch ms or `null`).
 - **Writes:** `transact` (a list of op objects in one transaction), `cypherWrite`, and `with` (speculation: ops applied hypothetically, then queries run on the result, then everything discarded). They are in [[bindings/json/src/tx.rs#transact]].
 - **Transaction ops:** `assert`, `create`, `retract`, `retractMatching`, `supersede`, `confirm`, `meta`, `upsert`, `newNode`, the five graph ops, `importBundle` (`bundle`; returns `{"root", "statements": [{"id", "eid", "new"}]}`, and `as` names the imported root) and `cypher`. An op may carry `"as": name`, and a later op may use `{"ref": name}` as a statement id or as a subject or object, which is how a layer is written on a statement created earlier in the same transaction.
 - **Housekeeping:** `optimize`, `info` (with `importActive` and `statisticsDue`), `cancel` (`key`, see [[bindings#JSON Bridge#Budgets]]), `rebuildTextIndex` and `enableTextIndex` (see [[bindings#JSON Bridge#Text Recall]]).
@@ -42,7 +42,7 @@ Progress is `{"chunks", "rejected", "asserted", "existing", "retracted", "txs", 
 
 Arguments are `text`, `mode` (`"all"`, `"any"`, `"phrase"`), `graphs` and `predicates` (lists of terms; a term that is not stored matches nothing), `limit` and `confidence` (a predicate term). Each hit is `{"eid", "s", "p", "o", "text", "lang", "score", "rank", "evidence": {"confidence", "confirmations", "authors", "tAdd", "addedAt"}}`, with an absent confidence as `null`.
 
-The open option `textIndex: true` builds the index at open. `rebuildTextIndex` returns `{"values": n}` and `enableTextIndex` returns `{"built": bool}`. Errors are `TextIndexUnavailable` and `MissingCapability`; an unknown option is `InvalidArgument`. Node exposes `View.textSearch`, `Database.rebuildTextIndex` and `enableTextIndex`; Python `View.text_search`, `Database.rebuild_text_index` and `enable_text_index`.
+The open option `textIndex: true` builds the index at open. `rebuildTextIndex` returns `{"values": n}` and `enableTextIndex` returns `{"built": bool}`. Errors are `TextIndexUnavailable` and `MissingCapability`; an unknown option is `InvalidArgument`. Node's `View.sparql` takes `{ provenance, queryOnly }` and returns `provenanceGaps`; Python's `View.sparql` takes `provenance` and `query_only` and returns `provenance_gaps`. Node exposes `View.textSearch`, `Database.rebuildTextIndex` and `enableTextIndex`; Python `View.text_search`, `Database.rebuild_text_index` and `enable_text_index`.
 
 ### Views
 

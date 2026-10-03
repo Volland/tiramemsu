@@ -45,6 +45,9 @@ pub const ADD: &str = "ADD";
 pub const MOVE: &str = "MOVE";
 /// `COPY`.
 pub const COPY: &str = "COPY";
+/// An update request in a call that accepts only queries
+/// (`SparqlOptions::query_only` in the facade).
+pub const UPDATE_QUERY_ONLY: &str = "update in a query-only call";
 /// Provenance requested for an `ASK` query (it has no rows to annotate).
 pub const PROVENANCE_ASK: &str = "provenance for ASK";
 /// Provenance requested for a `CONSTRUCT` query.

@@ -1,14 +1,15 @@
 [package]
 name = "tiramemsu-json"
-description = "The JSON bridge shared by the tiramemsu Node.js and Python bindings"
+description = "The JSON bridge of tiramemsu: one call per operation, shared by the Node.js and Python bindings and the MCP server"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 authors.workspace = true
 repository.workspace = true
 homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
 rust-version.workspace = true
-publish = false
 
 [dependencies]
 tiramemsu = { workspace = true }
