@@ -61,6 +61,8 @@ fn stdio_session_end_to_end() {
             "dependents",
             "export_bundle",
             "import_bundle",
+            "conflicts",
+            "preview_bundle",
             "text_search",
             "save_answer",
             "saved_answers",

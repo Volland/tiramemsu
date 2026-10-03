@@ -1020,3 +1020,58 @@ class TestCyclicJoins:
         assert rows(native) == want
         gated = Database(path, lftj=True, lftj_min_rows=1000)
         assert gated.now().explain_sparql(tri)["regions"][0]["note"] == "lftjBelowEstimate"
+
+
+# ------------------------------------------------------------------ memory conflict review
+
+
+class TestConflictReview:
+    # @lat: [[tests#Memory Conflict Review#Python Exposes Conflict Review]]
+    def test_conflicts_and_bundle_preview(self, tmp_path: Any) -> None:
+        db = Database(str(tmp_path / "a.db"))
+        sys_author = Iri("urn:tiramemsu:sys:author")
+        sys_unique = Iri("urn:tiramemsu:sys:unique")
+        with db.transact() as tx:
+            tx.meta(sys_author, iri("agent7"))
+            job = tx.assert_(iri("alice"), iri("worksAt"), iri("acme"), valid_from=0)
+            tx.assert_(job, iri("confidence"), 0.8)
+            tx.assert_(iri("alice"), iri("worksAt"), iri("globex"), valid_from=10, valid_to=20)
+            tx.assert_(iri("email"), sys_unique, True)
+            tx.assert_(iri("carol"), iri("email"), "c@x.org")
+        events = db.now().events(0)
+        cs = db.now().conflicts()
+        assert len(cs) == 1
+        c = cs[0]
+        assert c.s == iri("alice") and not c.declared_many
+        assert c.overlaps == [(10, 20)]
+        assert [v.o for v in c.values] == [iri("acme"), iri("globex")]
+        ev = c.values[0].statements[0]
+        assert ev.confidence == 0.8 and ev.authors == [iri("agent7")]
+        assert ev.valid_from == 0 and ev.valid_to is None
+        assert c.values[1].statements[0].confidence is None
+        assert db.now().conflicts(s=iri("bob")) == []
+        assert len(db.now().conflicts(p=iri("worksAt"), limit=1)) == 1
+        with pytest.raises(TiramemsuError) as e:
+            db.history().conflicts()
+        assert e.value.code == "Unsupported"
+        assert db.now().events(0) == events
+
+        src = Database(str(tmp_path / "b.db"))
+        with src.transact() as tx:
+            tx.assert_(iri("eve"), iri("email"), "c@x.org")
+        clash = src.now().bundle(1)
+        p = db.preview_bundle(clash, budget=QueryBudget(timeout_ms=5000))
+        assert not p.would_commit
+        assert p.failure is not None and p.failure["code"] == "UniqueViolation"
+        assert p.statements is None and p.report is None
+        with src.transact() as tx:
+            tx.assert_(iri("dave"), iri("email"), "d@x.org")
+        ok = db.preview_bundle(src.now().bundle(2))
+        assert ok.would_commit and ok.failure is None
+        assert ok.statements is not None and all(s["new"] for s in ok.statements)
+        assert ok.report is not None and ok.burned["statements"] == ok.report.asserted
+        assert ok.scope["reserved"] is False
+        assert db.now().events(0) == events
+        with db.transact() as tx:
+            tx.import_bundle(src.now().bundle(2))
+        assert tx.report is not None and len(tx.report.asserted) == 1

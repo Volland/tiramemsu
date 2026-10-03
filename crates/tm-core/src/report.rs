@@ -227,6 +227,21 @@ impl Patch {
     }
 }
 
+/// The ids a transaction has allocated so far ([`crate::Tx::id_usage`]). In a dry
+/// run or a speculation these are the ids that are burned: the counters advance
+/// for real after the rollback, so none of them is ever issued again.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct IdUsage {
+    /// Every statement number taken, ascending (statements and memberships).
+    pub statements: Vec<Eid>,
+    /// Anonymous `NODE` ids taken.
+    pub nodes: u64,
+    /// `BNODE` ids taken.
+    pub blank_nodes: u64,
+    /// Term-dictionary ids taken by values new to the dictionary.
+    pub terms: u64,
+}
+
 /// What a committed (or dry-run) transaction did.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct TxReport {

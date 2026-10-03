@@ -340,3 +340,49 @@ impl From<BindError> for Error {
         into_core(e)
     }
 }
+
+/// `previewBundle`: `{bundle}` to `{wouldCommit, failure, root, statements:
+/// [{id, eid, new}], report, burned: {statements, nodes, blankNodes, terms},
+/// scope: {basis, t, instant, reserved: false}}`. `failure` is the schema error
+/// as `{code, message}` (then `root`, `statements` and `report` are `null`); a
+/// malformed bundle fails the call with `InvalidTerm`, a cyclic one with
+/// `Unsupported`.
+// @lat: [[bindings#JSON Bridge#Conflict Review]]
+pub fn preview_bundle(db: &Db, args: &J) -> Res<J> {
+    let j = args
+        .get("bundle")
+        .filter(|j| !j.is_null())
+        .ok_or_else(|| arg("`bundle` is required"))?;
+    let p = db.preview_bundle(&Bundle::from_json(j)?)?;
+    let would = p.would_commit();
+    let (root, statements) = match &p.import {
+        Some(r) => (
+            json!(r.root.n()),
+            json!(r
+                .statements
+                .iter()
+                .map(|s| json!({ "id": s.local, "eid": s.eid.n(), "new": s.new }))
+                .collect::<Vec<_>>()),
+        ),
+        None => (J::Null, J::Null),
+    };
+    Ok(json!({
+        "wouldCommit": would,
+        "failure": p.failure.map_or(J::Null, |e| BindError::Db(e).to_json()),
+        "root": root,
+        "statements": statements,
+        "report": p.report.as_ref().map_or(J::Null, report_json),
+        "burned": {
+            "statements": p.burned.statements.iter().map(|e| e.n()).collect::<Vec<_>>(),
+            "nodes": p.burned.nodes,
+            "blankNodes": p.burned.blank_nodes,
+            "terms": p.burned.terms,
+        },
+        "scope": {
+            "basis": p.scope.basis.0,
+            "t": p.scope.t.0,
+            "instant": p.scope.instant,
+            "reserved": false,
+        },
+    }))
+}

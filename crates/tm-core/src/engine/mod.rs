@@ -23,7 +23,7 @@ use crate::clock::{Clock, SystemClock};
 use crate::error::{Error, Position, Result};
 use crate::exec::{Capabilities, Executor, Host, HostOptions, SqlValue};
 use crate::id::{Eid, ObjectId, Tag, TxId, COUNTER_MAX};
-use crate::report::{RetKind, TxOptions, TxReport, Valid};
+use crate::report::{IdUsage, RetKind, TxOptions, TxReport, Valid};
 use crate::storage::{self, meta::Counters, stats::Stats};
 use crate::term::TermDict;
 use crate::value::Value;
@@ -601,6 +601,22 @@ impl<'a> Tx<'a> {
     /// This transaction's instant (epoch ms).
     pub fn instant(&self) -> i64 {
         self.instant
+    }
+
+    /// The ids this transaction has allocated so far: statement numbers, anonymous
+    /// nodes, blank nodes and dictionary terms. After a dry run or a speculation
+    /// these ids are burned (never issued again); after a commit they are in use.
+    pub fn id_usage(&self) -> IdUsage {
+        let c = self.counters();
+        let n = |now: i64, then: i64| (now - then).max(0) as u64;
+        IdUsage {
+            statements: (self.c0.next_stmt..c.next_stmt)
+                .map(|k| Eid::new(k as u64))
+                .collect(),
+            nodes: n(c.next_node, self.c0.next_node),
+            blank_nodes: n(c.next_bnode, self.c0.next_bnode),
+            terms: n(c.next_term, self.c0.next_term),
+        }
     }
 
     /// The options of this transaction.

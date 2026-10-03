@@ -175,6 +175,17 @@ The facade trait `BundleFormat` gives a bundle a versioned JSON form and an RDF 
 
 See [[crates/tiramemsu/src/bundle.rs#BundleFormat]].
 
+### Import Preview
+
+`Db::preview_bundle(&bundle)` shows what importing a bundle would do before anything is written: the import runs as a dry run with full semantics and is discarded.
+
+- **Same semantics:** it is `Tx::import_bundle` inside `TxOptions { dry_run: true }` ([[time-model#Speculative Transactions]]), so validation, idempotent reuse, schema checks and cardinality-one replacement are exactly those of a real import.
+- **Result** `BundlePreview`: `import` (each local id with its eid and `new`: proposed or reused), the dry-run `report` (proposed `asserted`, reused `existing`, `retracted` by cardinality-one replacement, `memberships`), `failure` (a schema or write-semantics error such as `UniqueViolation`, reported rather than raised), `burned` (`IdUsage`: the statement eids, nodes, blank nodes and terms the dry run allocated, never issued again) and `scope` (`basis`, the last committed transaction it read, the would-be `t` and instant).
+- **Nothing committed:** no `triple`, `tx` or event row; only the id counters advance over the burned ids. A malformed bundle (`InvalidTerm`) is refused before the writer is taken, and a reference cycle stays `Unsupported`.
+- **Explicit application:** a preview reserves nothing. Applying is the ordinary write `tx.import_bundle(&bundle)`, which revalidates against the database as it is then and either commits atomically or fails with the schema error. No source is chosen silently, and bundles remain interchange, not replica-log synchronization.
+
+The facade code is [[crates/tiramemsu/src/review.rs#Db#preview_bundle]]; `Tx::id_usage` reports the allocated ids.
+
 ## ObjectId
 
 Every value in `s`, `p`, `o` and `eid` is a signed 64-bit integer: a 60-bit payload shifted left by 4, OR-ed with a 4-bit tag in the low bits.

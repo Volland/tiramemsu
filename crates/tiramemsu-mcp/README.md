@@ -62,6 +62,8 @@ Arguments use the JSON forms of the tiramemsu bindings. A term is a string (a pl
 | `query` | no | `language` (`sparql` or `cypher`), `text`, `params` (Cypher), `view`, `provenance` | `{language, view, result, provenance}` |
 | `dependents` | no | `eid`, `view` | `{eid, view, dependents}` |
 | `export_bundle` | no | `eid`, `view` | `{view, bundle}` |
+| `conflicts` | no | `s`, `p`, `limit`, `confidence`, `source`, `view` | `{view, conflicts}`: overlapping distinct values, each statement with its evidence |
+| `preview_bundle` | no | `bundle` | `{preview}`: proposed and reused statements, dependency changes, `failure`, burned ids, `scope` |
 | `text_search` | no | `text`, `mode`, `graphs`, `predicates`, `limit`, `confidence`, `view` | `{view, hits}` with evidence per hit |
 | `save_answer` | answer record | `name`, `language`, `text`, `params`, `view` | `{answer}`: result, cited statements, coverage, status |
 | `saved_answers` | no | `name` (optional) | `{answers}` |
@@ -71,6 +73,7 @@ Arguments use the JSON forms of the tiramemsu bindings. A term is a string (a pl
 - **Queries only read.** A SPARQL update or a Cypher write clause is refused with `Unsupported` before anything runs; there is no raw SQL.
 - **Provenance coverage.** A SPARQL `SELECT` lists the statements behind each row unless `provenance` is `false`. `provenance.coverage` is `complete`, `incomplete` (with `gaps`, e.g. `["recursivePath"]` for a `+` or `*` path, whose endpoints carry no statement ids) or `unavailable` (Cypher, `ASK`, `CONSTRUCT`, or not requested).
 - **Saved answers.** `save_answer`, `check_answers` and `refresh_answer` write only the derived answer records, never facts, but are left out in read-only mode with the other writing tools.
+- **Conflict review.** `conflicts` never retracts, supersedes or confirms, and refuses the history view. `preview_bundle` runs the import as a dry run on the writer: graph, history and event log stay unchanged and only the ids it allocated are burned, so it is offered in read-only mode. Applying is `import_bundle`, which validates again.
 - **No other file.** An argument such as `path`, `db` or `database` is refused with `PathNotAllowed`, and any argument a tool does not declare with `InvalidArgument`.
 
 ## Errors

@@ -643,6 +643,127 @@ fn a_bundle_moves_between_bridge_databases() {
     assert_eq!(e.code(), "InvalidTerm");
 }
 
+// @lat: [[tests#Memory Conflict Review#Bridge Conflicts And Previews]]
+#[test]
+fn the_bridge_reports_conflicts_and_previews_bundles() {
+    let (_d, db) = open();
+    let sys = |s: &str| json!({ "iri": format!("urn:tiramemsu:sys:{s}") });
+    let r = db
+        .call(
+            "transact",
+            &json!({ "ops": [
+                { "op": "meta", "p": sys("author"), "o": v("agent7") },
+                { "op": "assert", "s": v("alice"), "p": v("worksAt"), "o": v("acme"), "validFrom": 0, "as": "a" },
+                { "op": "assert", "s": {"ref": "a"}, "p": v("confidence"), "o": 0.8 },
+                { "op": "assert", "s": v("alice"), "p": v("worksAt"), "o": v("initech"), "validFrom": 10, "validTo": 20 },
+                { "op": "assert", "s": v("bob"), "p": v("worksAt"), "o": v("acme"), "validTo": 10 },
+                { "op": "assert", "s": v("bob"), "p": v("worksAt"), "o": v("initech"), "validFrom": 10 },
+                { "op": "assert", "s": v("email"), "p": sys("unique"), "o": true },
+                { "op": "assert", "s": v("carol"), "p": v("email"), "o": "c@x.org" }
+            ]}),
+        )
+        .unwrap();
+    let events = db.call("events", &json!({ "since": 0 })).unwrap();
+    let c = db.call("conflicts", &json!({})).unwrap();
+    assert_eq!(c.as_array().unwrap().len(), 1, "{c}");
+    assert_eq!(c[0]["s"], v("alice"));
+    assert_eq!(c[0]["declaredMany"], false);
+    assert_eq!(
+        c[0]["overlaps"],
+        json!([{ "validFrom": 10, "validTo": 20 }])
+    );
+    let acme = &c[0]["values"][0];
+    assert_eq!(acme["o"], v("acme"));
+    let e = &acme["statements"][0];
+    assert_eq!(e["eid"], r["refs"]["a"]);
+    assert_eq!(e["confidence"], 0.8);
+    assert_eq!(e["authors"], json!([v("agent7")]));
+    assert_eq!(e["validTo"], J::Null);
+    assert_eq!(c[0]["values"][1]["statements"][0]["confidence"], J::Null);
+    // filters: an unknown subject matches nothing; the history view is refused
+    let none = db.call("conflicts", &json!({ "s": v("nobody") })).unwrap();
+    assert_eq!(none, json!([]));
+    let bob = db
+        .call("conflicts", &json!({ "s": v("bob"), "limit": 5 }))
+        .unwrap();
+    assert_eq!(bob, json!([]));
+    let err = db
+        .call("conflicts", &json!({ "view": { "kind": "history" } }))
+        .unwrap_err();
+    assert_eq!(err.code(), "Unsupported");
+    let err = db
+        .call("conflicts", &json!({ "subject": v("alice") }))
+        .unwrap_err();
+    assert_eq!(err.code(), "InvalidArgument");
+    // inspection wrote nothing
+    assert_eq!(db.call("events", &json!({ "since": 0 })).unwrap(), events);
+
+    // a bundle from another database, previewed and then applied
+    let (_e, src) = open();
+    let s = src
+        .call(
+            "transact",
+            &json!({ "ops": [
+                { "op": "assert", "s": v("dave"), "p": v("email"), "o": "d@x.org", "as": "m" },
+                { "op": "assert", "s": {"ref": "m"}, "p": v("confidence"), "o": 0.5 }
+            ]}),
+        )
+        .unwrap();
+    let bundle = src
+        .call("bundle", &json!({ "eid": s["refs"]["m"] }))
+        .unwrap();
+    let p = db
+        .call("previewBundle", &json!({ "bundle": bundle }))
+        .unwrap();
+    assert_eq!(p["wouldCommit"], true, "{p}");
+    assert_eq!(p["failure"], J::Null);
+    assert_eq!(p["statements"].as_array().unwrap().len(), 2);
+    assert_eq!(p["report"]["asserted"], p["burned"]["statements"]);
+    assert_eq!(p["scope"]["basis"], r["t"]);
+    assert_eq!(p["scope"]["reserved"], false);
+    assert_eq!(db.call("events", &json!({ "since": 0 })).unwrap(), events);
+    // a schema failure is the preview's outcome, not an error
+    let (_f, src2) = open();
+    let s2 = src2
+        .call(
+            "transact",
+            &json!({ "ops": [{ "op": "assert", "s": v("eve"), "p": v("email"), "o": "c@x.org", "as": "m" }] }),
+        )
+        .unwrap();
+    let clash = src2
+        .call("bundle", &json!({ "eid": s2["refs"]["m"] }))
+        .unwrap();
+    let p = db
+        .call(
+            "previewBundle",
+            &json!({ "bundle": clash, "budget": { "timeoutMs": 5000 } }),
+        )
+        .unwrap();
+    assert_eq!(p["wouldCommit"], false);
+    assert_eq!(p["failure"]["code"], "UniqueViolation");
+    assert_eq!(p["statements"], J::Null);
+    assert_eq!(db.call("events", &json!({ "since": 0 })).unwrap(), events);
+    let err = db
+        .call("previewBundle", &json!({ "bundle": { "format": "x" } }))
+        .unwrap_err();
+    assert_eq!(err.code(), "InvalidTerm");
+    // applying is an explicit write that validates again
+    let t = db
+        .call(
+            "transact",
+            &json!({ "ops": [{ "op": "importBundle", "bundle": bundle }] }),
+        )
+        .unwrap();
+    assert_eq!(t["asserted"].as_array().unwrap().len(), 2);
+    let err = db
+        .call(
+            "transact",
+            &json!({ "ops": [{ "op": "importBundle", "bundle": clash }] }),
+        )
+        .unwrap_err();
+    assert_eq!(err.code(), "UniqueViolation");
+}
+
 #[test]
 fn reserved_origins_and_exhausted_counters_have_codes() {
     let (_d, db) = open();

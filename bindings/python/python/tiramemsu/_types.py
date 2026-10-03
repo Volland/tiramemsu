@@ -12,7 +12,7 @@ import json as _json
 import re as _re
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta, timezone
-from typing import Any, Dict, Iterator, List, Optional, Union
+from typing import Any, Dict, Iterator, List, Optional, Tuple, Union
 
 
 # ------------------------------------------------------------------------------- errors
@@ -619,6 +619,125 @@ def text_hit_from_json(j: Dict[str, Any]) -> TextHit:
             t_add=int(e["tAdd"]),
             added_at=int(e["addedAt"]),
         ),
+    )
+
+
+@dataclass(frozen=True)
+class ConflictEvidence:
+    """The attributed evidence of one statement in a conflict, read in the view. A
+    layer the statement does not have is ``None`` or empty, never estimated."""
+
+    eid: int
+    valid_from: Optional[int]
+    valid_to: Optional[int]
+    t_add: int
+    """The asserting transaction."""
+    added_at: int
+    """Its instant (epoch ms)."""
+    confidence: Optional[float]
+    """The largest numeric confidence layer, or ``None``."""
+    confirmed_by: List[int]
+    """The transactions that confirmed it."""
+    authors: List[Any]
+    """``sys:author`` of the asserting and confirming transactions."""
+    sources: List[Any]
+    """``sys:source`` of the asserting and confirming transactions."""
+    source_layer: List[Any]
+    """The objects of its source-layer statements (default ``v:source``)."""
+
+
+@dataclass(frozen=True)
+class ConflictValue:
+    """One disagreeing object with the statements that support it."""
+
+    o: Any
+    statements: List[ConflictEvidence]
+
+
+@dataclass(frozen=True)
+class Conflict:
+    """A subject/predicate pair with distinct objects valid at the same time, from
+    :meth:`View.conflicts`. Potential disagreement only: nothing is scored or chosen."""
+
+    s: Any
+    p: Any
+    declared_many: bool
+    """The predicate is declared ``sys:cardinality sys:many``."""
+    overlaps: List[Tuple[Optional[int], Optional[int]]]
+    """The maximal ``(valid_from, valid_to)`` windows where two or more objects hold."""
+    values: List[ConflictValue]
+
+
+def conflict_from_json(j: Dict[str, Any]) -> Conflict:
+    """Decode one ``conflicts`` entry from the bridge."""
+
+    def opt(x: Any) -> Optional[int]:
+        return None if x is None else int(x)
+
+    def evidence(e: Dict[str, Any]) -> ConflictEvidence:
+        return ConflictEvidence(
+            eid=int(e["eid"]),
+            valid_from=opt(e.get("validFrom")),
+            valid_to=opt(e.get("validTo")),
+            t_add=int(e["tAdd"]),
+            added_at=int(e["addedAt"]),
+            confidence=None if e.get("confidence") is None else float(e["confidence"]),
+            confirmed_by=[int(t) for t in e["confirmedBy"]],
+            authors=[term_from_json(x) for x in e["authors"]],
+            sources=[term_from_json(x) for x in e["sources"]],
+            source_layer=[term_from_json(x) for x in e["sourceLayer"]],
+        )
+
+    return Conflict(
+        s=term_from_json(j["s"]),
+        p=term_from_json(j["p"]),
+        declared_many=bool(j["declaredMany"]),
+        overlaps=[(opt(w.get("validFrom")), opt(w.get("validTo"))) for w in j["overlaps"]],
+        values=[
+            ConflictValue(
+                o=term_from_json(v["o"]),
+                statements=[evidence(e) for e in v["statements"]],
+            )
+            for v in j["values"]
+        ],
+    )
+
+
+@dataclass(frozen=True)
+class BundlePreview:
+    """The result of :meth:`Database.preview_bundle`: a dry-run import, nothing
+    committed. Apply it later with :meth:`TxBuilder.import_bundle`, which validates
+    again; a preview reserves nothing."""
+
+    would_commit: bool
+    """True when the import would commit if nothing changes first."""
+    failure: Optional[Dict[str, Any]]
+    """The schema failure ``{"code", "message"}`` the import would raise, or ``None``."""
+    root: Optional[int]
+    """The root's eid, ``None`` on failure."""
+    statements: Optional[List[Dict[str, Any]]]
+    """``[{"id", "eid", "new"}]``: ``new`` is a proposed assertion, otherwise a
+    reused live statement. ``None`` on failure."""
+    report: Optional[Report]
+    """The dry-run report (proposed, reused, cardinality retractions, memberships)."""
+    burned: Dict[str, Any]
+    """Ids the dry run allocated, never issued again:
+    ``{"statements", "nodes", "blankNodes", "terms"}``."""
+    scope: Dict[str, Any]
+    """``{"basis", "t", "instant", "reserved": False}``: the committed transaction
+    the preview read and the would-be number and instant."""
+
+
+def bundle_preview_from_json(j: Dict[str, Any]) -> BundlePreview:
+    """Decode a ``previewBundle`` result from the bridge."""
+    return BundlePreview(
+        would_commit=bool(j["wouldCommit"]),
+        failure=None if j.get("failure") is None else dict(j["failure"]),
+        root=None if j.get("root") is None else int(j["root"]),
+        statements=None if j.get("statements") is None else list(j["statements"]),
+        report=None if j.get("report") is None else report_from_json(j["report"]),
+        burned=dict(j["burned"]),
+        scope=dict(j["scope"]),
     )
 
 

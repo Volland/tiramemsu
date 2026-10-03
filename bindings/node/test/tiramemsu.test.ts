@@ -701,3 +701,47 @@ describe("native cyclic joins", () => {
     } finally { cleanup(dir); }
   });
 });
+
+// ---- memory conflict review -----------------------------------------------------
+
+describe("memory conflict review", () => {
+  // @lat: [[tests#Memory Conflict Review#Node Exposes Conflict Review]]
+  it("lists conflicts with evidence and previews a bundle without committing", () => {
+    const a = tempDb();
+    const b = tempDb();
+    try {
+      const sys = (s: string) => iri(`urn:tiramemsu:sys:${s}`);
+      a.db.transact((tx) => {
+        tx.meta(sys("author"), v("agent7"));
+        const job = tx.assert(alice, worksAt, acme, { validFrom: 0 });
+        tx.assert(job, confidence, 0.8);
+        tx.assert(alice, worksAt, globex, { validFrom: 10, validTo: 20 });
+      });
+      const events = a.db.now().events(0);
+      const cs = a.db.now().conflicts();
+      expect(cs).toHaveLength(1);
+      expect(cs[0].s).toEqual(alice);
+      expect(cs[0].overlaps).toEqual([{ validFrom: 10, validTo: 20 }]);
+      expect(cs[0].values.map((x) => x.o)).toEqual([acme, globex]);
+      const e = cs[0].values[0].statements[0];
+      expect(e.confidence).toBe(0.8);
+      expect(e.authors).toEqual([v("agent7")]);
+      expect(cs[0].values[1].statements[0].confidence).toBeNull();
+      expect(a.db.now().conflicts({ s: v("bob") })).toEqual([]);
+      expect(a.db.now().conflicts({ p: worksAt, limit: 1 })).toHaveLength(1);
+      expect(a.db.now().events(0)).toEqual(events);
+
+      const r = b.db.transact((tx) => { const x = tx.assert(v("bob"), worksAt, acme); tx.assert(x, confidence, 0.4); });
+      const bundle = b.db.now().bundle(r.asserted[0]);
+      const p = a.db.previewBundle(bundle, { timeoutMs: 5000 });
+      expect(p.wouldCommit).toBe(true);
+      expect(p.failure).toBeNull();
+      expect(p.statements!.every((s) => s.new)).toBe(true);
+      expect(p.burned.statements).toEqual(p.report!.asserted);
+      expect(p.scope.reserved).toBe(false);
+      expect(a.db.now().events(0)).toEqual(events);
+      const applied = a.db.transact((tx) => { tx.importBundle(bundle); });
+      expect(applied.asserted).toHaveLength(2);
+    } finally { cleanup(a.dir); cleanup(b.dir); }
+  });
+});

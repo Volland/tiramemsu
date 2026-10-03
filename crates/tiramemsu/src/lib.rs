@@ -8,6 +8,7 @@ mod cypher;
 mod db;
 mod import;
 mod pool;
+mod review;
 mod saved;
 mod sparql;
 mod view;
@@ -17,6 +18,7 @@ pub use bundle::{BundleFormat, BUNDLE_FORMAT};
 pub use cypher::TxCypher;
 pub use db::{Db, OpenOptions};
 pub use import::{BulkImport, ImportProgress, ImportSummary};
+pub use review::{BundlePreview, PreviewScope};
 pub use saved::{
     AnswerStatus, CoverageReason, Invalidation, InvalidationCause, QueryLanguage, SavedAnswer,
     SavedQuery, SAVED_ANSWER_LAYOUT,
@@ -26,13 +28,15 @@ pub use view::{PathArgs, PathReport, View};
 
 pub use tm_core::text;
 pub use tm_core::{
-    codec, read, value, vocab, AssertOpts, Asserted, CancelToken, Capabilities, Clock, Dialect,
-    Eid, Error, Event, Executor, Host, HostOptions, Interrupt, IntoObject, ManualClock, ObjectId,
-    OnExisting, Op, Patch, PatchField, Position, PredicateSchema, Result, ResultLimit, RetKind,
-    Span, SqlError, SqlValue, SystemClock, Tag, TextEvidence, TextHit, TextMode, TextQuery,
-    TimeRef, Triple, Tx, TxId, TxOptions, TxReport, TxSel, Valid, ValidSel, Value, ViewSpec,
+    codec, conflict, read, value, vocab, AssertOpts, Asserted, CancelToken, Capabilities, Clock,
+    Dialect, Eid, Error, Event, Executor, Host, HostOptions, Interrupt, IntoObject, ManualClock,
+    ObjectId, OnExisting, Op, Patch, PatchField, Position, PredicateSchema, Result, ResultLimit,
+    RetKind, Span, SqlError, SqlValue, SystemClock, Tag, TextEvidence, TextHit, TextMode,
+    TextQuery, TimeRef, Triple, Tx, TxId, TxOptions, TxReport, TxSel, Valid, ValidSel, Value,
+    ViewSpec,
 };
-pub use tm_core::{BTerm, Bundle, BundleStatement, ImportReport, ImportedStatement};
+pub use tm_core::{BTerm, Bundle, BundleStatement, IdUsage, ImportReport, ImportedStatement};
+pub use tm_core::{Conflict, ConflictEvidence, ConflictQuery, ConflictValue};
 pub use tm_cypher as cypher_frontend;
 pub use tm_cypher::{CypherParams, CypherResult, CypherValue};
 pub use tm_exec::path::row::{Dir as PathDir, HopKind};

@@ -19,6 +19,11 @@
 //! one chunk like `transact`, and `importProgress`, `importFinish` and
 //! `importCancel` take the `session`. See [`tiramemsu::BulkImport`].
 //!
+//! Conflict review: the read `conflicts` lists disagreeing values with their
+//! evidence, and `previewBundle` (`bundle`) reports what importing a bundle
+//! would do without committing; applying it is the `importBundle` op of
+//! `transact`, which validates again.
+//!
 //! Saved answers (`saveAnswer`, `savedAnswer`, `savedAnswers`,
 //! `checkSavedAnswers`, `refreshAnswer`, `deleteSavedAnswer`) store a query with
 //! its result and report later events as `recheck` or `stale` marks. See
@@ -341,12 +346,15 @@ impl Database {
     /// (`s`, `key`), `dependents` (`eid`: what stands on a statement) and `bundle`
     /// (`eid`: the statement with its layers and evidence, as `tiramemsu-bundle/1`
     /// JSON), `textSearch` (`text`, `mode`, `graphs`, `predicates`, `limit`,
-    /// `confidence`: ranked text recall) and `explainSparql` (`text`: the routing
+    /// `confidence`: ranked text recall), `conflicts` (`s`, `p`, `limit`,
+    /// `confidence`, `source`: distinct objects valid at the same time, with
+    /// attributed evidence) and `explainSparql` (`text`: the routing
     /// of each region with its reason, the SQL and `EXPLAIN QUERY PLAN`, without
     /// running the query). `rebuildTextIndex` and `enableTextIndex`
     /// maintain the derived text index. Writes are `transact` (`ops`, `options`; the ops include `importBundle`),
     /// `cypherWrite` (`text`, `params`, `options`) and `with` (`ops`, `queries`), plus
-    /// `optimize` and `info`. Reads, `transact` and `cypherWrite` take an optional
+    /// `optimize` and `info`. `previewBundle` (`bundle`, `budget`) runs a bundle
+    /// import as a dry run and reports what it would do. Reads, `transact` and `cypherWrite` take an optional
     /// `budget`, and `cancel` (`key`) stops the call running with that `cancelKey`.
     /// Bulk imports are `importBegin`, `importChunk` (`session`, `ops`, `options`,
     /// `budget`), `importProgress`, `importFinish` and `importCancel` (`session`).
@@ -357,7 +365,7 @@ impl Database {
     pub fn call(&self, op: &str, args: &J) -> Res<J> {
         match op {
             "sparql" | "cypher" | "triples" | "path" | "events" | "graphs" | "graphMembers"
-            | "values" | "dependents" | "bundle" | "textSearch" | "explainSparql" => {
+            | "values" | "dependents" | "bundle" | "textSearch" | "explainSparql" | "conflicts" => {
                 let view = read::view_from_json(&self.db, args.get("view").unwrap_or(&J::Null))?;
                 let (budget, _entry) = self.budget(args.get("budget"))?;
                 match &budget {
@@ -392,6 +400,15 @@ impl Database {
             }
             "savedAnswer" | "savedAnswers" | "checkSavedAnswers" | "deleteSavedAnswer" => {
                 saved::run(&self.db, op, args, None)
+            }
+            "previewBundle" => {
+                let (budget, _entry) = self.budget(args.get("budget"))?;
+                match &budget {
+                    Some(b) => b
+                        .run(|| tx::preview_bundle(&self.db, args).map_err(value::into_core))
+                        .map_err(BindError::from),
+                    None => tx::preview_bundle(&self.db, args),
+                }
             }
             "with" => tx::with(&self.db, args),
             "optimize" => {

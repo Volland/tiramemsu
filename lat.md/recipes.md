@@ -83,6 +83,47 @@ SELECT ?s ?o1 ?o2 ?a1 ?a2 WHERE {
 
 The overlap test is the same half-open test that assert uses ([[time-model#Operations#Assert]]); an unbound end is unbounded. Episodes that do not overlap, such as a later job, are not reported. `STR(?o1) < STR(?o2)` reports each pair once.
 
+## Reviewing Conflicting Memories
+
+`View::conflicts` asks the question above for every subject and predicate at once and returns, per disagreeing value, the evidence behind it, so an agent sees both sides before it decides ([[query#Conflict Inspection]]).
+
+```rust
+let conflicts = db.now().conflicts(&ConflictQuery { predicate: Some(works_at), ..Default::default() })?;
+for c in &conflicts {
+    // c.overlaps: when both were true; c.values: each object with its statements
+    for v in &c.values {
+        for e in &v.statements {
+            // e.eid, e.valid, e.t_add, e.confidence (None when unstated),
+            // e.confirmed_by, e.authors, e.sources, e.source_layer
+        }
+    }
+}
+// deciding is an explicit write: supersede, retract or confirm one side
+db.transact(TxOptions::default(), |tx| tx.retract(loser).map(|_| ()))?;
+```
+
+Parallel statements with the same object are support for one value, not a conflict, and a predicate declared multi-valued is only flagged with `declared_many`. Nothing is scored or chosen: the evidence stays attributed and the choice stays with the caller. On an as-of view the same call shows what memory disagreed about then. The MCP server offers it as the read tool `conflicts`. Tests are in `memory_conflict_review.rs`.
+
+## Previewing An Import
+
+Before another agent's memory is merged in, `Db::preview_bundle` runs the import as a dry run and says what it would do ([[data-model#Fact Bundles#Import Preview]]).
+
+```rust
+let preview = mine.preview_bundle(&Bundle::from_json(&theirs)?)?;
+match &preview.failure {
+    Some(e) => println!("would fail: {e}"),            // e.g. UniqueViolation: nothing written
+    None => {
+        let import = preview.import.as_ref().unwrap();  // new: proposed, else reused
+        let report = preview.report.as_ref().unwrap();  // retracted by cardinality one, memberships
+        println!("{} new, {} reused, computed at t{}", report.asserted.len(), report.existing.len(), preview.scope.basis.0);
+    }
+}
+// later: an explicit write that validates again against the current state
+mine.transact(TxOptions::default(), |tx| tx.import_bundle(&bundle).map(|_| ()))?;
+```
+
+History and the event log are unchanged; only the ids the dry run allocated are burned and listed in `preview.burned`. A preview reserves nothing, so a write in between can make the application fail with the schema error, atomically. The MCP server offers it as the read tool `preview_bundle`. Tests are in `memory_conflict_review.rs`.
+
 ## When We Learned It
 
 `tm:addedAt` and `tm:retractedAt` give the wall-clock instant a statement was recorded and retracted. Compared with valid time, they measure how late memory learned a fact.

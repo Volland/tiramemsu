@@ -131,6 +131,7 @@ A view chooses when you look and when the fact was true. Every read takes a view
 | `view.pathReport(start, expr, options?)` | `{ rows, completeness }`: the rows of `path` and a `PathCompleteness` |
 | `view.dependents(eid)` | The statements that stand on `eid`: what retracting it would cascade to |
 | `view.bundle(eid)` | The statement with its layers and evidence, as `tiramemsu-bundle/1` JSON |
+| `view.conflicts({ s?, p?, limit?, confidence?, source? })` | `Conflict`s: overlapping distinct values with `overlaps` and each statement's evidence; nothing is written |
 | `view.events(since?)` | The change log after a transaction |
 | `view.graphs()`, `view.graphMembers(g)`, `view.values(s, key)` | Named graphs and values |
 
@@ -222,6 +223,18 @@ db.now().cypher("CALL tiramemsu.text.search('lisbon') YIELD statement, score RET
 ```
 
 `textSearch(text, { mode, graphs, predicates, limit, confidence })` ranks by lexical score, then confidence, confirmations, authors and recency, then eid. It throws `TextIndexUnavailable` without an index and `MissingCapability` on a SQLite without FTS5.
+
+## Conflict review
+
+```ts
+const conflicts = db.now().conflicts({ p: v("worksAt") });
+// [{ s, p, declaredMany, overlaps: [{ validFrom, validTo }], values: [{ o, statements: [
+//    { eid, validFrom, validTo, tAdd, addedAt, confidence, confirmedBy, authors, sources, sourceLayer }] }] }]
+const preview = db.previewBundle(bundle);   // dry run: { wouldCommit, failure, statements, report, burned, scope }
+if (preview.wouldCommit) db.transact((tx) => { tx.importBundle(bundle); });  // validates again
+```
+
+A schema failure is `preview.failure` (`{ code, message }`), not an exception. `conflicts` throws `Unsupported` on the history view.
 
 ## Saved answers
 

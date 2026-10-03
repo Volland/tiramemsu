@@ -39,6 +39,7 @@ impl Db {
     pub fn refresh_answer(&self, name: &str) -> Result<SavedAnswer>;      // only success clears a mark
     pub fn refresh_answer_with(&self, name: &str, budget: Option<&QueryBudget>) -> Result<SavedAnswer>;
     pub fn delete_saved_answer(&self, name: &str) -> Result<bool>;
+    pub fn preview_bundle(&self, bundle: &Bundle) -> Result<BundlePreview>; // dry-run import; nothing committed
 }
 
 impl BulkImport<'_> {
@@ -69,6 +70,7 @@ impl View {
     pub fn events_since(&self, t: u64) -> Result<Vec<Event>>;
     pub fn text_search(&self, q: &TextQuery) -> Result<Vec<TextHit>>;         // ranked recall with evidence
     pub fn explain_sparql(&self, q: &str) -> Result<Explain>;                 // routing + reasons, SQL, query plan
+    pub fn conflicts(&self, q: &ConflictQuery) -> Result<Vec<Conflict>>;      // overlapping distinct objects + evidence
 }
 ```
 
@@ -85,6 +87,7 @@ impl View {
 - Text recall ([[query#Text Recall]]): `TextQuery { text, mode: TextMode::{All, Any, Phrase}, graphs, predicates, limit, confidence }` (`TextQuery::new(text)` for the defaults) and `TextHit { eid, s, p, o, text, lang, lexical, rank, evidence: TextEvidence { confidence: Option<f64>, confirmations, authors, t_add, added_at } }`, ordered by `text::RANK_POLICY`. The index is opt-in: `OpenOptions::text_index` or `Db::rebuild_text_index`.
 - Saved answers ([[query#Saved Answers]]): `SavedQuery { language: QueryLanguage::{Sparql, Cypher}, text, params, view }` (`SavedQuery::sparql(text)`, `SavedQuery::cypher(text, params)`, `.on(view)`), and `SavedAnswer { name, query, vocab, prefixes, result, dependencies, coverage, checkpoint, cursor, evaluated_at, revision, status, invalidation, error }` with `solutions()` and `boolean()`. `AnswerStatus::{Fresh, Recheck, Stale}`, `CoverageReason` and `Invalidation { name, status, cause: InvalidationCause, t, event }`.
 - Cyclic joins ([[query#Physical Planning#LFTJ]]): `OpenOptions { planner: PlannerOptions { lftj: LftjConfig { enabled: true, min_rows_estimate: 0 } }, .. }` installs `LftjOperator` (`tm_lftj`) and routes pure cyclic BGPs to it. `View::explain_ir` and `View::explain_sparql` return `Explain { regions: Vec<RegionInfo { kind: RegionKind, note: RouteNote, aliases, query_plan }>, sql, params, query_plan, short_circuit }`; the LFTJ notes are `CyclicLftjDisabled`, `LftjUnavailable`, `LftjUnsupportedShape`, `LftjBelowEstimate` and `LftjNative`.
+- Conflict review ([[query#Conflict Inspection]], [[data-model#Fact Bundles#Import Preview]]): `ConflictQuery { subject, predicate, limit, confidence, source }` and `Conflict { s, p, declared_many, overlaps: Vec<Valid>, values: Vec<ConflictValue { o, statements: Vec<ConflictEvidence { eid, valid, t_add, added_at, confidence, confirmed_by, authors, sources, source_layer }> }> }`; `BundlePreview { import, report, failure, burned: IdUsage, scope: PreviewScope { basis, t, instant } }` with `would_commit()`. `Tx::id_usage() -> IdUsage { statements, nodes, blank_nodes, terms }` lists the ids a transaction allocated (burned after a dry run).
 - `values(s, key)` is how M0 exposes volatile state before a query language exists. See [[storage#Volatile Table]].
 - `Patch::from_fields` builds a patch from named fields for bindings and rejects `s` and `p` with `InvalidPatch`.
 
@@ -158,7 +161,7 @@ Bindings wrap the facade crate one to one. Python, Node and the MCP server are i
 | Python | `tiramemsu-python`, package `tiramemsu` (PyO3, maturin wheel) | Done. Transactions take a list of op dicts, or a context manager |
 | Node | `tiramemsu-node`, package `@tiramemsu/node` (napi-rs) | Done. Sync API; queries return plain JS objects |
 | WASM | `tiramemsu-wasm` | SQLite compiled to WASM with an OPFS VFS; single-threaded, reader = writer |
-| MCP | `tiramemsu-mcp` (stdio JSON-RPC server, binary of the same name) | Done. Tools: `assert`, `confirm`, `supersede`, `query`, `dependents`, `export_bundle`, `import_bundle`, `text_search`, and the saved-answer tools; see [[api#MCP Tools]] |
+| MCP | `tiramemsu-mcp` (stdio JSON-RPC server, binary of the same name) | Done. Tools: `assert`, `confirm`, `supersede`, `query`, `dependents`, `export_bundle`, `import_bundle`, `conflicts`, `preview_bundle`, `text_search`, and the saved-answer tools; see [[api#MCP Tools]] |
 | SQLite extension | later | Only the `tm_path` table function and time helpers; no write API |
 
 ## MCP Tools
@@ -169,7 +172,7 @@ Register it with `claude mcp add tiramemsu -- tiramemsu-mcp --db ./memory.db`, o
 
 - **Protocol:** JSON-RPC 2.0, one message per line; `initialize`, `ping`, `tools/list`, `tools/call`, notifications ignored, batches answered. Revision `2025-06-18`, with `2025-03-26` and `2024-11-05` accepted; `structuredContent` from `2025-06-18` on. The layer is hand-rolled over `serde_json`, so no protocol crate reaches `tm-core` or the facade. It lives in [[crates/tiramemsu-mcp/src/lib.rs#Server]].
 - **Configuration** comes only from the command line ([[crates/tiramemsu-mcp/src/config.rs#parse_args]]): `--db` (required), `--read-only`, `--text-index`, and `--timeout-ms` (30000), `--reader-timeout-ms`, `--max-rows` (10000), `--max-bytes` (8 MiB), `0` meaning unbounded. The bounds are one `QueryBudget` per tool call ([[query#Query Budgets]]).
-- **Tools:** `assert` (`s`, `p`, `o`, `validFrom`, `validTo`, `onExisting`, `graph`), `confirm` (`eid`), `supersede` (`eid`, `patch`), `import_bundle` (`bundle`) write one transaction each; `query` (`language`: `sparql` or `cypher`, `text`, `params`, `view`, `provenance`), `dependents` and `export_bundle` (`eid`, `view`) and `text_search` ([[query#Text Recall]]) read. Terms and views use the bridge's JSON forms.
+- **Tools:** `assert` (`s`, `p`, `o`, `validFrom`, `validTo`, `onExisting`, `graph`), `confirm` (`eid`), `supersede` (`eid`, `patch`), `import_bundle` (`bundle`) write one transaction each; `query` (`language`: `sparql` or `cypher`, `text`, `params`, `view`, `provenance`), `dependents` and `export_bundle` (`eid`, `view`), `text_search` ([[query#Text Recall]]), `conflicts` (`s`, `p`, `limit`, `confidence`, `source`, `view`; [[query#Conflict Inspection]]) and `preview_bundle` (`bundle`; [[data-model#Fact Bundles#Import Preview]]) read. `preview_bundle` takes the writer briefly for its dry run and advances only the burned id counters, so it is offered in read-only mode; applying stays the write tool `import_bundle`. Terms and views use the bridge's JSON forms.
 - **Saved answers** ([[query#Saved Answers]]): `save_answer` (`name`, `language`, `text`, `params`, `view`), `check_answers` and `refresh_answer` (`name`) write only derived records and are left out in read-only mode; `saved_answers` (optional `name`) reads.
 - **Write policy:** read-only mode leaves the write tools out of `tools/list` and refuses them with `ReadOnly` before arguments are parsed or a transaction starts. `query` only reads: SPARQL runs with `SparqlOptions::query_only` and Cypher on a view, so an update is `Unsupported`; there is no SQL.
 - **Path policy:** arguments are checked against each tool's declared keys; `path`, `db`, `database`, `file` and similar are `PathNotAllowed`, anything else undeclared is `InvalidArgument`. Free text is data and never changes authorization.

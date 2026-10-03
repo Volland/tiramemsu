@@ -37,6 +37,10 @@ from ._types import (
     term_from_json,
     text_hit_from_json,
     TextHit,
+    BundlePreview,
+    bundle_preview_from_json,
+    Conflict,
+    conflict_from_json,
     term_to_json,
     time_to_json,
 )
@@ -720,6 +724,33 @@ class View:
         rows: List[Any] = json.loads(self._call("textSearch", args))
         return [text_hit_from_json(r) for r in rows]
 
+    def conflicts(
+        self,
+        *,
+        s: Any = None,
+        p: Any = None,
+        limit: Optional[int] = None,
+        confidence: Any = None,
+        source: Any = None,
+    ) -> List["Conflict"]:
+        """Subject/predicate pairs of this view with distinct objects whose valid
+        intervals overlap, with the attributed evidence of every value.
+
+        Statements with the same object support one value; disjoint valid times are
+        not reported. Nothing is scored, resolved or written. *s* and *p* filter,
+        *limit* caps the count, and *confidence* / *source* name the layer
+        predicates (default ``v:confidence`` and ``v:source``). Raises
+        ``Unsupported`` on the history view.
+        """
+        args: Dict[str, Any] = {}
+        for key, val in (("s", s), ("p", p), ("confidence", confidence), ("source", source)):
+            if val is not None:
+                args[key] = term_to_json(val)
+        if limit is not None:
+            args["limit"] = limit
+        rows: List[Any] = json.loads(self._call("conflicts", args))
+        return [conflict_from_json(r) for r in rows]
+
     def explain_sparql(self, text: str) -> Dict[str, Any]:
         """Explain SPARQL query text without running it.
 
@@ -1020,6 +1051,23 @@ class Database:
         """Delete a saved answer; returns whether there was one."""
         j = json.loads(_call(self._native, "deleteSavedAnswer", json.dumps({"name": name})))
         return bool(j["deleted"])
+
+    def preview_bundle(
+        self, bundle: Dict[str, Any], *, budget: Optional[QueryBudget] = None
+    ) -> BundlePreview:
+        """Preview importing *bundle* now: a dry run with the full validation and
+        write semantics that commits nothing (only burned id counters advance).
+
+        A schema failure is reported in ``failure``, not raised; a malformed bundle
+        raises ``InvalidTerm``. Apply it later with :meth:`TxBuilder.import_bundle`,
+        which validates again against the database as it is then.
+        """
+        args: Dict[str, Any] = {"bundle": bundle}
+        if budget is not None:
+            args["budget"] = budget._to_json()
+        return bundle_preview_from_json(
+            json.loads(_call(self._native, "previewBundle", json.dumps(args)))
+        )
 
     def optimize(self) -> None:
         """Refresh query-planner statistics after large imports."""

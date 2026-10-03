@@ -22,6 +22,7 @@ Reads take a view and return rows; writes are one transaction each; anything tha
 - **Housekeeping:** `optimize`, `info` (with `importActive` and `statisticsDue`), `cancel` (`key`, see [[bindings#JSON Bridge#Budgets]]), `rebuildTextIndex` and `enableTextIndex` (see [[bindings#JSON Bridge#Text Recall]]).
 - **Bulk import:** `importBegin`, `importChunk`, `importProgress`, `importFinish` and `importCancel`, see [[bindings#JSON Bridge#Bulk Import]].
 - **Saved answers:** `saveAnswer`, `savedAnswer`, `savedAnswers`, `checkSavedAnswers`, `refreshAnswer` and `deleteSavedAnswer`, see [[bindings#JSON Bridge#Saved Answers]].
+- **Conflict review:** the read `conflicts` and the dry-run `previewBundle`, see [[bindings#JSON Bridge#Conflict Review]].
 
 ### Budgets
 
@@ -62,6 +63,14 @@ The saved-answer calls of [[query#Saved Answers]], in [[bindings/json/src/saved.
 `saveAnswer` takes `name`, `text`, `language` (`"sparql"` default, or `"cypher"`), `params`, `view` and `budget`; `refreshAnswer` takes `name` and `budget`; `savedAnswer` and `deleteSavedAnswer` take `name`. An answer is `{"name", "language", "text", "params", "view", "vocab", "prefixes", "result", "dependencies", "coverage", "checkpoint", "cursor", "evaluatedAt", "revision", "status", "invalidation", "error"}`, where `result` has the shape of a live `sparql` or `cypher` call. `checkSavedAnswers` returns the new invalidations `{"name", "status", "cause", "t", "event"}`, and an unknown name on refresh is `SavedAnswerNotFound`.
 
 Node exposes `Database.saveAnswer(name, {text, language, params, view}, budget)`, `savedAnswer`, `savedAnswers`, `checkSavedAnswers`, `refreshAnswer` and `deleteSavedAnswer`; Python `Database.save_answer(name, text, language=, params=, view=, budget=)`, `saved_answer`, `saved_answers`, `check_saved_answers`, `refresh_answer` and `delete_saved_answer`, returning `SavedAnswer` and `Invalidation` dataclasses.
+
+### Conflict Review
+
+The read `conflicts` ([[query#Conflict Inspection]]) and the dry run `previewBundle` ([[data-model#Fact Bundles#Import Preview]]), so a wrapper can show disagreement and preview an import before writing.
+
+`conflicts` takes `view`, `budget`, `s`, `p` (terms; one that is not stored matches nothing), `limit`, and the layer predicates `confidence` and `source`. Each entry is `{"s", "p", "declaredMany", "overlaps": [{"validFrom", "validTo"}], "values": [{"o", "statements": [{"eid", "validFrom", "validTo", "tAdd", "addedAt", "confidence", "confirmedBy", "authors", "sources", "sourceLayer"}]}]}` with `null` for an unbounded bound or an absent confidence ([[bindings/json/src/read.rs#conflicts]]).
+
+`previewBundle` takes `bundle` and `budget` and returns `{"wouldCommit", "failure", "root", "statements", "report", "burned": {"statements", "nodes", "blankNodes", "terms"}, "scope": {"basis", "t", "instant", "reserved": false}}` ([[bindings/json/src/tx.rs#preview_bundle]]); `failure` is the schema error object, and then `root`, `statements` and `report` are `null`. Applying is the `importBundle` op of `transact`. Node exposes `View.conflicts(opts)` and `Database.previewBundle(bundle, budget)`; Python `View.conflicts(s=, p=, limit=, confidence=, source=)` and `Database.preview_bundle(bundle, budget=)`, returning `Conflict` and `BundlePreview` dataclasses.
 
 ### Views
 

@@ -1098,3 +1098,59 @@ Node: `Database.open(path, { lftj, lftjMinRows })` and `View.explainSparql` repo
 ### Python Exposes LFTJ Routing
 
 Python: `Database(path, lftj=, lftj_min_rows=)` and `View.explain_sparql` report the default note, the native route and the estimate fallback, with identical rows.
+
+## Memory Conflict Review
+
+Spec `memory-conflict-review`: read-only conflict inspection and noncommitting bundle import previews. Facade tests are in `crates/tiramemsu/tests/memory_conflict_review.rs`.
+
+### Disjoint Valid Times Are Not Conflicts
+
+Distinct objects in nonoverlapping half-open intervals are not reported; overlapping ones are, with the exact overlap windows, and a valid-time view narrows the question to one instant.
+
+### Parallel Equal Objects Are Support
+
+Parallel statements with the same object never conflict; next to a different object they are listed together under one value, each with its own source layer.
+
+### Conflict Evidence Is Attributed
+
+Each statement carries its eid, valid time, asserting transaction and instant, stated confidence or `None`, confirming transactions, authors and sources of those transactions, and its source layer; custom layer predicates apply.
+
+### Conflicts Follow The View And Filters
+
+Subject, predicate and limit filters work, `sys:` predicates are skipped unless named, a declared multi-valued predicate is flagged but not an error, as-of views keep past conflicts, history is `Unsupported` and budgets apply.
+
+### Inspection Never Writes
+
+Repeated inspection leaves history, the event log, the live set and the `meta` counters unchanged; inside a speculation it sees the hypothetical value and keeps nothing.
+
+### Preview Reports Schema Violations
+
+A bundle that breaks `sys:unique` previews with a `UniqueViolation` failure, no import and no report, and writes no graph row; the real import fails the same way atomically.
+
+### Preview Refuses Malformed Bundles
+
+A bundle with a dangling reference fails with `InvalidTerm` and a reference cycle with `Unsupported`, and neither leaves a trace.
+
+### Successful Preview Changes Nothing
+
+A preview lists reused and proposed statements, cardinality-one retractions and the burned ids with its scope, leaves history and the event log unchanged, consumes no transaction number, and later writes never reuse a burned eid.
+
+### Application Revalidates
+
+After a successful preview another write takes the unique value: applying fails with `UniqueViolation` and commits nothing; once the state allows it, applying commits the whole bundle in one transaction.
+
+### Bridge Conflicts And Previews
+
+The JSON bridge's `conflicts` returns overlaps and evidence, honors filters, refuses history and unknown options; `previewBundle` reports success, a schema failure as data and a malformed bundle as `InvalidTerm`, writing nothing.
+
+### MCP Conflict And Preview Tools
+
+The MCP `conflicts` and `preview_bundle` tools are offered in read-only mode, echo the view, check their arguments, and leave history and the last transaction unchanged, while `import_bundle` stays a refused write tool.
+
+### Node Exposes Conflict Review
+
+Node: `View.conflicts(opts)` decodes terms and evidence, and `Database.previewBundle(bundle, budget)` previews without committing before `Tx.importBundle` applies.
+
+### Python Exposes Conflict Review
+
+Python: `View.conflicts(...)` returns `Conflict` dataclasses, refuses history, and `Database.preview_bundle(...)` reports a schema failure as data and a success with burned ids and scope.

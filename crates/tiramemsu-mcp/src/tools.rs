@@ -255,6 +255,41 @@ live are reused (new: false). A malformed bundle is refused and nothing is commi
         )],
     },
     Tool {
+        name: "conflicts",
+        title: "Find conflicting memories",
+        description: "List subject/predicate pairs that hold different objects at the same valid time, on a \
+view, with the windows where they overlap and the evidence behind every value: statement ids, valid time, \
+the asserting transaction, confidence when stated (null otherwise), confirmations, authors and sources. \
+Statements with the same object support one value. Nothing is scored or resolved and nothing is written; \
+choose explicitly with supersede, confirm or assert. Not available on the history view.",
+        writes: false,
+        idempotent: true,
+        args: &[
+            ("s", Schema::Term, false),
+            ("p", Schema::Term, false),
+            ("limit", Schema::Count("The most conflicts to return."), false),
+            ("confidence", Schema::Term, false),
+            ("source", Schema::Term, false),
+            ("view", Schema::View, false),
+        ],
+    },
+    Tool {
+        name: "preview_bundle",
+        title: "Preview a bundle import",
+        description: "Run a tiramemsu-bundle/1 import as a dry run and report what it would do without \
+committing: the proposed (new: true) and reused statements, dependency changes (retractions by \
+cardinality-one replacement, memberships), the schema failure if any, the ids the dry run burned, and the \
+transaction it was computed against (scope.basis). Graph, history and event log stay unchanged. A preview \
+reserves nothing: import_bundle validates again when it applies.",
+        writes: false,
+        idempotent: true,
+        args: &[(
+            "bundle",
+            Schema::Object("A tiramemsu-bundle/1 document, as export_bundle returns it."),
+            true,
+        )],
+    },
+    Tool {
         name: "text_search",
         title: "Search memory by text",
         description: "Find statements whose string object matches the words, ranked by lexical score, \
@@ -498,6 +533,26 @@ fn run(db: &Database, config: &Config, t: &Tool, args: &J) -> Result<J, ToolErro
             Ok(json!({ "root": out["root"], "statements": out["statements"], "t": r["t"] }))
         }
         "query" => query(&get, read),
+        "conflicts" => {
+            let mut c = Map::new();
+            for k in ["s", "p", "limit", "confidence", "source"] {
+                if let Some(v) = get(k) {
+                    c.insert(k.into(), v);
+                }
+            }
+            let (r, v) = read("conflicts", c)?;
+            Ok(json!({ "view": v, "conflicts": r }))
+        }
+        "preview_bundle" => {
+            let bundle = get("bundle").unwrap_or(J::Null);
+            Bundle::from_json(&bundle)
+                .map_err(|e| ToolError::arg(format!("malformed bundle: {e}")))?;
+            let p = db.call(
+                "previewBundle",
+                &json!({ "bundle": bundle, "budget": budget }),
+            )?;
+            Ok(json!({ "preview": p }))
+        }
         "dependents" => {
             let eid = get("eid").unwrap_or(J::Null);
             let mut c = Map::new();
@@ -707,6 +762,8 @@ mod tests {
                 "query",
                 "dependents",
                 "export_bundle",
+                "conflicts",
+                "preview_bundle",
                 "text_search",
                 "saved_answers"
             ]

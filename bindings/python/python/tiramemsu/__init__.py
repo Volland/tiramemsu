@@ -25,6 +25,10 @@ from importlib.metadata import PackageNotFoundError, version
 from ._db import BulkImport, Database, Ref, TxBuilder, TxContext, View
 from ._types import (
     BNode,
+    BundlePreview,
+    Conflict,
+    ConflictEvidence,
+    ConflictValue,
     CypherResult,
     CypherWriteResult,
     ImportProgress,
@@ -67,6 +71,10 @@ except PackageNotFoundError:  # pragma: no cover - running from a source tree
 
 __all__ = [
     "BNode",
+    "BundlePreview",
+    "Conflict",
+    "ConflictEvidence",
+    "ConflictValue",
     "BulkImport",
     "CypherResult",
     "CypherWriteResult",

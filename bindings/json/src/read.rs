@@ -4,9 +4,10 @@ use std::collections::HashMap;
 
 use serde_json::{json, Map, Value as J};
 use tiramemsu::{
-    BundleFormat, Db, Eid, Event, Explain, ObjectId, Op, Params, PathArgs, PathCompleteness,
-    PathDir, PathMode, PathRow, RdfTerm, RdfTriple, RegionKind, RouteNote, SparqlOptions,
-    SparqlResult, TextMode, TextQuery, TimeRef, TimeRespecting, Triple, TxReport, View,
+    BundleFormat, ConflictQuery, Db, Eid, Event, Explain, ObjectId, Op, Params, PathArgs,
+    PathCompleteness, PathDir, PathMode, PathRow, RdfTerm, RdfTriple, RegionKind, RouteNote,
+    SparqlOptions, SparqlResult, TextMode, TextQuery, TimeRef, TimeRespecting, Triple, TxReport,
+    View,
 };
 
 use crate::value::{eid_from_json, params_from_json, value_from_json, value_to_json};
@@ -205,6 +206,7 @@ pub fn run(view: &View<'_>, op: &str, args: &J) -> Res<J> {
         }
         "bundle" => Ok(view.bundle(eid_arg(args)?)?.to_json()),
         "textSearch" => text_search(view, args),
+        "conflicts" => conflicts(view, args),
         "explainSparql" => Ok(explain_json(&view.explain_sparql(str_arg(args, "text")?)?)),
         other => Err(arg(format!("unknown read operation {other:?}"))),
     }
@@ -319,6 +321,86 @@ fn text_search(view: &View<'_>, args: &J) -> Res<J> {
             })
             .collect::<Res<_>>()?,
     ))
+}
+
+/// `conflicts`: `{s?, p?, limit?, confidence?, source?}` to the view's
+/// conflicts, each `{s, p, declaredMany, overlaps: [{validFrom, validTo}],
+/// values: [{o, statements: [{eid, validFrom, validTo, tAdd, addedAt,
+/// confidence, confirmedBy, authors, sources, sourceLayer}]}]}`. Absent
+/// confidence is `null`; an unbounded bound is `null`. A subject or predicate
+/// that is not stored matches nothing.
+// @lat: [[bindings#JSON Bridge#Conflict Review]]
+fn conflicts(view: &View<'_>, args: &J) -> Res<J> {
+    let mut q = ConflictQuery::default();
+    for (k, v) in args.as_object().into_iter().flatten() {
+        if v.is_null() {
+            continue;
+        }
+        match k.as_str() {
+            "view" | "budget" => {}
+            "limit" => {
+                q.limit = Some(
+                    v.as_u64()
+                        .ok_or_else(|| arg("limit must be a non-negative integer"))?
+                        as usize,
+                )
+            }
+            "s" | "p" | "confidence" | "source" => {
+                // a term that is not stored is on no statement
+                let id = view
+                    .encode(&value_from_json(v)?)?
+                    .unwrap_or(ObjectId::from_raw(0));
+                match k.as_str() {
+                    "s" => q.subject = Some(id),
+                    "p" => q.predicate = Some(id),
+                    "confidence" => q.confidence = Some(id),
+                    _ => q.source = Some(id),
+                }
+            }
+            other => return Err(arg(format!("unknown conflicts option {other:?}"))),
+        }
+    }
+    let ms = |o: Option<i64>| o.map_or(J::Null, |v| json!(v));
+    let terms = |ids: &[ObjectId]| -> Res<Vec<J>> {
+        ids.iter()
+            .map(|i| Ok(value_to_json(&view.decode(*i)?)))
+            .collect()
+    };
+    let mut out = Vec::new();
+    for c in view.conflicts(&q)? {
+        let mut values = Vec::with_capacity(c.values.len());
+        for val in &c.values {
+            let mut statements = Vec::with_capacity(val.statements.len());
+            for e in &val.statements {
+                statements.push(json!({
+                    "eid": e.eid.n(),
+                    "validFrom": ms(e.valid.from),
+                    "validTo": ms(e.valid.to),
+                    "tAdd": e.t_add.0,
+                    "addedAt": e.added_at,
+                    "confidence": e.confidence,
+                    "confirmedBy": e.confirmed_by.iter().map(|t| t.0).collect::<Vec<_>>(),
+                    "authors": terms(&e.authors)?,
+                    "sources": terms(&e.sources)?,
+                    "sourceLayer": terms(&e.source_layer)?,
+                }));
+            }
+            values.push(
+                json!({ "o": value_to_json(&view.decode(val.o)?), "statements": statements }),
+            );
+        }
+        out.push(json!({
+            "s": value_to_json(&view.decode(c.s)?),
+            "p": value_to_json(&view.decode(c.p)?),
+            "declaredMany": c.declared_many,
+            "overlaps": c.overlaps.iter().map(|w| json!({
+                "validFrom": ms(w.from),
+                "validTo": ms(w.to),
+            })).collect::<Vec<_>>(),
+            "values": values,
+        }));
+    }
+    Ok(J::Array(out))
 }
 
 /// The statement id in `eid`: a number or `{"stmt": n}`.

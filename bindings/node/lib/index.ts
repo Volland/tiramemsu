@@ -441,6 +441,75 @@ export interface TextHit {
   };
 }
 
+/** Options for `View.conflicts`. */
+export interface ConflictOptions {
+  /** Only this subject (a term that is not stored matches nothing). */
+  s?: TermInput;
+  /** Only this predicate (by default every predicate outside `sys:`). */
+  p?: TermInput;
+  /** At most this many conflicts, in subject/predicate order. */
+  limit?: number;
+  /** The predicate read as the confidence layer (default `v:confidence`). */
+  confidence?: TermInput;
+  /** The predicate read as the statement's source layer (default `v:source`). */
+  source?: TermInput;
+}
+
+/** The attributed evidence of one statement in a conflict; absent layers are `null` or empty, never invented. */
+export interface ConflictEvidence {
+  eid: number;
+  validFrom: number | null;
+  validTo: number | null;
+  /** The asserting transaction and its instant. */
+  tAdd: number;
+  addedAt: number;
+  /** The largest numeric confidence layer, or `null` when the statement has none. */
+  confidence: number | null;
+  /** The transactions that confirmed it. */
+  confirmedBy: number[];
+  /** `sys:author` of the asserting and confirming transactions. */
+  authors: Term[];
+  /** `sys:source` of the asserting and confirming transactions. */
+  sources: Term[];
+  /** The objects of its source-layer statements. */
+  sourceLayer: Term[];
+}
+
+/** One disagreeing value with the statements that support it. */
+export interface ConflictValue {
+  o: Term;
+  statements: ConflictEvidence[];
+}
+
+/** A subject/predicate pair with distinct objects valid at the same time. */
+export interface Conflict {
+  s: Term;
+  p: Term;
+  /** The predicate is declared `sys:cardinality sys:many` (several values may be intended). */
+  declaredMany: boolean;
+  /** The maximal valid intervals where two or more objects hold (`null` = unbounded). */
+  overlaps: Array<{ validFrom: number | null; validTo: number | null }>;
+  values: ConflictValue[];
+}
+
+/** The result of `Database.previewBundle`: a dry-run import, nothing committed. */
+export interface BundlePreview {
+  /** True when the import would commit if nothing changes first. */
+  wouldCommit: boolean;
+  /** The schema failure the import would raise, or `null`. */
+  failure: { code: string; message: string } | null;
+  /** The root's eid, or `null` on failure. */
+  root: number | null;
+  /** Where each bundle statement would land (`new: false` reuses a live statement), or `null` on failure. */
+  statements: Array<{ id: number; eid: number; new: boolean }> | null;
+  /** The dry-run report (proposed, reused, retracted by cardinality one, memberships), or `null` on failure. */
+  report: Omit<Report, "results" | "refs"> | null;
+  /** Ids the dry run allocated; they are never issued again. */
+  burned: { statements: number[]; nodes: number; blankNodes: number; terms: number };
+  /** The committed transaction the preview read (`basis`), the would-be `t` and instant. Nothing is reserved. */
+  scope: { basis: number; t: number; instant: number; reserved: false };
+}
+
 /**
  * The bounds of one call, for `View.withBudget` and the `budget` transaction option.
  * Every field is optional and independent; an empty budget bounds nothing.
@@ -697,6 +766,36 @@ export class View {
       s: fromJson(h.s),
       p: fromJson(h.p),
       o: fromJson(h.o),
+    }));
+  }
+
+  /**
+   * Subject/predicate pairs of this view with distinct objects whose valid intervals
+   * overlap, with the attributed evidence of every value. Statements with the same object
+   * support one value; nothing is scored, resolved or written. Throws `Unsupported` on the
+   * history view.
+   */
+  conflicts(opts?: ConflictOptions): Conflict[] {
+    const args: Record<string, unknown> = { ...this._base() };
+    if (opts?.s !== undefined) args.s = toJson(opts.s);
+    if (opts?.p !== undefined) args.p = toJson(opts.p);
+    if (opts?.limit !== undefined) args.limit = opts.limit;
+    if (opts?.confidence !== undefined) args.confidence = toJson(opts.confidence);
+    if (opts?.source !== undefined) args.source = toJson(opts.source);
+    const terms = (xs: unknown[]) => xs.map(fromJson);
+    return (callNative(this._db, "conflicts", args) as Array<Record<string, unknown>>).map((c) => ({
+      ...(c as unknown as Conflict),
+      s: fromJson(c.s),
+      p: fromJson(c.p),
+      values: (c.values as Array<Record<string, unknown>>).map((v) => ({
+        o: fromJson(v.o),
+        statements: (v.statements as Array<Record<string, unknown>>).map((e) => ({
+          ...(e as unknown as ConflictEvidence),
+          authors: terms(e.authors as unknown[]),
+          sources: terms(e.sources as unknown[]),
+          sourceLayer: terms(e.sourceLayer as unknown[]),
+        })),
+      })),
     }));
   }
 
@@ -1118,6 +1217,17 @@ export class Database {
   /** Deletes a saved answer; returns whether there was one. */
   deleteSavedAnswer(name: string): boolean {
     return (callNative(this._db, "deleteSavedAnswer", { name }) as { deleted: boolean }).deleted;
+  }
+
+  /**
+   * Previews importing `bundle` now: a dry run with the full validation and write semantics
+   * that commits nothing (only burned id counters advance). A schema failure is reported in
+   * `failure`, not thrown. Apply it later with `Tx.importBundle`, which validates again.
+   */
+  previewBundle(bundle: Bundle, budget?: QueryBudget): BundlePreview {
+    const args: Record<string, unknown> = { bundle };
+    if (budget) args.budget = budget;
+    return callNative(this._db, "previewBundle", args) as BundlePreview;
   }
 
   /** Refreshes the query planner's statistics (run after large imports). */

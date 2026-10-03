@@ -6,6 +6,7 @@ pub mod budget;
 pub mod bundle;
 pub mod clock;
 pub mod codec;
+pub mod conflict;
 pub mod engine;
 pub mod error;
 pub mod event;
@@ -24,6 +25,7 @@ pub mod vocab;
 pub use budget::{CancelToken, Interrupt, ResultLimit};
 pub use bundle::{BTerm, Bundle, BundleStatement, ImportReport, ImportedStatement};
 pub use clock::{Clock, ManualClock, SystemClock};
+pub use conflict::{Conflict, ConflictEvidence, ConflictQuery, ConflictValue};
 pub use engine::{IntoObject, PredicateSchema, Store, StoreOptions, Tx};
 pub use error::{Dialect, Error, Position, Result, Span};
 pub use event::{Event, Op};
@@ -34,8 +36,8 @@ pub use exec::{
 pub use id::{Eid, ObjectId, Tag, TxId};
 pub use mapping::Vocab;
 pub use report::{
-    AssertOpts, Asserted, OnExisting, Patch, PatchField, RetKind, Triple, TxOptions, TxReport,
-    Valid,
+    AssertOpts, Asserted, IdUsage, OnExisting, Patch, PatchField, RetKind, Triple, TxOptions,
+    TxReport, Valid,
 };
 pub use term::{TermDict, TermReader};
 pub use text::{TextEvidence, TextHit, TextMode, TextQuery};

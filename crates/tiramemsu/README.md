@@ -690,6 +690,35 @@ db.now().cypher("CALL tiramemsu.text.search('lisbon') YIELD statement, score RET
 
 Plain and language-tagged strings are searchable; typed literals are not. Words match as whole tokens, case- and accent-insensitive (`TextMode::All`, `Any` or `Phrase`, a trailing `*` for a prefix). Hits are ranked by lexical score, then confidence (absent last), confirmations, distinct authors and recency, with the statement eid as the final tie-break. A retracted statement is absent from `now()` and present `as_of` before its retraction. On a SQLite without FTS5 recall fails with `MissingCapability` and everything else works. Building the index never touches history; it needs storage format 2 or later.
 
+## Conflict review
+
+`conflicts` shows where memory disagrees with itself, and `preview_bundle` shows what an import would do before it is written. Neither chooses anything: deciding is an explicit write.
+
+```rust
+# use tiramemsu::*;
+# let dir = tempfile::tempdir().unwrap();
+# let db = Db::open(dir.path().join("m.db"), OpenOptions::default())?;
+# let other = Db::open(dir.path().join("o.db"), OpenOptions::default())?;
+let v = |s: &str| Value::iri(format!("urn:tiramemsu:v:{s}"));
+db.transact(TxOptions::default(), |tx| {
+    tx.assert(v("alice"), v("worksAt"), v("acme"), Valid::from(0))?;
+    tx.assert(v("alice"), v("worksAt"), v("initech"), Valid::between(10, 20))?;
+    Ok(())
+})?;
+let c = &db.now().conflicts(&ConflictQuery::default())?[0];
+assert_eq!(c.overlaps, vec![Valid::between(10, 20)]);  // when both were true
+assert_eq!(c.values.len(), 2);                          // each object with its statements
+
+let job = db.now().triples(None, None, None)?[0].eid;
+let bundle = db.now().bundle(job)?;
+let preview = other.preview_bundle(&bundle)?;            // a dry run: nothing committed
+assert!(preview.would_commit() && other.events_since(0)?.is_empty());
+other.transact(TxOptions::default(), |tx| tx.import_bundle(&bundle).map(|_| ()))?; // validates again
+# Ok::<(), Error>(())
+```
+
+Each conflicting statement carries its eid, valid time, asserting transaction, stated confidence (`None` when there is none), confirming transactions, and the authors and sources of those transactions. Statements with the same object are support for one value; a predicate declared `sys:many` is flagged with `declared_many`, never reported as a violation; the history view is refused. A preview reports a schema failure as `failure` instead of raising it, lists the burned ids and the transaction it read (`scope.basis`), and reserves nothing.
+
 ## Saved answers
 
 An agent that remembers an answer needs to know when to stop trusting it. `Db::save_answer` runs a query and stores it with its parameters, view, the `@vocab` and prefixes of the moment, its result and the statements it cited (SPARQL `SELECT` provenance). `Db::check_saved_answers` then reads the event log since each answer's cursor, once: a retracted or superseded cited statement makes the answer `Stale` with that event, and any other later transaction under a mutable view makes it `Recheck`, because a new row, a `NOT EXISTS` or an `OPTIONAL` may have changed it. Only `Db::refresh_answer`, a successful re-run, makes it `Fresh` again.

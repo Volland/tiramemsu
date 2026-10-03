@@ -526,7 +526,7 @@ pub fn search(
         });
         Ok(())
     })?;
-    let ev = EvidenceReader::new(exec, spec, q)?;
+    let ev = EvidenceReader::new(exec, spec, q.confidence)?;
     for h in &mut hits {
         budget::check()?;
         ev.fill(exec, h, terms, use_cache)?;
@@ -562,17 +562,24 @@ pub fn compare(a: &TextHit, b: &TextHit) -> Ordering {
         .then_with(|| a.eid.cmp(&b.eid))
 }
 
-/// The evidence queries of one recall, with the view's time predicates.
-struct EvidenceReader {
+/// The evidence queries of one recall (and of conflict inspection), with the
+/// view's time predicates. A layer predicate that is not interned is `None`.
+pub(crate) struct EvidenceReader {
     spec: ViewSpec,
     confidence: Option<ObjectId>,
-    confirmed_by: Option<ObjectId>,
-    author: Option<ObjectId>,
+    pub(crate) confirmed_by: Option<ObjectId>,
+    pub(crate) author: Option<ObjectId>,
 }
 
 impl EvidenceReader {
-    fn new(exec: &mut dyn Executor, spec: &ViewSpec, q: &TextQuery) -> Result<EvidenceReader> {
-        let confidence = match q.confidence {
+    /// The reader of `spec`, with `confidence` as the confidence layer
+    /// ([`DEFAULT_CONFIDENCE`] when `None`).
+    pub(crate) fn new(
+        exec: &mut dyn Executor,
+        spec: &ViewSpec,
+        confidence: Option<ObjectId>,
+    ) -> Result<EvidenceReader> {
+        let confidence = match confidence {
             Some(c) => Some(c),
             None => TermReader::encode(exec, &Value::iri(DEFAULT_CONFIDENCE))?,
         };
@@ -585,7 +592,12 @@ impl EvidenceReader {
     }
 
     /// The objects of the visible `(eid, p, ?)` statements.
-    fn objects(&self, exec: &mut dyn Executor, s: ObjectId, p: ObjectId) -> Result<Vec<ObjectId>> {
+    pub(crate) fn objects(
+        &self,
+        exec: &mut dyn Executor,
+        s: ObjectId,
+        p: ObjectId,
+    ) -> Result<Vec<ObjectId>> {
         let mut params = Params::new();
         let sp = params.push(s.raw());
         let pp = params.push(p.raw());
@@ -603,6 +615,33 @@ impl EvidenceReader {
             .collect())
     }
 
+    /// The largest numeric object of the visible confidence statements on `me`
+    /// (`INT`, `DOUBLE` or `DECIMAL`); `None` when it has none.
+    pub(crate) fn confidence(
+        &self,
+        exec: &mut dyn Executor,
+        me: ObjectId,
+        terms: &TermReader,
+        use_cache: bool,
+    ) -> Result<Option<f64>> {
+        let Some(c) = self.confidence else {
+            return Ok(None);
+        };
+        let mut best: Option<f64> = None;
+        for o in self.objects(exec, me, c)? {
+            let x = match terms.decode(exec, o, use_cache)? {
+                Value::Int(i) => Some(i as f64),
+                Value::Double(d) if !d.is_nan() => Some(d),
+                Value::Decimal(s) => s.parse::<f64>().ok(),
+                _ => None,
+            };
+            if let Some(x) = x {
+                best = Some(best.map_or(x, |b: f64| b.max(x)));
+            }
+        }
+        Ok(best)
+    }
+
     fn fill(
         &self,
         exec: &mut dyn Executor,
@@ -611,21 +650,7 @@ impl EvidenceReader {
         use_cache: bool,
     ) -> Result<()> {
         let me = h.eid.oid();
-        if let Some(c) = self.confidence {
-            let mut best: Option<f64> = None;
-            for o in self.objects(exec, me, c)? {
-                let x = match terms.decode(exec, o, use_cache)? {
-                    Value::Int(i) => Some(i as f64),
-                    Value::Double(d) if !d.is_nan() => Some(d),
-                    Value::Decimal(s) => s.parse::<f64>().ok(),
-                    _ => None,
-                };
-                if let Some(x) = x {
-                    best = Some(best.map_or(x, |b: f64| b.max(x)));
-                }
-            }
-            h.evidence.confidence = best;
-        }
+        h.evidence.confidence = self.confidence(exec, me, terms, use_cache)?;
         let mut txs = vec![h.evidence.t_add.oid()];
         if let Some(cb) = self.confirmed_by {
             let confirmations = self.objects(exec, me, cb)?;

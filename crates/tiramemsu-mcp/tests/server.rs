@@ -105,6 +105,8 @@ fn read_only_refuses_writes_before_a_transaction() {
             "query",
             "dependents",
             "export_bundle",
+            "conflicts",
+            "preview_bundle",
             "text_search",
             "saved_answers"
         ]
@@ -491,7 +493,7 @@ fn protocol_handshake_and_errors() {
         json!({ "jsonrpc": "2.0", "id": 3, "method": "tools/list" }),
     )
     .unwrap();
-    assert_eq!(r["result"]["tools"].as_array().unwrap().len(), 12);
+    assert_eq!(r["result"]["tools"].as_array().unwrap().len(), 14);
     // protocol errors
     let code = |r: Option<J>| r.unwrap()["error"]["code"].as_i64().unwrap();
     let raw: J = serde_json::from_str(&server.handle("{not json").unwrap()).unwrap();
@@ -578,4 +580,77 @@ fn saved_answer_tools_mark_and_refresh() {
     assert_eq!(all["answers"].as_array().unwrap().len(), 1);
     let missing = server.call_tool("refresh_answer", &json!({ "name": "nope" }));
     assert_eq!(missing.unwrap_err().code, "SavedAnswerNotFound");
+}
+
+// @lat: [[tests#Memory Conflict Review#MCP Conflict And Preview Tools]]
+#[test]
+fn conflict_and_preview_tools_read_without_writing() {
+    let dir = tempfile::tempdir().unwrap();
+    let server = open(&dir);
+    seed(&server);
+    server
+        .call_tool(
+            "assert",
+            &json!({ "s": v("alice"), "p": v("worksAt"), "o": v("initech"), "validFrom": 5 }),
+        )
+        .unwrap();
+    let src_dir = tempfile::tempdir().unwrap();
+    let src = open(&src_dir);
+    let b = src
+        .call_tool(
+            "assert",
+            &json!({ "s": v("bob"), "p": v("worksAt"), "o": v("globex") }),
+        )
+        .unwrap();
+    let bundle = src
+        .call_tool("export_bundle", &json!({ "eid": b["eid"] }))
+        .unwrap()["bundle"]
+        .clone();
+    drop(server);
+    // both tools are read tools, offered in read-only mode
+    let ro = Server::open(Config {
+        read_only: true,
+        ..config(&dir)
+    })
+    .unwrap();
+    let before = counters(&ro);
+    let c = ro.call_tool("conflicts", &json!({})).unwrap();
+    assert_eq!(c["view"], json!({ "kind": "now" }));
+    let list = c["conflicts"].as_array().unwrap();
+    assert_eq!(list.len(), 1);
+    assert_eq!(list[0]["s"], v("alice"));
+    assert_eq!(
+        list[0]["overlaps"],
+        json!([{ "validFrom": 5, "validTo": null }])
+    );
+    assert_eq!(list[0]["values"].as_array().unwrap().len(), 2);
+    let filtered = ro
+        .call_tool("conflicts", &json!({ "s": v("bob"), "p": v("worksAt") }))
+        .unwrap();
+    assert_eq!(filtered["conflicts"], json!([]));
+    let p = ro
+        .call_tool("preview_bundle", &json!({ "bundle": bundle }))
+        .unwrap();
+    assert_eq!(p["preview"]["wouldCommit"], true, "{p}");
+    assert_eq!(p["preview"]["statements"][0]["new"], true);
+    assert_eq!(counters(&ro), before);
+    // the arguments are checked like every tool's
+    let e = ro
+        .call_tool("preview_bundle", &json!({ "bundle": { "format": "nope" } }))
+        .unwrap_err();
+    assert_eq!(e.code, "InvalidArgument");
+    let e = ro
+        .call_tool("conflicts", &json!({ "path": "/tmp/other.db" }))
+        .unwrap_err();
+    assert_eq!(e.code, "PathNotAllowed");
+    let e = ro
+        .call_tool("conflicts", &json!({ "view": { "kind": "history" } }))
+        .unwrap_err();
+    assert_eq!(e.code, "Unsupported");
+    // applying stays an explicit write tool, refused here
+    let e = ro
+        .call_tool("import_bundle", &json!({ "bundle": bundle }))
+        .unwrap_err();
+    assert_eq!(e.code, "ReadOnly");
+    assert_eq!(counters(&ro), before);
 }

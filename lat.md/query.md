@@ -538,6 +538,19 @@ YIELD statement, subject, predicate, text, score, rank, confidence
 - **SPARQL:** the `tm:text*` patterns on one subject variable form one recall ([[crates/tm-sparql/src/lower/bgp.rs]]); `GRAPH <g>` and `FROM` restrict it, `SERVICE <tm:asOf/…>` times it, and `GRAPH ?g` around it is `InvalidQuery`. Recall rows add no query provenance.
 - **Cypher:** the procedure ([[crates/tm-cypher/src/exec/text.rs]]) joins the recall with the hit's statement and yields it in node form; `USE AS OF` and the other time clauses apply.
 
+## Conflict Inspection
+
+A read that shows disagreement instead of hiding it: subject/predicate pairs of one view whose distinct objects hold at the same valid time, each value with its attributed evidence.
+
+`View::conflicts(&ConflictQuery)` in Rust, `conflicts` on the JSON bridge, `View.conflicts` in Node and Python and the MCP `conflicts` tool all run [[crates/tm-core/src/conflict.rs#inspect]] on the caller's connection, in one snapshot, as one budgeted operation ([[query#Query Budgets]]).
+
+- **Conflict:** two statements of the view with the same `s` and `p`, different `o`, and intersecting half-open valid intervals, the overlap test of assert ([[time-model#Operations#Assert]]). A self-join finds the candidate pairs; each pair's statements are then swept over their interval bounds into `overlaps`, the maximal windows where two or more objects hold. Statements outside every window are left out.
+- **Support, not conflict:** parallel statements with the same object (several eids, as `create` makes them) are listed together under one `ConflictValue`. Disjoint episodes, such as a job that ended before the next began, are never reported.
+- **Evidence, never a score:** per statement its eid, valid interval, `t_add` and instant, the largest numeric confidence layer or `None`, the transactions of its `sys:confirmedBy` layers, the distinct `sys:author` and `sys:source` values of the asserting and confirming transactions, and the objects of its source layer (`v:source` unless the query names another). Nothing is combined, ranked or chosen.
+- **Schema neutral:** a multi-valued predicate is reported like any other and never as a violation; `declared_many` says when it is declared `sys:cardinality sys:many`. Predicates in the `sys:` namespace are skipped unless the query names one.
+- **Views:** now, as-of (a disagreement memory held then) and valid-time views; the history view is `Unsupported`, because it mixes statements that were never believed together. Filters are `subject`, `predicate` and `limit`.
+- **Read-only:** inspection never retracts, supersedes or confirms; resolving is an explicit write chosen by the caller (`supersede`, `retract`, `confirm` or a new assertion). Inside `Db::with` it sees the speculative statements.
+
 ## Saved Answers
 
 A saved answer stores a query with its parameters, view and last result, and turns later events into conservative `recheck` and `stale` marks, so an agent knows when a remembered answer can no longer be trusted.

@@ -129,6 +129,7 @@ Times accept a `datetime`, a `date`, epoch milliseconds or an RFC 3339 string. `
 | `view.path_report(start, expr, ...)` | `PathReport(rows, completeness)`: the rows of `path` and a `PathCompleteness` |
 | `view.dependents(eid)` | The statements that stand on `eid`: what retracting it would cascade to |
 | `view.bundle(eid)` | The statement with its layers and evidence, as a `tiramemsu-bundle/1` dict |
+| `view.conflicts(s=, p=, limit=, confidence=, source=)` | `Conflict`s: overlapping distinct values with `overlaps` and each statement's `ConflictEvidence`; nothing is written |
 | `view.events(since=0)` | The change log after a transaction |
 | `view.graphs()`, `view.graph_members(g)`, `view.values(s, key)` | Named graphs and values |
 
@@ -226,6 +227,19 @@ db.now().cypher("CALL tiramemsu.text.search('lisbon') YIELD statement, score RET
 ```
 
 `text_search(text, mode="all"|"any"|"phrase", graphs=, predicates=, limit=, confidence=)` returns `TextHit`s ranked by lexical score, then confidence, confirmations, authors and recency, then eid. Views apply: `db.as_of(...)` recalls what was believed then.
+
+## Conflict review
+
+```python
+for c in db.now().conflicts(p=Iri("urn:tiramemsu:v:worksAt")):
+    print(c.s, c.overlaps, [(v.o, [e.authors for e in v.statements]) for v in c.values])
+preview = db.preview_bundle(bundle)       # dry run: nothing committed
+if preview.would_commit:
+    with db.transact() as tx:
+        tx.import_bundle(bundle)          # validates again
+```
+
+`preview.failure` holds a schema failure (`{"code", "message"}`) instead of raising it; `preview.burned` and `preview.scope` say which ids the dry run burned and which transaction it read. `conflicts` raises `Unsupported` on the history view.
 
 ## Saved answers
 
