@@ -258,6 +258,15 @@ pub enum Error {
     /// resume once the session finishes, is cancelled or is dropped.
     #[error("a bulk import session holds the write lease")]
     ImportInProgress,
+    /// Text recall on a database whose derived text index cannot answer: it was
+    /// never built (`OpenOptions::text_index` or `Db::rebuild_text_index`), or a
+    /// host without FTS5 wrote string statements since it was last brought up to
+    /// date. Graph history is unaffected; rebuilding the index fixes it.
+    #[error("text index unavailable: {reason}")]
+    TextIndexUnavailable {
+        /// Why the index cannot answer.
+        reason: String,
+    },
     /// A SQLite file with user tables but no tiramemsu `meta` table.
     #[error("{0} is not a tiramemsu database")]
     ForeignFile(PathBuf),

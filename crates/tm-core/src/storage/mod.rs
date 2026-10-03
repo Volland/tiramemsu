@@ -9,8 +9,10 @@ use std::path::Path;
 use crate::error::{Error, Result};
 use crate::exec::{Executor, Host, HostOptions, SqlValue};
 
-/// The format version this build writes and reads.
-pub const FORMAT_VERSION: i64 = 1;
+/// The format version this build writes and reads. Format 2 adds the bookkeeping
+/// of the derived text index (`meta.text_index`, `meta.text_stale`), so that a
+/// format-1 build, which would not keep `term_fts` current, refuses the file.
+pub const FORMAT_VERSION: i64 = 2;
 
 /// The format-1 DDL: tables, indexes, the `event` view and the invariant triggers.
 // @lat: [[storage#Schema]]
@@ -131,7 +133,9 @@ fn init_or_check(
                 &[SqlValue::from(k), SqlValue::Integer(v)],
             )?;
         }
-        return Ok(());
+        // a new file is created as format 1 and migrated forward like an old one,
+        // so a fresh file and a migrated file have the same schema
+        return migrate::run_migrations(exec, 1, supported, migrations);
     }
     let has_meta = exec
         .query_i64(

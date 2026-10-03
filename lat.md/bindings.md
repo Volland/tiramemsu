@@ -17,7 +17,7 @@ Reads take a view and return rows; writes are one transaction each; anything tha
 - **Reads:** `sparql`, `cypher`, `triples`, `path`, `events`, `graphs`, `graphMembers`, `values`, `dependents` (`eid`, see [[time-model#Cascade#Dependents]]) and `bundle` (`eid`, returns the `tiramemsu-bundle/1` JSON of [[data-model#Fact Bundles#Bundle Formats]]), each with `{"view": …}` plus its own arguments. They are [[bindings/json/src/read.rs#run]]. `path` takes `start`, `path`, `mode`, `maxHops`, an optional `graphs` list of terms (a term that is not stored names no graph) and `timeRespecting: true | {"after": time}`, and every row carries `arrival` (epoch ms or `null`).
 - **Writes:** `transact` (a list of op objects in one transaction), `cypherWrite`, and `with` (speculation: ops applied hypothetically, then queries run on the result, then everything discarded). They are in [[bindings/json/src/tx.rs#transact]].
 - **Transaction ops:** `assert`, `create`, `retract`, `retractMatching`, `supersede`, `confirm`, `meta`, `upsert`, `newNode`, the five graph ops, `importBundle` (`bundle`; returns `{"root", "statements": [{"id", "eid", "new"}]}`, and `as` names the imported root) and `cypher`. An op may carry `"as": name`, and a later op may use `{"ref": name}` as a statement id or as a subject or object, which is how a layer is written on a statement created earlier in the same transaction.
-- **Housekeeping:** `optimize`, `info` (with `importActive` and `statisticsDue`) and `cancel` (`key`, see [[bindings#JSON Bridge#Budgets]]).
+- **Housekeeping:** `optimize`, `info` (with `importActive` and `statisticsDue`), `cancel` (`key`, see [[bindings#JSON Bridge#Budgets]]), `rebuildTextIndex` and `enableTextIndex` (see [[bindings#JSON Bridge#Text Recall]]).
 - **Bulk import:** `importBegin`, `importChunk`, `importProgress`, `importFinish` and `importCancel`, see [[bindings#JSON Bridge#Bulk Import]].
 
 ### Budgets
@@ -35,6 +35,14 @@ The bridge keeps bulk import sessions by id, so a wrapper drives one with plain 
 `importBegin` returns `{"session": n}` from `Db::bulk_import_shared` ([[query#Bulk Import]]). `importChunk` takes `session`, `ops`, `options` and `budget`, like `transact`, and returns the report with a `progress` member. Chunks of one session run one at a time.
 
 Progress is `{"chunks", "rejected", "asserted", "existing", "retracted", "txs", "elapsedMs", "maintenanceMs"}`. `importFinish` returns `{"progress", "analyzed", "statisticsDue", "maintenanceError"}` (an error object or `null`); `importCancel` returns the progress. Both remove the session, and an unknown session is `InvalidArgument`.
+
+### Text Recall
+
+`textSearch` is a read like the others, so it takes a view and a budget, and returns ranked hits with their evidence ([[query#Text Recall]]).
+
+Arguments are `text`, `mode` (`"all"`, `"any"`, `"phrase"`), `graphs` and `predicates` (lists of terms; a term that is not stored matches nothing), `limit` and `confidence` (a predicate term). Each hit is `{"eid", "s", "p", "o", "text", "lang", "score", "rank", "evidence": {"confidence", "confirmations", "authors", "tAdd", "addedAt"}}`, with an absent confidence as `null`.
+
+The open option `textIndex: true` builds the index at open. `rebuildTextIndex` returns `{"values": n}` and `enableTextIndex` returns `{"built": bool}`. Errors are `TextIndexUnavailable` and `MissingCapability`; an unknown option is `InvalidArgument`. Node exposes `View.textSearch`, `Database.rebuildTextIndex` and `enableTextIndex`; Python `View.text_search`, `Database.rebuild_text_index` and `enable_text_index`.
 
 ### Views
 
@@ -66,6 +74,8 @@ Bulk import: `Database.bulkImport()` returns a `BulkImport` with `chunk(fn | ops
 
 Budgets: `View.withBudget({ timeoutMs, readerTimeoutMs, maxRows, maxBytes, cancelKey })`, a `budget` member in the options of `transact` and `cypherWrite`, `Database.cancel(key)`, and the open option `readerTimeoutMs`. Because the API is synchronous, `cancel` from the same thread only affects a call that starts later.
 
+Text recall: the open option `textIndex`, `View.textSearch(text, { mode, graphs, predicates, limit, confidence })` returning typed `TextHit`s, `Database.rebuildTextIndex()` and `Database.enableTextIndex()`.
+
 The package carries one addon per platform, and the loader names the platform when none matches. A `Date` is written as an `xsd:dateTime` literal and an `xsd:dateTime` is read back as a `Date`. Releases are built by `.github/workflows/npm-publish.yml`; see `docs/node-publishing.md`.
 
 ## Python
@@ -77,6 +87,8 @@ Every bridge operation has a wrapper method, as in Node.js: `sparql(text, proven
 Bulk import: `Database.bulk_import()` returns a `BulkImport` context manager (finish on clean exit, cancel on an exception) with `chunk()` in both `transact` forms, `progress()`, `finish()` and `cancel()`, and the dataclasses `ImportProgress` and `ImportSummary`.
 
 Budgets: the frozen dataclass `QueryBudget(timeout_ms=, reader_timeout_ms=, max_rows=, max_bytes=, cancel_key=)`, `View.with_budget`, `budget=` on `transact` (both forms) and `cypher_write`, `Database(reader_timeout_ms=)`, and `Database.cancel(key)`, which works from another thread because the GIL is released during calls.
+
+Text recall: `Database(text_index=True)`, `View.text_search(text, mode=, graphs=, predicates=, limit=, confidence=)` returning frozen `TextHit` dataclasses with a `TextEvidence`, `Database.rebuild_text_index()` and `Database.enable_text_index()`.
 
 `Database.transact` is both a context manager, which records ops and submits them when the block exits cleanly, and a function of a list of op dicts. The GIL is released during each call, so threads can query one `Database` in parallel.
 

@@ -25,8 +25,29 @@ impl std::fmt::Debug for Migration {
     }
 }
 
-/// The migrations of this build. Empty for format version 1.
-pub const MIGRATIONS: &[Migration] = &[];
+/// The migrations of this build: format 1 to 2 adds the text-index bookkeeping.
+pub const MIGRATIONS: &[Migration] = &[Migration {
+    from: 1,
+    apply: v1_to_v2,
+}];
+
+/// Format 1 to 2: the `meta` rows of the derived text index (OpenSpec change
+/// `add-text-retrieval`). `text_index` is the index version (0: not built) and
+/// `text_stale` the lowest statement eid a host without FTS5 wrote while the
+/// index was built (0: none). The FTS5 table itself (`term_fts`, reserved by
+/// format 1) is created only when the index is built, on a host with FTS5, so the
+/// migration runs on every host and touches no graph row.
+// @lat: [[storage#Text Index]]
+fn v1_to_v2(exec: &mut dyn Executor) -> Result<()> {
+    for key in ["text_index", "text_stale"] {
+        exec.execute(
+            "INSERT INTO meta(key, value) SELECT ?1, 0 WHERE NOT EXISTS \
+             (SELECT 1 FROM meta WHERE key = ?1)",
+            &[SqlValue::from(key)],
+        )?;
+    }
+    Ok(())
+}
 
 /// Checks `found` against `supported` and applies the pending migrations in order,
 /// then records the new version. Runs inside the caller's transaction.

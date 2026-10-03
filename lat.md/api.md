@@ -29,6 +29,8 @@ impl Db {
     pub fn bulk_import_shared(self: &Arc<Db>) -> Result<BulkImport<'static>>;
     pub fn statistics_due(&self) -> Result<bool>;
     pub fn import_active(&self) -> bool;
+    pub fn enable_text_index(&self) -> Result<bool>;                        // build unless current; catch up
+    pub fn rebuild_text_index(&self) -> Result<u64>;                        // drop + refill term_fts; history untouched
 }
 
 impl BulkImport<'_> {
@@ -56,6 +58,7 @@ impl View {
     pub fn encode(&self, v: &Value) -> Result<Option<ObjectId>>;              // lookup only, never inserts
     pub fn decode(&self, id: ObjectId) -> Result<Value>;
     pub fn events_since(&self, t: u64) -> Result<Vec<Event>>;
+    pub fn text_search(&self, q: &TextQuery) -> Result<Vec<TextHit>>;         // ranked recall with evidence
 }
 ```
 
@@ -68,6 +71,7 @@ impl View {
 - `sparql(q)` is `sparql_with(q, &SparqlOptions::default())`. `SparqlOptions { provenance: true }` makes each `SELECT` row carry the eids of the statements that produced it: `Solutions::provenance(row) -> Option<&[Eid]>`, a `"provenance"` member in SPARQL JSON, and `provenance: true` on the JSON bridge's `sparql`. `ASK`, `CONSTRUCT` and updates with it are `Unsupported`. See [[query#Front Ends#SPARQL#Query Provenance]].
 - Query budgets ([[query#Query Budgets]]): `QueryBudget { timeout, cancel, reader_timeout, max_rows, max_bytes }` (all `Option`, `Default` bounds nothing), `CancelToken::{new, cancel, is_cancelled}`, and `QueryBudget::run(f)`, which bounds a sequence of calls as one operation. Hosts receive the stop conditions through `Executor::set_interrupt(Option<Interrupt>)`, a default no-op.
 - Bulk import ([[query#Bulk Import]]): `ImportProgress { chunks, rejected, asserted, existing, retracted, txs, elapsed, maintenance }` and `ImportSummary { progress, analyzed, maintenance_error, statistics_due }`. Dropping a `BulkImport` equals `cancel`.
+- Text recall ([[query#Text Recall]]): `TextQuery { text, mode: TextMode::{All, Any, Phrase}, graphs, predicates, limit, confidence }` (`TextQuery::new(text)` for the defaults) and `TextHit { eid, s, p, o, text, lang, lexical, rank, evidence: TextEvidence { confidence: Option<f64>, confirmations, authors, t_add, added_at } }`, ordered by `text::RANK_POLICY`. The index is opt-in: `OpenOptions::text_index` or `Db::rebuild_text_index`.
 - `values(s, key)` is how M0 exposes volatile state before a query language exists. See [[storage#Volatile Table]].
 - `Patch::from_fields` builds a patch from named fields for bindings and rejects `s` and `p` with `InvalidPatch`.
 
@@ -91,7 +95,8 @@ Every failure is a typed error, and a failed transaction leaves no trace: no tx 
 | `GraphNotFound { graph }` / `GraphExists { graph }` | `CLEAR GRAPH` or `DROP GRAPH` on a graph with no membership and no declaration; `CREATE GRAPH` on a declared graph (both unless `SILENT`) |
 | `SchemaConflict { violating }` | A schema change is violated by existing live data |
 | `Parse { dialect, span, msg }` / `Unsupported { feature }` | A query is outside the v1 subset. `dialect` is SPARQL, Cypher or Path (the `tm_path` expression text). `Unsupported` also rejects what format 1 reserves for later milestones: tag 15 `SEALED` and the `sys:sensitive` flag (M6), and a `NODE`, `BNODE`, `STMT` or `TX` id with a non-zero origin ([[data-model#ObjectId#Origin Bits]]) |
-| `MissingCapability { capability }` | `Db::open` with the query engine on a host that lacks `functions` or `vtab`. See [[architecture#Executor]] |
+| `MissingCapability { capability }` | `Db::open` with the query engine on a host that lacks `functions` or `vtab`, or text recall and index maintenance on a host without `fts5`. See [[architecture#Executor]] |
+| `TextIndexUnavailable { reason }` | Text recall when the text index was never built, has another layout version, or lacks strings a host without FTS5 wrote. See [[storage#Text Index]] |
 | `InvalidQuery { msg }` | A structurally invalid IR or query plan (e.g. an unbound variable in a projection) that is not a parse error |
 | `Cancelled` | A budgeted operation's `CancelToken` was cancelled. Read resources are released; a write rolls back |
 | `DeadlineExceeded { timeout }` | A budgeted operation ran past its `timeout`, including time spent waiting for a connection |
@@ -128,6 +133,7 @@ The error enum is `#[non_exhaustive]`. Each OpenSpec change adds the variants it
 | `path_max_hops` | 15 | `add-path-engine` |
 | `path_max_states` | 1 000 000 | `add-path-engine` |
 | `reader_timeout` | `None` (wait for a reader without limit); past it a read fails with `PoolTimeout` | `add-query-budgets` |
+| `text_index` | false; true builds the derived text index at open (ignored without FTS5) | `add-text-retrieval` |
 
 ## Bindings
 

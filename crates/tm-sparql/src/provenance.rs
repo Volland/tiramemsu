@@ -283,7 +283,7 @@ impl Pass {
     fn op(&mut self, op: Op) -> Result<(Op, Vec<ProvColumn>)> {
         Ok(match op {
             Op::Triple(t) => self.triple(t),
-            op @ (Op::Path(_) | Op::Values(_)) => (op, Vec::new()),
+            op @ (Op::Path(_) | Op::Text(_) | Op::Values(_)) => (op, Vec::new()),
             Op::Join(j) => {
                 let mut inputs = Vec::with_capacity(j.inputs.len());
                 let mut cols = Vec::new();

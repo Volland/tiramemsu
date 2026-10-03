@@ -20,6 +20,7 @@ pub mod eval;
 pub mod funcs;
 pub mod pattern;
 pub mod project;
+pub mod text;
 pub mod time;
 pub mod write;
 pub mod write_set;
@@ -333,8 +334,10 @@ impl Exec<'_> {
         yields: &[(Name, Option<Name>)],
         standalone: bool,
     ) -> CResult<(Vec<Row>, Vec<String>)> {
-        let _ = args;
         let lname = name.to_ascii_lowercase();
+        if lname == text::NAME {
+            return self.exec_text_search(rows, args, yields, standalone);
+        }
         let (col, values) = self.builtin_procedure(&lname)?;
         let mut out = Vec::new();
         let outname = |c: &str| -> Option<String> {

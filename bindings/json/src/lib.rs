@@ -104,6 +104,7 @@ impl BindError {
                 Error::IdSpaceExhausted { .. } => "IdSpaceExhausted",
                 Error::Reentrant => "Reentrant",
                 Error::ImportInProgress => "ImportInProgress",
+                Error::TextIndexUnavailable { .. } => "TextIndexUnavailable",
                 Error::Cancelled => "Cancelled",
                 Error::DeadlineExceeded { .. } => "DeadlineExceeded",
                 Error::PoolTimeout { .. } => "PoolTimeout",
@@ -156,12 +157,18 @@ impl Drop for CancelEntry<'_> {
 impl Database {
     /// Opens (creating if needed) the database file at `path`. `options` may carry
     /// `readers`, `busyTimeoutMs`, `termCacheCapacity`, `optimizeEvery`,
-    /// `pathMaxHops`, `pathMaxStates` and `readerTimeoutMs`; anything else is
-    /// rejected.
+    /// `pathMaxHops`, `pathMaxStates`, `readerTimeoutMs` and `textIndex` (a
+    /// boolean: build the text index at open); anything else is rejected.
     pub fn open(path: &str, options: &J) -> Res<Database> {
         let mut opts = OpenOptions::default();
         if let Some(o) = options.as_object() {
             for (k, v) in o {
+                if k == "textIndex" {
+                    opts.text_index = v
+                        .as_bool()
+                        .ok_or_else(|| arg("option textIndex must be a boolean"))?;
+                    continue;
+                }
                 let n = v
                     .as_u64()
                     .ok_or_else(|| arg(format!("option {k} must be a non-negative integer")))?;
@@ -316,7 +323,9 @@ impl Database {
     /// `maxHops`), `events` (`since`), `graphs`, `graphMembers` (`graph`), `values`
     /// (`s`, `key`), `dependents` (`eid`: what stands on a statement) and `bundle`
     /// (`eid`: the statement with its layers and evidence, as `tiramemsu-bundle/1`
-    /// JSON). Writes are `transact` (`ops`, `options`; the ops include `importBundle`),
+    /// JSON) and `textSearch` (`text`, `mode`, `graphs`, `predicates`, `limit`,
+    /// `confidence`: ranked text recall). `rebuildTextIndex` and `enableTextIndex`
+    /// maintain the derived text index. Writes are `transact` (`ops`, `options`; the ops include `importBundle`),
     /// `cypherWrite` (`text`, `params`, `options`) and `with` (`ops`, `queries`), plus
     /// `optimize` and `info`. Reads, `transact` and `cypherWrite` take an optional
     /// `budget`, and `cancel` (`key`) stops the call running with that `cancelKey`.
@@ -325,7 +334,7 @@ impl Database {
     pub fn call(&self, op: &str, args: &J) -> Res<J> {
         match op {
             "sparql" | "cypher" | "triples" | "path" | "events" | "graphs" | "graphMembers"
-            | "values" | "dependents" | "bundle" => {
+            | "values" | "dependents" | "bundle" | "textSearch" => {
                 let view = read::view_from_json(&self.db, args.get("view").unwrap_or(&J::Null))?;
                 let (budget, _entry) = self.budget(args.get("budget"))?;
                 match &budget {
@@ -359,6 +368,8 @@ impl Database {
                 self.db.optimize()?;
                 Ok(J::Null)
             }
+            "rebuildTextIndex" => Ok(json!({ "values": self.db.rebuild_text_index()? })),
+            "enableTextIndex" => Ok(json!({ "built": self.db.enable_text_index()? })),
             "info" => Ok(json!({
                 "path": self.db.path().display().to_string(),
                 "readers": self.db.reader_count(),

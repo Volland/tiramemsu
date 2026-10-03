@@ -117,6 +117,30 @@ pub struct PPath {
     pub in_graph: Option<ObjectId>,
 }
 
+/// A text recall: `tm_text(query, mode, view, graphs, limit)` binds the eid and
+/// the optional score, rank and confidence columns.
+#[derive(Clone, Debug, PartialEq)]
+pub struct PText {
+    /// The words.
+    pub query: String,
+    /// `all`, `any` or `phrase`.
+    pub mode: &'static str,
+    /// View text (as for `tm_path`).
+    pub view_text: String,
+    /// The graph filter: `None` = any statement.
+    pub graphs: Option<Vec<ObjectId>>,
+    /// Hit limit.
+    pub limit: Option<u32>,
+    /// Eid variable.
+    pub eid: Var,
+    /// Score variable.
+    pub score: Option<Var>,
+    /// Rank variable.
+    pub rank: Option<Var>,
+    /// Confidence variable.
+    pub confidence: Option<Var>,
+}
+
 /// The graph selection of a routed path.
 #[derive(Clone, Debug, PartialEq)]
 pub enum PGraphs {
@@ -253,6 +277,8 @@ pub enum Node {
     Volatile(PVolatile),
     /// A path pattern (native region).
     Path(PPath),
+    /// A text recall (`tm_text`).
+    Text(PText),
     /// Inline rows.
     Values(PValues),
     /// List unnesting.

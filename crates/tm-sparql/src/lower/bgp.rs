@@ -3,8 +3,9 @@
 //! spargebra live here and nowhere else.
 
 use spargebra::term::{NamedNodePattern, TermPattern, TriplePattern as SpTriple};
+use tm_core::Error;
 use tm_core::Value;
-use tm_ir::{Expr, Op, TermOrVar, TriplePattern, Values, Var, View};
+use tm_ir::{Expr, Op, TermOrVar, TextPattern, TriplePattern, Values, Var, View};
 
 use super::Lowerer;
 use crate::error::{unsupported, REIFIES_WITHOUT_TRIPLE, VARIABLE_PREDICATE_TRIPLE};
@@ -57,11 +58,13 @@ impl Lowerer<'_> {
             return Ok(empty_op());
         }
         let mut triples = std::mem::take(&mut items.triples);
+        let texts = self.text_patterns(&mut triples, view)?;
         eliminate_redundant(&mut triples);
         let reifiers = std::mem::take(&mut items.reifiers);
         let ops: Vec<Op> = triples
             .into_iter()
             .map(|t| Op::Triple(self.select_graph(t, &reifiers)))
+            .chain(texts)
             .collect();
         let mut op = if ops.len() == 1 {
             ops.into_iter().next().expect("one")
@@ -179,6 +182,97 @@ impl Lowerer<'_> {
         t.eid = Some(eid);
         items.triples.push(t);
         Ok(())
+    }
+}
+
+impl Lowerer<'_> {
+    /// Takes the `tm:text*` patterns out of `triples` and turns each group on one
+    /// subject variable into a text recall under `view` and the active graph
+    /// selection (`lat.md/query#Text Recall`).
+    fn text_patterns(&mut self, triples: &mut Vec<TriplePattern>, view: View) -> Result<Vec<Op>> {
+        let is_text = |t: &TriplePattern| matches!(&t.p, TermOrVar::Const(Value::Iri(p)) if tm_ir::vocab::TEXT.contains(&p.as_str()));
+        if !triples.iter().any(is_text) {
+            return Ok(Vec::new());
+        }
+        let (text, rest): (Vec<TriplePattern>, Vec<TriplePattern>) =
+            std::mem::take(triples).into_iter().partition(is_text);
+        *triples = rest;
+        let bad = |msg: &str| Error::invalid_query(format!("text recall: {msg}"));
+        let mut groups: Vec<TextPattern> = Vec::new();
+        for t in &text {
+            let TermOrVar::Var(e) = &t.s else {
+                return Err(bad("the subject of a tm:text pattern must be a variable"));
+            };
+            if !groups.iter().any(|g| &g.eid == e) {
+                groups.push(TextPattern::new(
+                    TermOrVar::Const(Value::Str(String::new())),
+                    e.name(),
+                    view,
+                ));
+            }
+        }
+        for g in &mut groups {
+            let mut matched = false;
+            for t in text.iter().filter(|t| t.s.as_var() == Some(&g.eid)) {
+                let TermOrVar::Const(Value::Iri(p)) = &t.p else {
+                    unreachable!("text patterns have constant predicates")
+                };
+                let out_var = |o: &TermOrVar| match o {
+                    TermOrVar::Var(v) => Ok(Some(v.clone())),
+                    _ => Err(bad(&format!("<{p}> binds a variable"))),
+                };
+                match p.as_str() {
+                    tm_ir::vocab::TM_TEXT_MATCH => {
+                        if matched {
+                            return Err(bad("one tm:textMatch per subject"));
+                        }
+                        matched = true;
+                        g.query = match &t.o {
+                            TermOrVar::Const(Value::Str(s)) => {
+                                TermOrVar::Const(Value::Str(s.clone()))
+                            }
+                            TermOrVar::Const(Value::LangStr { lex, .. }) => {
+                                TermOrVar::Const(Value::Str(lex.clone()))
+                            }
+                            _ => return Err(bad("tm:textMatch needs a string literal")),
+                        };
+                    }
+                    tm_ir::vocab::TM_TEXT_SCORE => g.score = out_var(&t.o)?,
+                    tm_ir::vocab::TM_TEXT_RANK => g.rank = out_var(&t.o)?,
+                    tm_ir::vocab::TM_TEXT_CONFIDENCE => g.confidence = out_var(&t.o)?,
+                    tm_ir::vocab::TM_TEXT_LIMIT => {
+                        g.limit = match &t.o {
+                            TermOrVar::Const(Value::Int(n)) if *n >= 0 => {
+                                Some(u32::try_from(*n).unwrap_or(u32::MAX))
+                            }
+                            _ => return Err(bad("tm:textLimit needs a non-negative integer")),
+                        }
+                    }
+                    _ => {
+                        g.mode = match &t.o {
+                            TermOrVar::Const(Value::Str(s)) => tm_core::TextMode::from_name(s)
+                                .ok_or_else(|| {
+                                    bad("tm:textMode is \"all\", \"any\" or \"phrase\"")
+                                })?,
+                            _ => return Err(bad("tm:textMode needs a string literal")),
+                        }
+                    }
+                }
+            }
+            if !matched {
+                return Err(bad(&format!(
+                    "{} has tm:text patterns but no tm:textMatch",
+                    g.eid
+                )));
+            }
+            g.graph = match &self.active {
+                tm_ir::GraphSel::Var(_) => {
+                    return Err(bad("GRAPH ?g around tm:textMatch (name the graphs)"))
+                }
+                other => other.clone(),
+            };
+        }
+        Ok(groups.into_iter().map(Op::Text).collect())
     }
 }
 

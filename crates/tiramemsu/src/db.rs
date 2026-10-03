@@ -68,6 +68,12 @@ pub struct OpenOptions {
     /// [`QueryBudget::reader_timeout`] overrides it per operation. It bounds only
     /// the wait for a connection; `busy_timeout` is SQLite's own lock wait.
     pub reader_timeout: Option<Duration>,
+    /// Build the derived text index at open when it is not current (default
+    /// false), so that [`View::text_search`] and the query-language text recall
+    /// can run. Once built, the index is kept current by every writer with FTS5,
+    /// whatever this option says. Ignored on a host without FTS5, where text
+    /// recall fails with `MissingCapability`. See [`Db::rebuild_text_index`].
+    pub text_index: bool,
     /// Native operators registered on every connection (tests). A registered
     /// `Path` operator replaces the built-in `tm_path`.
     #[doc(hidden)]
@@ -97,6 +103,7 @@ impl Default for OpenOptions {
             path_max_hops: 15,
             path_max_states: 1_000_000,
             reader_timeout: None,
+            text_index: false,
             native_operators: Vec::new(),
         }
     }
@@ -114,6 +121,7 @@ impl std::fmt::Debug for OpenOptions {
             .field("path_max_hops", &self.path_max_hops)
             .field("path_max_states", &self.path_max_states)
             .field("reader_timeout", &self.reader_timeout)
+            .field("text_index", &self.text_index)
             .finish()
     }
 }
@@ -249,6 +257,9 @@ impl Db {
             },
         )?;
         let caps = store.capabilities();
+        if opts.text_index && caps.fts5 {
+            store.enable_text_index()?;
+        }
         if let Some(e) = &engine {
             e.install(store.executor())?;
         }
@@ -410,6 +421,57 @@ impl Db {
     pub fn optimize(&self) -> Result<()> {
         let _held = HeldGuard::acquire(self.id)?;
         self.lock()?.optimize()
+    }
+
+    /// Builds the derived text index unless it is current, and indexes what a
+    /// host without FTS5 wrote since it last was (the `OpenOptions::text_index`
+    /// step, for a database that is already open). Returns true when it built the
+    /// whole index. Touches no graph row and consumes no transaction number.
+    ///
+    /// # Errors
+    ///
+    /// `MissingCapability("fts5")` on a host without FTS5, `ImportInProgress`
+    /// while a bulk import session holds the write lease, `Reentrant` inside a
+    /// running transaction.
+    pub fn enable_text_index(&self) -> Result<bool> {
+        let _held = HeldGuard::acquire(self.id)?;
+        if self.import_active() {
+            return Err(Error::ImportInProgress);
+        }
+        self.lock()?.enable_text_index()
+    }
+
+    /// Drops and rebuilds the derived text index from every statement, live and
+    /// retracted, in one write transaction, and returns the number of indexed
+    /// string values. History is untouched: no `triple`, `term` or `tx` row is
+    /// changed or added, and recall afterwards returns what it returned before.
+    /// Use it to repair or upgrade the index; it also builds a missing one.
+    ///
+    /// # Errors
+    ///
+    /// As [`Db::enable_text_index`].
+    ///
+    /// ```
+    /// # use tiramemsu::*;
+    /// # let dir = tempfile::tempdir().unwrap();
+    /// let db = Db::open(dir.path().join("m.db"), OpenOptions::default())?;
+    /// let v = |s: &str| Value::iri(format!("urn:tiramemsu:v:{s}"));
+    /// db.transact(TxOptions::default(), |tx| {
+    ///     tx.assert(v("alice"), v("note"), Value::str("met at the Lisbon offsite"), Valid::ALWAYS)?;
+    ///     Ok(())
+    /// })?;
+    /// assert_eq!(db.rebuild_text_index()?, 1);
+    /// let hits = db.now().text_search(&TextQuery::new("lisbon"))?;
+    /// assert_eq!(hits[0].text, "met at the Lisbon offsite");
+    /// # Ok::<(), Error>(())
+    /// ```
+    // @lat: [[storage#Text Index]]
+    pub fn rebuild_text_index(&self) -> Result<u64> {
+        let _held = HeldGuard::acquire(self.id)?;
+        if self.import_active() {
+            return Err(Error::ImportInProgress);
+        }
+        self.lock()?.rebuild_text_index()
     }
 
     /// True when commits of a bulk import session changed the data and the

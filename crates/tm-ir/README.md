@@ -50,7 +50,7 @@ assert!(validate(&bad).is_err());
 
 ## Tour
 
-- [`Op`] and its node structs ([`TriplePattern`], [`PathPattern`], [`Join`], [`LeftJoin`], [`Filter`], [`Union`], [`Extend`], [`Aggregate`], [`Project`], [`OrderLimit`], [`Unnest`], [`RowNumber`], [`Values`]): the algebra.
+- [`Op`] and its node structs ([`TriplePattern`], [`PathPattern`], [`TextPattern`] (text recall), [`Join`], [`LeftJoin`], [`Filter`], [`Union`], [`Extend`], [`Aggregate`], [`Project`], [`OrderLimit`], [`Unnest`], [`RowNumber`], [`Values`]): the algebra.
 - [`IrQuery`]: a root [`Op`] plus [`Semantics`].
 - [`View`], [`TxSel`], [`ValidSel`], [`TimeRef`]: the time selection of one pattern.
 - [`Semantics`], [`MatchMode`], [`Missing`], [`GraphSet`]: the dialect flags.
@@ -65,7 +65,7 @@ assert!(validate(&bad).is_err());
 ## Design notes
 
 - **Operators.** Leaves are view-scoped triple patterns and path patterns; everything else is relational: join, left join, filter, union, extend, aggregate, project, order/limit, plus `Values`, `Unnest` and `RowNumber` for Cypher. A `Join` with no inputs is the unit relation.
-- **A view per pattern.** Every [`TriplePattern`] and [`PathPattern`] holds its own [`View`] (`Now`, `AsOf`, `History` for transaction time; `Unfiltered` or `At(ms)` for valid time). The default is `{Now, Unfiltered}`. Front ends fill views in explicitly, using [`View::overlay`] for query-level and per-pattern clauses, so a query can compare two points in time. Time predicates are written by exactly one function in `tm-exec`, never here.
+- **A view per pattern.** Every [`TriplePattern`], [`PathPattern`] and [`TextPattern`] holds its own [`View`] (`Now`, `AsOf`, `History` for transaction time; `Unfiltered` or `At(ms)` for valid time). The default is `{Now, Unfiltered}`. Front ends fill views in explicitly, using [`View::overlay`] for query-level and per-pattern clauses, so a query can compare two points in time. Time predicates are written by exactly one function in `tm-exec`, never here.
 - **Semantic flags.** Instead of two algebras there is one algebra and three flags: [`MatchMode`] (`Homomorphism` or `RelIsomorphism`), [`Missing`] (`Unbound` or `Null3VL`) and [`GraphSet`] (`SetOfTriples` or `BagOfEids`). [`Semantics::sparql`] and [`Semantics::cypher`] are the two presets; `IrBuilder::sparql()` and `IrBuilder::cypher()` use them. Other combinations are legal.
 - **Validation.** [`validate::validate`] rejects structurally invalid trees with `InvalidQuery`: rebinding an already bound variable in `Extend`, `Unnest` or `RowNumber`, aggregate outputs that collide with group variables, `Values` rows of the wrong width, negative skip or limit, and a virtual-predicate pattern that binds an eid. It does not check that constants exist in a database; that happens at plan time in `tm-exec`.
 - **Text form.** `IrQuery` and `Op` implement `Display` as an indented S-expression that starts with a `; flags` line. It is canonical and is what snapshot tests compare. It is for humans and tests, not a serialisation format to parse back.

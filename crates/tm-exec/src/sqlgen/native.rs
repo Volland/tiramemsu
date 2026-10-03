@@ -6,8 +6,8 @@ use tm_core::{Result, SqlValue};
 use tm_ir::Var;
 
 use super::{Col, Gen, Item, Rel};
-use crate::plan::analyze::Dom;
-use crate::plan::{PGraphs, PPath, PTerm};
+use crate::plan::analyze::{Dom, VClass};
+use crate::plan::{PGraphs, PPath, PTerm, PText};
 use crate::result::RouteNote;
 use crate::scan::view_predicates;
 
@@ -96,6 +96,51 @@ impl Gen<'_> {
                     eid_of: None,
                 },
             );
+        }
+        Ok(r)
+    }
+
+    /// Compiles a text recall: one `tm_text(…)` call whose rows bind the eid and
+    /// the optional score, rank and confidence.
+    pub fn text(&mut self, t: &PText) -> Result<Rel> {
+        let a = self.alias('x');
+        let query = self.params.push(SqlValue::Text(t.query.clone()));
+        let mode = self.params.push(SqlValue::Text(t.mode.to_string()));
+        let view = self.params.push(SqlValue::Text(t.view_text.clone()));
+        let graphs = match &t.graphs {
+            None => self.params.push(SqlValue::Null),
+            Some(ids) => {
+                let list: Vec<String> = ids.iter().map(|g| g.raw().to_string()).collect();
+                self.params
+                    .push(SqlValue::Text(format!("[{}]", list.join(","))))
+            }
+        };
+        let limit = match t.limit {
+            None => self.params.push(SqlValue::Null),
+            Some(n) => self.params.push(SqlValue::Integer(i64::from(n))),
+        };
+        let mut r = Rel {
+            items: vec![Item {
+                sql: format!("tm_text({query}, {mode}, {view}, {graphs}, {limit}) AS {a}"),
+                on: None,
+            }],
+            ..Rel::default()
+        };
+        r.set(&t.eid, Col::term(format!("{a}.eid"), false));
+        let computed = |sql: String, class: VClass, mm: bool| Col {
+            sql,
+            dom: Dom::Computed(class),
+            mm,
+            eid_of: None,
+        };
+        if let Some(v) = &t.score {
+            r.set(v, computed(format!("{a}.score"), VClass::Double, false));
+        }
+        if let Some(v) = &t.rank {
+            r.set(v, computed(format!("{a}.rank"), VClass::Int, false));
+        }
+        if let Some(v) = &t.confidence {
+            r.set(v, computed(format!("{a}.confidence"), VClass::Double, true));
         }
         Ok(r)
     }

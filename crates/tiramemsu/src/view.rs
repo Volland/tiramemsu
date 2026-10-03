@@ -3,8 +3,8 @@
 use std::cell::RefCell;
 
 use tm_core::{
-    budget, read, Bundle, Eid, Error, Event, Executor, ObjectId, Result, TermReader, Triple, Value,
-    ViewSpec,
+    budget, read, text, Bundle, Eid, Error, Event, Executor, ObjectId, Result, TermReader, TextHit,
+    TextQuery, Triple, Value, ViewSpec,
 };
 use tm_exec::{CacheMode, Explain, PathRequest, PathRow, QueryEngine, QueryResult, TimeRespecting};
 use tm_ir::{IrQuery, Params, PathMode};
@@ -525,6 +525,65 @@ impl View<'_> {
             let b = self.exec(|e, _| read::bundle(e, &spec, root))?;
             charge(b.statements.len(), 5)?;
             Ok(b)
+        })
+    }
+}
+
+// Text recall (OpenSpec change `add-text-retrieval`), kept in its own block.
+impl View<'_> {
+    /// Recalls the statements of this view whose object is a string matching
+    /// `query`, with their lexical score and evidence, ranked by the documented
+    /// policy ([`text::RANK_POLICY`]: lexical score, then confidence, confirmations,
+    /// authors and recency, then statement eid). Plain and language-tagged strings
+    /// are searchable, inline short strings included; typed literals are not.
+    ///
+    /// Visibility is that of [`View::triples`]: a retracted statement is absent
+    /// from a now view and present in an as-of view before its retraction, and a
+    /// valid-time filter applies. `query.graphs` keeps statements with a visible
+    /// membership in one of the graphs. Every query runs in one read snapshot (on
+    /// the writer inside [`Db::with`], where the speculative strings are found too)
+    /// and is one budgeted operation. The SPARQL (`tm:textMatch`) and Cypher
+    /// (`tiramemsu.text.search`) entrypoints run this same recall.
+    ///
+    /// # Errors
+    ///
+    /// `MissingCapability("fts5")` on a host without FTS5 (ordinary reads still
+    /// work), `TextIndexUnavailable` when the index was never built
+    /// ([`OpenOptions::text_index`](crate::OpenOptions::text_index),
+    /// [`Db::rebuild_text_index`]) or is behind, `InvalidQuery` for a query
+    /// without a word, and the budget errors.
+    ///
+    /// ```
+    /// # use tiramemsu::*;
+    /// # let dir = tempfile::tempdir().unwrap();
+    /// let opts = OpenOptions { text_index: true, ..OpenOptions::default() };
+    /// let db = Db::open(dir.path().join("m.db"), opts)?;
+    /// let v = |s: &str| Value::iri(format!("urn:tiramemsu:v:{s}"));
+    /// let r = db.transact(TxOptions::default(), |tx| {
+    ///     let e = tx.assert(v("alice"), v("note"), Value::str("prefers tea"), Valid::ALWAYS)?.eid();
+    ///     tx.assert(e, v("confidence"), Value::Double(0.9), Valid::ALWAYS)?;
+    ///     tx.assert(v("bob"), v("note"), Value::str("tea"), Valid::ALWAYS)?; // inline short string
+    ///     Ok(())
+    /// })?;
+    /// let hits = db.now().text_search(&TextQuery::new("tea"))?;
+    /// assert_eq!(hits.len(), 2);
+    /// let alice = hits.iter().find(|h| h.eid == r.asserted[0]).unwrap();
+    /// assert_eq!(alice.evidence.confidence, Some(0.9));
+    /// let bob = hits.iter().find(|h| h.eid == r.asserted[2]).unwrap();
+    /// assert_eq!(bob.evidence.confidence, None); // absent, not invented
+    /// # Ok::<(), Error>(())
+    /// ```
+    ///
+    /// [`Db::with`]: crate::Db::with
+    /// [`Db::rebuild_text_index`]: crate::Db::rebuild_text_index
+    // @lat: [[query#Text Recall]]
+    pub fn text_search(&self, query: &TextQuery) -> Result<Vec<TextHit>> {
+        let spec = self.spec;
+        self.op(|| {
+            self.exec(|e, cache| match cache {
+                Some(r) => text::search(e, &spec, query, r, true),
+                None => text::search(e, &spec, query, &TermReader::new(64), false),
+            })
         })
     }
 }

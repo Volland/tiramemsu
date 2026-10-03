@@ -5,7 +5,8 @@ use std::collections::HashMap;
 use serde_json::{json, Map, Value as J};
 use tiramemsu::{
     BundleFormat, Db, Eid, Event, ObjectId, Op, PathArgs, PathDir, PathMode, PathRow, RdfTerm,
-    RdfTriple, SparqlOptions, SparqlResult, TimeRef, TimeRespecting, Triple, TxReport, View,
+    RdfTriple, SparqlOptions, SparqlResult, TextMode, TextQuery, TimeRef, TimeRespecting, Triple,
+    TxReport, View,
 };
 
 use crate::value::{eid_from_json, params_from_json, value_from_json, value_to_json};
@@ -176,8 +177,85 @@ pub fn run(view: &View<'_>, op: &str, args: &J) -> Res<J> {
                 .collect::<Vec<_>>()))
         }
         "bundle" => Ok(view.bundle(eid_arg(args)?)?.to_json()),
+        "textSearch" => text_search(view, args),
         other => Err(arg(format!("unknown read operation {other:?}"))),
     }
+}
+
+/// `textSearch`: `{text, mode?, graphs?, predicates?, limit?, confidence?}` to the
+/// ranked hits, each with its statement, scores and evidence (absent confidence is
+/// `null`).
+// @lat: [[bindings#JSON Bridge#Text Recall]]
+fn text_search(view: &View<'_>, args: &J) -> Res<J> {
+    let mut q = TextQuery::new(str_arg(args, "text")?);
+    for (k, v) in args.as_object().into_iter().flatten() {
+        if v.is_null() {
+            continue;
+        }
+        match k.as_str() {
+            "text" | "view" | "budget" => {}
+            "mode" => {
+                q.mode = v
+                    .as_str()
+                    .and_then(TextMode::from_name)
+                    .ok_or_else(|| arg("mode must be \"all\", \"any\" or \"phrase\""))?
+            }
+            "limit" => {
+                q.limit = Some(
+                    v.as_u64()
+                        .ok_or_else(|| arg("limit must be a non-negative integer"))?
+                        as usize,
+                )
+            }
+            "graphs" | "predicates" => {
+                let J::Array(items) = v else {
+                    return Err(arg(format!("`{k}` must be a list of terms")));
+                };
+                let mut ids = Vec::with_capacity(items.len());
+                for t in items {
+                    // a term that is not stored matches nothing
+                    if let Some(id) = view.encode(&value_from_json(t)?)? {
+                        ids.push(id);
+                    }
+                }
+                if k == "graphs" {
+                    q.graphs = Some(ids);
+                } else {
+                    q.predicates = Some(ids);
+                }
+            }
+            "confidence" => match view.encode(&value_from_json(v)?)? {
+                Some(id) => q.confidence = Some(id),
+                // a predicate that is not stored is on no statement
+                None => q.confidence = Some(ObjectId::from_raw(0)),
+            },
+            other => return Err(arg(format!("unknown textSearch option {other:?}"))),
+        }
+    }
+    let hits = view.text_search(&q)?;
+    Ok(J::Array(
+        hits.iter()
+            .map(|h| {
+                Ok(json!({
+                    "eid": h.eid.n(),
+                    "s": value_to_json(&view.decode(h.s)?),
+                    "p": value_to_json(&view.decode(h.p)?),
+                    "o": value_to_json(&view.decode(h.o)?),
+                    "text": h.text,
+                    "lang": h.lang,
+                    "score": h.lexical,
+                    "rank": h.rank,
+                    "evidence": {
+                        "confidence": h.evidence.confidence,
+                        "confirmations": h.evidence.confirmations,
+                        "authors": h.evidence.authors,
+                        "tAdd": h.evidence.t_add.0,
+                        "addedAt": h.evidence.added_at,
+                    },
+                }))
+            })
+            .collect::<Res<_>>()?,
+    ))
 }
 
 /// The statement id in `eid`: a number or `{"stmt": n}`.

@@ -845,3 +845,44 @@ class TestBulkImport:
         info = db.info()
         assert info["importActive"] is False and info["statisticsDue"] is True
         assert len(db.now().triples()) == 1
+
+
+# ------------------------------------------------------------------------ text recall
+
+
+class TestTextRecall:
+    def test_ranked_hits_with_evidence_from_api_sparql_and_cypher(self, tmp_path: Any) -> None:
+        db = Database(str(tmp_path / "t.db"), text_index=True)
+        with db.transact() as tx:
+            n = tx.assert_(iri("alice"), iri("note"), "met at the lisbon offsite")
+            tx.assert_(n, iri("confidence"), 0.9)
+            tx.assert_(iri("bob"), iri("note"), "lisbon")
+        assert tx.report is not None
+        asserted = tx.report.asserted
+        hits = db.now().text_search("lisbon")
+        assert len(hits) == 2
+        alice = next(h for h in hits if h.eid == asserted[0])
+        assert alice.text == "met at the lisbon offsite"
+        assert alice.s == iri("alice")
+        assert alice.evidence.confidence == 0.9
+        bob = next(h for h in hits if h.eid == asserted[2])
+        assert bob.evidence.confidence is None  # absent, not invented
+        assert [h.rank for h in hits] == [1, 2]
+        assert len(db.now().text_search("offsite nowhere", mode="any", limit=1)) == 1
+        assert db.now().text_search("lisbon", graphs=[iri("nowhere")]) == []
+        rows = list(db.now().sparql('SELECT ?e WHERE { ?e tm:textMatch "lisbon" }'))
+        assert len(rows) == 2
+        c = db.now().cypher("CALL tiramemsu.text.search('lisbon') YIELD rank RETURN rank")
+        assert c.rows == [[1], [2]]
+        assert db.rebuild_text_index() == 2
+        assert db.enable_text_index() is False
+        assert [h.eid for h in db.now().text_search("lisbon")] == [h.eid for h in hits]
+
+    def test_missing_index_has_a_typed_code(self, db: Database) -> None:
+        with db.transact() as tx:
+            tx.assert_(iri("alice"), iri("note"), "not indexed yet")
+        with pytest.raises(TiramemsuError) as e:
+            db.now().text_search("indexed")
+        assert e.value.code == "TextIndexUnavailable"
+        assert db.enable_text_index() is True
+        assert len(db.now().text_search("indexed")) == 1

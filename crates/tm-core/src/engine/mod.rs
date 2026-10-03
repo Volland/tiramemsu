@@ -103,7 +103,18 @@ impl Store {
                 busy_timeout: opts.busy_timeout,
             },
         )?;
-        Ok(Store::from_executor(exec, path, opts))
+        let mut store = Store::from_executor(exec, path, opts);
+        if store.caps.fts5 {
+            // index what a host without FTS5 wrote since the index was current
+            let st = crate::text::state(store.exec.as_mut())?;
+            if st.built() && st.stale_from != 0 {
+                store.text_maintenance(|e| {
+                    let st = crate::text::state(e)?;
+                    crate::text::catch_up(e, st)
+                })?;
+            }
+        }
+        Ok(store)
     }
 
     /// Wraps an already opened and initialised writer executor.
@@ -159,6 +170,50 @@ impl Store {
     /// refreshed since.
     pub fn statistics_due(&self) -> bool {
         self.stats.due()
+    }
+
+    /// Builds the derived text index unless it is current, and brings a stale one
+    /// up to date, in one write transaction that touches no graph row. Returns
+    /// true when it built the whole index.
+    ///
+    /// # Errors
+    ///
+    /// `MissingCapability("fts5")` on a host without FTS5.
+    pub fn enable_text_index(&mut self) -> Result<bool> {
+        self.text_maintenance(crate::text::enable)
+    }
+
+    /// Drops and rebuilds the derived text index from every statement, live and
+    /// retracted, in one write transaction. Graph rows (`triple`, `term`, `tx`)
+    /// are neither changed nor added. Returns the number of indexed values.
+    ///
+    /// # Errors
+    ///
+    /// `MissingCapability("fts5")` on a host without FTS5.
+    pub fn rebuild_text_index(&mut self) -> Result<u64> {
+        self.text_maintenance(crate::text::rebuild)
+    }
+
+    fn text_maintenance<R>(&mut self, f: fn(&mut dyn Executor) -> Result<R>) -> Result<R> {
+        if !self.caps.fts5 {
+            return Err(Error::MissingCapability {
+                capability: "fts5".to_string(),
+            });
+        }
+        self.exec.begin_immediate()?;
+        match f(self.exec.as_mut()) {
+            Ok(r) => match self.exec.commit() {
+                Ok(()) => Ok(r),
+                Err(e) => {
+                    let _ = self.exec.rollback();
+                    Err(e)
+                }
+            },
+            Err(e) => {
+                let _ = self.exec.rollback();
+                Err(e)
+            }
+        }
     }
 
     /// The writer executor (for reads outside transactions and for tests).
@@ -394,6 +449,8 @@ pub struct Tx<'a> {
     schema_cache: HashMap<ObjectId, PredicateSchema>,
     multi_seen: HashSet<ObjectId>,
     ext: Option<std::sync::Arc<dyn std::any::Any + Send + Sync>>,
+    /// How this transaction keeps the derived text index.
+    text: crate::text::Upkeep,
 }
 
 impl std::fmt::Debug for Tx<'_> {
@@ -463,6 +520,7 @@ impl<'a> Tx<'a> {
         opts: TxOptions,
     ) -> Result<Tx<'a>> {
         let c0 = Counters::load(exec)?;
+        let text = crate::text::Upkeep::begin(exec)?;
         // `t` is the next number after `last_t`, bounded like every id counter
         let t = bump(&mut (c0.last_t + 1), Tag::Tx)?;
         let instant = clock.now_ms().max(c0.last_instant + 1);
@@ -489,6 +547,7 @@ impl<'a> Tx<'a> {
             schema_cache: HashMap::new(),
             multi_seen: HashSet::new(),
             ext: None,
+            text,
         })
     }
 
@@ -681,6 +740,7 @@ impl<'a> Tx<'a> {
         )?;
         self.asserted.push(eid);
         self.record_multi(eid, s, p, o)?;
+        self.index_text(eid, o)?;
         if self.is_flag_predicate(p)? {
             self.schema_cache.clear();
         }
@@ -717,6 +777,36 @@ impl<'a> Tx<'a> {
             }
         }
         Ok(())
+    }
+
+    /// Keeps the derived text index current for a new statement whose object is a
+    /// string: indexes the value on a host with FTS5, or records on a host without
+    /// it that the index lacks this statement.
+    // @lat: [[storage#Text Index]]
+    fn index_text(&mut self, eid: Eid, o: ObjectId) -> Result<()> {
+        use crate::text::Upkeep;
+        if self.text == Upkeep::Off || !crate::text::is_text(o) {
+            return Ok(());
+        }
+        match self.text {
+            Upkeep::Index => {
+                let (text, lang) = match self.dict.decode(self.exec, o)? {
+                    Value::Str(s) => (s, None),
+                    Value::LangStr { lex, lang } => (lex, Some(lang)),
+                    _ => return Ok(()),
+                };
+                crate::text::index_value(self.exec, o, &text, lang.as_deref())
+            }
+            Upkeep::Defer { marked: false } => {
+                self.exec.execute(
+                    "UPDATE meta SET value = ?1 WHERE key = 'text_stale' AND value = 0",
+                    &[SqlValue::Integer(eid.oid().raw())],
+                )?;
+                self.text = Upkeep::Defer { marked: true };
+                Ok(())
+            }
+            _ => Ok(()),
+        }
     }
 
     /// Sets `t_ret`/`ret_kind` on a live row. Returns false if it was not live.

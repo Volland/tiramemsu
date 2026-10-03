@@ -526,3 +526,49 @@ describe("bulk import", () => {
     } finally { cleanup(dir); }
   });
 });
+
+// ---- text recall ------------------------------------------------------------
+
+describe("text recall", () => {
+  it("recalls ranked statements with evidence from the API, SPARQL and Cypher", () => {
+    const dir = mkdtempSync(join(tmpdir(), "tiramemsu-test-"));
+    try {
+      const db = Database.open(join(dir, "t.db"), { textIndex: true });
+      const r = db.transact((tx) => {
+        const n = tx.assert(alice, v("note"), "met at the lisbon offsite");
+        tx.assert(n, confidence, 0.9);
+        tx.assert(v("bob"), v("note"), "lisbon");
+      });
+      const hits = db.now().textSearch("lisbon");
+      expect(hits).toHaveLength(2);
+      const a = hits.find((h) => h.eid === r.asserted[0])!;
+      expect(a.text).toBe("met at the lisbon offsite");
+      expect(a.s).toEqual(alice);
+      expect(a.evidence.confidence).toBe(0.9);
+      const b = hits.find((h) => h.eid === r.asserted[2])!;
+      expect(b.evidence.confidence).toBeNull();
+      expect(hits.map((h) => h.rank)).toEqual([1, 2]);
+      expect(db.now().textSearch("offsite nowhere", { mode: "any", limit: 1 })).toHaveLength(1);
+      expect(db.now().textSearch("lisbon", { graphs: [v("nowhere")] })).toEqual([]);
+      const s = db.now().sparql('SELECT ?e WHERE { ?e tm:textMatch "lisbon" ; tm:textRank ?r } ORDER BY ?r');
+      expect((s as { rows: unknown[] }).rows).toHaveLength(2);
+      const c = db.now().cypher("CALL tiramemsu.text.search('lisbon') YIELD rank RETURN rank");
+      expect(c.rows).toEqual([[1], [2]]);
+      expect(db.rebuildTextIndex()).toBe(2);
+      expect(db.enableTextIndex()).toBe(false);
+      expect(db.now().textSearch("lisbon").map((h) => h.eid)).toEqual(hits.map((h) => h.eid));
+    } finally { cleanup(dir); }
+  });
+
+  it("reports a missing index with a typed code", () => {
+    const { db, dir } = tempDb();
+    try {
+      db.transact((tx) => { tx.assert(alice, v("note"), "not indexed yet"); });
+      let code: string | undefined;
+      try { db.now().textSearch("indexed"); } catch (e) { code = (e as TiramemsuError).code; }
+      expect(code).toBe("TextIndexUnavailable");
+      expect(db.enableTextIndex()).toBe(true);
+      expect(db.now().textSearch("indexed")).toHaveLength(1);
+    } finally { cleanup(dir); }
+  });
+});

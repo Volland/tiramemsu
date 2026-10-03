@@ -222,8 +222,9 @@ host_test! {
             .map(|r| (r[0].as_str().unwrap().to_string(), r[1].as_i64().unwrap()))
             .collect();
         let want: Vec<(String, i64)> = [
-            ("format_version", 1), ("last_instant", 0), ("last_t", 0), ("multi_version", 0),
-            ("next_bnode", 1), ("next_node", 1), ("next_stmt", 1), ("next_term", 1),
+            ("format_version", storage::FORMAT_VERSION), ("last_instant", 0), ("last_t", 0),
+            ("multi_version", 0), ("next_bnode", 1), ("next_node", 1), ("next_stmt", 1),
+            ("next_term", 1), ("text_index", 0), ("text_stale", 0),
         ]
         .iter()
         .map(|(k, v)| (k.to_string(), *v))
@@ -347,25 +348,25 @@ fn newer_format_version_is_refused() {
     db.close();
     {
         let raw = db.raw();
-        raw.execute("UPDATE meta SET value = 2 WHERE key = 'format_version'", [])
-            .unwrap();
+        raw.execute(
+            "UPDATE meta SET value = ?1 WHERE key = 'format_version'",
+            [storage::FORMAT_VERSION + 1],
+        )
+        .unwrap();
     }
     let bytes = std::fs::read(&db.path).unwrap();
+    let (newer, ours) = (storage::FORMAT_VERSION + 1, storage::FORMAT_VERSION);
     let r = Store::open(&RusqliteHost::new(), &db.path, StoreOptions::default());
-    assert_err!(
-        r,
-        Error::FormatVersion {
-            found: 2,
-            supported: 1
-        }
+    assert!(
+        matches!(r, Err(Error::FormatVersion { found, supported }) if found == newer && supported == ours),
+        "{:?}",
+        r.err()
     );
     let r = Store::open(&MinimalHost::new(), &db.path, StoreOptions::default());
-    assert_err!(
-        r,
-        Error::FormatVersion {
-            found: 2,
-            supported: 1
-        }
+    assert!(
+        matches!(r, Err(Error::FormatVersion { found, supported }) if found == newer && supported == ours),
+        "{:?}",
+        r.err()
     );
     assert_eq!(std::fs::read(&db.path).unwrap(), bytes);
 }
@@ -420,11 +421,12 @@ fn older_versions_migrate_forward_atomically() {
             HostKind::Minimal => Box::new(MinimalHost::new()),
         };
         // failed migration rolls back
+        let (cur, next) = (storage::FORMAT_VERSION, storage::FORMAT_VERSION + 1);
         let bad = [Migration {
-            from: 1,
+            from: cur,
             apply: failing_step,
         }];
-        let r = storage::open_with(&*host, &db.path, &HostOptions::default(), &bad, 2);
+        let r = storage::open_with(&*host, &db.path, &HostOptions::default(), &bad, next);
         assert!(r.is_err());
         drop(r);
         {
@@ -436,16 +438,17 @@ fn older_versions_migrate_forward_atomically() {
                     |r| r.get(0),
                 )
                 .unwrap();
-            assert_eq!(v, 1);
+            assert_eq!(v, cur);
             assert!(!names(&raw, "table").contains("extra_fail"));
             assert_eq!(contents(&raw), before);
         }
         // successful migration
         let good = [Migration {
-            from: 1,
+            from: cur,
             apply: add_v2_table,
         }];
-        let exec = storage::open_with(&*host, &db.path, &HostOptions::default(), &good, 2).unwrap();
+        let exec =
+            storage::open_with(&*host, &db.path, &HostOptions::default(), &good, next).unwrap();
         drop(exec);
         let raw = db.raw();
         let v: i64 = raw
@@ -455,7 +458,7 @@ fn older_versions_migrate_forward_atomically() {
                 |r| r.get(0),
             )
             .unwrap();
-        assert_eq!(v, 2);
+        assert_eq!(v, next);
         assert!(names(&raw, "table").contains("extra_v2"));
         assert_eq!(contents(&raw), before);
     }
@@ -486,7 +489,7 @@ fn foreign_and_empty_files() {
         s.executor()
             .query_i64("SELECT value FROM meta WHERE key = 'format_version'", &[])
             .unwrap(),
-        Some(1)
+        Some(storage::FORMAT_VERSION)
     );
     let no_tables = dir.path().join("notables.db");
     {

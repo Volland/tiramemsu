@@ -199,6 +199,30 @@ fn write_op(out: &mut String, op: &Op, depth: usize, pretty: bool) {
             graph_text(&p.graph, out);
             out.push(')');
         }
+        Op::Text(t) => {
+            let _ = write!(
+                out,
+                "(text {} :mode {} :eid {} :view {}",
+                term(&t.query),
+                t.mode.name(),
+                t.eid,
+                view_text(&t.view)
+            );
+            for (k, v) in [
+                ("score", &t.score),
+                ("rank", &t.rank),
+                ("confidence", &t.confidence),
+            ] {
+                if let Some(v) = v {
+                    let _ = write!(out, " :{k} {v}");
+                }
+            }
+            if let Some(l) = t.limit {
+                let _ = write!(out, " :limit {l}");
+            }
+            graph_text(&t.graph, out);
+            out.push(')');
+        }
         Op::Values(v) => {
             let _ = write!(out, "(values {}", vars(&v.vars));
             for r in &v.rows {

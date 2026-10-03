@@ -402,7 +402,12 @@ fn check_clause(c: &Clause, scope: &mut Scope, opts: &CheckOpts) -> CResult<Opti
             yields,
             span,
         } => {
-            let known = ["db.labels", "db.relationshiptypes", "db.propertykeys"];
+            let known = [
+                "db.labels",
+                "db.relationshiptypes",
+                "db.propertykeys",
+                crate::exec::text::NAME,
+            ];
             if !known.contains(&name.to_ascii_lowercase().as_str()) {
                 return Err(CypherError::unsupported(
                     format!("procedure `{name}`"),

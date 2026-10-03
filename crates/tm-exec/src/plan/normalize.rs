@@ -25,8 +25,8 @@ use super::encode::{encode_value, position_ok, value_position_ok, Enc, Pos};
 use super::resolve::resolve;
 use super::route::{bound_before, bound_by_non_paths, orient, path_patterns, Orientation};
 use super::{
-    Cell, Node, PAgg, PConst, PExpr, PGraphs, PKey, PLookup, PObj, PPath, PTerm, PTriple, PValues,
-    PVirtual, PVolatile,
+    Cell, Node, PAgg, PConst, PExpr, PGraphs, PKey, PLookup, PObj, PPath, PTerm, PText, PTriple,
+    PValues, PVirtual, PVolatile,
 };
 use crate::error::invalid;
 use crate::path::ast::nullable;
@@ -285,6 +285,37 @@ impl<'e> Planner<'e> {
                     graphs,
                     view,
                     in_graph,
+                })
+            }
+            Op::Text(t) => {
+                let Some(view) = self.view(&t.view)? else {
+                    return Ok(empty());
+                };
+                let query = match &t.query {
+                    TermOrVar::Const(Value::Str(s)) => s.clone(),
+                    other => {
+                        return Err(invalid(format!(
+                            "text recall needs a string query, got {other:?}"
+                        )))
+                    }
+                };
+                let graphs = match self.path_graphs(&t.graph)? {
+                    PGraphs::Any => None,
+                    PGraphs::Ids(ids) => Some(ids),
+                    PGraphs::Var(_) => {
+                        return Err(invalid("text recall cannot bind a graph variable"))
+                    }
+                };
+                Node::Text(PText {
+                    query,
+                    mode: t.mode.name(),
+                    view_text: view_text(&view),
+                    graphs,
+                    limit: t.limit,
+                    eid: t.eid.clone(),
+                    score: t.score.clone(),
+                    rank: t.rank.clone(),
+                    confidence: t.confidence.clone(),
                 })
             }
             Op::Values(v) => {

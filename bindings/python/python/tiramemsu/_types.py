@@ -519,3 +519,54 @@ class PathRow:
     path: Optional[Dict[str, Any]]
     arrival: Optional[int] = None
     """Arrival instant (epoch ms) of a time-respecting search, otherwise ``None``."""
+
+
+@dataclass(frozen=True)
+class TextEvidence:
+    """The evidence of one text hit, read in the recall's view. A layer the statement
+    does not have is ``None`` (confidence) or a zero count, never estimated."""
+
+    confidence: Optional[float]
+    confirmations: int
+    authors: int
+    t_add: int
+    added_at: int
+
+
+@dataclass(frozen=True)
+class TextHit:
+    """One row from :meth:`View.text_search`: a statement whose string object matched,
+    with its lexical score (larger is better), its 1-based rank under the policy
+    ``tiramemsu-text-rank/1`` and its evidence."""
+
+    eid: int
+    s: Any
+    p: Any
+    o: Any
+    text: str
+    lang: Optional[str]
+    score: float
+    rank: int
+    evidence: TextEvidence
+
+
+def text_hit_from_json(j: Dict[str, Any]) -> TextHit:
+    """Decode one ``textSearch`` hit from the bridge."""
+    e = j["evidence"]
+    return TextHit(
+        eid=int(j["eid"]),
+        s=term_from_json(j["s"]),
+        p=term_from_json(j["p"]),
+        o=term_from_json(j["o"]),
+        text=str(j["text"]),
+        lang=j.get("lang"),
+        score=float(j["score"]),
+        rank=int(j["rank"]),
+        evidence=TextEvidence(
+            confidence=None if e.get("confidence") is None else float(e["confidence"]),
+            confirmations=int(e["confirmations"]),
+            authors=int(e["authors"]),
+            t_add=int(e["tAdd"]),
+            added_at=int(e["addedAt"]),
+        ),
+    )

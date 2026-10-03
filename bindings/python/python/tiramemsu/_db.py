@@ -29,6 +29,8 @@ from ._types import (
     sparql_result_from_json,
     statement_from_json,
     term_from_json,
+    text_hit_from_json,
+    TextHit,
     term_to_json,
     time_to_json,
 )
@@ -614,6 +616,39 @@ class View:
         JSON, for :meth:`TxBuilder.import_bundle`."""
         return dict(json.loads(self._call("bundle", {"eid": _eid_json(eid)})))
 
+    def text_search(
+        self,
+        text: str,
+        *,
+        mode: str = "all",
+        graphs: Optional[List[Any]] = None,
+        predicates: Optional[List[Any]] = None,
+        limit: Optional[int] = None,
+        confidence: Any = None,
+    ) -> List["TextHit"]:
+        """Text recall: the statements of this view whose string object matches
+        *text*, ranked by lexical score, then confidence, confirmations, authors and
+        recency, then eid.
+
+        *mode* is ``"all"`` (every word, default), ``"any"`` or ``"phrase"``.
+        *graphs* and *predicates* filter the statements, *limit* keeps the first hits
+        by rank, and *confidence* names the confidence predicate (default
+        ``v:confidence``).  Needs the text index (``Database(..., text_index=True)``
+        or :meth:`Database.rebuild_text_index`): raises ``TextIndexUnavailable``
+        without it and ``MissingCapability`` on a SQLite without FTS5.
+        """
+        args: Dict[str, Any] = {"text": text, "mode": mode}
+        if graphs is not None:
+            args["graphs"] = [term_to_json(g) for g in graphs]
+        if predicates is not None:
+            args["predicates"] = [term_to_json(p) for p in predicates]
+        if limit is not None:
+            args["limit"] = limit
+        if confidence is not None:
+            args["confidence"] = term_to_json(confidence)
+        rows: List[Any] = json.loads(self._call("textSearch", args))
+        return [text_hit_from_json(r) for r in rows]
+
     def values(self, s: Any, key: Any) -> List[Any]:
         """Return all objects ``o`` where ``(s, key, o)`` exists in this view."""
         items: List[Any] = json.loads(
@@ -646,6 +681,7 @@ class Database:
         path_max_hops: Optional[int] = None,
         path_max_states: Optional[int] = None,
         reader_timeout_ms: Optional[int] = None,
+        text_index: Optional[bool] = None,
     ) -> None:
         options: Dict[str, Any] = {}
         if readers is not None:
@@ -662,6 +698,8 @@ class Database:
             options["pathMaxStates"] = path_max_states
         if reader_timeout_ms is not None:
             options["readerTimeoutMs"] = reader_timeout_ms
+        if text_index is not None:
+            options["textIndex"] = bool(text_index)
         opts_str: Optional[str] = json.dumps(options) if options else None
         try:
             self._native = Native(path, opts_str)
@@ -822,6 +860,17 @@ class Database:
         """
         j = json.loads(_call(self._native, "importBegin", ""))
         return BulkImport(self._native, int(j["session"]))
+
+    def rebuild_text_index(self) -> int:
+        """Drop and rebuild the derived text index from every statement (history is
+        untouched); returns the number of indexed string values. Also builds a missing
+        index."""
+        return int(json.loads(_call(self._native, "rebuildTextIndex", ""))["values"])
+
+    def enable_text_index(self) -> bool:
+        """Build the text index unless it is current; returns whether it built the
+        whole index."""
+        return bool(json.loads(_call(self._native, "enableTextIndex", ""))["built"])
 
     def optimize(self) -> None:
         """Refresh query-planner statistics after large imports."""

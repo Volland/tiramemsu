@@ -12,6 +12,7 @@ pub mod plan;
 pub mod result;
 pub mod scan;
 pub mod sqlgen;
+pub mod text;
 pub mod udf;
 pub mod udf_fn;
 pub mod virtual_pred;

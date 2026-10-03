@@ -175,7 +175,7 @@ Every failure throws a `TiramemsuError` with a `code`:
 
 ## Options
 
-`Database.open(path, options?)` accepts `readers`, `busyTimeoutMs`, `termCacheCapacity`, `optimizeEvery`, `pathMaxHops`, `pathMaxStates` and `readerTimeoutMs`. Anything else is rejected.
+`Database.open(path, options?)` accepts `readers`, `busyTimeoutMs`, `termCacheCapacity`, `optimizeEvery`, `pathMaxHops`, `pathMaxStates`, `readerTimeoutMs` and `textIndex` (a boolean). Anything else is rejected.
 
 ## Budgets
 
@@ -189,6 +189,25 @@ db.cypherWrite("CREATE (:Person {name: 'Bob'})", undefined, { budget: { timeoutM
 ```
 
 `db.cancel(key)` stops the call running with that `cancelKey`. The API is synchronous, so from the same thread it only stops a call that starts later; use a fresh key per call.
+
+## Text recall
+
+Recall statements by the words in their string values. Open with `{ textIndex: true }` (or call `db.rebuildTextIndex()`); every write then keeps the index current.
+
+```ts
+const db = Database.open("memory.db", { textIndex: true });
+db.transact((tx) => {
+  const note = tx.assert(iri("urn:tiramemsu:v:alice"), iri("urn:tiramemsu:v:note"), "met at the Lisbon offsite");
+  tx.assert(note, iri("urn:tiramemsu:v:confidence"), 0.9);
+});
+for (const hit of db.now().textSearch("lisbon offsite", { limit: 10 })) {
+  console.log(hit.rank, hit.score, hit.text, hit.evidence.confidence); // null when absent
+}
+db.now().sparql('SELECT ?e WHERE { ?e tm:textMatch "lisbon" }');
+db.now().cypher("CALL tiramemsu.text.search('lisbon') YIELD statement, score RETURN statement, score");
+```
+
+`textSearch(text, { mode, graphs, predicates, limit, confidence })` ranks by lexical score, then confidence, confirmations, authors and recency, then eid. It throws `TextIndexUnavailable` without an index and `MissingCapability` on a SQLite without FTS5.
 
 ## Bulk import
 

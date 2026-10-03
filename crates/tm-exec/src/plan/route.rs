@@ -84,6 +84,12 @@ pub fn bound_by_non_paths(op: &Op) -> VarSet {
                 }
             }
             Op::Values(v) => out.extend(v.vars.iter().cloned()),
+            Op::Text(t) => {
+                out.insert(t.eid.clone());
+                for v in [&t.score, &t.rank, &t.confidence].into_iter().flatten() {
+                    out.insert(v.clone());
+                }
+            }
             Op::Unnest(u) => {
                 out.insert(u.var.clone());
             }

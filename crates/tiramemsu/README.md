@@ -522,6 +522,8 @@ Every failure is a typed `Error` (`#[non_exhaustive]`, so keep a wildcard arm), 
 | `ResultLimitExceeded { limit }` | A budgeted operation decoded more than `max_rows` rows or `max_bytes` bytes; no partial result |
 | `Reentrant` | A write or speculation started inside another on the same `Db` and thread |
 | `ImportInProgress` | A write, or a second import session, while a bulk import session holds the write lease |
+| `MissingCapability { capability }` | The host lacks a capability: `functions`/`vtab` for the query engine at open, `fts5` for text recall |
+| `TextIndexUnavailable { reason }` | Text recall before the text index was built, or while it lacks strings a host without FTS5 wrote |
 | `FormatVersion`, `ForeignFile` | The file is from a newer format, or is some other SQLite database |
 | `IdSpaceExhausted { kind }` | A node, blank node, statement or transaction counter passed 2⁴⁸ − 1 (about 2.8 × 10¹⁴ ids per kind) |
 | `Sqlite(_)`, `Custom(_)` | A SQLite failure with its result code (busy, I/O), or your own error returned from a transaction body |
@@ -539,6 +541,7 @@ Every failure is a typed `Error` (`#[non_exhaustive]`, so keep a wildcard arm), 
 | `path_max_hops` | 15 | Hop cap of unbounded Cypher path patterns and `TRAIL` in `tm_path` |
 | `path_max_states` | 1 000 000 | Search-state budget per path evaluation; exceeding it is an error |
 | `reader_timeout` | `None` | How long a read waits for a free reader before `PoolTimeout`; `None` waits without limit |
+| `text_index` | false | Build the derived text index at open so text recall can run (ignored without FTS5) |
 | `term_cache_capacity`, `planner`, `query_engine` | 16 384, defaults, true | Term cache size, planner routing, and the switch for opening the storage tier only |
 
 ```rust
@@ -619,6 +622,31 @@ assert!(summary.analyzed);
 
 `progress()` counts committed chunks, rejected chunks and rows, and lists every chunk's transaction number. `chunk_with(opts, budget, f)` bounds one chunk with a `QueryBudget`. A failed final analysis is reported in `summary.maintenance_error` with the committed chunks still listed; nothing is rolled back. `cancel()` or dropping the session releases the lease without analysis and leaves `Db::statistics_due()` true, and the next ordinary commit refreshes the statistics. `Db::bulk_import_shared` takes an `Arc<Db>` and returns a session that can be stored or moved to another thread.
 
+## Text recall
+
+Agents often remember words, not graph patterns. Text recall finds the statements whose string object matches a query, in any view, each with a lexical score and the evidence the store holds about it. The FTS5 index behind it is derived and opt-in: build it with `OpenOptions::text_index` (or `Db::enable_text_index` / `Db::rebuild_text_index` on an open database); from then on every write keeps it current.
+
+```rust
+# use tiramemsu::*;
+# let dir = tempfile::tempdir().unwrap();
+let db = Db::open(dir.path().join("m.db"), OpenOptions { text_index: true, ..OpenOptions::default() })?;
+let v = |s: &str| Value::iri(format!("urn:tiramemsu:v:{s}"));
+db.transact(TxOptions::default(), |tx| {
+    let e = tx.assert(v("alice"), v("note"), Value::str("met at the Lisbon offsite"), Valid::ALWAYS)?.eid();
+    tx.assert(e, v("confidence"), Value::Double(0.9), Valid::ALWAYS)?;
+    Ok(())
+})?;
+let q = TextQuery { limit: Some(10), ..TextQuery::new("lisbon offsite") };
+let hits = db.now().text_search(&q)?;
+assert_eq!(hits[0].evidence.confidence, Some(0.9)); // None when the layer is absent
+// the same recall from the query languages
+db.now().sparql("SELECT ?e ?score WHERE { ?e tm:textMatch \"lisbon\" ; tm:textScore ?score }")?;
+db.now().cypher("CALL tiramemsu.text.search('lisbon') YIELD statement, score RETURN statement, score", &CypherParams::default())?;
+# Ok::<(), Error>(())
+```
+
+Plain and language-tagged strings are searchable; typed literals are not. Words match as whole tokens, case- and accent-insensitive (`TextMode::All`, `Any` or `Phrase`, a trailing `*` for a prefix). Hits are ranked by lexical score, then confidence (absent last), confirmations, distinct authors and recency, with the statement eid as the final tie-break. A retracted statement is absent from `now()` and present `as_of` before its retraction. On a SQLite without FTS5 recall fails with `MissingCapability` and everything else works. Building the index never touches history; files with it use storage format 2.
+
 ## Concurrency
 
 There is one writer connection behind a mutex and a pool of read-only connections on the same WAL file. `transact` and `with` serialize on the writer, so writes are atomic and never race. Reads take a pooled connection and one read snapshot, so readers do not block the writer or each other, and a `View` sees a consistent committed state. `Db` is `Send + Sync`: share it in an `Arc` across threads. Calling `transact` from inside a running `transact` or `with` on the same thread returns `Error::Reentrant` instead of deadlocking.
@@ -630,7 +658,7 @@ No code path deletes a statement, a term or a transaction. The only change to a 
 - `as_of(t)` is exact for every `t`, forever, and eids are never reused.
 - Forgetting means retracting. The fact leaves `now()` and stays in `as_of` and `history`.
 - The file only grows. High-churn state that should not keep history belongs in the `volatile` table (`Tx::set_volatile`), which is not part of the graph.
-- Legal erasure is planned as crypto-shredding (destroy a key, keep the rows) and is not implemented; format 1 rejects `sys:sensitive` and sealed values.
+- Legal erasure is planned as crypto-shredding (destroy a key, keep the rows) and is not implemented; the storage format rejects `sys:sensitive` and sealed values.
 
 ## What it is not
 

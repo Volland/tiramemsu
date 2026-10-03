@@ -401,3 +401,30 @@ A [[crates/tiramemsu/src/budget.rs#QueryBudget]] has five independent fields: `t
 - **Writes:** the stop conditions cover waiting for the writer and every statement of the body; the facade checks them once more when the body returns, then removes the interrupt so bookkeeping and `COMMIT` run uninterrupted. A stopped write rolls back like any failed transaction: no statement, term, event or `tx` row.
 - **Result budgets:** the engine charges each SQL row as it streams and each decoded row's bytes (8 per cell plus the UTF-8 length of every string) in [[crates/tm-exec/src/exec.rs#run]]; `View::path`, `triples`, `events_since` and the other list reads charge their rows. Past `max_rows` or `max_bytes` the operation fails with `ResultLimitExceeded { limit }`; no prefix is ever returned as a result.
 
+
+## Text Recall
+
+Recall by words, not by graph pattern: the statements of a view whose string object matches a query, each with a lexical score and the evidence the store holds about it.
+
+One logical operation, [[crates/tm-core/src/text.rs#search]], serves every surface: `View::text_search(&TextQuery)` in Rust, `textSearch` on the JSON bridge, and the `tm_text` table function ([[crates/tm-exec/src/text.rs#call]]) that SPARQL and Cypher compile to through the IR leaf `TextPattern`. All run every query on the caller's connection, in one snapshot, as one budgeted operation ([[query#Query Budgets]]).
+
+- **Matching:** query words are split on whitespace, each quoted, and matched as whole tokens after case folding and diacritics removal (index of [[storage#Text Index]]); `TextMode` is `All` (default), `Any` or `Phrase`, and a trailing `*` is a prefix. Query text is never FTS5 syntax, and text without a word is `InvalidQuery`.
+- **Visibility:** matching values are joined to `triple` through `scan_predicates`, the one writer of time predicates, so as-of, history and valid-time views select exactly what `View::triples` selects. `graphs` keeps statements with a membership visible in the same view, `predicates` filters by predicate.
+- **Evidence** is read in the same view: the largest numeric object of the confidence predicate (`v:confidence` unless the query names another) or `None`, the count of `sys:confirmedBy`, the distinct `sys:author`s of the asserting and confirming transactions, and `t_add` with its instant. An absent layer is reported as absent, never estimated.
+- **Ranking policy** `tiramemsu-text-rank/1`: lexical score (negated bm25) descending, confidence descending with absent last, confirmations, authors, `added_at` (newer first), and statement eid ascending as the final tie-break. Each hit carries its 1-based `rank`; `limit` cuts after ranking.
+- **Errors:** `MissingCapability("fts5")` on a host without FTS5, while every other read and write still works; `TextIndexUnavailable` when the index was never built or is behind.
+
+```sparql
+SELECT ?e ?score ?c ?s ?o WHERE {
+  ?e tm:textMatch "lisbon offsite" ; tm:textScore ?score ; tm:textConfidence ?c ;
+     tm:textLimit 10 .                       # also tm:textRank, tm:textMode "any"
+  ?s ?p ?o ~ ?e }
+```
+
+```cypher
+CALL tiramemsu.text.search('lisbon offsite', {limit: 10, mode: 'all', graphs: ['trip']})
+YIELD statement, subject, predicate, text, score, rank, confidence
+```
+
+- **SPARQL:** the `tm:text*` patterns on one subject variable form one recall ([[crates/tm-sparql/src/lower/bgp.rs]]); `GRAPH <g>` and `FROM` restrict it, `SERVICE <tm:asOf/…>` times it, and `GRAPH ?g` around it is `InvalidQuery`. Recall rows add no query provenance.
+- **Cypher:** the procedure ([[crates/tm-cypher/src/exec/text.rs]]) joins the recall with the hit's statement and yields it in node form; `USE AS OF` and the other time clauses apply.

@@ -48,5 +48,6 @@ pub fn install(exec: &mut dyn Executor, ops: &OperatorRegistry) -> Result<()> {
     for f in udf::aggregate_functions() {
         reg.register_aggregate(f)?;
     }
+    reg.register_conn_table(crate::text::table_function())?;
     ops.register_all(reg)
 }

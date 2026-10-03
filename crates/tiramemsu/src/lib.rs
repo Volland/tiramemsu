@@ -19,12 +19,13 @@ pub use import::{BulkImport, ImportProgress, ImportSummary};
 pub use sparql::{SparqlOptions, SparqlResult};
 pub use view::{PathArgs, View};
 
+pub use tm_core::text;
 pub use tm_core::{
     codec, read, value, vocab, AssertOpts, Asserted, CancelToken, Capabilities, Clock, Dialect,
     Eid, Error, Event, Executor, Host, HostOptions, Interrupt, IntoObject, ManualClock, ObjectId,
     OnExisting, Op, Patch, PatchField, Position, PredicateSchema, Result, ResultLimit, RetKind,
-    Span, SqlError, SqlValue, SystemClock, Tag, TimeRef, Triple, Tx, TxId, TxOptions, TxReport,
-    TxSel, Valid, ValidSel, Value, ViewSpec,
+    Span, SqlError, SqlValue, SystemClock, Tag, TextEvidence, TextHit, TextMode, TextQuery,
+    TimeRef, Triple, Tx, TxId, TxOptions, TxReport, TxSel, Valid, ValidSel, Value, ViewSpec,
 };
 pub use tm_core::{BTerm, Bundle, BundleStatement, ImportReport, ImportedStatement};
 pub use tm_cypher as cypher_frontend;

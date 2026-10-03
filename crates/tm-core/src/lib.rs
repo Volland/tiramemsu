@@ -16,6 +16,7 @@ pub mod read;
 pub mod report;
 pub mod storage;
 pub mod term;
+pub mod text;
 pub mod value;
 pub mod view;
 pub mod vocab;
@@ -37,5 +38,6 @@ pub use report::{
     Valid,
 };
 pub use term::{TermDict, TermReader};
+pub use text::{TextEvidence, TextHit, TextMode, TextQuery};
 pub use value::Value;
 pub use view::{scan_predicates, TimeRef, TxSel, ValidSel, ViewSpec};

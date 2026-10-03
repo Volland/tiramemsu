@@ -134,6 +134,52 @@ impl PathPattern {
     }
 }
 
+/// Text recall: one solution per visible statement whose string object matches
+/// `query`, in the order of the store's ranking policy (`lat.md/query#Text
+/// Recall`). Executed by the `tm_text` table function, which runs the same recall
+/// as the Rust `View::text_search`.
+///
+/// Like [`TriplePattern`] it carries its own [`View`]; `graph` may be `Any` or a
+/// `Set` (a graph variable is invalid).
+#[derive(Clone, Debug, PartialEq)]
+pub struct TextPattern {
+    /// The words: a string constant or a parameter.
+    pub query: TermOrVar,
+    /// How the words combine.
+    pub mode: tm_core::TextMode,
+    /// Binds the matching statement's eid.
+    pub eid: Var,
+    /// Binds the lexical score (a double; larger is better).
+    pub score: Option<Var>,
+    /// Binds the 1-based rank under the ranking policy.
+    pub rank: Option<Var>,
+    /// Binds the confidence layer (a double), missing when the statement has none.
+    pub confidence: Option<Var>,
+    /// Keeps the first `limit` hits by rank.
+    pub limit: Option<u32>,
+    /// The pattern's own time selection.
+    pub view: View,
+    /// The graphs the statement must be a member of (`Any` by default).
+    pub graph: GraphSel,
+}
+
+impl TextPattern {
+    /// An all-words recall of `query` binding `eid`, with no other output.
+    pub fn new(query: impl Into<TermOrVar>, eid: &str, view: View) -> TextPattern {
+        TextPattern {
+            query: query.into(),
+            mode: tm_core::TextMode::All,
+            eid: Var::new(eid),
+            score: None,
+            rank: None,
+            confidence: None,
+            limit: None,
+            view,
+            graph: GraphSel::Any,
+        }
+    }
+}
+
 /// Inline bindings; a `None` cell is UNDEF.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Values {
@@ -251,7 +297,7 @@ pub struct RowNumber {
 
 /// A logical operator: one node of the query tree.
 ///
-/// Leaves are [`TriplePattern`], [`PathPattern`] and [`Values`]; the rest are
+/// Leaves are [`TriplePattern`], [`PathPattern`], [`TextPattern`] and [`Values`]; the rest are
 /// relational operators over child operators. Build trees with the constructor
 /// methods on `Op` (`Op::join`, [`Op::filter`], `Op::project`, ...) or with
 /// [`IrBuilder`](crate::builder::IrBuilder), then check them with
@@ -262,6 +308,8 @@ pub enum Op {
     Triple(TriplePattern),
     /// A path pattern.
     Path(PathPattern),
+    /// A text recall.
+    Text(TextPattern),
     /// Inline rows.
     Values(Values),
     /// List unnesting.
@@ -372,7 +420,7 @@ impl Op {
     /// The direct children of this operator (not inside expressions).
     pub fn children(&self) -> Vec<&Op> {
         match self {
-            Op::Triple(_) | Op::Path(_) | Op::Values(_) => Vec::new(),
+            Op::Triple(_) | Op::Path(_) | Op::Text(_) | Op::Values(_) => Vec::new(),
             Op::Join(j) => j.inputs.iter().collect(),
             Op::Union(u) => u.inputs.iter().collect(),
             Op::LeftJoin(l) => vec![&l.left, &l.right],
@@ -390,6 +438,12 @@ impl Op {
 impl From<TriplePattern> for Op {
     fn from(t: TriplePattern) -> Op {
         Op::Triple(t)
+    }
+}
+
+impl From<TextPattern> for Op {
+    fn from(t: TextPattern) -> Op {
+        Op::Text(t)
     }
 }
 

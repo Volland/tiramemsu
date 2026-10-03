@@ -80,7 +80,7 @@ CREATE TABLE pred_multi (
 PRAGMA optimize = 0x10002;
 ```
 
-Format 1 reserves names for later milestones, so that no user migration clashes with them: tag 15 `SEALED` and the table `seal_key` (M6, [[time-model#Erasure]]), and the tables `term_fts` and `vec_*` (M7, [[roadmap#Milestones]]).
+Format 1 reserves names for later milestones, so that no user migration clashes with them: tag 15 `SEALED` and the table `seal_key` (M6, [[time-model#Erasure]]), and the tables `term_fts` and `vec_*` (M7, [[roadmap#Milestones]]). Format 2 adds the `meta` rows `text_index` and `text_stale` of [[storage#Text Index]]; `term_fts` is created only when that index is built.
 
 ## Triple Table
 
@@ -215,3 +215,24 @@ High-churn state (`lastSeen`, counters, per-turn scores) lives in `volatile(s, k
 `meta.format_version` records the schema version. Opening a file with an unknown newer version fails, and older versions are migrated forward inside one transaction.
 
 Migrations must respect [[time-model#Never Forget]]. They may add columns, indexes and tables, but never drop or rewrite triples.
+
+- **Format 2** is the current version. Its one migration ([[crates/tm-core/src/storage/migrate.rs#MIGRATIONS]]) inserts the `meta` rows `text_index = 0` and `text_stale = 0` of [[storage#Text Index]]. It runs on every host, creates no FTS5 table and touches no `triple`, `term` or `tx` row.
+- A new file is created as format 1 and migrated forward like an old file, so fresh and migrated files have the same schema.
+- The bump is what keeps the derived index honest: a format-1 build, which would write strings without indexing them, refuses a format-2 file with `FormatVersion` instead of letting `term_fts` drift.
+
+## Text Index
+
+The derived FTS5 index behind text recall ([[query#Text Recall]]). It holds one row per distinct string ever stored as a statement object, and can always be rebuilt from the graph.
+
+```sql
+CREATE VIRTUAL TABLE term_fts USING fts5(text, lang UNINDEXED,
+  tokenize = 'unicode61 remove_diacritics 2');
+-- rowid = the value's full ObjectId (SHORT_STR, STR or LANG_STR)
+-- meta: text_index = index version (0: never built), text_stale = lowest eid not indexed (0: none)
+```
+
+- **What is indexed:** plain strings, inline (`SHORT_STR`, decoded into the index without a dictionary row) or in the dictionary (`STR`), and language-tagged strings (`LANG_STR`, with their tag in `lang`). Typed literals, IRIs and numbers are not searchable. Values of retracted statements stay indexed; visibility is decided at recall time.
+- **Opt-in:** a file has no `term_fts` until the index is built by `OpenOptions::text_index`, `Db::enable_text_index` or `Db::rebuild_text_index`. Once built, every writer on a host with FTS5 keeps it current.
+- **Upkeep:** each new statement with a string object adds its value inside the write transaction (`Tx::index_text`, through [[crates/tm-core/src/text.rs#index_value]]), so speculations, dry runs and failed transactions roll their index rows back with everything else.
+- **Hosts without FTS5** never issue FTS5 SQL. While the index exists they set `text_stale` to the first string statement they write. The next writer with FTS5 (at open or at the start of a transaction) indexes every string statement from that eid and clears it; until then recall fails with `TextIndexUnavailable` rather than miss hits.
+- **Rebuild** ([[crates/tm-core/src/text.rs#rebuild]]) drops and refills `term_fts` from the statements in one write transaction. It reads `triple` and `term` and changes neither, nor `tx`; recall afterwards returns what it returned before. `text_index` stores the layout version, so a later tokenizer change is a rebuild, not a format migration.

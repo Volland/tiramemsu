@@ -859,3 +859,111 @@ fn bulk_import_sessions_cross_the_bridge() {
         "InvalidArgument"
     );
 }
+
+// @lat: [[tests#Text Retrieval#Bridge Text Recall]]
+#[test]
+fn text_recall_crosses_the_bridge_with_evidence_and_error_codes() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("t.db");
+    let path = path.to_str().unwrap();
+    // without the option the index is not built
+    let plain = Database::open(path, &J::Null).unwrap();
+    plain
+        .call("transact", &json!({ "ops": [
+            { "op": "assert", "s": v("alice"), "p": v("note"), "o": "met at the lisbon offsite", "as": "n" },
+            { "op": "assert", "s": {"ref": "n"}, "p": v("confidence"), "o": 0.9 },
+            { "op": "assert", "s": v("bob"), "p": v("note"), "o": "lisbon" }
+        ]}))
+        .unwrap();
+    let e = plain
+        .call("textSearch", &json!({ "text": "lisbon" }))
+        .unwrap_err();
+    assert_eq!(e.code(), "TextIndexUnavailable");
+    assert_eq!(
+        plain.call("enableTextIndex", &json!({})).unwrap(),
+        json!({ "built": true })
+    );
+    assert_eq!(
+        plain.call("rebuildTextIndex", &json!({})).unwrap(),
+        json!({ "values": 2 })
+    );
+    drop(plain);
+    let db = Database::open(path, &json!({ "textIndex": true })).unwrap();
+    let hits = db
+        .call(
+            "textSearch",
+            &json!({ "text": "lisbon", "view": { "kind": "now" } }),
+        )
+        .unwrap();
+    let hits = hits.as_array().unwrap();
+    assert_eq!(hits.len(), 2);
+    let alice = hits.iter().find(|h| h["eid"] == 1).unwrap();
+    assert_eq!(alice["text"], "met at the lisbon offsite");
+    assert_eq!(alice["s"], v("alice"));
+    assert_eq!(alice["evidence"]["confidence"], 0.9);
+    assert_eq!(alice["evidence"]["tAdd"], 1);
+    let bob = hits.iter().find(|h| h["eid"] == 3).unwrap();
+    assert_eq!(bob["evidence"]["confidence"], J::Null); // absent, not invented
+    assert_eq!(bob["lang"], J::Null);
+    assert!(hits[0]["rank"] == 1 && hits[1]["rank"] == 2);
+    // options: limit, mode, predicates; a budget bounds the call
+    let top = db
+        .call(
+            "textSearch",
+            &json!({ "text": "offsite nowhere", "mode": "any", "limit": 1,
+                                      "predicates": [v("note")] }),
+        )
+        .unwrap();
+    assert_eq!(top.as_array().unwrap().len(), 1);
+    let none = db
+        .call(
+            "textSearch",
+            &json!({ "text": "lisbon", "graphs": [v("nowhere")] }),
+        )
+        .unwrap();
+    assert_eq!(none, json!([]));
+    let e = db
+        .call(
+            "textSearch",
+            &json!({ "text": "lisbon", "budget": { "maxRows": 1 } }),
+        )
+        .unwrap_err();
+    assert_eq!(e.code(), "ResultLimitExceeded");
+    for bad in [
+        json!({ "text": "lisbon", "mode": "near" }),
+        json!({ "text": "lisbon", "nope": 1 }),
+        json!({}),
+    ] {
+        assert_eq!(
+            db.call("textSearch", &bad).unwrap_err().code(),
+            "InvalidArgument"
+        );
+    }
+    assert_eq!(
+        db.call("textSearch", &json!({ "text": "  " }))
+            .unwrap_err()
+            .code(),
+        "InvalidQuery"
+    );
+    // the query languages reach the same recall through the bridge
+    let s = db
+        .call(
+            "sparql",
+            &json!({ "text": "SELECT ?e WHERE { ?e tm:textMatch \"lisbon\" ; tm:textLimit 1 }" }),
+        )
+        .unwrap();
+    assert_eq!(s["rows"].as_array().unwrap().len(), 1);
+    let c = db
+        .call(
+            "cypher",
+            &json!({ "text": "CALL tiramemsu.text.search('lisbon') YIELD rank RETURN rank" }),
+        )
+        .unwrap();
+    assert_eq!(c["rows"], json!([[1], [2]]));
+    assert_eq!(
+        Database::open(path, &json!({ "textIndex": 1 }))
+            .unwrap_err()
+            .code(),
+        "InvalidArgument"
+    );
+}

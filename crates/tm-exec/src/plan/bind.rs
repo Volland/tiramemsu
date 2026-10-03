@@ -147,6 +147,16 @@ impl Binder<'_> {
                 }
                 Op::Path(p)
             }
+            Op::Text(t) => {
+                let mut t = t.clone();
+                t.query = self.term(&t.query)?;
+                if let GraphSel::Set(gs) = &mut t.graph {
+                    for g in gs.iter_mut() {
+                        *g = self.term(g)?;
+                    }
+                }
+                Op::Text(t)
+            }
             Op::Values(v) => {
                 let mut v = v.clone();
                 for r in &mut v.rows {

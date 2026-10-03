@@ -27,6 +27,32 @@ pub const TM_VALID_TO: &str = "urn:tiramemsu:tm:validTo";
 /// `tm:retractKind`: 0 explicit, 1 cascade, 2 supersede, 3 cardinality.
 pub const TM_RETRACT_KIND: &str = "urn:tiramemsu:tm:retractKind";
 
+/// `tm:textMatch`: in SPARQL, `?e tm:textMatch "words"` recalls the statements
+/// whose string object matches the words and binds their eids to `?e`
+/// (`lat.md/query#Text Recall`). Not a stored or virtual predicate: the front end
+/// turns the group of `tm:text*` patterns on one subject into a text recall.
+pub const TM_TEXT_MATCH: &str = "urn:tiramemsu:tm:textMatch";
+/// `tm:textScore`: binds a text hit's lexical score.
+pub const TM_TEXT_SCORE: &str = "urn:tiramemsu:tm:textScore";
+/// `tm:textRank`: binds a text hit's 1-based rank.
+pub const TM_TEXT_RANK: &str = "urn:tiramemsu:tm:textRank";
+/// `tm:textConfidence`: binds a text hit's confidence layer (unbound when absent).
+pub const TM_TEXT_CONFIDENCE: &str = "urn:tiramemsu:tm:textConfidence";
+/// `tm:textLimit`: keeps the first N text hits by rank.
+pub const TM_TEXT_LIMIT: &str = "urn:tiramemsu:tm:textLimit";
+/// `tm:textMode`: `"all"` (default), `"any"` or `"phrase"`.
+pub const TM_TEXT_MODE: &str = "urn:tiramemsu:tm:textMode";
+
+/// The `tm:text*` pattern predicates.
+pub const TEXT: [&str; 6] = [
+    TM_TEXT_MATCH,
+    TM_TEXT_SCORE,
+    TM_TEXT_RANK,
+    TM_TEXT_CONFIDENCE,
+    TM_TEXT_LIMIT,
+    TM_TEXT_MODE,
+];
+
 /// Every virtual predicate IRI.
 pub const VIRTUAL: [&str; 10] = [
     SYS_SUBJECT,

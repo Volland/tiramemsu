@@ -286,6 +286,76 @@ A chunk under a cancelled budget fails with `Cancelled`, leaves no trace and cou
 
 The bridge's `importBegin`, `importChunk`, `importProgress`, `importFinish` and `importCancel` run a session by id, report progress and summaries, and map the lease error to `ImportInProgress`.
 
+## Text Retrieval
+
+Text recall of [[query#Text Recall]] over the derived index of [[storage#Text Index]]: view-aware visibility, inline strings, deterministic ranking with absent evidence, the index lifecycle and the entrypoints. Tests are in `text_retrieval.rs` and the bridge suite.
+
+### Inline Text Is Recalled Without A Dictionary Row
+
+A short string stored inline in its ObjectId is recalled like a dictionary string, keyed in `term_fts` by its full ObjectId, and neither recall nor a rebuild inserts a `term` row for it.
+
+### Language Tagged Text Keeps Its Tag
+
+A language-tagged string is recalled with its `lang`, diacritics fold (`cafe` matches `Café`), and typed literals are not searchable.
+
+The all, any, phrase and prefix modes match as documented, query text is never FTS5 syntax, and wordless text is `InvalidQuery`.
+
+### Retracted Text Leaves Now Recall
+
+A matching statement retracted later is absent from the now view and from an as-of view at the retraction, and present in as-of views (by tx and by instant) before it and in history.
+
+### Recall Honors Graph And Valid Time
+
+With a graph list and a valid instant every hit is a visible member of a listed graph and valid at the instant; each filter alone, an empty graph list and a predicate filter behave as specified.
+
+### Absent Confidence Is Reported As Absent
+
+A hit without a confidence layer reports `None` and ranks after one with a layer at equal lexical score; a custom confidence predicate the hit lacks stays absent.
+
+The largest numeric layer, confirmations, authors, `t_add` and its instant are reported.
+
+### Equal Hits Keep Their Order
+
+Hits with equal lexical score and evidence come back in ascending eid order on every repetition, and `limit` keeps the first hits by rank.
+
+### Host Without FTS5 Rejects Recall
+
+On a host that declares no FTS5, recall, rebuild and enable fail with `MissingCapability("fts5")`, no `term_fts` is created, and triple lookups, SPARQL and Cypher keep working.
+
+### Writes Without FTS5 Are Caught Up
+
+String statements written by a host without FTS5 set `meta.text_stale`; reopening on a host with FTS5 indexes them, clears the mark, and recall finds them.
+
+### Stale Index Is Refused
+
+Without a built index recall is `TextIndexUnavailable` and writes keep no index; enabling builds it once; a stale mark makes recall refuse until the next write with FTS5 closes the gap.
+
+### Rebuild Restores Recall Without Touching History
+
+After the index is emptied, a rebuild restores identical now and history recall, while every `triple`, `term` and `tx` row and the event log stay unchanged.
+
+### Migration To Format 2 Keeps Every Row
+
+A file written by a format-1 build migrates to format 2 on open with every `triple`, `term` and `tx` row unchanged, recall then covers its strings, and a format-1 build refuses the migrated file.
+
+### Recall Sees Speculative Strings
+
+Recall inside `Db::with` finds the speculative strings, and neither a speculation nor a dry run leaves an index row behind.
+
+### Recall Honors Budgets
+
+Recall is one budgeted operation: a row budget smaller than the hits fails with `ResultLimitExceeded` (also through SPARQL), a limit within it succeeds, and a cancelled token fails with `Cancelled`.
+
+### SPARQL And Cypher Share The Recall
+
+`tm:textMatch` with score, rank and confidence bindings and `CALL tiramemsu.text.search` return the same hits in the same order as `View::text_search`; limit, mode, graphs and time clauses apply, and misuse of the SPARQL patterns is `InvalidQuery`.
+
+### Bridge Text Recall
+
+The bridge's `textSearch`, `rebuildTextIndex`, `enableTextIndex` and `textIndex` open option return hits with evidence (`null` for absent confidence) and reach SPARQL and Cypher.
+
+Errors map to `TextIndexUnavailable`, `ResultLimitExceeded`, `InvalidQuery` and `InvalidArgument`.
+
 ## Storage Invariants
 
 Checks of the SQLite-level guarantees in [[storage#Invariant Triggers]] and [[storage#Query Shapes]].

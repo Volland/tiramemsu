@@ -66,6 +66,16 @@ pub fn scope(op: &Op) -> Scope {
                 s.push(g);
             }
         }
+        Op::Text(t) => {
+            s.push(&t.eid);
+            for v in [&t.score, &t.rank].into_iter().flatten() {
+                s.push(v);
+            }
+            if let Some(c) = &t.confidence {
+                s.push(c);
+                s.maybe_missing.insert(c.clone());
+            }
+        }
         Op::Values(v) => {
             for (i, var) in v.vars.iter().enumerate() {
                 s.push(var);
@@ -264,6 +274,30 @@ fn check_op(op: &Op) -> Result<()> {
             }
         }
         Op::Path(p) => check_graph(&p.graph)?,
+        Op::Text(t) => {
+            check_graph(&t.graph)?;
+            if matches!(t.graph, crate::op::GraphSel::Var(_)) {
+                return Err(invalid(
+                    "text recall cannot bind a graph variable".to_string(),
+                ));
+            }
+            match &t.query {
+                TermOrVar::Const(Value::Str(_)) | TermOrVar::Param(_) => {}
+                other => {
+                    return Err(invalid(format!(
+                        "text recall needs a string constant or a parameter, got {other:?}"
+                    )))
+                }
+            }
+            let outs: Vec<&Var> = std::iter::once(&t.eid)
+                .chain([&t.score, &t.rank, &t.confidence].into_iter().flatten())
+                .collect();
+            for (i, v) in outs.iter().enumerate() {
+                if outs[..i].contains(v) {
+                    return Err(invalid(format!("text recall binds {v} twice")));
+                }
+            }
+        }
         Op::Values(v) => {
             for (i, r) in v.rows.iter().enumerate() {
                 if r.len() != v.vars.len() {

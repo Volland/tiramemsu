@@ -169,11 +169,13 @@ Every failure raises `TiramemsuError` with a `.code`:
 | `InvalidPatch` | A `supersede` patch tried to change the subject or predicate |
 | `IdSpaceExhausted` | An id counter passed 2^48 − 1 |
 | `ImportInProgress` | A write, or a second import session, while a bulk import session is open |
+| `TextIndexUnavailable` | `text_search` before the text index was built (`text_index=True` or `rebuild_text_index()`) |
+| `MissingCapability` | `text_search` on a SQLite without FTS5 |
 | `Sqlite` | A SQLite failure, such as a locked or unreadable file |
 
 ## Options
 
-`Database(path, readers=, busy_timeout_ms=, term_cache_capacity=, optimize_every=, path_max_hops=, path_max_states=, reader_timeout_ms=)`. It works as a context manager, and Python threads can query one `Database` in parallel, because the GIL is released during each call.
+`Database(path, readers=, busy_timeout_ms=, term_cache_capacity=, optimize_every=, path_max_hops=, path_max_states=, reader_timeout_ms=, text_index=)`. It works as a context manager, and Python threads can query one `Database` in parallel, because the GIL is released during each call.
 
 ## Budgets
 
@@ -191,6 +193,25 @@ with db.transact(budget=QueryBudget(timeout_ms=1_000)) as tx:
 # from another thread: stop the call running with cancel_key="job-42"
 db.cancel("job-42")
 ```
+
+## Text recall
+
+Recall statements by the words in their string values. Build the index with `text_index=True` (or `db.rebuild_text_index()`); every write then keeps it current.
+
+```python
+db = Database("memory.db", text_index=True)
+with db.transact() as tx:
+    note = tx.assert_(alice, Iri("urn:tiramemsu:v:note"), "met at the Lisbon offsite")
+    tx.assert_(note, Iri("urn:tiramemsu:v:confidence"), 0.9)
+
+for hit in db.now().text_search("lisbon offsite", limit=10):
+    print(hit.rank, hit.score, hit.text, hit.evidence.confidence)  # confidence is None when absent
+
+db.now().sparql('SELECT ?e WHERE { ?e tm:textMatch "lisbon" }')
+db.now().cypher("CALL tiramemsu.text.search('lisbon') YIELD statement, score RETURN statement, score")
+```
+
+`text_search(text, mode="all"|"any"|"phrase", graphs=, predicates=, limit=, confidence=)` returns `TextHit`s ranked by lexical score, then confidence, confirmations, authors and recency, then eid. Views apply: `db.as_of(...)` recalls what was believed then.
 
 ## Bulk import
 

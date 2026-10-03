@@ -311,6 +311,46 @@ export interface OpenOptions {
   pathMaxStates?: number;
   /** How long a read waits for a free reader before failing with `PoolTimeout` (default: no limit). */
   readerTimeoutMs?: number;
+  /** Build the derived text index at open so `View.textSearch` can run (default: false; ignored without FTS5). */
+  textIndex?: boolean;
+}
+
+/** Options for `View.textSearch`. */
+export interface TextSearchOptions {
+  /** How the words combine: every word (default), any word, or the words as a phrase. */
+  mode?: "all" | "any" | "phrase";
+  /** Only statements that are members of one of these graphs (a term that is not stored names no graph). */
+  graphs?: TermInput[];
+  /** Only statements with one of these predicates. */
+  predicates?: TermInput[];
+  /** At most this many hits, after ranking. */
+  limit?: number;
+  /** The predicate read as the confidence layer (default `v:confidence`). */
+  confidence?: TermInput;
+}
+
+/** One text recall hit: the statement, its lexical score, its rank and its evidence. */
+export interface TextHit {
+  eid: number;
+  s: Term;
+  p: Term;
+  o: Term;
+  /** The matched string. */
+  text: string;
+  /** The language tag of a language-tagged string, else `null`. */
+  lang: string | null;
+  /** Lexical relevance (negated FTS5 bm25: larger is better). */
+  score: number;
+  /** 1-based rank under the policy `tiramemsu-text-rank/1`. */
+  rank: number;
+  evidence: {
+    /** The largest numeric confidence layer, or `null` when the statement has none (never invented). */
+    confidence: number | null;
+    confirmations: number;
+    authors: number;
+    tAdd: number;
+    addedAt: number;
+  };
 }
 
 /**
@@ -449,6 +489,27 @@ export class View {
   /** The statement `eid` with its layers and evidence, as `tiramemsu-bundle/1` JSON for `Tx.importBundle`. */
   bundle(eid: number | StmtTerm): Bundle {
     return callNative(this._db, "bundle", { ...this._base(), eid }) as Bundle;
+  }
+
+  /**
+   * Text recall: statements of this view whose string object matches `text`, ranked by
+   * lexical score, then confidence, confirmations, authors and recency, then eid. Needs the
+   * text index (`OpenOptions.textIndex` or `Database.rebuildTextIndex`); throws
+   * `MissingCapability` on a SQLite without FTS5 and `TextIndexUnavailable` without an index.
+   */
+  textSearch(text: string, opts?: TextSearchOptions): TextHit[] {
+    const args: Record<string, unknown> = { ...this._base(), text };
+    if (opts?.mode) args.mode = opts.mode;
+    if (opts?.graphs) args.graphs = opts.graphs.map(toJson);
+    if (opts?.predicates) args.predicates = opts.predicates.map(toJson);
+    if (opts?.limit !== undefined) args.limit = opts.limit;
+    if (opts?.confidence !== undefined) args.confidence = toJson(opts.confidence);
+    return (callNative(this._db, "textSearch", args) as Array<Record<string, unknown>>).map((h) => ({
+      ...(h as unknown as TextHit),
+      s: fromJson(h.s),
+      p: fromJson(h.p),
+      o: fromJson(h.o),
+    }));
   }
 
   /** All object values for a given subject and predicate. */
@@ -799,6 +860,19 @@ export class Database {
   bulkImport(): BulkImport {
     const r = callNative(this._db, "importBegin", {}) as { session: number };
     return new BulkImport(this._db, r.session);
+  }
+
+  /**
+   * Drops and rebuilds the derived text index from every statement (history is untouched)
+   * and returns the number of indexed string values. Also builds a missing index.
+   */
+  rebuildTextIndex(): number {
+    return (callNative(this._db, "rebuildTextIndex", {}) as { values: number }).values;
+  }
+
+  /** Builds the text index unless it is current; returns whether it built the whole index. */
+  enableTextIndex(): boolean {
+    return (callNative(this._db, "enableTextIndex", {}) as { built: boolean }).built;
   }
 
   /** Refreshes the query planner's statistics (run after large imports). */
