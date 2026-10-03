@@ -12,7 +12,8 @@ categories.workspace = true
 rust-version.workspace = true
 
 [dependencies]
-tiramemsu = { workspace = true }
+# the bridge serves SPARQL, Cypher and paths: it needs the full facade
+tiramemsu = { workspace = true, features = ["sparql", "cypher"] }
 serde_json = "1"
 
 [dev-dependencies]

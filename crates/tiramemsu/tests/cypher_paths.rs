@@ -1,6 +1,7 @@
 //! `path-lowering` (Cypher): variable-length relationships, path and list bindings,
 //! relationship isomorphism, shortest paths, endpoint binding, temporal scope and the
 //! unsupported forms.
+#![cfg(feature = "cypher")]
 mod cypher_common;
 use cypher_common::*;
 use tiramemsu::*;

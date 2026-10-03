@@ -1,5 +1,6 @@
 //! `named-graphs` through SPARQL Update: GRAPH blocks, WITH, USING, membership
 //! deletion and the graph-management operations.
+#![cfg(feature = "sparql")]
 mod sparql_common;
 use sparql_common::*;
 use tiramemsu::*;

@@ -1,5 +1,6 @@
 //! `sparql-query`: built-in functions, literal canonicalisation, blank nodes and
 //! skolem IRIs, interim paths, parse errors and predeclared prefixes.
+#![cfg(feature = "sparql")]
 mod sparql_common;
 use sparql_common::*;
 use tiramemsu::*;

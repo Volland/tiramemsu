@@ -2,6 +2,7 @@
 //! <urn:tiramemsu:tm:timeRespecting…>` with `tm:arrival`, the Cypher `MATCH TIME
 //! RESPECTING [AFTER t] [ARRIVAL AS x]`, and path completeness reporting
 //! (`lat.md/query#Temporal Path Syntax`).
+#![cfg(all(feature = "sparql", feature = "cypher"))]
 mod cypher_common;
 
 use std::collections::BTreeMap;

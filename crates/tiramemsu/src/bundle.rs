@@ -1,11 +1,13 @@
 //! Text forms of a fact bundle: the versioned JSON format and RDF 1.2 N-Triples.
 //!
 //! The [`Bundle`] value lives in `tm-core`, which has no JSON dependency, so its
-//! formats are an extension trait here, like [`crate::TxCypher`] for `Tx`.
+//! formats are an extension trait here. They need no query front end: the RDF
+//! terms and the N-Triples writer come from `tm_core::rdf`, so a core-only build
+//! (`default-features = false`) keeps them.
 
 use serde_json::{json, Map, Value as J};
+use tm_core::rdf::{render, write_ntriples, RdfTerm, RdfTriple};
 use tm_core::{vocab, BTerm, Bundle, BundleStatement, Error, Position, Result, Valid, Value};
-use tm_sparql::results::{nt, term::render, RdfTerm, RdfTriple};
 
 /// The format string of the JSON form this build writes and reads.
 pub const BUNDLE_FORMAT: &str = "tiramemsu-bundle/1";
@@ -257,6 +259,6 @@ impl BundleFormat for Bundle {
                 });
             }
         }
-        nt::write(&out)
+        write_ntriples(&out)
     }
 }

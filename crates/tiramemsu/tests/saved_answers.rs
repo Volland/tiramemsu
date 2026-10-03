@@ -2,6 +2,7 @@
 //! `add-saved-answer-invalidation`): stored queries with their parameters, view
 //! and result, event-driven `recheck` and `stale` marks, replayable checkpoints,
 //! and refreshes that only clear a mark when they succeed.
+#![cfg(all(feature = "sparql", feature = "cypher"))]
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;

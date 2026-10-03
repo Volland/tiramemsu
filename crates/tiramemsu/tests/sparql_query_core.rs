@@ -1,5 +1,6 @@
 //! `sparql-query`: views, query forms, patterns, set semantics, OPTIONAL, UNION,
 //! MINUS/EXISTS, BIND and VALUES.
+#![cfg(feature = "sparql")]
 mod sparql_common;
 use sparql_common::*;
 use tiramemsu::*;

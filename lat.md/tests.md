@@ -1154,3 +1154,41 @@ Node: `View.conflicts(opts)` decodes terms and evidence, and `Database.previewBu
 ### Python Exposes Conflict Review
 
 Python: `View.conflicts(...)` returns `Conflict` dataclasses, refuses history, and `Database.preview_bundle(...)` reports a schema failure as data and a success with burned ids and scope.
+
+## Optional Query Frontends
+
+Spec `optional-query-frontends`: runtime smoke tests that run in every facade feature combination, in `crates/tiramemsu/tests/feature_matrix.rs` ([[architecture#Crates#Cargo Features]]).
+
+`scripts/feature-matrix.sh` adds the dependency assertions (`cargo tree -e normal`) and the cross-build file handoff; CI runs it for core, exec, sparql, cypher, default and the bindings.
+
+### Core Operations In Every Build
+
+Whatever the features, a fact asserted and corrected reads back the same in the now, as-of, history and valid-time views, the file records the current storage format, and a reopened file shows the same story.
+
+### Bundle Formats Without A Parser
+
+A core-only build writes a bundle as JSON and RDF 1.2 N-Triples, reads the JSON back to an equal bundle, previews and imports it into another database, and renders RDF terms from `tm-core`.
+
+### Recent Core Features In Every Build
+
+Text recall, conflict review, bulk import with its write lease, row limits and cancellation all work in the core tier, without the query engine.
+
+### One File Across Builds
+
+With `TIRAMEMSU_HANDOFF` set, a file written by one combination is read by the default build (and the reverse) with identical views; a SPARQL build also queries it.
+
+### Shared Execution Without A Parser
+
+With `exec` alone, paths and path reports evaluate with the engine options, and a database opened with `query_engine: false` refuses paths with `Unsupported`.
+
+### SPARQL Only
+
+With `sparql`, updates, property-path queries and `explain_sparql` run on the shared engine; in the sparql-only combination the script asserts that no Cypher parser is linked.
+
+### Cypher Only
+
+With `cypher`, `Db::cypher_write`, a variable-length `MATCH` and `TxCypher` inside `transact` run; in the cypher-only combination the script asserts that no SPARQL parser is linked.
+
+### Default Surface
+
+The default build keeps both front ends and saved answers: a SPARQL insert is read by Cypher and a saved SPARQL answer starts fresh.

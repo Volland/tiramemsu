@@ -10,8 +10,8 @@ use tm_ir::{IrQuery, Params};
 
 use crate::budget::QueryBudget;
 use crate::db::Db;
-use crate::sparql::read_settings;
 use crate::view::View;
+use tm_core::mapping::read_settings;
 
 fn rows_of(r: &QueryResult) -> Result<Rows> {
     let columns = r.columns.iter().map(|v| v.name().to_string()).collect();
@@ -101,6 +101,7 @@ impl Runner for ViewRunner<'_, '_> {
 
 /// What a read-only Cypher run touched, for saved answers: every IR query it ran
 /// and whether it read volatile values.
+#[cfg(feature = "sparql")] // saved answers need both front ends
 #[derive(Default)]
 pub(crate) struct CypherTrace {
     pub(crate) queries: Vec<IrQuery>,
@@ -108,11 +109,13 @@ pub(crate) struct CypherTrace {
 }
 
 /// A [`ViewRunner`] that records what it runs into a [`CypherTrace`].
+#[cfg(feature = "sparql")] // saved answers need both front ends
 struct TracingRunner<'v, 'a, 't> {
     inner: ViewRunner<'v, 'a>,
     trace: &'t mut CypherTrace,
 }
 
+#[cfg(feature = "sparql")] // saved answers need both front ends
 impl Runner for TracingRunner<'_, '_, '_> {
     fn run_ir(&mut self, q: &IrQuery, params: &Params) -> Result<Rows> {
         self.trace.queries.push(q.clone());
@@ -189,7 +192,7 @@ impl Runner for TxRunner<'_, '_> {
     }
 }
 
-fn vocab_of(settings: crate::sparql::Settings) -> Vocab {
+fn vocab_of(settings: tm_core::mapping::Settings) -> Vocab {
     let (v, prefixes) = settings;
     let mut out = Vocab::default();
     if let Some(v) = v {
@@ -237,6 +240,7 @@ impl View<'_> {
     }
 }
 
+#[cfg(feature = "sparql")] // saved answers need both front ends
 impl View<'_> {
     /// [`View::cypher`] with the given `@vocab` and prefix table, recording into
     /// `trace` what the run touched (saved answers). Not wrapped in an operation:
@@ -245,7 +249,7 @@ impl View<'_> {
         &self,
         text: &str,
         params: &CypherParams,
-        settings: &crate::sparql::Settings,
+        settings: &tm_core::mapping::Settings,
         trace: &mut CypherTrace,
     ) -> Result<CypherResult> {
         let ctx = CompileCtx {

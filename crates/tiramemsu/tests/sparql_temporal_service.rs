@@ -1,5 +1,6 @@
 //! `sparql-temporal-dataset`: per-group time scopes with `SERVICE`, the `GRAPH`
 //! rejections and the statement-time virtual predicates.
+#![cfg(feature = "sparql")]
 mod sparql_common;
 use sparql_common::*;
 use tiramemsu::*;

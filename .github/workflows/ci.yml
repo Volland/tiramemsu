@@ -49,6 +49,51 @@ jobs:
             exit 1
           fi
 
+  # The facade feature matrix (spec optional-query-frontends): for each combination,
+  # the normal dependency tree (no parser where none is enabled), a check of the
+  # library, tests and examples, the test suite with its runtime smoke tests, and a
+  # database file handed to and from the default build. `bindings` asserts that the
+  # JSON bridge, the MCP server and the bindings keep both front ends.
+  features:
+    strategy:
+      fail-fast: false
+      matrix:
+        combo: [core, exec, sparql, cypher, default, bindings]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.91.1"
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: features-${{ matrix.combo }}
+      - name: Dependency tree
+        run: scripts/feature-matrix.sh ${{ matrix.combo }} deps
+      - name: Clippy
+        if: matrix.combo != 'bindings' && matrix.combo != 'default'
+        run: |
+          case "${{ matrix.combo }}" in
+            core) cargo clippy -p tiramemsu --all-targets --no-default-features -- -D warnings ;;
+            *) cargo clippy -p tiramemsu --all-targets --no-default-features --features ${{ matrix.combo }} -- -D warnings ;;
+          esac
+      - name: Check
+        run: scripts/feature-matrix.sh ${{ matrix.combo }} check
+      - name: Tests and smoke tests
+        run: scripts/feature-matrix.sh ${{ matrix.combo }} test
+      - name: File handoff with the default build
+        run: scripts/feature-matrix.sh ${{ matrix.combo }} handoff
+      - name: Default examples run
+        if: matrix.combo == 'default'
+        run: |
+          for e in quickstart time_travel named_graphs layers_and_paths; do
+            cargo run -p tiramemsu --example "$e" > /dev/null
+          done
+      - name: Docs build
+        if: matrix.combo == 'core'
+        run: RUSTDOCFLAGS='-D warnings' cargo doc -p tiramemsu --no-deps --no-default-features
+
   # The language bindings over the JSON bridge (spec binding-release). Wheels and addons for
   # release are built by python-wheels.yml and npm-publish.yml.
   python:

@@ -267,6 +267,7 @@ impl View<'_> {
     /// Runs a `SELECT` with provenance: the instrumented query and its sibling
     /// lookups in one read, so both see the same state, and under one operation
     /// budget, so the lookups draw on what the main query left.
+    #[cfg_attr(not(feature = "cypher"), allow(dead_code))] // saved answers
     pub(crate) fn run_provenance(&self, plan: &QueryPlan) -> Result<SparqlResult> {
         self.run_provenance_with(plan, &Params::new())
     }
@@ -311,6 +312,7 @@ impl View<'_> {
         Ok(SparqlResult::Update(report))
     }
 
+    #[cfg_attr(not(feature = "cypher"), allow(dead_code))] // saved answers
     pub(crate) fn run_plan(&self, plan: &QueryPlan) -> Result<SparqlResult> {
         self.run_plan_with(plan, &Params::new())
     }
@@ -331,4 +333,4 @@ impl View<'_> {
     }
 }
 
-pub(crate) use tm_core::mapping::{read_settings, Settings};
+use tm_core::mapping::{read_settings, Settings};

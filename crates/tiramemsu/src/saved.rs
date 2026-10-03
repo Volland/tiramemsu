@@ -24,8 +24,8 @@ use tm_sparql::Prepared;
 use crate::budget::QueryBudget;
 use crate::cypher::CypherTrace;
 use crate::db::Db;
-use crate::sparql::{read_settings, Settings};
 use crate::view::View;
+use tm_core::mapping::{read_settings, Settings};
 
 /// The layout version of a `saved_answer` row this build writes and reads.
 pub const SAVED_ANSWER_LAYOUT: i64 = 1;

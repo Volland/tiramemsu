@@ -1,5 +1,6 @@
 //! `vocabulary-mapping`: names, CURIEs, rendering, implicit labels, sys hiding,
 //! node identity and vocabulary configuration.
+#![cfg(all(feature = "sparql", feature = "cypher"))]
 mod cypher_common;
 use cypher_common::*;
 use tiramemsu::*;

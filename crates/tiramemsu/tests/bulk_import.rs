@@ -1,6 +1,7 @@
 //! Bulk import sessions with deferred statistics (OpenSpec change `add-bulk-import`):
 //! chunked atomic commits, the write lease, one final analysis, progress, and
 //! cancellation without losing committed history.
+#![cfg(all(feature = "sparql", feature = "cypher"))]
 
 use std::sync::Arc;
 use std::thread;

@@ -13,6 +13,7 @@ pub mod event;
 pub mod exec;
 pub mod id;
 pub mod mapping;
+pub mod rdf;
 pub mod read;
 pub mod report;
 pub mod storage;

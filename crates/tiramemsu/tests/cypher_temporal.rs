@@ -1,5 +1,6 @@
 //! `cypher-temporal-clauses`: USE AS OF / VALID AT / HISTORY, per-pattern scopes,
 //! statement time properties.
+#![cfg(feature = "cypher")]
 mod cypher_common;
 use cypher_common::*;
 use tiramemsu::*;

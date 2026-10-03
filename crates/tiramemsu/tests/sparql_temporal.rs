@@ -1,5 +1,6 @@
 //! `sparql-temporal-dataset`: time IRIs in `FROM`, default views and valid-time
 //! filtering (`lat.md/query#Temporal Syntax`).
+#![cfg(feature = "sparql")]
 mod sparql_common;
 use sparql_common::*;
 use tiramemsu::*;

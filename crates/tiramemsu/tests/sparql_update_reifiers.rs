@@ -1,4 +1,5 @@
 //! `sparql-rdf12-annotations`, update side (task 8.5).
+#![cfg(feature = "sparql")]
 mod sparql_common;
 use sparql_common::*;
 use tiramemsu::*;

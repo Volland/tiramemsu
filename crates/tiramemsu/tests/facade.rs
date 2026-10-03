@@ -63,6 +63,7 @@ fn host_without_reader_pool() {
     let probe = host.probe.clone();
     // the minimal host has no `functions`/`vtab`: open the tm-core tier only
     let opts = OpenOptions {
+        #[cfg(feature = "exec")]
         query_engine: false,
         ..OpenOptions::default()
     };
@@ -628,6 +629,7 @@ fn caught_speculative_panics_leave_no_trace_and_burn_ids() {
 
 // @lat: [[tests#Recovery#Read Panic]]
 #[test]
+#[cfg(feature = "sparql")] // the panic is raised by a query hook
 fn caught_read_panics_preserve_reader_and_writer_reads() {
     for readers in [0, 1] {
         let (_d, p) = tmp();
@@ -709,6 +711,7 @@ fn failed_read_commit_rolls_back_before_reuse() {
             &p,
             OpenOptions {
                 readers,
+                #[cfg(feature = "exec")]
                 query_engine: false,
                 ..Default::default()
             },

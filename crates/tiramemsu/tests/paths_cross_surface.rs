@@ -1,5 +1,6 @@
 //! Task 12.2: `View::path`, `tm_path`, SPARQL `+` and Cypher trails agree on endpoint
 //! sets and hop counts over random fixtures.
+#![cfg(all(feature = "sparql", feature = "cypher"))]
 mod cypher_common;
 
 use std::collections::BTreeMap;

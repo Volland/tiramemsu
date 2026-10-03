@@ -1,5 +1,6 @@
 //! `cypher-read`: subqueries, UNION, EXISTS, expressions, parameters, values, paths,
 //! volatile properties, procedures, unsupported features and errors.
+#![cfg(feature = "cypher")]
 mod cypher_common;
 use cypher_common::*;
 use tiramemsu::*;

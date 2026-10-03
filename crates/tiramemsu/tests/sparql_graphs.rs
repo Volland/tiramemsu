@@ -1,5 +1,6 @@
 //! `named-graphs` through SPARQL: GRAPH, FROM, FROM NAMED, time scopes and the
 //! query-side scenarios of the spec.
+#![cfg(feature = "sparql")]
 mod sparql_common;
 use sparql_common::*;
 use tiramemsu::*;

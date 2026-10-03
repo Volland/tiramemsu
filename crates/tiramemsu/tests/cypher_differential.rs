@@ -1,5 +1,6 @@
 //! `dialect-differential-testing`: equivalent SPARQL and Cypher queries over shared
 //! fixtures return identical normalised results.
+#![cfg(all(feature = "sparql", feature = "cypher"))]
 mod cypher_common;
 mod differential;
 

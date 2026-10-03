@@ -152,6 +152,8 @@ The error enum is `#[non_exhaustive]`. Each OpenSpec change adds the variants it
 | `reader_timeout` | `None` (wait for a reader without limit); past it a read fails with `PoolTimeout` | `add-query-budgets` |
 | `text_index` | false; true builds the derived text index at open (ignored without FTS5) | `add-text-retrieval` |
 
+`planner`, `query_engine`, `path_max_hops` and `path_max_states` exist only with the facade's `exec` feature ([[architecture#Crates#Cargo Features]]), so options are built with `..OpenOptions::default()`.
+
 ## Bindings
 
 Bindings wrap the facade crate one to one. Python, Node and the MCP server are implemented over a shared JSON bridge ([[bindings]]); the others are designed and ordered later. See [[overview#Open Inputs]].

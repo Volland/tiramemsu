@@ -1,5 +1,6 @@
 //! The MCP-facing surface (task 11.2): `View::sparql` plus `write_sparql_json` on
 //! the current and as-of views produce valid SPARQL Query Results JSON.
+#![cfg(feature = "sparql")]
 mod sparql_common;
 use sparesults::{QueryResultsFormat, QueryResultsParser, ReaderQueryResultsParserOutput};
 use sparql_common::*;

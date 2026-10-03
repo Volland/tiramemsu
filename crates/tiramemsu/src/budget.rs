@@ -8,7 +8,7 @@ use tm_core::Result;
 
 /// The bounds of one operation, for [`View::with_budget`](crate::View::with_budget),
 /// [`Db::transact_budgeted`](crate::Db::transact_budgeted) and
-/// [`Db::cypher_write_budgeted`](crate::Db::cypher_write_budgeted).
+/// `Db::cypher_write_budgeted` (feature `cypher`).
 ///
 /// `QueryBudget::default()` bounds nothing, which is exactly the behaviour of the
 /// calls without a budget. Every field is independent:
@@ -35,19 +35,25 @@ use tm_core::Result;
 /// # use std::time::Duration;
 /// # let dir = tempfile::tempdir().unwrap();
 /// # let db = Db::open(dir.path().join("m.db"), OpenOptions::default())?;
-/// db.now().sparql("INSERT DATA { v:a v:p 1 , 2 , 3 }")?;
+/// let v = |s: &str| Value::iri(format!("urn:tiramemsu:v:{s}"));
+/// db.transact(TxOptions::default(), |tx| {
+///     for n in 1..=3 {
+///         tx.assert(v("a"), v("p"), Value::Int(n), Valid::ALWAYS)?;
+///     }
+///     Ok(())
+/// })?;
 /// let budget = QueryBudget {
 ///     timeout: Some(Duration::from_secs(2)),
 ///     max_rows: Some(2),
 ///     ..Default::default()
 /// };
-/// let r = db.now().with_budget(&budget).sparql("SELECT ?o WHERE { v:a v:p ?o }");
+/// let r = db.now().with_budget(&budget).triples(None, None, None);
 /// assert!(matches!(r, Err(Error::ResultLimitExceeded { .. })));
 ///
 /// let token = CancelToken::new();
 /// let budget = QueryBudget { cancel: Some(token.clone()), ..Default::default() };
-/// token.cancel(); // from any thread; here before the query starts
-/// let r = db.now().with_budget(&budget).sparql("SELECT ?o WHERE { v:a v:p ?o }");
+/// token.cancel(); // from any thread; here before the read starts
+/// let r = db.now().with_budget(&budget).triples(None, None, None);
 /// assert!(matches!(r, Err(Error::Cancelled)));
 /// # Ok::<(), Error>(())
 /// ```
@@ -77,7 +83,12 @@ impl QueryBudget {
     /// # use tiramemsu::*;
     /// # let dir = tempfile::tempdir().unwrap();
     /// # let db = Db::open(dir.path().join("m.db"), OpenOptions::default())?;
-    /// db.now().sparql("INSERT DATA { v:a v:p 1 , 2 }")?;
+    /// let v = |s: &str| Value::iri(format!("urn:tiramemsu:v:{s}"));
+    /// db.transact(TxOptions::default(), |tx| {
+    ///     tx.assert(v("a"), v("p"), Value::Int(1), Valid::ALWAYS)?;
+    ///     tx.assert(v("a"), v("p"), Value::Int(2), Valid::ALWAYS)?;
+    ///     Ok(())
+    /// })?;
     /// let budget = QueryBudget { max_rows: Some(3), ..Default::default() };
     /// let r = budget.run(|| {
     ///     db.now().triples(None, None, None)?; // 2 rows

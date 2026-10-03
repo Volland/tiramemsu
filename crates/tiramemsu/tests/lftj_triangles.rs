@@ -1,6 +1,7 @@
 //! Spec `cyclic-join-execution` "Triangle benchmark": the harness of
 //! `examples/triangles.rs` verifies identical triangle counts on the SQL and the
 //! LFTJ route before it times anything.
+#![cfg(feature = "exec")]
 
 #[path = "../examples/triangles.rs"]
 mod harness;

@@ -218,18 +218,23 @@ fn a_belief_travels_between_databases_as_json() {
     })
     .unwrap();
     let report = report.unwrap();
-    let rows = b
-        .now()
-        .sparql(
-            "SELECT ?who ?c WHERE { GRAPH v:agent7 { ?who v:supportedBy ?f } \
-             ?f sys:subject v:alice ; sys:object ?c }",
-        )
-        .unwrap();
-    let SparqlResult::Solutions(rows) = rows else {
-        panic!("not a select")
-    };
-    assert_eq!(rows.rows.len(), 1);
-    assert_eq!(rows.get(0, "c"), Some(&v("acme")));
+    // the layered query runs where the SPARQL front end is compiled; the JSON
+    // round trip and the import above need no query front end
+    #[cfg(feature = "sparql")]
+    {
+        let rows = b
+            .now()
+            .sparql(
+                "SELECT ?who ?c WHERE { GRAPH v:agent7 { ?who v:supportedBy ?f } \
+                 ?f sys:subject v:alice ; sys:object ?c }",
+            )
+            .unwrap();
+        let SparqlResult::Solutions(rows) = rows else {
+            panic!("not a select")
+        };
+        assert_eq!(rows.rows.len(), 1);
+        assert_eq!(rows.get(0, "c"), Some(&v("acme")));
+    }
     assert_eq!(b.now().bundle(report.root).unwrap(), bundle);
     // importing it again inside a speculation asserts nothing
     let asserted = b

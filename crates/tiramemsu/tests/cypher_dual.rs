@@ -1,4 +1,5 @@
 //! `cypher-dual-view`: statements as relationships and `:Statement` nodes.
+#![cfg(feature = "cypher")]
 mod cypher_common;
 use cypher_common::*;
 use tiramemsu::*;

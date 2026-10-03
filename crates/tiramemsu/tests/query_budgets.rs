@@ -1,6 +1,7 @@
 //! Query budgets (OpenSpec change `add-query-budgets`): bounded reader acquisition,
 //! deadlines and cancellation of SQL and native execution, atomic writes, and
 //! result budgets that cover a whole operation.
+#![cfg(all(feature = "sparql", feature = "cypher"))]
 
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::{Arc, Mutex};

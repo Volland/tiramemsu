@@ -1,5 +1,6 @@
 //! `sparql-rdf12-annotations`, query side: reifiers, annotation syntax, nesting,
 //! triple terms, the virtual `rdf:reifies` and views (task 6.4).
+#![cfg(feature = "sparql")]
 mod sparql_common;
 use sparql_common::*;
 use tiramemsu::*;

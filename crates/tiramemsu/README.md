@@ -4,7 +4,7 @@
 
 Tiramemsu is a graph database in which every fact is a row `(eid, s, p, o)` with its own id, and that id can be the subject or object of another statement. Provenance, confidence and beliefs are therefore just more statements (layers), and every change is kept together with when the database learned it and when it was true in the world. You query the same store with SPARQL 1.1 (with RDF 1.2 annotations) or openCypher, and walk paths across layers.
 
-This is the facade crate: the only one an application depends on. It re-exports the transaction engine (`tm-core`), the query planner (`tm-exec`), both query front ends and the rusqlite host.
+This is the facade crate: the only one an application depends on. It re-exports the transaction engine (`tm-core`), the query planner (`tm-exec`), both query front ends and the rusqlite host. The query engine and the front ends are optional [cargo features](#cargo-features), all on by default.
 
 ## Why layered, never-forget memory
 
@@ -17,6 +17,29 @@ cargo add tiramemsu
 ```
 
 Version 0.1, MSRV 1.88. SQLite is bundled (through `rusqlite`), so there are no other system dependencies. Storage is one file in WAL mode.
+
+## Cargo features
+
+The default build is the full facade. The query engine and each query front end are optional dependencies, so an application that only writes and reads facts links no parser:
+
+| Feature | Adds | Dependencies |
+|---|---|---|
+| *(none)*: `default-features = false` | The core tier: `Db`, transactions, speculation, `now` / `as_of` / `history` views and `triples`, dependents, fact bundles with their JSON and N-Triples forms (`BundleFormat`), bundle previews, conflict review, text recall (`View::text_search`), bulk import and query budgets | `tm-core`, `tm-rusqlite` |
+| `exec` | The shared query engine: `View::execute_ir` / `explain_ir`, paths (`View::path`, `path_with`, `path_report`, `PathArgs`), the opt-in LFTJ operator, the `ir` module and the `planner`, `query_engine`, `path_max_hops` and `path_max_states` open options | `tm-ir`, `tm-exec` |
+| `sparql` | `View::sparql`, `sparql_with`, `explain_sparql`, `SparqlResult`, `Solutions` and `sparql_frontend`; implies `exec` | `tm-sparql` (`spargebra`, `peg`) |
+| `cypher` | `View::cypher`, `Db::cypher_write`, `TxCypher`, `CypherParams` and `cypher_frontend`; implies `exec` | `tm-cypher` (`open-cypher`) |
+| `default` | `sparql` and `cypher`; saved answers (`Db::save_answer` and the rest) need both front ends | all of the above |
+
+```toml
+# core only: transactions, views, bundles, text recall; no query engine, no parser
+tiramemsu = { version = "0.2", default-features = false }
+# SPARQL and paths, no Cypher parser
+tiramemsu = { version = "0.2", default-features = false, features = ["sparql"] }
+```
+
+A disabled API is absent, not a runtime error. The file format does not depend on the features: a file written by a core-only build opens in a default build and the reverse, with the same statements and temporal semantics. Build `OpenOptions` with `..OpenOptions::default()`, because its query-engine fields exist only with `exec`. The JSON bridge, the MCP server and the Node and Python bindings always enable the full facade.
+
+**Migrating from 0.2.** The `sparql` feature used to switch only the SPARQL side of the differential test suite, and `default-features = false` still built both front ends. Now `sparql` is the SPARQL front end itself and `default-features = false` is the core tier. A dependency declared with `default-features = false` that uses SPARQL, Cypher or paths must add `features = ["sparql", "cypher"]` (or the subset it uses); one that kept the defaults needs no change.
 
 ## Tour
 
@@ -586,6 +609,8 @@ Every failure is a typed `Error` (`#[non_exhaustive]`, so keep a wildcard arm), 
 | `reader_timeout` | `None` | How long a read waits for a free reader before `PoolTimeout`; `None` waits without limit |
 | `text_index` | false | Build the derived text index at open so text recall can run (ignored without FTS5) |
 | `term_cache_capacity`, `planner`, `query_engine` | 16 384, defaults, true | Term cache size, planner routing, and the switch for opening the storage tier only |
+
+`planner`, `query_engine`, `path_max_hops` and `path_max_states` need the `exec` feature (on by default).
 
 ```rust
 use std::sync::Arc;

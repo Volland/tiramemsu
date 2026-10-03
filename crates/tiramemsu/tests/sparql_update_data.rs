@@ -1,4 +1,5 @@
 //! `sparql-update`: INSERT DATA and DELETE DATA (task 8.3).
+#![cfg(feature = "sparql")]
 mod sparql_common;
 use sparql_common::*;
 use tiramemsu::*;

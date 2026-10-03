@@ -1,5 +1,6 @@
 //! `sparql-query`: FILTER and expression errors, aggregates, subqueries and
 //! solution modifiers.
+#![cfg(feature = "sparql")]
 mod sparql_common;
 use sparql_common::*;
 use tiramemsu::Value;

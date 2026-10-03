@@ -1,5 +1,6 @@
 //! `sparql-query`: result terms, JSON results and `CONSTRUCT` results, plus the
 //! RDF 1.2 export of `sparql-rdf12-annotations`.
+#![cfg(feature = "sparql")]
 mod sparql_common;
 use sparql_common::*;
 use tiramemsu::*;

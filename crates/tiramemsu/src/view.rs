@@ -6,11 +6,13 @@ use tm_core::{
     budget, read, text, Bundle, Eid, Error, Event, Executor, ObjectId, Result, TermReader, TextHit,
     TextQuery, Triple, Value, ViewSpec,
 };
-use tm_exec::{CacheMode, Explain, PathRequest, PathRow, QueryEngine, QueryResult, TimeRespecting};
+#[cfg(feature = "exec")]
+use tm_exec::{CacheMode, Explain, PathRequest, PathRow, QueryResult, TimeRespecting};
+#[cfg(feature = "exec")]
 use tm_ir::{IrQuery, Params, PathCompleteness, PathMode};
 
 use crate::budget::QueryBudget;
-use crate::db::Db;
+use crate::db::{Db, Engine};
 
 /// Access to the writer executor inside a speculation.
 pub(crate) trait WriterAccess {
@@ -32,7 +34,8 @@ enum Source<'a> {
     Db(&'a Db),
     /// The writer inside a speculation: sees uncommitted state, bypasses the
     /// shared caches (`ConnSource::Speculative`).
-    Writer(&'a dyn WriterAccess, Option<&'a QueryEngine>),
+    #[cfg_attr(not(all(feature = "sparql", feature = "cypher")), allow(dead_code))]
+    Writer(&'a dyn WriterAccess, Option<&'a Engine>),
 }
 
 /// An immutable time selection: a transaction-time selector (now, as-of, history)
@@ -68,7 +71,7 @@ impl<'a> View<'a> {
     pub(crate) fn on_writer(
         w: &'a dyn WriterAccess,
         spec: ViewSpec,
-        engine: Option<&'a QueryEngine>,
+        engine: Option<&'a Engine>,
     ) -> View<'a> {
         View {
             spec,
@@ -78,6 +81,7 @@ impl<'a> View<'a> {
     }
 
     /// The database behind a view on committed state (`None` inside a speculation).
+    #[cfg_attr(not(all(feature = "sparql", feature = "cypher")), allow(dead_code))]
     pub(crate) fn db(&self) -> Option<&'a Db> {
         match self.src {
             Source::Db(db) => Some(db),
@@ -112,7 +116,11 @@ impl<'a> View<'a> {
     /// # use std::time::Duration;
     /// # let dir = tempfile::tempdir().unwrap();
     /// # let db = Db::open(dir.path().join("m.db"), OpenOptions::default())?;
-    /// db.now().sparql("INSERT DATA { v:a v:p v:b }")?;
+    /// let v = |s: &str| Value::iri(format!("urn:tiramemsu:v:{s}"));
+    /// db.transact(TxOptions::default(), |tx| {
+    ///     tx.assert(v("a"), v("p"), v("b"), Valid::ALWAYS)?;
+    ///     Ok(())
+    /// })?;
     /// let budget = QueryBudget {
     ///     timeout: Some(Duration::from_secs(1)),
     ///     reader_timeout: Some(Duration::from_millis(100)),
@@ -165,8 +173,8 @@ impl<'a> View<'a> {
     }
 
     /// Every statement selected by the view that matches the bound positions, in
-    /// ascending eid order. This is the low-level lookup; use [`View::sparql`] or
-    /// [`View::cypher`] for anything with joins. Never writes.
+    /// ascending eid order. This is the low-level lookup; use `View::sparql` or
+    /// `View::cypher` (features `sparql`, `cypher`) for anything with joins. Never writes.
     ///
     /// # Errors
     ///
@@ -239,7 +247,7 @@ impl<'a> View<'a> {
     }
 
     /// Encodes a value for a lookup, so it can be passed to [`View::triples`],
-    /// [`View::path`] or [`View::values`]. Never inserts: `None` when a dictionary value
+    /// `View::path` (feature `exec`) or [`View::values`]. Never inserts: `None` when a dictionary value
     /// is not stored, so any pattern using it matches nothing.
     pub fn encode(&self, v: &Value) -> Result<Option<ObjectId>> {
         self.op(|| self.exec(|e, _| TermReader::encode(e, v)))
@@ -255,13 +263,15 @@ impl<'a> View<'a> {
         })
     }
 
+    #[cfg(feature = "exec")]
     /// The view descriptor: this handle's time selection as an IR [`tm_ir::View`],
     /// which front ends use as the default View of patterns without a time clause.
     pub fn descriptor(&self) -> tm_ir::View {
         self.spec.into()
     }
 
-    pub(crate) fn engine(&self) -> Result<&'a QueryEngine> {
+    #[cfg(feature = "exec")]
+    pub(crate) fn engine(&self) -> Result<&'a Engine> {
         let e = match self.src {
             Source::Db(db) => db.engine(),
             Source::Writer(_, e) => e,
@@ -271,6 +281,7 @@ impl<'a> View<'a> {
         })
     }
 
+    #[cfg(feature = "exec")]
     /// Executes an IR query. Each pattern is evaluated under its own View; the
     /// handle's view is not applied (use [`View::descriptor`] when lowering).
     /// Outside `Db::with` the query runs on a pooled reader in one read
@@ -286,6 +297,7 @@ impl<'a> View<'a> {
         self.op(|| self.exec(|e, _| engine.execute(e, mode, &p)))
     }
 
+    #[cfg(feature = "exec")]
     /// Explains an IR query: regions, SQL, parameters and `EXPLAIN QUERY PLAN`
     /// (whole and per SQL region), with the real parameters bound. Never steps
     /// the query.
@@ -295,6 +307,7 @@ impl<'a> View<'a> {
         self.op(|| self.exec(|e, _| engine.explain(e, &p)))
     }
 
+    #[cfg(feature = "exec")]
     /// Evaluates a path from `start` under this view's transaction-time and
     /// valid-time selection, with the engine behind `tm_path`. `path` is SPARQL 1.1
     /// property-path text plus `{m,n}`; `max_hops` is a hard bound for every mode
@@ -345,6 +358,7 @@ impl<'a> View<'a> {
         )
     }
 
+    #[cfg(feature = "exec")]
     /// Evaluates a path from `start` with the options of `args`: the mode, the hop
     /// bound, an optional graph set and optional time respect. Otherwise as
     /// [`View::path`], which is the shorthand with neither.
@@ -406,6 +420,7 @@ impl<'a> View<'a> {
         Ok(self.path_report(start, path, args)?.rows)
     }
 
+    #[cfg(feature = "exec")]
     /// [`View::path_with`], with how completely the search was evaluated
     /// ([`PathCompleteness`]): `Exhaustive` when no state was left to expand,
     /// `StoppedAtBound` when the explicit `max_hops` stopped it with states left
@@ -651,6 +666,7 @@ fn charged<T>(rows: Vec<T>, cells: u64) -> Result<Vec<T>> {
     Ok(rows)
 }
 
+#[cfg(feature = "exec")]
 /// The options of [`View::path_with`]. `PathArgs::default()` is `REACH` with no hop
 /// bound, no graph filter and no time respect.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -673,6 +689,7 @@ pub struct PathArgs {
     pub capped: bool,
 }
 
+#[cfg(feature = "exec")]
 impl Default for PathArgs {
     fn default() -> PathArgs {
         PathArgs {
@@ -685,6 +702,7 @@ impl Default for PathArgs {
     }
 }
 
+#[cfg(feature = "exec")]
 /// The result of [`View::path_report`]: the rows of [`View::path_with`] and how
 /// completely the search was evaluated.
 #[derive(Clone, Debug, PartialEq)]

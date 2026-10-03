@@ -1,4 +1,5 @@
 //! `cypher-read`: property access, isomorphism, WHERE, OPTIONAL MATCH, WITH, RETURN.
+#![cfg(feature = "cypher")]
 mod cypher_common;
 use cypher_common::*;
 use tiramemsu::*;

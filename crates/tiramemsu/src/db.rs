@@ -8,13 +8,13 @@ use std::sync::{Arc, Mutex, MutexGuard, TryLockError};
 use std::time::{Duration, Instant};
 
 use tm_core::{
-    budget, storage, Capabilities, Clock, Error, Event, Executor, Host, HostOptions, ObjectId,
-    Result, Store, StoreOptions, SystemClock, TermReader, TimeRef, Tx, TxOptions, TxReport,
-    ViewSpec,
+    budget, storage, Capabilities, Clock, Error, Event, Executor, Host, HostOptions, Result, Store,
+    StoreOptions, SystemClock, TermReader, TimeRef, Tx, TxOptions, TxReport, ViewSpec,
 };
+#[cfg(feature = "exec")]
 use tm_exec::{
     LftjOperator, NativeKind, NativeOperator, OperatorRegistry, PathEngine, PathOperator,
-    PathOptions, PlannerOptions, QueryEngine,
+    PathOptions, PlannerOptions,
 };
 use tm_rusqlite::RusqliteHost;
 
@@ -22,16 +22,37 @@ use crate::budget::QueryBudget;
 use crate::pool::ReaderPool;
 use crate::view::View;
 
+/// The query engine a database installs (`OpenOptions::query_engine`).
+#[cfg(feature = "exec")]
+pub(crate) use tm_exec::QueryEngine as Engine;
+
+/// Without the `exec` feature there is no query engine: the type has no values, so
+/// every `Option<&Engine>` is `None`.
+#[cfg(not(feature = "exec"))]
+pub(crate) enum Engine {}
+
+#[cfg(not(feature = "exec"))]
+impl Engine {
+    fn install(&self, _: &mut dyn Executor) -> Result<()> {
+        match *self {}
+    }
+}
+
 /// Per-database tuning knobs, passed to [`Db::open`].
 ///
 /// `OpenOptions::default()` suits most applications. Override `clock` to make
 /// transaction instants deterministic in tests, `readers` to size the read pool,
 /// and `path_max_hops` / `path_max_states` to bound path searches.
 ///
+/// The query-engine fields (`planner`, `query_engine`, `path_max_hops`,
+/// `path_max_states`) exist only with the `exec` cargo feature (implied by
+/// `sparql` and `cypher`). Build the options with `..OpenOptions::default()`, so
+/// that the same code compiles whichever features are enabled.
+///
 /// ```
 /// # use tiramemsu::*;
 /// # let dir = tempfile::tempdir().unwrap();
-/// let opts = OpenOptions { readers: 2, path_max_states: 100_000, ..OpenOptions::default() };
+/// let opts = OpenOptions { readers: 2, text_index: true, ..OpenOptions::default() };
 /// let db = Db::open(dir.path().join("m.db"), opts)?;
 /// assert_eq!(db.reader_count(), 2);
 /// # Ok::<(), Error>(())
@@ -50,20 +71,24 @@ pub struct OpenOptions {
     /// Run `PRAGMA optimize` every this many commits, and after a commit that
     /// inserted at least this many statements (default 1000).
     pub optimize_every: u64,
+    #[cfg(feature = "exec")]
     /// Query planner options (default: SQL routing, LFTJ off). Setting
     /// `planner.lftj.enabled` installs the native cyclic-join operator
     /// ([`LftjOperator`], the `tm_lftj` table function) and lets the planner route
     /// pure cyclic BGPs to it when the estimate reaches
     /// `planner.lftj.min_rows_estimate`; see [`LftjConfig`](crate::LftjConfig).
     pub planner: PlannerOptions,
+    #[cfg(feature = "exec")]
     /// Open the query engine (default true). It needs the host capabilities
     /// `functions` and `vtab`; opening fails with `MissingCapability` on a host
     /// without them. `false` opens the `tm-core` tier only (no `execute_ir`).
     pub query_engine: bool,
+    #[cfg(feature = "exec")]
     /// The hop cap of unbounded Cypher path patterns and the default `max_hops` of
     /// `tm_path` in `TRAIL` mode (default 15). Reaching it stops paths without an
     /// error.
     pub path_max_hops: u32,
+    #[cfg(feature = "exec")]
     /// The bound on the search states of one path evaluation (default 1 000 000).
     /// Exceeding it fails with `PathLimitExceeded`.
     pub path_max_states: usize,
@@ -81,9 +106,11 @@ pub struct OpenOptions {
     /// Native operators registered on every connection (tests). A registered
     /// `Path` operator replaces the built-in `tm_path`.
     #[doc(hidden)]
+    #[cfg(feature = "exec")]
     pub native_operators: Vec<Arc<dyn NativeOperator>>,
 }
 
+#[cfg(feature = "exec")]
 impl OpenOptions {
     /// Registers a native operator (the `tm_path` path operator of M3, or a test
     /// operator).
@@ -102,12 +129,17 @@ impl Default for OpenOptions {
             busy_timeout: Duration::from_secs(5),
             term_cache_capacity: 16_384,
             optimize_every: 1000,
+            #[cfg(feature = "exec")]
             planner: PlannerOptions::default(),
+            #[cfg(feature = "exec")]
             query_engine: true,
+            #[cfg(feature = "exec")]
             path_max_hops: 15,
+            #[cfg(feature = "exec")]
             path_max_states: 1_000_000,
             reader_timeout: None,
             text_index: false,
+            #[cfg(feature = "exec")]
             native_operators: Vec::new(),
         }
     }
@@ -115,16 +147,17 @@ impl Default for OpenOptions {
 
 impl std::fmt::Debug for OpenOptions {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("OpenOptions")
-            .field("readers", &self.readers)
+        let mut d = f.debug_struct("OpenOptions");
+        d.field("readers", &self.readers)
             .field("busy_timeout", &self.busy_timeout)
             .field("term_cache_capacity", &self.term_cache_capacity)
-            .field("optimize_every", &self.optimize_every)
-            .field("planner", &self.planner)
+            .field("optimize_every", &self.optimize_every);
+        #[cfg(feature = "exec")]
+        d.field("planner", &self.planner)
             .field("query_engine", &self.query_engine)
             .field("path_max_hops", &self.path_max_hops)
-            .field("path_max_states", &self.path_max_states)
-            .field("reader_timeout", &self.reader_timeout)
+            .field("path_max_states", &self.path_max_states);
+        d.field("reader_timeout", &self.reader_timeout)
             .field("text_index", &self.text_index)
             .finish()
     }
@@ -170,12 +203,14 @@ pub struct Db {
     writer: Mutex<Store>,
     pool: Option<ReaderPool>,
     terms: TermReader,
-    engine: Option<Arc<QueryEngine>>,
+    engine: Option<Arc<Engine>>,
     caps: Capabilities,
+    #[cfg(feature = "exec")]
     path_max_hops: u32,
     /// `OpenOptions::reader_timeout`, also for reads served by the writer.
     reader_timeout: Option<Duration>,
     path: PathBuf,
+    #[cfg_attr(not(all(feature = "sparql", feature = "cypher")), allow(dead_code))]
     clock: Arc<dyn Clock>,
     /// The bulk import session holding the write lease (0: none).
     import_lease: AtomicU64,
@@ -215,45 +250,16 @@ impl Db {
     /// # Errors
     ///
     /// As [`Db::open`], plus `MissingCapability` when `opts.query_engine` is set and
-    /// the host lacks `functions` or `vtab`.
+    /// the host lacks `functions` or `vtab`. Without the `exec` feature no engine
+    /// is installed and only the host's required set is used.
     pub fn open_with_host(
         host: impl Host,
         path: impl AsRef<Path>,
         opts: OpenOptions,
     ) -> Result<Db> {
         let path = path.as_ref();
-        let engine = if opts.query_engine {
-            // refuse before touching the file: no query is ever planned on a host
-            // without `functions` and `vtab` (decision D22)
-            tm_exec::host::check_capabilities(host.capabilities())?;
-            let mut reg = OperatorRegistry::new();
-            if !opts
-                .native_operators
-                .iter()
-                .any(|o| o.kind() == NativeKind::Path)
-            {
-                let engine = Arc::new(PathEngine::new(PathOptions {
-                    max_hops: opts.path_max_hops,
-                    max_states: opts.path_max_states,
-                    ..PathOptions::default()
-                }));
-                reg.add(Arc::new(PathOperator::new(engine)));
-            }
-            // the cyclic-join operator is installed only when LFTJ routing is on
-            if opts.planner.lftj.enabled {
-                reg.add(Arc::new(LftjOperator));
-            }
-            for op in &opts.native_operators {
-                reg.add(op.clone());
-            }
-            Some(Arc::new(QueryEngine::new(
-                opts.planner,
-                reg,
-                opts.term_cache_capacity,
-            )))
-        } else {
-            None
-        };
+        let engine = open_engine(&host, &opts)?;
+
         let mut store = Store::open(
             &host,
             path,
@@ -295,6 +301,7 @@ impl Db {
             terms: TermReader::new(opts.term_cache_capacity),
             engine,
             caps,
+            #[cfg(feature = "exec")]
             path_max_hops: opts.path_max_hops,
             reader_timeout: opts.reader_timeout,
             path: path.to_path_buf(),
@@ -304,6 +311,7 @@ impl Db {
     }
 
     /// The database clock (`NOW()` in SPARQL).
+    #[cfg_attr(not(all(feature = "sparql", feature = "cypher")), allow(dead_code))]
     pub(crate) fn now_ms(&self) -> i64 {
         self.clock.now_ms()
     }
@@ -314,6 +322,7 @@ impl Db {
     }
 
     /// The hop cap of unbounded Cypher path patterns (`OpenOptions::path_max_hops`).
+    #[cfg(feature = "exec")]
     pub fn path_max_hops(&self) -> u32 {
         self.path_max_hops
     }
@@ -374,19 +383,22 @@ impl Db {
         &self.terms
     }
 
-    pub(crate) fn engine(&self) -> Option<&QueryEngine> {
+    #[cfg_attr(not(all(feature = "sparql", feature = "cypher")), allow(dead_code))]
+    pub(crate) fn engine(&self) -> Option<&Engine> {
         self.engine.as_deref()
     }
 
     /// Number of terms in the query engine's shared term cache (tests).
     #[doc(hidden)]
+    #[cfg(feature = "exec")]
     pub fn term_cache_len(&self) -> usize {
         self.engine.as_ref().map_or(0, |e| e.term_cache().len())
     }
 
     /// True when the query engine's shared term cache holds `id` (tests).
     #[doc(hidden)]
-    pub fn term_cache_contains(&self, id: ObjectId) -> bool {
+    #[cfg(feature = "exec")]
+    pub fn term_cache_contains(&self, id: tm_core::ObjectId) -> bool {
         self.engine
             .as_ref()
             .is_some_and(|e| e.term_cache().contains(id))
@@ -395,6 +407,7 @@ impl Db {
     /// Sets a hook run by every query between planning and its SQL statement
     /// (snapshot tests).
     #[doc(hidden)]
+    #[cfg(feature = "exec")]
     pub fn set_query_hook(&self, f: Option<Arc<dyn Fn() + Send + Sync>>) {
         if let Some(e) = &self.engine {
             e.set_test_hook(f);
@@ -485,6 +498,7 @@ impl Db {
     /// Runs `f` on the writer in one write transaction for derived records (saved
     /// answers): no transaction number, no event. Refused while a bulk import
     /// holds the write lease and inside a running transaction.
+    #[cfg_attr(not(all(feature = "sparql", feature = "cypher")), allow(dead_code))]
     pub(crate) fn derived_write<R>(
         &self,
         f: impl FnOnce(&mut dyn Executor) -> Result<R>,
@@ -604,6 +618,7 @@ impl Db {
         F: FnOnce(&mut Tx<'_>) -> Result<()>,
     {
         let _held = HeldGuard::acquire(self.id)?;
+        #[cfg(feature = "exec")]
         let engine = self.engine.clone();
         let mut guard = self.lock_bounded(false)?;
         let holder = self.import_lease.load(Ordering::Acquire);
@@ -617,6 +632,7 @@ impl Db {
         guard.defer_statistics(lease.is_some());
         armed(&mut guard, |store| {
             store.transact(opts, move |tx| {
+                #[cfg(feature = "exec")]
                 if let Some(e) = engine {
                     tx.set_extension(e);
                 }
@@ -639,7 +655,7 @@ impl Db {
     /// cancellation token cover waiting for the writer and every statement of the
     /// body, and are checked once more when the body returns; a stopped transaction
     /// rolls back and leaves no trace. The row and byte budgets cover the queries
-    /// the body runs (Cypher through [`TxCypher`](crate::TxCypher)).
+    /// the body runs (Cypher through `TxCypher`, feature `cypher`).
     ///
     /// # Errors
     ///
@@ -766,4 +782,48 @@ fn armed<R>(store: &mut Store, f: impl FnOnce(&mut Store) -> Result<R>) -> Resul
         Ok(r) => r,
         Err(panic) => resume_unwind(panic),
     }
+}
+
+/// The query engine of `opts`: `None` when `opts.query_engine` is off. Refused
+/// with `MissingCapability` before the file is touched on a host without
+/// `functions` and `vtab`.
+#[cfg(feature = "exec")]
+fn open_engine(host: &impl Host, opts: &OpenOptions) -> Result<Option<Arc<Engine>>> {
+    if !opts.query_engine {
+        return Ok(None);
+    }
+    // refuse before touching the file: no query is ever planned on a host
+    // without `functions` and `vtab` (decision D22)
+    tm_exec::host::check_capabilities(host.capabilities())?;
+    let mut reg = OperatorRegistry::new();
+    if !opts
+        .native_operators
+        .iter()
+        .any(|o| o.kind() == NativeKind::Path)
+    {
+        let engine = Arc::new(PathEngine::new(PathOptions {
+            max_hops: opts.path_max_hops,
+            max_states: opts.path_max_states,
+            ..PathOptions::default()
+        }));
+        reg.add(Arc::new(PathOperator::new(engine)));
+    }
+    // the cyclic-join operator is installed only when LFTJ routing is on
+    if opts.planner.lftj.enabled {
+        reg.add(Arc::new(LftjOperator));
+    }
+    for op in &opts.native_operators {
+        reg.add(op.clone());
+    }
+    Ok(Some(Arc::new(Engine::new(
+        opts.planner,
+        reg,
+        opts.term_cache_capacity,
+    ))))
+}
+
+/// Without the `exec` feature no engine is ever installed.
+#[cfg(not(feature = "exec"))]
+fn open_engine(_host: &impl Host, _opts: &OpenOptions) -> Result<Option<Arc<Engine>>> {
+    Ok(None)
 }

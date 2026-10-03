@@ -1,6 +1,7 @@
 //! Runs the SPARQL half of the differential corpus (task 11.4). The Cypher half
 //! and the `@lat` reference for `tests#Query#Differential SPARQL Cypher` live in
 //! the harness of `add-cypher-frontend`.
+#![cfg(all(feature = "sparql", feature = "cypher"))] // the shared corpus module compiles both sides
 mod differential;
 mod sparql_common;
 

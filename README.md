@@ -35,6 +35,7 @@ A knowledge graph stores facts. An agent also needs to say *how sure am I*, *whe
 - **Conflict review.** `View::conflicts` lists subject/predicate pairs whose distinct objects hold at the same valid time, with the evidence behind each value (statement ids, authors, sources, confirmations, confidence when stated), never a made-up score and never a write. `Db::preview_bundle` runs an import as a dry run and shows proposed and reused facts, cardinality retractions and schema failures before anything is committed.
 - **MCP server.** `tiramemsu-mcp` serves one memory file to Claude Code, Claude Desktop or any MCP client over stdio (`claude mcp add tiramemsu -- tiramemsu-mcp --db ./memory.db`): typed `assert`, `confirm`, `supersede`, `query`, `dependents`, bundle, `conflicts`, `preview_bundle`, `text_search` and saved-answer tools, a read-only mode, per-call budgets, and query results that name their view and say whether their provenance is complete.
 - **Embedded.** One SQLite file (WAL, STRICT). The core reaches SQLite through a small synchronous executor trait.
+- **Pay for what you use.** The query engine and the SPARQL and Cypher front ends are optional cargo features of the `tiramemsu` crate (`exec`, `sparql`, `cypher`; all on by default). `default-features = false` keeps transactions, views, bundles, text recall and conflict review and links no parser.
 
 ### What agents are saying
 
@@ -152,6 +153,7 @@ cargo build --workspace
 cargo test --workspace                 # 1 109 tests; PROPTEST_CASES=64 to speed up property tests
 cargo clippy --workspace --all-targets -- -D warnings
 lat check                              # design graph and code refs stay in sync
+scripts/feature-matrix.sh core         # core | exec | sparql | cypher | default | bindings: deps, check, tests
 ```
 
 ## Status

@@ -1,5 +1,6 @@
 //! `sparql-update`: DELETE/INSERT WHERE, time-scoped WHERE and store constraints
 //! (tasks 8.4 and 8.6).
+#![cfg(feature = "sparql")]
 mod sparql_common;
 use sparql_common::*;
 use tiramemsu::*;

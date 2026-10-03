@@ -1,4 +1,5 @@
 //! `cypher-read`: read clauses, classification, patterns, expressions, values.
+#![cfg(feature = "cypher")]
 mod cypher_common;
 use cypher_common::*;
 use tiramemsu::*;

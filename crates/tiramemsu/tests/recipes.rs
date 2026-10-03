@@ -1,5 +1,6 @@
 //! Layer recipes (`lat.md/recipes.md`): questions answered by combining statement
 //! ids, layers, transaction metadata, paths and time scopes, with no new feature.
+#![cfg(all(feature = "sparql", feature = "cypher"))]
 mod sparql_common;
 use sparql_common::*;
 use tiramemsu::*;

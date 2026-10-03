@@ -1,4 +1,5 @@
 //! `cypher-write`: SET, REMOVE, DELETE, DETACH DELETE, schema rules, time rules.
+#![cfg(feature = "cypher")]
 mod cypher_common;
 use cypher_common::*;
 use tiramemsu::*;

@@ -2,6 +2,7 @@
 //! view-aware recall over dictionary and inline strings, deterministic ranking with
 //! absent evidence reported as absent, the derived index lifecycle (format
 //! migration, rebuild, hosts without FTS5) and the SPARQL and Cypher entrypoints.
+#![cfg(all(feature = "sparql", feature = "cypher"))]
 
 use std::path::{Path, PathBuf};
 

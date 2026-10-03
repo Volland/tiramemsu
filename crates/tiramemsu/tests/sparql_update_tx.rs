@@ -1,4 +1,5 @@
 //! `sparql-update`: transactions, the report, unsupported operations and parse errors.
+#![cfg(feature = "sparql")]
 mod sparql_common;
 use sparql_common::*;
 use tiramemsu::*;

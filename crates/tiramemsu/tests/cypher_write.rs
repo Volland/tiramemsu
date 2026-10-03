@@ -1,4 +1,5 @@
 //! `cypher-write`: entry points, CREATE, MERGE.
+#![cfg(feature = "cypher")]
 mod cypher_common;
 use cypher_common::*;
 use tiramemsu::*;

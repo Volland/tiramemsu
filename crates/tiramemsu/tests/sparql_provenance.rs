@@ -1,4 +1,5 @@
 //! `query-provenance`: which stored statements produced each SPARQL solution.
+#![cfg(all(feature = "sparql", feature = "cypher"))] // uses the shared differential corpus
 mod differential;
 mod sparql_common;
 use proptest::prelude::*;

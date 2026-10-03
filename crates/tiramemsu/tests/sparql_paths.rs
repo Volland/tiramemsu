@@ -1,5 +1,6 @@
 //! `path-lowering` (SPARQL): recursive and non-recursive property paths, endpoint
 //! binding, temporal scope, layer hops and the unsupported forms.
+#![cfg(feature = "sparql")]
 mod sparql_common;
 use sparql_common::*;
 use tiramemsu::*;

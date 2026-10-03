@@ -1,5 +1,7 @@
 //! Spec `statement-dependents` through the facade: `View::dependents` against the
 //! dry-run cascade and the layer path `(^sys:subject|^sys:object)*`.
+// the generator serves only the path comparison, which needs the query engine
+#![cfg_attr(not(feature = "exec"), allow(dead_code, unused_imports))]
 
 use std::collections::BTreeSet;
 
@@ -108,6 +110,7 @@ fn apply(db: &Db, op: &GenOp, known: &[Eid]) -> Result<TxReport> {
 // path engine's inverse layer hops. They must agree on every live statement.
 // @lat: [[tests#Dependents#Dependents Match Cascade And Path]]
 #[test]
+#[cfg(feature = "exec")] // compares with `View::path`
 fn prop_dependents_match_cascade_and_path() {
     let cfg = ProptestConfig::with_cases(proptest_cases(32));
     proptest!(cfg, |(ops in prop::collection::vec(op_strategy(), 1..40))| {
