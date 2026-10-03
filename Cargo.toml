@@ -3,7 +3,7 @@ resolver = "2"
 members = ["crates/*", "bindings/json", "bindings/node", "bindings/python"]
 
 [workspace.package]
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 license = "MIT OR Apache-2.0"
 rust-version = "1.88"
@@ -20,10 +20,10 @@ unsafe_code = "forbid"
 all = { level = "warn", priority = -1 }
 
 [workspace.dependencies]
-tm-core = { path = "crates/tm-core", version = "0.1.0" }
-tm-rusqlite = { path = "crates/tm-rusqlite", version = "0.1.0" }
-tiramemsu = { path = "crates/tiramemsu", version = "0.1.0" }
-tm-ir = { path = "crates/tm-ir", version = "0.1.0" }
-tm-exec = { path = "crates/tm-exec", version = "0.1.0" }
-tm-sparql = { path = "crates/tm-sparql", version = "0.1.0" }
-tm-cypher = { path = "crates/tm-cypher", version = "0.1.0" }
+tm-core = { path = "crates/tm-core", version = "0.2.0" }
+tm-rusqlite = { path = "crates/tm-rusqlite", version = "0.2.0" }
+tiramemsu = { path = "crates/tiramemsu", version = "0.2.0" }
+tm-ir = { path = "crates/tm-ir", version = "0.2.0" }
+tm-exec = { path = "crates/tm-exec", version = "0.2.0" }
+tm-sparql = { path = "crates/tm-sparql", version = "0.2.0" }
+tm-cypher = { path = "crates/tm-cypher", version = "0.2.0" }
