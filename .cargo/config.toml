@@ -1,0 +1,10 @@
+# Settings for the WebAssembly build (OpenSpec change `add-wasm-sqlite-host`).
+# Native builds are unaffected.
+[target.wasm32-unknown-unknown]
+# `cargo test --target wasm32-unknown-unknown` runs the tests under Node.js with
+# wasm-bindgen-test (install the `wasm-bindgen-cli` matching Cargo.lock).
+runner = "wasm-bindgen-test-runner"
+# oxrdf, behind the SPARQL front end, draws random blank-node ids through
+# getrandom 0.3, whose browser backend needs this cfg as well as its `wasm_js`
+# feature. Downstream crates building the SPARQL tier for the web set it too.
+rustflags = ['--cfg', 'getrandom_backend="wasm_js"']

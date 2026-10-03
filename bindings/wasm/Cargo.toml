@@ -1,0 +1,42 @@
+[package]
+name = "tiramemsu-wasm"
+description = "WebAssembly binding of tiramemsu for a Web Worker: the JSON bridge on SQLite compiled to WASM with memory or OPFS storage"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+readme = "README.md"
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+rust-version.workspace = true
+# Shipped as a wasm-bindgen package (see README), like the Node and Python
+# bindings it is not published to crates.io.
+publish = false
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+tiramemsu = { workspace = true, features = ["sparql", "cypher"] }
+tiramemsu-json = { workspace = true }
+tm-wasm = { workspace = true }
+serde_json = "1"
+
+[target.'cfg(all(target_family = "wasm", target_os = "unknown"))'.dependencies]
+wasm-bindgen = "0.2"
+wasm-bindgen-futures = "0.4"
+# oxrdf draws random blank-node ids; the cfg `getrandom_backend="wasm_js"` is set
+# in `.cargo/config.toml`
+getrandom = { version = "0.3", features = ["wasm_js"] }
+
+[dev-dependencies]
+tempfile = "3"
+
+[target.'cfg(all(target_family = "wasm", target_os = "unknown"))'.dev-dependencies]
+wasm-bindgen-test = "0.3"
+js-sys = "0.3"
+
+# No `[lints] workspace = true`: the wasm-bindgen macros emit `unsafe` glue and
+# the workspace forbids it (as for the Node and Python bindings).
+[lints.clippy]
+all = { level = "warn", priority = -1 }

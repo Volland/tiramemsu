@@ -391,8 +391,9 @@ impl Default for HostOptions {
 
 /// A SQLite host: opens executors on a database file.
 ///
-/// [`Store::open`](crate::Store::open) takes a `&dyn Host`. The only host in this
-/// workspace is `RusqliteHost`, in the `tm-rusqlite` crate. A host that declares no
+/// [`Store::open`](crate::Store::open) takes a `&dyn Host`. The hosts in this
+/// workspace are `RusqliteHost` (`tm-rusqlite`, bundled SQLite) and `WasmHost`
+/// (`tm-wasm`, SQLite compiled to WebAssembly). A host that declares no
 /// `reader_pool` is never asked for [`Host::open_reader`].
 pub trait Host: Send + Sync {
     /// The capabilities this host declares.

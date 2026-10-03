@@ -126,6 +126,14 @@ Text recall: `Database(text_index=True)`, `View.text_search(text, mode=, graphs=
 
 A `datetime` is written as an `xsd:dateTime` literal (a naive one is taken as UTC) and a `date` as `xsd:date`, and both are read back as the same Python types. `supersede` tells an omitted bound from `None`, which clears it. Wheels and the sdist are built by `.github/workflows/python-wheels.yml`; see `docs/python-publishing.md`.
 
+## WebAssembly
+
+`tiramemsu-wasm` (`bindings/wasm`) serves the JSON bridge from a Web Worker on the `tm-wasm` host ([[architecture#WebAssembly Host]]); it is built with wasm-bindgen and not published.
+
+The JavaScript surface is the class `Database` (`await Database.open(config)`, `call(op, args)`, `capabilities()`, `exportFile()`, `close()`) and the functions `importFile(config, bytes)` and `runtimeInfo()`. The configuration is `{"storage": "memory" | "opfs", "path", "journal": "rollback" | "wal", "queryEngine", "opfs", "options"}`; `journal` is required and `wal` fails at open on both browser VFSes.
+
+Operations and errors are those of the Node.js `call`: results are JSON text, and failures throw `Error("tiramemsu:{code,message}")`. `budget` arguments, the bulk import operations and `cancel` are refused with `Unsupported`, since the target has no `Instant` and a worker runs one call at a time. `Database::open_options` and `Database::from_db` in the bridge let the binding open the `Db` on its own host.
+
 ## Test Strategy
 
 Each binding runs the same story as the time-travel article against a real file, so the two packages and the article cannot drift apart.

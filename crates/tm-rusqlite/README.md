@@ -2,7 +2,7 @@
 
 The rusqlite host for tiramemsu: bundled SQLite behind the `tm-core` `Host` and `Executor` traits.
 
-Tiramemsu is a layered, never-forget memory for agents, stored in one SQLite file. `tm-core` reaches SQLite only through its own traits and links no SQLite binding; this crate implements those traits on [`rusqlite`](https://crates.io/crates/rusqlite) with a bundled SQLite. It is the only host in the workspace.
+Tiramemsu is a layered, never-forget memory for agents, stored in one SQLite file. `tm-core` reaches SQLite only through its own traits and links no SQLite binding; this crate implements those traits on [`rusqlite`](https://crates.io/crates/rusqlite) with a bundled SQLite. It is the native host; [`tm-wasm`](https://crates.io/crates/tm-wasm) reuses its executor on SQLite compiled to WebAssembly.
 
 ```text
  tiramemsu      facade: Db, View, Tx        <- most applications stop here

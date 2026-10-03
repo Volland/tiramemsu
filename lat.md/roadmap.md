@@ -14,7 +14,7 @@ The core comes first. After the IR lands, the two front ends and the path engine
 | M2b | `add-cypher-frontend` | `tm-cypher`: openCypher subset + dual view + time clauses + differential suite | M1 |
 | M3 | `add-path-engine` | Native path operator, `tm_path` table function, SPARQL/Cypher path lowering | M1 (M2 for lowering) |
 | M4 | `add-lftj-operator` (implemented, opt-in) | Leapfrog triejoin for pure cyclic patterns as `tm_lftj`, with routing reasons in explain ([[query#Physical Planning#LFTJ]]) | M1, benchmark evidence |
-| M5 | bindings: Python, Node and `add-mcp-adapter` done; WASM future | Python and Node over the JSON bridge, the `tiramemsu-mcp` stdio server ([[api#MCP Tools]]) | M0–M3 |
+| M5 | bindings: Python, Node, `add-mcp-adapter` and `add-wasm-sqlite-host` done | Python, Node and WASM over the JSON bridge, the `tiramemsu-mcp` stdio server ([[api#MCP Tools]]), the WebAssembly host ([[architecture#WebAssembly Host]]) | M0–M3 |
 | M6 | future: `add-crypto-shredding` | `sys:sensitive`, `SEALED` terms, `seal_key`, erase transaction. See [[time-model#Erasure]] | M0 |
 | M7 | `add-text-retrieval` (implemented); vectors future | FTS5 over string terms (`term_fts`, format 2) with evidence ranking from Rust, SPARQL and Cypher ([[query#Text Recall]]); later, on hosts with vector support, k-nearest-neighbour indexes defined as `sys:` triples | M1, M2 |
 

@@ -143,3 +143,45 @@ jobs:
           npm run build:native
           npm run build
           npm test
+
+  # The WASM SQLite host and binding (spec wasm-sqlite-host): clippy on wasm32,
+  # the host and the JavaScript surface under Node.js (memory VFS), the native <->
+  # WASM file handoff, a smoke test of the generated package, and OPFS in a
+  # dedicated worker in headless Chrome.
+  wasm:
+    runs-on: ubuntu-latest
+    env:
+      WASM_BINDGEN_VERSION: "0.2.129"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.91.1"
+          targets: wasm32-unknown-unknown
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: wasm
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: wasm-bindgen-cli (the version in Cargo.lock)
+        run: |
+          grep -A1 'name = "wasm-bindgen"' Cargo.lock | grep -q "version = \"$WASM_BINDGEN_VERSION\""
+          cargo install wasm-bindgen-cli --version "$WASM_BINDGEN_VERSION" --locked
+      - name: Clippy (wasm32)
+        run: cargo clippy -p tm-wasm -p tiramemsu-wasm --target wasm32-unknown-unknown --all-targets -- -D warnings
+      - name: Host and binding tests under Node.js
+        run: cargo test -p tm-wasm -p tiramemsu-wasm --target wasm32-unknown-unknown --tests
+      - name: Native <-> WASM file handoff
+        run: scripts/wasm-interop.sh
+      - name: Generated package smoke test
+        run: |
+          cargo build -p tiramemsu-wasm --target wasm32-unknown-unknown --release
+          wasm-bindgen --target nodejs --out-dir pkg target/wasm32-unknown-unknown/release/tiramemsu_wasm.wasm
+          node bindings/wasm/tests/node-smoke.cjs pkg
+          wasm-bindgen --target web --out-dir pkg-web target/wasm32-unknown-unknown/release/tiramemsu_wasm.wasm
+      - name: OPFS in a dedicated worker (headless Chrome)
+        run: |
+          export CHROMEDRIVER="$CHROMEWEBDRIVER/chromedriver"
+          cargo test -p tm-wasm --target wasm32-unknown-unknown --features opfs-tests --test opfs

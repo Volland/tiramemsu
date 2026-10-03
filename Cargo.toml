@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/*", "bindings/json", "bindings/node", "bindings/python"]
+members = ["crates/*", "bindings/json", "bindings/node", "bindings/python", "bindings/wasm"]
 
 [workspace.package]
 version = "0.2.0"
@@ -29,3 +29,4 @@ tm-sparql = { path = "crates/tm-sparql", version = "0.2.0" }
 tm-cypher = { path = "crates/tm-cypher", version = "0.2.0" }
 tiramemsu-json = { path = "bindings/json", version = "0.2.0" }
 tiramemsu-mcp = { path = "crates/tiramemsu-mcp", version = "0.2.0" }
+tm-wasm = { path = "crates/tm-wasm", version = "0.2.0" }

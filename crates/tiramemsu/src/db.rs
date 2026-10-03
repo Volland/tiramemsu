@@ -200,8 +200,12 @@ impl Drop for HeldGuard {
 /// declares `reader_pool`, a pool of read-only connections on the same WAL file.
 pub struct Db {
     id: u64,
-    writer: Mutex<Store>,
+    /// Declared before `writer` so the readers close first: the last connection
+    /// to close checkpoints the WAL into the file and removes it only when it can
+    /// write, so a closed database is one self-contained file (which the WASM
+    /// host imports without its `-wal`).
     pool: Option<ReaderPool>,
+    writer: Mutex<Store>,
     terms: TermReader,
     engine: Option<Arc<Engine>>,
     caps: Capabilities,

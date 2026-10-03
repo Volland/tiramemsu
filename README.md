@@ -9,7 +9,7 @@ An embedded graph database on SQLite. Every fact has an id, so facts can carry l
 
 <p align="center"><a href="site/articles/layered-graphs.html">Layered graphs, explained</a> · <a href="site/articles/tiramemsu-vs-oxilite.html">Tiramemsu vs oxilite</a> · <a href="site/articles/metagraphs.html">Metagraphs</a> · <a href="lat.md/">Design (lat.md)</a> · <a href="openspec/specs/">Specs (OpenSpec)</a></p>
 
-> **Status: new.** Designed and implemented in September 2026 as one Rust library. It is not published to crates.io, has no server yet, and runs on rusqlite only. Node.js and Python packages exist in [`bindings/`](bindings/) but are not published either. What is measured and what is not is listed under [Status](#status).
+> **Status: new.** Designed and implemented in September 2026 as one Rust library. It is not published to crates.io, has no server yet, and runs on rusqlite natively and on SQLite compiled to WebAssembly in the browser. Node.js, Python and WebAssembly packages exist in [`bindings/`](bindings/) but are not published either. What is measured and what is not is listed under [Status](#status).
 
 ## Why
 
@@ -35,6 +35,7 @@ A knowledge graph stores facts. An agent also needs to say *how sure am I*, *whe
 - **Conflict review.** `View::conflicts` lists subject/predicate pairs whose distinct objects hold at the same valid time, with the evidence behind each value (statement ids, authors, sources, confirmations, confidence when stated), never a made-up score and never a write. `Db::preview_bundle` runs an import as a dry run and shows proposed and reused facts, cardinality retractions and schema failures before anything is committed.
 - **MCP server.** `tiramemsu-mcp` serves one memory file to Claude Code, Claude Desktop or any MCP client over stdio (`claude mcp add tiramemsu -- tiramemsu-mcp --db ./memory.db`): typed `assert`, `confirm`, `supersede`, `query`, `dependents`, bundle, `conflicts`, `preview_bundle`, `text_search` and saved-answer tools, a read-only mode, per-call budgets, and query results that name their view and say whether their provenance is complete.
 - **Embedded.** One SQLite file (WAL, STRICT). The core reaches SQLite through a small synchronous executor trait.
+- **In the browser.** The `tm-wasm` host runs the whole engine, query languages included, on SQLite compiled to WebAssembly in a Web Worker, with the database in memory or in OPFS; `bindings/wasm` serves the JSON bridge to JavaScript. Capabilities are probed from the running SQLite, a journal mode the browser VFS cannot keep fails at open, and the files open natively and back.
 - **Pay for what you use.** The query engine and the SPARQL and Cypher front ends are optional cargo features of the `tiramemsu` crate (`exec`, `sparql`, `cypher`; all on by default). `default-features = false` keeps transactions, views, bundles, text recall and conflict review and links no parser.
 
 ### What agents are saying
@@ -154,6 +155,8 @@ cargo test --workspace                 # 1 109 tests; PROPTEST_CASES=64 to speed
 cargo clippy --workspace --all-targets -- -D warnings
 lat check                              # design graph and code refs stay in sync
 scripts/feature-matrix.sh core         # core | exec | sparql | cypher | default | bindings: deps, check, tests
+cargo test -p tm-wasm --target wasm32-unknown-unknown --tests   # the WASM host under Node.js (wasm-bindgen-cli 0.2.129)
+scripts/wasm-interop.sh                # a file handed native -> WASM -> native
 ```
 
 ## Status
@@ -165,20 +168,20 @@ scripts/feature-matrix.sh core         # core | exec | sparql | cypher | default
 | Cypher | 2 615 of 3 880 openCypher TCK scenarios (67 %). Temporal types, `CALL`, and a few dual-view cases are deferred and listed in `crates/tm-cypher/tests/tck/allowlist.txt` |
 | Speed | Raw SQLite lookups on the schema take about 4 µs at 11 million statements; about 150 bytes per statement with all indexes. See [`bench/`](bench/) |
 
-**Known limits.** As-of lookups slow down as one key collects many updates. A membership per statement roughly doubles the file. SPARQL decimals come back as doubles. Recursive paths add no statement ids to query provenance (results say so: `provenance_gaps`). There is no WASM binding or network server yet; the MCP server is local stdio only. The comparison with oxilite's change-log approach to history is not benchmarked head to head.
+**Known limits.** As-of lookups slow down as one key collects many updates. A membership per statement roughly doubles the file. SPARQL decimals come back as doubles. Recursive paths add no statement ids to query provenance (results say so: `provenance_gaps`). There is no network server yet; the MCP server is local stdio only. In the browser the database uses a rollback journal (no WAL readers) and refuses query budgets and bulk import sessions. The comparison with oxilite's change-log approach to history is not benchmarked head to head.
 
 ## How it differs from oxilite
 
-[oxilite](https://github.com/Volland/oxilite) is a shipped, Oxigraph-compatible RDF database on SQLite by the same author. It stores quads and uses reifiers for annotations, keeps history in a change log, and runs on D1, WebAssembly and more. Tiramemsu stores statements with ids, keeps lifetime in the row and is bitemporal, but it is new, runs on rusqlite only and has none of oxilite's reasoning or validation, and its Node.js and Python packages are not published yet. [The article](site/articles/tiramemsu-vs-oxilite.html) has the details and a benchmark.
+[oxilite](https://github.com/Volland/oxilite) is a shipped, Oxigraph-compatible RDF database on SQLite by the same author. It stores quads and uses reifiers for annotations, keeps history in a change log, and runs on D1, WebAssembly and more. Tiramemsu stores statements with ids, keeps lifetime in the row and is bitemporal, but it is new, runs on rusqlite and in the browser on SQLite compiled to WebAssembly (not on D1), and has none of oxilite's reasoning or validation, and its Node.js and Python packages are not published yet. [The article](site/articles/tiramemsu-vs-oxilite.html) has the details and a benchmark.
 
 ## Repository
 
 | Path | Contents |
 |---|---|
-| `crates/` | The seven crates |
+| `crates/` | The crates: core, hosts (`tm-rusqlite`, `tm-wasm`), query engine and front ends, facade, MCP server |
 | `lat.md/` | The design as a cross-linked knowledge graph: architecture, data model, time model, storage, query, tests |
 | `openspec/specs/` | Requirements with scenarios, one folder per capability; `openspec/changes/archive/` has the changes that built them |
-| `bindings/` | The JSON bridge, and the Node.js (`@tiramemsu/node`) and Python (`tiramemsu`) packages built on it; publishing guides in `docs/` |
+| `bindings/` | The JSON bridge, and the Node.js (`@tiramemsu/node`), Python (`tiramemsu`) and WebAssembly (`tiramemsu-wasm`) packages built on it; publishing guides in `docs/` |
 | `bench/` | SQLite versus DuckDB, and ids versus reifiers, benchmarks with results |
 | `docs/design-options.md` | The option analysis behind the design decisions |
 | `site/` | The static website (GitHub Pages) and its articles |

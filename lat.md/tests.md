@@ -1192,3 +1192,101 @@ With `cypher`, `Db::cypher_write`, a variable-length `MATCH` and `TxCypher` insi
 ### Default Surface
 
 The default build keeps both front ends and saved answers: a SPARQL insert is read by Cypher and a saved SPARQL answer starts fresh.
+
+## WASM SQLite Host
+
+Spec `wasm-sqlite-host`: the WebAssembly host in `crates/tm-wasm/tests` and its binding in `bindings/wasm/tests` ([[architecture#WebAssembly Host]], [[bindings#WebAssembly]]).
+
+`native_host.rs` runs the host natively on files beside `tm-rusqlite`; `wasm_host.rs` runs it in WebAssembly under Node.js on the memory VFS; `opfs.rs` runs it in a dedicated worker in headless Chrome. CI's `wasm` job runs all three and `scripts/wasm-interop.sh`.
+
+### Probed capabilities
+
+The native probe declares `functions`, `vtab` and `fts5`, `stat4` exactly when `PRAGMA compile_options` lists it, and never `reader_pool`; a database on the host has no readers.
+
+### Core-only runtime
+
+A host limited to the `tm-core` tier refuses a query engine with `MissingCapability` before creating the file, runs transactions, views, history and bundles, and exposes no registration hooks.
+
+### Native operator support
+
+With the engine on, every scalar and aggregate UDF and the `tm_path`, `tm_text`, `tm_lftj` and `rarray` table functions are registered on the writer, and SPARQL, paths, Cypher and text recall run.
+
+### Unsupported journal
+
+`Journal::Wal` on a database the runtime keeps in another mode fails with `MissingCapability` naming both modes; memory and OPFS storage are `Unsupported` natively; each policy holds its mode after the engine's WAL switch.
+
+### Native interchange
+
+A file the WASM host wrote opens with `tm-rusqlite` with identical terms, statements, transactions and id counters; the native host continues it, closes without a `-wal`, and the WASM host opens it again.
+
+### Byte export and import
+
+`export_file` returns the committed bytes and `import_file` stores them as a new file that opens natively with the same rows; importing over an existing file or importing non-database bytes fails.
+
+### Interrupted write
+
+A child process dies with `abort` inside a large uncommitted transaction, leaving a hot journal; reopening rolls it back to the committed fixture, no term of the lost transaction survives, and numbering continues.
+
+### Restart
+
+After a commit and a close, a reopened database shows the fact and the next transaction is number 2.
+
+### Cross-target handoff
+
+Native side of `scripts/wasm-interop.sh`: writes the fixture and its row dump for the WebAssembly build, then opens the file the WebAssembly build exported, compares it row for row and continues it.
+
+### WebAssembly capabilities
+
+In WebAssembly the probe finds functions, virtual tables and FTS5 but no STAT4 and no readers (`THREADSAFE=0`); statistics still work, and reopening a file without STAT4 samples fills `sqlite_stat1`.
+
+### WebAssembly core-only runtime
+
+On the memory VFS, a host limited to the `tm-core` tier refuses the engine with `MissingCapability` and runs the fixture history.
+
+### WebAssembly operator support
+
+On the memory VFS, the query engine registers every function and table function and SPARQL, paths, Cypher and text recall run in WebAssembly.
+
+### WAL refused on the memory VFS
+
+`Journal::Wal` on the memory VFS fails with `MissingCapability` because SQLite keeps `delete`; OPFS without the installed VFS and file storage in WebAssembly fail explicitly too.
+
+### WebAssembly byte export and import
+
+A memory-VFS file exports as SQLite bytes, imports under a new name (not over an existing one) with identical rows, and continues its numbering.
+
+### WebAssembly interrupted write
+
+The storage contents captured while a write is open, as a stopped worker leaves them, reopen as exactly the committed state, without the uncommitted fact, and numbering continues.
+
+### WebAssembly restart
+
+On the memory VFS, a closed and reopened database shows the committed fact and the next transaction is number 2.
+
+### WebAssembly side of the handoff
+
+With `TM_WASM_INTEROP_DIR` set, imports the native file through Node's `fs`, matches the native row dump, commits one more transaction and exports the file and its dump; skipped otherwise.
+
+### OPFS in a worker
+
+In a dedicated worker, OPFS refuses `Journal::Wal`, keeps commits across a close and reopen with the query engine on, and the storage captured during an open write reopens as the committed state.
+
+### Worker binding
+
+The binding's `Worker` serves the JSON bridge on the WASM host: transactions, a property-path SPARQL query, capabilities JSON, and export and import of the file as a new database that continues numbering.
+
+### Worker refusals
+
+Budgets, bulk import operations and `cancel` are refused with `Unsupported`; a worker without the engine refuses queries; a `wal` journal the runtime cannot keep fails at open with `MissingCapability`.
+
+### Worker configuration
+
+Unknown storages, empty paths, a missing journal, unknown fields, reader options and a non-boolean `queryEngine` are `InvalidArgument`; memory storage on a native target is `Unsupported`.
+
+### JavaScript API
+
+Through wasm-bindgen in WebAssembly: `runtimeInfo`, `Database.open`, `call`, `capabilities`, thrown `tiramemsu:{code,message}` errors, `exportFile`, `close`, then `importFile` and a reopened copy.
+
+### JavaScript journal errors
+
+`Database.open` rejects a `wal` journal on memory storage with `MissingCapability`, and OPFS outside a dedicated worker with `MissingCapability` naming OPFS.

@@ -788,7 +788,7 @@ No code path deletes a statement, a term or a transaction. The only change to a 
 ## What it is not
 
 - Not a server. It is a library in your process; there is no network protocol, MCP server or Python, Node or WASM binding yet.
-- Not portable across SQLite hosts yet. The only host is rusqlite (`RusqliteHost`); Cloudflare D1 is unsupported because the engine reads before it writes. `Db::open_with_host` takes any `Host` implementation.
+- Two SQLite hosts: rusqlite (`RusqliteHost`, the default) and SQLite compiled to WebAssembly ([`tm-wasm`](https://crates.io/crates/tm-wasm), memory or OPFS storage in a Web Worker, rollback journal, no reader pool). Cloudflare D1 is unsupported because the engine reads before it writes. `Db::open_with_host` takes any `Host` implementation.
 - Not multi-writer. One writer at a time, by design.
 - Not a reasoner or validator: no RDFS/OWL inference and no SHACL. Predicate flags are the whole schema.
 

@@ -156,13 +156,13 @@ The error enum is `#[non_exhaustive]`. Each OpenSpec change adds the variants it
 
 ## Bindings
 
-Bindings wrap the facade crate one to one. Python, Node and the MCP server are implemented over a shared JSON bridge ([[bindings]]); the others are designed and ordered later. See [[overview#Open Inputs]].
+Bindings wrap the facade crate one to one. Python, Node, WASM and the MCP server are implemented over a shared JSON bridge ([[bindings]]); the others are designed and ordered later. See [[overview#Open Inputs]].
 
 | Binding | Crate | Notes |
 |---|---|---|
 | Python | `tiramemsu-python`, package `tiramemsu` (PyO3, maturin wheel) | Done. Transactions take a list of op dicts, or a context manager |
 | Node | `tiramemsu-node`, package `@tiramemsu/node` (napi-rs) | Done. Sync API; queries return plain JS objects |
-| WASM | `tiramemsu-wasm` | SQLite compiled to WASM with an OPFS VFS; single-threaded, reader = writer |
+| WASM | `tiramemsu-wasm` (wasm-bindgen, on the `tm-wasm` host) | Done, not published. A Web Worker class `Database` over the JSON bridge; memory or OPFS storage with a rollback journal; single-threaded, reader = writer; no budgets or bulk import ([[bindings#WebAssembly]]) |
 | MCP | `tiramemsu-mcp` (stdio JSON-RPC server, binary of the same name) | Done. Tools: `assert`, `confirm`, `supersede`, `query`, `dependents`, `export_bundle`, `import_bundle`, `conflicts`, `preview_bundle`, `text_search`, and the saved-answer tools; see [[api#MCP Tools]] |
 | SQLite extension | later | Only the `tm_path` table function and time helpers; no write API |
 

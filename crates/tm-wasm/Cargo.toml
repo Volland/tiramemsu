@@ -1,0 +1,57 @@
+[package]
+name = "tm-wasm"
+description = "Tiramemsu executor host for SQLite compiled to WebAssembly, with memory and OPFS storage"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+readme = "README.md"
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+keywords = ["wasm", "sqlite", "opfs", "graph-database", "agent-memory"]
+categories = ["database-implementations", "wasm"]
+rust-version.workspace = true
+
+[package.metadata.docs.rs]
+# `install_opfs` and `OpfsOptions` exist only on the WebAssembly target
+targets = ["wasm32-unknown-unknown", "x86_64-unknown-linux-gnu"]
+
+# OpenSpec change `add-wasm-sqlite-host`. The host reuses the `rusqlite`
+# executor of `tm-rusqlite`: on `wasm32-unknown-unknown` rusqlite links SQLite
+# through `sqlite-wasm-rs` (SQLite compiled to WASM with in-crate VFSes), on
+# native targets the bundled SQLite. The crate builds on both, so the host's
+# journal checks and capability probe are tested natively against real files.
+[dependencies]
+tm-core = { workspace = true }
+tm-rusqlite = { workspace = true }
+rusqlite = { version = "0.40", features = ["functions", "vtab", "array", "hooks"] }
+
+[target.'cfg(all(target_family = "wasm", target_os = "unknown"))'.dependencies]
+js-sys = "0.3"
+sqlite-wasm-rs = { version = "0.5", default-features = false }
+# the OPFS sync-access-handle pool VFS (dedicated Web Worker only)
+sqlite-wasm-vfs = "0.2"
+
+[features]
+# Runs `tests/opfs.rs` in a dedicated Web Worker in headless Chrome (needs
+# `CHROMEDRIVER`); test-only, it changes nothing in the library.
+opfs-tests = []
+
+[dev-dependencies]
+tiramemsu = { workspace = true }
+tm-exec = { workspace = true }
+rusqlite = { version = "0.40", features = ["functions", "vtab", "array", "hooks"] }
+
+[target.'cfg(not(target_family = "wasm"))'.dev-dependencies]
+tempfile = "3"
+
+[target.'cfg(all(target_family = "wasm", target_os = "unknown"))'.dev-dependencies]
+wasm-bindgen = "0.2"
+wasm-bindgen-test = "0.3"
+js-sys = "0.3"
+# oxrdf (behind the SPARQL front end) draws random blank-node ids; the
+# `getrandom_backend="wasm_js"` cfg is set in `.cargo/config.toml`
+getrandom = { version = "0.3", features = ["wasm_js"] }
+
+[lints]
+workspace = true

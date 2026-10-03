@@ -174,6 +174,14 @@ impl Database {
     /// patterns to the native cyclic-join operator) and `lftjMinRows` (its
     /// estimate threshold); anything else is rejected.
     pub fn open(path: &str, options: &J) -> Res<Database> {
+        let opts = Database::open_options(options)?;
+        Ok(Database::from_db(Db::open(path, opts)?))
+    }
+
+    /// The [`OpenOptions`] of a JSON `options` object, as [`Database::open`] reads
+    /// them, for a wrapper that opens the [`Db`] itself (on another host, such as
+    /// the WASM one) and then calls [`Database::from_db`].
+    pub fn open_options(options: &J) -> Res<OpenOptions> {
         let mut opts = OpenOptions::default();
         if let Some(o) = options.as_object() {
             for (k, v) in o {
@@ -207,12 +215,17 @@ impl Database {
         } else if !options.is_null() {
             return Err(arg("options must be an object"));
         }
-        Ok(Database {
-            db: Arc::new(Db::open(path, opts)?),
+        Ok(opts)
+    }
+
+    /// Serves an already open database through the bridge.
+    pub fn from_db(db: Db) -> Database {
+        Database {
+            db: Arc::new(db),
             cancels: Mutex::new(HashMap::new()),
             imports: Mutex::new(HashMap::new()),
             next_session: AtomicU64::new(1),
-        })
+        }
     }
 
     fn import_map(&self) -> std::sync::MutexGuard<'_, HashMap<u64, Session>> {
