@@ -155,6 +155,7 @@ mod tests {
             ],
             provenance: None,
             provenance_gaps: Vec::new(),
+            path_completeness: None,
         }
     }
 
@@ -166,6 +167,7 @@ mod tests {
             rows: vec![vec![Some(Value::iri("urn:tiramemsu:v:bob")), None]],
             provenance: None,
             provenance_gaps: Vec::new(),
+            path_completeness: None,
         };
         let want = r#"{"head":{"vars":["p","age"]},"results":{"bindings":[{"p":{"type":"uri","value":"urn:tiramemsu:v:bob"}}]}}"#;
         assert_eq!(write_select(&sol), want);
@@ -179,6 +181,7 @@ mod tests {
             rows: vec![vec![Some(Value::Int(41))]],
             provenance: None,
             provenance_gaps: Vec::new(),
+            path_completeness: None,
         };
         assert!(write_select(&sol).contains(
             r#"{"type":"literal","value":"41","datatype":"http://www.w3.org/2001/XMLSchema#integer"}"#

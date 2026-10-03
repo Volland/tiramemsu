@@ -7,7 +7,7 @@ use tm_core::{
     TextQuery, Triple, Value, ViewSpec,
 };
 use tm_exec::{CacheMode, Explain, PathRequest, PathRow, QueryEngine, QueryResult, TimeRespecting};
-use tm_ir::{IrQuery, Params, PathMode};
+use tm_ir::{IrQuery, Params, PathCompleteness, PathMode};
 
 use crate::budget::QueryBudget;
 use crate::db::Db;
@@ -403,6 +403,47 @@ impl<'a> View<'a> {
     /// # Ok::<(), Error>(())
     /// ```
     pub fn path_with(&self, start: ObjectId, path: &str, args: &PathArgs) -> Result<Vec<PathRow>> {
+        Ok(self.path_report(start, path, args)?.rows)
+    }
+
+    /// [`View::path_with`], with how completely the search was evaluated
+    /// ([`PathCompleteness`]): `Exhaustive` when no state was left to expand,
+    /// `StoppedAtBound` when the explicit `max_hops` stopped it with states left
+    /// (complete within the bound), `StoppedAtCap` when `args.capped` applied the
+    /// configured hop cap to an unbounded search and the cap stopped it (longer
+    /// paths may exist). A search past `OpenOptions::path_max_states` still fails
+    /// with `PathLimitExceeded` rather than returning a prefix.
+    ///
+    /// # Errors
+    ///
+    /// As [`View::path`].
+    ///
+    /// ```
+    /// # use tiramemsu::*;
+    /// # let dir = tempfile::tempdir().unwrap();
+    /// # let db = Db::open(dir.path().join("m.db"), OpenOptions::default())?;
+    /// let v = |s: &str| Value::iri(format!("urn:tiramemsu:v:{s}"));
+    /// db.transact(TxOptions::default(), |tx| {
+    ///     tx.assert(v("a"), v("next"), v("b"), Valid::ALWAYS)?;
+    ///     tx.assert(v("b"), v("next"), v("c"), Valid::ALWAYS)?;
+    ///     tx.assert(v("c"), v("next"), v("a"), Valid::ALWAYS)?; // a cycle
+    ///     Ok(())
+    /// })?;
+    /// let view = db.now();
+    /// let a = view.encode(&v("a"))?.unwrap();
+    /// let reach = view.path_report(a, "next+", &PathArgs::default())?;
+    /// assert_eq!(reach.completeness, PathCompleteness::Exhaustive);
+    /// let two = PathArgs { mode: PathMode::Trail, max_hops: 2, ..PathArgs::default() };
+    /// let r = view.path_report(a, "next+", &two)?;
+    /// assert_eq!(r.completeness, PathCompleteness::StoppedAtBound { max_hops: 2 });
+    /// // the configured cap (`OpenOptions::path_max_hops`, 15 by default) on an
+    /// // unbounded trail around the cycle
+    /// let capped = PathArgs { mode: PathMode::Trail, capped: true, ..PathArgs::default() };
+    /// let r = view.path_report(a, "next+", &capped)?;
+    /// assert_eq!(r.completeness, PathCompleteness::Exhaustive); // a trail ends after 3 hops
+    /// # Ok::<(), Error>(())
+    /// ```
+    pub fn path_report(&self, start: ObjectId, path: &str, args: &PathArgs) -> Result<PathReport> {
         let engine = self
             .engine()?
             .path_engine()
@@ -411,15 +452,22 @@ impl<'a> View<'a> {
             })?
             .clone();
         let view = self.spec;
+        let hop_cap = args.capped && args.max_hops == u32::MAX;
+        let max_hops = if hop_cap {
+            engine.options().max_hops
+        } else {
+            args.max_hops
+        };
         self.op(|| {
-            let rows = self.exec(|e, _| {
-                engine.eval(
+            let (rows, completeness) = self.exec(|e, _| {
+                engine.eval_report(
                     e,
                     &PathRequest {
                         start,
                         path,
                         mode: args.mode,
-                        max_hops: Some(args.max_hops),
+                        max_hops: Some(max_hops),
+                        hop_cap,
                         view,
                         end: None,
                         graphs: args.graphs.clone(),
@@ -435,7 +483,7 @@ impl<'a> View<'a> {
                     .sum();
                 budget::charge_bytes(rows.len() as u64 * 40 + hops * 24)?;
             }
-            Ok(rows)
+            Ok(PathReport { rows, completeness })
         })
     }
 
@@ -618,6 +666,11 @@ pub struct PathArgs {
     /// Time-respecting evaluation: valid time never goes backwards along a path, and
     /// rows carry their `arrival`. `None` = ordinary evaluation.
     pub time_respecting: Option<TimeRespecting>,
+    /// With no explicit bound (`max_hops == u32::MAX`), stop at the database's
+    /// configured hop cap (`OpenOptions::path_max_hops`) as a Cypher `*` pattern
+    /// does; [`View::path_report`] then says whether the cap cut the search.
+    /// Ignored when `max_hops` is set. Off by default.
+    pub capped: bool,
 }
 
 impl Default for PathArgs {
@@ -627,6 +680,17 @@ impl Default for PathArgs {
             max_hops: u32::MAX,
             graphs: None,
             time_respecting: None,
+            capped: false,
         }
     }
+}
+
+/// The result of [`View::path_report`]: the rows of [`View::path_with`] and how
+/// completely the search was evaluated.
+#[derive(Clone, Debug, PartialEq)]
+pub struct PathReport {
+    /// The rows, as [`View::path_with`] returns them.
+    pub rows: Vec<PathRow>,
+    /// `Exhaustive`, `StoppedAtBound` or `StoppedAtCap`.
+    pub completeness: PathCompleteness,
 }

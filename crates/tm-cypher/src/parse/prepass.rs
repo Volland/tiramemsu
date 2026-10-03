@@ -1,11 +1,12 @@
 //! The extension pre-pass: recognises `USE AS OF | HISTORY | VALID AT` at scope
-//! starts and `REPEATABLE ELEMENTS` / `DIFFERENT RELATIONSHIPS` after `MATCH`,
-//! records them, and blanks them with spaces so that every span of the upstream
-//! parser still refers to the original text (design Decision 2).
+//! starts, and `REPEATABLE ELEMENTS` / `DIFFERENT RELATIONSHIPS` and `TIME
+//! RESPECTING [AFTER t] [ARRIVAL AS name]` after `MATCH`, records them, and blanks
+//! them with spaces so that every span of the upstream parser still refers to the
+//! original text (design Decision 2).
 
 use open_cypher::{lex, Keyword, Token, TokenKind};
 
-use crate::ast::{MatchModeExt, TimeArg, TimeSel, TxClause};
+use crate::ast::{MatchModeExt, Name, TemporalMatch, TimeArg, TimeSel, TxClause};
 use crate::error::{CResult, CypherError};
 use crate::span::Span;
 
@@ -29,6 +30,15 @@ pub struct MatchExt {
     pub mode: MatchModeExt,
 }
 
+/// A recognised `TIME RESPECTING …` after `MATCH`.
+#[derive(Clone, Debug, PartialEq)]
+pub struct TemporalExt {
+    /// Start of the clause (`OPTIONAL` or `MATCH`).
+    pub clause_start: usize,
+    /// The modifier.
+    pub temporal: TemporalMatch,
+}
+
 /// The output of the pre-pass.
 #[derive(Debug)]
 pub struct Prepass {
@@ -38,6 +48,8 @@ pub struct Prepass {
     pub scopes: Vec<ScopeExt>,
     /// Match modes.
     pub matches: Vec<MatchExt>,
+    /// Time-respecting modifiers.
+    pub temporals: Vec<TemporalExt>,
 }
 
 struct Cur<'a> {
@@ -88,6 +100,17 @@ fn time_arg(c: &mut Cur, what: &str) -> CResult<(TimeArg, Span)> {
         ));
     };
     let sp: Span = t.span.into();
+    // a negative integer: `-` then the digits
+    if t.kind == TokenKind::Minus && c.peek(1).map(|x| x.kind) == Some(TokenKind::Integer) {
+        let n = c.peek(1).unwrap();
+        let txt = c.text(n).replace('_', "");
+        let end: Span = n.span.into();
+        let v: i64 = format!("-{txt}")
+            .parse()
+            .map_err(|_| CypherError::parse(sp.cover(end), "integer out of range"))?;
+        c.i += 2;
+        return Ok((TimeArg::Int(v), sp.cover(end)));
+    }
     match t.kind {
         TokenKind::Integer => {
             c.i += 1;
@@ -193,6 +216,52 @@ fn use_clause(c: &mut Cur) -> CResult<TimeSel> {
     })
 }
 
+/// Parses `TIME RESPECTING [AFTER t] [ARRIVAL AS name]` at the cursor (on
+/// `TIME`); the cursor ends after the modifier.
+// @lat: [[query#Temporal Path Syntax#Cypher Temporal Paths]]
+fn temporal_match(c: &mut Cur) -> CResult<TemporalMatch> {
+    let start: Span = c.peek(0).unwrap().span.into();
+    let mut end: Span = c.peek(1).unwrap().span.into();
+    c.i += 2;
+    let mut after = None;
+    if c.is_word(c.peek(0), "after") {
+        c.i += 1;
+        let (a, sp) = time_arg(c, "TIME RESPECTING AFTER")?;
+        end = sp;
+        after = Some((a, sp));
+    }
+    let mut arrival = None;
+    if c.is_word(c.peek(0), "arrival") {
+        let kw: Span = c.peek(0).unwrap().span.into();
+        let as_ok = matches!(c.peek(1), Some(t) if t.kind == TokenKind::Keyword(Keyword::As));
+        let name = c
+            .peek(2)
+            .filter(|t| matches!(t.kind, TokenKind::Identifier | TokenKind::EscapedIdentifier));
+        let (true, Some(n)) = (as_ok, name) else {
+            return Err(CypherError::parse(kw, "ARRIVAL needs `AS <variable>`"));
+        };
+        let raw = c.text(n);
+        let escaped = n.kind == TokenKind::EscapedIdentifier;
+        let text = if escaped {
+            raw.trim_matches('`').to_string()
+        } else {
+            raw.to_string()
+        };
+        end = n.span.into();
+        c.i += 3;
+        arrival = Some(Name {
+            text,
+            escaped,
+            span: end,
+        });
+    }
+    Ok(TemporalMatch {
+        after,
+        arrival,
+        span: start.cover(end),
+    })
+}
+
 fn t_span(t: Option<Token>, d: Span) -> Span {
     t.map_or(d, |t| t.span.into())
 }
@@ -218,6 +287,7 @@ pub fn run_in(text: &str, body: bool) -> CResult<Prepass> {
     };
     let mut scopes = Vec::new();
     let mut matches = Vec::new();
+    let mut temporals = Vec::new();
     let mut blank: Vec<(usize, usize)> = Vec::new();
     // Positions (token indexes) where a scope starts.
     let mut starts = vec![0usize];
@@ -332,9 +402,22 @@ pub fn run_in(text: &str, body: bool) -> CResult<Prepass> {
         } else {
             None
         };
+        let mut next = i + 1;
         if let Some(mode) = mode {
             blank.push((a.unwrap().span.start, b.unwrap().span.end));
             matches.push(MatchExt { clause_start, mode });
+            next = i + 3;
+        }
+        if c.is_word(c.toks.get(next).copied(), "time")
+            && c.is_word(c.toks.get(next + 1).copied(), "respecting")
+        {
+            c.i = next;
+            let temporal = temporal_match(&mut c)?;
+            blank.push((temporal.span.start, temporal.span.end));
+            temporals.push(TemporalExt {
+                clause_start,
+                temporal,
+            });
         }
     }
     let mut bytes = text.as_bytes().to_vec();
@@ -350,5 +433,6 @@ pub fn run_in(text: &str, body: bool) -> CResult<Prepass> {
         blanked,
         scopes,
         matches,
+        temporals,
     })
 }

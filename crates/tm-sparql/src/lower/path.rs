@@ -7,10 +7,38 @@
 use spargebra::algebra::PropertyPathExpression as P;
 use spargebra::term::TermPattern;
 use tm_core::{Result, Value};
-use tm_ir::{GraphSel, Op, PathExpr, PathMode, PathPattern, TermOrVar, TriplePattern, View};
+use tm_ir::{
+    GraphSel, Op, PathExpr, PathMode, PathPattern, TemporalPath, TermOrVar, TriplePattern, View,
+};
 
 use super::Lowerer;
-use crate::error::{unsupported, NEGATED_PROPERTY_SET, PROPERTY_PATH};
+use crate::error::{temporal_path_error, unsupported, NEGATED_PROPERTY_SET, PROPERTY_PATH};
+
+/// Sets the arrival variable of every time-respecting path ending at `end`
+/// (counting them in `found`); paths inside expressions are not considered.
+fn bind_arrival(op: &mut Op, end: &TermOrVar, var: &tm_ir::Var, found: &mut u32) {
+    if let Op::Path(p) = op {
+        if let Some(t) = p.time_respecting.as_mut() {
+            if &p.end == end && t.arrival.is_none() {
+                t.arrival = Some(var.clone());
+                *found += 1;
+            } else if &p.end == end {
+                *found += 1;
+            }
+        }
+    }
+    for c in op.children_mut() {
+        bind_arrival(c, end, var, found);
+    }
+}
+
+fn show(t: &TermOrVar) -> String {
+    match t {
+        TermOrVar::Var(v) => format!("?{}", v.name()),
+        TermOrVar::Const(c) => c.to_string(),
+        other => format!("{other:?}"),
+    }
+}
 
 /// True when the path contains `*`, `+` or `?`.
 fn recursive(p: &P) -> bool {
@@ -67,10 +95,19 @@ impl Lowerer<'_> {
     ) -> Result<Op> {
         let s = self.simple_position(subject)?;
         let o = self.simple_position(object)?;
-        if recursive(path) {
+        // inside a time-respecting scope every path the parser hands over (a plain
+        // sequence `a/b` arrives as triple patterns) is one time-respecting region
+        if recursive(path) || self.temporal.is_some() {
             if matches!(self.active, GraphSel::Var(_)) {
                 self.graph_var_uses += 1;
             }
+            let time_respecting = self.temporal.as_mut().map(|t| {
+                t.paths += 1;
+                TemporalPath {
+                    after: t.after.clone(),
+                    arrival: None,
+                }
+            });
             return Ok(Op::Path(PathPattern {
                 start: s,
                 end: o,
@@ -80,6 +117,8 @@ impl Lowerer<'_> {
                 bind_path: None,
                 view,
                 graph: self.active.clone(),
+                time_respecting,
+                hop_cap: false,
             }));
         }
         self.expand(s, path, o, view)
@@ -115,6 +154,52 @@ impl Lowerer<'_> {
                 unreachable!("recursive paths are routed to the path operator")
             }
         })
+    }
+
+    /// Lowers the group of `SERVICE <urn:tiramemsu:tm:timeRespecting…> { … }`: its
+    /// paths become time-respecting from `after`, and each `?end tm:arrival ?t` of
+    /// the group binds the arrival of the one time-respecting path ending at `?end`.
+    // @lat: [[query#Temporal Path Syntax#SPARQL Temporal Paths]]
+    pub fn temporal_scope(
+        &mut self,
+        after: Option<TermOrVar>,
+        inner: &spargebra::algebra::GraphPattern,
+        sc: crate::dataset::ViewScope,
+    ) -> Result<Op> {
+        let outer = self.temporal.replace(super::TemporalScope {
+            after,
+            ..Default::default()
+        });
+        let op = self.pattern(inner, sc);
+        let scope = std::mem::replace(&mut self.temporal, outer).unwrap_or_default();
+        let mut op = op?;
+        if scope.paths == 0 {
+            return Err(temporal_path_error(
+                "the SERVICE <urn:tiramemsu:tm:timeRespecting> group has no property path \
+                 (write `*`, `+`, `?`, `^` or `|`; a plain sequence `a/b` is triple patterns)",
+            ));
+        }
+        for (end, var) in scope.arrivals {
+            let mut found = 0;
+            bind_arrival(&mut op, &end, &var, &mut found);
+            match found {
+                1 => {}
+                0 => {
+                    return Err(temporal_path_error(format!(
+                        "tm:arrival names {}, which is the end of no time-respecting path \
+                         of the group",
+                        show(&end)
+                    )))
+                }
+                _ => {
+                    return Err(temporal_path_error(format!(
+                        "tm:arrival names {}, which ends several time-respecting paths",
+                        show(&end)
+                    )))
+                }
+            }
+        }
+        Ok(op)
     }
 
     fn simple_position(&mut self, t: &TermPattern) -> Result<TermOrVar> {

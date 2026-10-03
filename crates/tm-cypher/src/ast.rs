@@ -56,6 +56,20 @@ pub enum MatchModeExt {
     Repeatable,
 }
 
+/// `TIME RESPECTING [AFTER t] [ARRIVAL AS name]` after `MATCH`: the
+/// variable-length relationships of the clause become time-respecting journeys
+/// (`lat.md/query#Temporal Path Syntax#Cypher Temporal Paths`).
+#[derive(Clone, Debug, PartialEq)]
+pub struct TemporalMatch {
+    /// `AFTER t`: the start instant (integer epoch ms, `$param`, `datetime('…')`
+    /// or `date('…')`); `None` is −∞.
+    pub after: Option<(TimeArg, Span)>,
+    /// `ARRIVAL AS name`: binds the arrival (Integer epoch ms, `null` for −∞).
+    pub arrival: Option<Name>,
+    /// The extension's text span.
+    pub span: Span,
+}
+
 /// A whole query: `UNION` branches of single queries.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Query {
@@ -253,6 +267,8 @@ pub enum Clause {
         optional: bool,
         /// Match mode.
         mode: MatchModeExt,
+        /// `TIME RESPECTING …`.
+        temporal: Option<TemporalMatch>,
         /// The pattern.
         pattern: Pattern,
         /// `WHERE`.

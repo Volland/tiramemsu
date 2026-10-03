@@ -375,6 +375,48 @@ assert_eq!(layered, [v("acme"), v("alice")]);
 
 In SPARQL the same walk is `v:belief9 v:supportedBy/(sys:subject|sys:object)+ ?x`, and Cypher writes it as ``(b:Belief)-[:SUPPORTED_BY|`sys:subject`*2]->(x)``.
 
+**Journeys in both query languages.** A time-respecting path (valid time never goes backwards along the walk, `PathArgs::time_respecting` in Rust) is an opt-in extension in each dialect, run by the same engine in the query's view and graph scope:
+
+- SPARQL: `SERVICE <urn:tiramemsu:tm:timeRespecting> { … }`, or `…/timeRespecting/<t>` with `t` epoch milliseconds, an `xsd:date`, an `xsd:dateTime` or `$name` from `SparqlOptions::params`. Every path with `*`, `+`, `?`, `^` or `|` in the group is a journey (a plain `a/b` is triple patterns), and `?end tm:arrival ?t` binds the earliest arrival (unbound for −∞).
+- Cypher: `MATCH TIME RESPECTING [AFTER t] [ARRIVAL AS name] <pattern>`, with `t` an Integer, a `$parameter`, `datetime('…')` or `date('…')`. The clause's variable-length or shortest-path relationship is the journey; `ARRIVAL AS` binds its arrival (an Integer, `null` for −∞).
+- Both need the start bound, and without `tm:arrival` / `ARRIVAL AS` the rows have the columns of the same query without the modifier.
+
+**Completeness.** `View::path_report` returns the rows with a `PathCompleteness`: `Exhaustive`, `StoppedAtBound { max_hops }` (the explicit bound stopped it; complete within it) or `StoppedAtCap { max_hops }` (`OpenOptions::path_max_hops` stopped an unbounded search, as for a Cypher `*`, or `PathArgs::capped`). `Solutions::path_completeness` and `CypherResult::path_completeness` carry the verdict of a query. Running out of `path_max_states` is always the error `PathLimitExceeded`.
+
+```rust
+# use tiramemsu::*;
+# let dir = tempfile::tempdir().unwrap();
+# let db = Db::open(dir.path().join("m.db"), OpenOptions { path_max_hops: 2, ..OpenOptions::default() })?;
+# let v = |s: &str| Value::iri(format!("urn:tiramemsu:v:{s}"));
+db.transact(TxOptions::default(), |tx| {
+    tx.assert(v("a"), v("met"), v("b"), Valid::between(1, 5))?;
+    tx.assert(v("b"), v("met"), v("c"), Valid::between(3, 9))?;
+    tx.assert(v("c"), v("met"), v("d"), Valid::between(0, 2))?; // over before c is reached
+    Ok(())
+})?;
+let view = db.now();
+let q = "SELECT ?who ?t WHERE { SERVICE <urn:tiramemsu:tm:timeRespecting/$since> \
+         { v:a v:met+ ?who . ?who tm:arrival ?t } } ORDER BY ?t";
+let opts = SparqlOptions { params: ir::params([("since", Value::Int(2))]), ..Default::default() };
+let r = view.sparql_with(q, &opts)?;
+let rows = &r.solutions().unwrap().rows;
+assert_eq!(rows.len(), 2); // b at 2, c at 3; d is not reachable in time order
+assert_eq!(rows[1][1], Some(Value::Int(3)));
+let c = view.cypher(
+    "MATCH TIME RESPECTING AFTER $since ARRIVAL AS t (x {`@id`: 'v:a'})-[:met*]->(y) RETURN t ORDER BY t",
+    &[("since".to_string(), CypherValue::Integer(2))].into_iter().collect(),
+)?;
+assert_eq!(c.rows, vec![vec![CypherValue::Integer(2)], vec![CypherValue::Integer(3)]]);
+// the cap of 2 hops stopped the trail at c, which still has a `met` fact: not exhaustive
+assert_eq!(c.path_completeness, Some(PathCompleteness::StoppedAtCap { max_hops: 2 }));
+// an unbounded trail under the configured cap of 2 hops
+let a = view.encode(&v("a"))?.unwrap();
+let capped = PathArgs { mode: PathMode::Trail, capped: true, ..PathArgs::default() };
+let r = view.path_report(a, "met+", &capped)?;
+assert_eq!(r.completeness, PathCompleteness::StoppedAtCap { max_hops: 2 });
+# Ok::<(), Error>(())
+```
+
 ### 12. Named graphs
 
 A graph is a node, and membership is one more layer statement `(fact sys:inGraph graph)`. There is no extra column or table. Sessions, sources, tenants or scratch spaces all fit. SPARQL supports `GRAPH`, `FROM`, `FROM NAMED`, `WITH` and graph management updates. In Rust, `Tx::add_to_graph`, `remove_from_graph`, `clear_graph`, `create_graph` and `drop_graph` do the same, and `View::graphs` and `View::graph_members` list them. Removing a membership retracts only the membership; the fact stays.

@@ -67,6 +67,24 @@ fn distinct_over_bgp(root: &Op) -> bool {
     matches!(root, Op::Project(p) if p.distinct && only_bgp(&p.input))
 }
 
+/// The start instant of a time-respecting path in epoch ms (`None` = −∞): an
+/// integer, a date (00:00 UTC) or a date-time constant; parameters are bound by
+/// now.
+fn after_ms(after: Option<&TermOrVar>) -> Result<Option<i64>> {
+    Ok(match after {
+        None => None,
+        Some(TermOrVar::Const(Value::Int(ms))) => Some(*ms),
+        Some(TermOrVar::Const(Value::DateTime { ms, .. })) => Some(*ms),
+        Some(TermOrVar::Const(Value::Date(d))) => Some(d.saturating_mul(86_400_000)),
+        Some(other) => {
+            return Err(invalid(format!(
+                "a time-respecting start must be an integer of epoch milliseconds, a date \
+                 or a date-time, got {other:?}"
+            )))
+        }
+    })
+}
+
 /// A classified path endpoint.
 enum Ep {
     Term(PTerm),
@@ -204,17 +222,39 @@ impl<'e> Planner<'e> {
         if !nullable(&p.path) || p.bind_path.is_some() {
             return Ok(empty);
         }
-        let bind = |this: &mut Self, var: &Var, term: &Value| -> Node {
-            let id = this.synthetic_id(&term.canonical());
+        // a zero-hop journey arrives at its start instant (unbound for −∞)
+        let arrival = match &p.time_respecting {
+            Some(t) => t
+                .arrival
+                .clone()
+                .map(|v| Ok::<_, tm_core::Error>((v, after_ms(t.after.as_ref())?.map(Cell::Int))))
+                .transpose()?,
+            None => None,
+        };
+        let bind = |this: &mut Self, var: Option<&Var>, term: Option<&Value>| -> Node {
+            let mut vars = Vec::new();
+            let mut row = Vec::new();
+            if let (Some(var), Some(term)) = (var, term) {
+                let id = this.synthetic_id(&term.canonical());
+                vars.push(var.clone());
+                row.push(Some(Cell::Id(id)));
+            }
+            if let Some((v, cell)) = &arrival {
+                vars.push(v.clone());
+                row.push(cell.clone());
+            }
+            if vars.is_empty() {
+                return Node::Join(Vec::new(), Vec::new());
+            }
             Node::Values(PValues {
-                vars: vec![var.clone()],
-                rows: vec![vec![Some(Cell::Id(id))]],
+                vars,
+                rows: vec![row],
             })
         };
         Ok(match (s, e) {
-            (Ep::Missing(a), Ep::Missing(b)) if a == b => Node::Join(Vec::new(), Vec::new()),
+            (Ep::Missing(a), Ep::Missing(b)) if a == b => bind(self, None, None),
             (Ep::Missing(c), Ep::Term(PTerm::Var(v)))
-            | (Ep::Term(PTerm::Var(v)), Ep::Missing(c)) => bind(self, &v, &c),
+            | (Ep::Term(PTerm::Var(v)), Ep::Missing(c)) => bind(self, Some(&v), Some(&c)),
             _ => empty,
         })
     }
@@ -273,6 +313,16 @@ impl<'e> Planner<'e> {
                             RouteNote::PathInverted,
                         ),
                     };
+                let mut call_view = view_text(&view);
+                if let Some(t) = &p.time_respecting {
+                    match after_ms(t.after.as_ref())? {
+                        Some(ms) => call_view.push_str(&format!(";timeRespecting/{ms}")),
+                        None => call_view.push_str(";timeRespecting"),
+                    }
+                }
+                if p.hop_cap && p.max_hops.is_some() {
+                    call_view.push_str(";hopCap");
+                }
                 Node::Path(PPath {
                     arg,
                     other,
@@ -280,7 +330,8 @@ impl<'e> Planner<'e> {
                     mode: p.mode.sql_name(),
                     max_hops: p.max_hops,
                     bind_path: p.bind_path.clone(),
-                    view_text: view_text(&view),
+                    bind_arrival: p.time_respecting.as_ref().and_then(|t| t.arrival.clone()),
+                    view_text: call_view,
                     note,
                     graphs,
                     view,

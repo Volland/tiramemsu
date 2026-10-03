@@ -163,6 +163,7 @@ impl Fixture {
                     end: None,
                     graphs: None,
                     time_respecting: Some(TimeRespecting { after }),
+                    hop_cap: false,
                 },
             )
             .unwrap()

@@ -1138,3 +1138,131 @@ fn saved_answers_cross_the_bridge() {
         assert_eq!(db.call(op, &args).unwrap_err().code(), "InvalidArgument");
     }
 }
+
+// temporal-language-paths: SPARQL and Cypher temporal syntax with a parameterized
+// start, and completeness reporting, through the bridge
+// @lat: [[tests#Temporal Path Syntax#Bridge Temporal Paths And Completeness]]
+#[test]
+fn temporal_path_syntax_and_completeness_cross_the_bridge() {
+    let dir = tempfile::tempdir().unwrap();
+    let db = Database::open(
+        dir.path().join("t.db").to_str().unwrap(),
+        &json!({ "pathMaxHops": 2 }),
+    )
+    .unwrap();
+    db.call(
+        "transact",
+        &json!({ "ops": [
+            { "op": "assert", "s": v("a"), "p": v("id"), "o": "a" },
+            { "op": "assert", "s": v("a"), "p": v("met"), "o": v("b"), "validFrom": 1, "validTo": 5 },
+            { "op": "assert", "s": v("b"), "p": v("met"), "o": v("c"), "validFrom": 3, "validTo": 9 },
+            { "op": "assert", "s": v("c"), "p": v("met"), "o": v("d"), "validFrom": 4, "validTo": 9 },
+        ]}),
+    )
+    .unwrap();
+    // SPARQL with a start parameter: the rows of the path API
+    let sparql = |start: J, completeness: bool| {
+        db.call(
+            "sparql",
+            &json!({
+                "text": "SELECT ?y ?t WHERE { SERVICE <urn:tiramemsu:tm:timeRespecting/$start> \
+                         { v:a v:met+ ?y . ?y tm:arrival ?t } } ORDER BY ?t",
+                "params": { "start": start },
+                "pathCompleteness": completeness,
+            }),
+        )
+        .unwrap()
+    };
+    let r = sparql(json!(2), false);
+    let rows: Vec<(J, J)> = r["rows"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|row| (row["y"].clone(), row["t"].clone()))
+        .collect();
+    let api = db
+        .call(
+            "path",
+            &json!({ "start": v("a"), "path": "met+", "timeRespecting": { "after": 2 } }),
+        )
+        .unwrap();
+    let api: Vec<(J, J)> = api
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|row| (row["end"].clone(), row["arrival"].clone()))
+        .collect();
+    assert_eq!(rows, api);
+    assert_eq!(
+        rows,
+        vec![(v("b"), json!(2)), (v("c"), json!(3)), (v("d"), json!(4))]
+    );
+    // without the flag the response has no completeness member
+    assert!(r.get("pathCompleteness").is_none());
+    let r = sparql(json!("1970-01-01T00:00:00.002Z"), true);
+    assert_eq!(r["rows"].as_array().unwrap().len(), 3);
+    assert_eq!(
+        r["pathCompleteness"],
+        json!({ "kind": "exhaustive", "maxHops": null, "complete": true })
+    );
+    // Cypher: the same journeys, capped at 2 hops by the database option
+    let cy = |completeness: bool| {
+        db.call(
+            "cypher",
+            &json!({
+                "text": "MATCH TIME RESPECTING AFTER $start ARRIVAL AS t (x {id:'a'})-[:met*]->(y) \
+                         RETURN t ORDER BY t",
+                "params": { "start": 2 },
+                "pathCompleteness": completeness,
+            }),
+        )
+        .unwrap()
+    };
+    let r = cy(false);
+    assert_eq!(r["rows"], json!([[2], [3]]));
+    assert!(r.get("pathCompleteness").is_none());
+    assert_eq!(
+        cy(true)["pathCompleteness"],
+        json!({ "kind": "cap", "maxHops": 2, "complete": false })
+    );
+    // the path op: a plain array unless the completeness is asked for
+    let r = db
+        .call(
+            "path",
+            &json!({ "start": v("a"), "path": "met+", "mode": "trail", "capped": true,
+                     "completeness": true }),
+        )
+        .unwrap();
+    assert_eq!(r["rows"].as_array().unwrap().len(), 2);
+    assert_eq!(
+        r["completeness"],
+        json!({ "kind": "cap", "maxHops": 2, "complete": false })
+    );
+    let r = db
+        .call(
+            "path",
+            &json!({ "start": v("a"), "path": "met+", "maxHops": 1, "completeness": true }),
+        )
+        .unwrap();
+    assert_eq!(
+        r["completeness"],
+        json!({ "kind": "bound", "maxHops": 1, "complete": true })
+    );
+    assert!(db
+        .call("path", &json!({ "start": v("a"), "path": "met+" }))
+        .unwrap()
+        .is_array());
+    for bad in [
+        json!({ "start": v("a"), "path": "met+", "capped": "yes" }),
+        json!({ "start": v("a"), "path": "met+", "completeness": 1 }),
+    ] {
+        assert_eq!(db.call("path", &bad).unwrap_err().code(), "InvalidArgument");
+    }
+    let e = db
+        .call(
+            "sparql",
+            &json!({ "text": "SELECT ?y WHERE { v:a v:met+ ?y }", "params": { "x": true } }),
+        )
+        .unwrap_err();
+    assert_eq!(e.code(), "InvalidArgument");
+}

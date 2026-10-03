@@ -556,6 +556,7 @@ impl ProvenancePlan {
                     .collect(),
             ),
             provenance_gaps: self.gaps.clone(),
+            path_completeness: None,
         })
     }
 
@@ -728,6 +729,7 @@ mod tests {
             ],
             provenance: None,
             provenance_gaps: Vec::new(),
+            path_completeness: None,
         };
         let mut calls = 0;
         let sol = p
@@ -746,6 +748,7 @@ mod tests {
                     ],
                     provenance: None,
                     provenance_gaps: Vec::new(),
+                    path_completeness: None,
                 })
             })
             .unwrap();

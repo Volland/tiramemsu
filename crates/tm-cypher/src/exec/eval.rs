@@ -678,6 +678,7 @@ impl Exec<'_> {
                     w.as_ref(),
                     false,
                     MatchModeExt::Default,
+                    None,
                 )?;
                 Ok(!rows.is_empty())
             }

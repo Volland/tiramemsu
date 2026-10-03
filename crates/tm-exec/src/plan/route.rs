@@ -70,6 +70,10 @@ fn nested_ops(op: &Op) -> Vec<&Op> {
     out
 }
 
+/// The `Unsupported` feature of a time-respecting path whose start is not bound.
+pub const TIME_RESPECTING_NEEDS_START: &str =
+    "time-respecting path with no bound start (a journey runs forward from its start)";
+
 /// Every variable bound by an operator other than a path pattern.
 pub fn bound_by_non_paths(op: &Op) -> VarSet {
     let mut out = VarSet::new();
@@ -131,6 +135,9 @@ pub fn bound_before(base: &VarSet, all: &[PathPattern], skip: &PathPattern) -> V
                 if let Some(b) = &p.bind_path {
                     changed |= bound.insert(b.clone());
                 }
+                if let Some(a) = p.time_respecting.as_ref().and_then(|t| t.arrival.as_ref()) {
+                    changed |= bound.insert(a.clone());
+                }
                 // a path under an unbound graph variable enumerates the graphs
                 if let tm_ir::GraphSel::Var(g) = &p.graph {
                     changed |= bound.insert(g.clone());
@@ -158,11 +165,14 @@ fn endpoint_bound(t: &TermOrVar, bound: &VarSet) -> bool {
 }
 
 /// Orients a path: from its bound start, else from its bound end (inverse path);
-/// no bound endpoint is `Unsupported`.
+/// no bound endpoint is `Unsupported`. A time-respecting path runs forward only (a
+/// journey is not the inverse journey read backwards), so it needs a bound start.
 // @lat: [[query#Physical Planning#Path Engine#Path Lowering]]
 pub fn orient(p: &PathPattern, bound: &VarSet) -> Result<Orientation> {
     if endpoint_bound(&p.start, bound) {
         Ok(Orientation::Forward)
+    } else if p.time_respecting.is_some() {
+        Err(unsupported(TIME_RESPECTING_NEEDS_START))
     } else if endpoint_bound(&p.end, bound) {
         Ok(Orientation::Inverted)
     } else {
@@ -276,6 +286,8 @@ mod tests {
             bind_path: None,
             view: tm_ir::View::NOW,
             graph: tm_ir::GraphSel::Any,
+            time_respecting: None,
+            hop_cap: false,
         };
         assert_eq!(orient(&p, &bound).unwrap(), Orientation::Inverted);
         let fwd = PathPattern {

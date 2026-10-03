@@ -84,6 +84,18 @@ impl Gen<'_> {
             }
             PTerm::Var(v) => r.set(v, Col::term(format!("{a}.\"end\""), false)),
         }
+        if let Some(v) = &p.bind_arrival {
+            // epoch ms, NULL for −∞
+            r.set(
+                v,
+                Col {
+                    sql: format!("{a}.arrival"),
+                    dom: Dom::Computed(VClass::Int),
+                    mm: true,
+                    eid_of: None,
+                },
+            );
+        }
         if let Some(b) = &p.bind_path {
             r.set(
                 b,

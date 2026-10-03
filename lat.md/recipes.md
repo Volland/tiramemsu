@@ -181,3 +181,16 @@ let rows = view.path_with(a, "met+", &args)?;   // A met B in [1, 5), B met C in
 ```
 
 `tm_path` takes the same option as a `timeRespecting` or `timeRespecting/<instant>` part of its view text and returns an `arrival` column. Every mode works, and a property test compares all four with brute-force enumeration of walks. See [[query#Physical Planning#Path Engine#Time-Respecting Search]].
+
+Both query languages say the same, with the start as a parameter ([[query#Temporal Path Syntax]]):
+
+```sparql
+SELECT ?who ?t WHERE {
+  SERVICE <urn:tiramemsu:tm:timeRespecting/$since> { v:a v:met+ ?who . ?who tm:arrival ?t }
+}
+```
+
+```cypher
+MATCH TIME RESPECTING AFTER $since ARRIVAL AS t (a {`@id`: 'v:a'})-[:met*]->(who)
+RETURN who, min(t) AS t
+```

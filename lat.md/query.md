@@ -203,7 +203,8 @@ Paths run as a native breadth-first search over the product of a path DFA and th
 - **Wildcard:** the reserved atom `sys:anyRelationship` (Cypher `[*]`) steps over relationship-view statements only: not literal properties unless `sys:isEdge true`, not `rdf:type`, not `sys:` statements.
 - **Graphs:** a request may carry a graph set (`PathRequest.graphs`). Every statement a path traverses must then be a member of one of the graphs, the membership `(e sys:inGraph g)` visible in the hop's view: the statement stepped over, or for a virtual hop the statement whose part is stepped to or from. Each fetch shape gains one `EXISTS` on `t.eid`, a covering-index seek, with `sys:inGraph` and the graph ids as parameters ([[crates/tm-exec/src/path/fetch.rs#Fetcher]]). Zero-hop rows ignore the set; an empty set or a store without `sys:inGraph` leaves only them.
 - **Time-respecting:** with `PathRequest.time_respecting` ([[crates/tm-exec/src/path/engine.rs#TimeRespecting]]) valid time never goes backwards along a path, a journey in a temporal graph. A time τ starts at `after` or −∞; a stored hop over `[v_from, v_to)` needs `v_to > τ` (or no `v_to`) and moves τ to `max(τ, v_from)`; virtual hops keep τ. The view's `validAt` and a graph set still apply. Rows carry `arrival` (epoch ms; `None` for −∞ and for ordinary searches). See [[query#Physical Planning#Path Engine#Time-Respecting Search]].
-- **Later:** `SIMPLE`, `ACYCLIC`, `SHORTEST k`, negated property sets, quantified path patterns, and SPARQL or Cypher syntax for time-respecting paths.
+- **Completeness:** every search reports `Exhaustive`, `StoppedAtBound` or `StoppedAtCap`, see [[query#Physical Planning#Path Engine#Path Completeness]]. SPARQL and Cypher reach time-respecting search through [[query#Temporal Path Syntax]].
+- **Later:** `SIMPLE`, `ACYCLIC`, `SHORTEST k`, negated property sets and quantified path patterns.
 
 #### tm_path
 
@@ -212,6 +213,7 @@ The eponymous read-only table function `tm_path(start, path, mode, max_hops, vie
 - **Arguments:** `start` is an ObjectId (NULL gives no rows). `path` is SPARQL 1.1 property-path text plus `{m,n}`, `{m,}` and `{n}`, with atoms `<iri>`, CURIEs (declared prefixes, `sys:`, `tm:`, `rdf:`, `xsd:`) and bare names through `@vocab`. `mode` is `REACH`, `TRAIL`, `ANY_SHORTEST` or `ALL_SHORTEST`, case-insensitive, default `REACH`. `max_hops` defaults to none, except `TRAIL`, which defaults to `path_max_hops`. `view` is `now`, `asOf/<t or RFC 3339>`, `history`, optionally followed by `;validAt/<d>`, or `validAt/<d>` alone, also with the `urn:tiramemsu:tm:` prefix. `graphs` is NULL (no filter), the INTEGER ObjectId of one graph, or TEXT with a JSON array of ids (`'[]'` is the empty set); it may be a column, so a call can follow a graph per row.
 - **Output:** `path_json` is NULL for `REACH` and otherwise `{"nodes":[ids],"edges":[{"eid":id,"p":id,"dir":"out"|"in"}]}` with raw ObjectIds as integers. `arrival` is the INTEGER epoch-ms arrival of a time-respecting call, else NULL.
 - **Time respect:** a `timeRespecting` or `timeRespecting/<RFC 3339 or epoch ms>` part of the `view` text (any order, at most once, e.g. `now;validAt/2025-01-01;timeRespecting/2024-06-01`) makes the call time-respecting.
+- **Hop cap:** a `hopCap` part marks `max_hops` as the configured cap on an unbounded expression, for completeness reporting only ([[query#Physical Planning#Path Engine#Path Completeness]]); a NULL `max_hops` under `TRAIL` is the cap already.
 - **Errors:** a bad argument fails the statement with a message that starts with `tm_path: <argument>:`. A `PathLimitExceeded` or `Unsupported` inside SQL is kept in a per-connection slot and re-raised as the typed error by the executor.
 - **Snapshot:** the function reads through the calling statement's own connection (a non-owning handle, [[crates/tm-rusqlite/src/table_fn.rs#borrowed_exec]]), so it sees that statement's snapshot, or the speculative state inside `with`.
 
@@ -225,6 +227,17 @@ A time-respecting search answers "could something travel along these facts in ti
 - **Reading the interval** costs nothing: every fetch selects `t.v_from, t.v_to`, which are in every covering index.
 - **Checked** against a brute-force enumeration of every time-respecting walk ([[tests#Query#Time Respecting Paths Match Brute Force]]).
 
+#### Path Completeness
+
+A path search reports whether it was exhaustive or a hop limit stopped it, and which kind of limit: the bound the query wrote, or the configured cap on an unbounded expression ([[crates/tm-ir/src/path.rs#PathCompleteness]]).
+
+- **Verdicts:** `Exhaustive` (no state left to expand), `StoppedAtBound { max_hops }` (an explicit bound such as a `max_hops` argument stopped it with states left: complete within the bound, as asked) and `StoppedAtCap { max_hops }` (`path_max_hops` stopped an unbounded Cypher `*` or `shortestPath`, or `PathArgs::capped`: longer matches may exist, so it does not claim exhaustive evaluation). `is_complete()` is false only for the cap.
+- **Detection:** when the hop bound ends the search with entries left, one more fetch round probes whether one of them has a neighbour along a DFA transition (`Ctx::more` on [[crates/tm-exec/src/path/search/mod.rs#Ctx]]); time and trail identity are not checked by the probe, so a cut means "longer paths may exist". A bounded expression (`*1..3`, `{1,3}`) whose automaton has no move left is exhaustive. A consumer that stops early (an end filter) is not a cut.
+- **Cap or bound:** `PathRequest.hop_cap` (IR `PathPattern.hop_cap`, set by Cypher for an unbounded upper limit) marks `max_hops` as the cap; on `tm_path` a NULL `max_hops` under `TRAIL` and a `hopCap` view part do. Every other bound is the query's.
+- **Reporting:** `PathEngine::run` returns the verdict and records it in a thread-local scope ([[crates/tm-exec/src/path/report.rs#collect]]) merged over every `tm_path` call of a query (the least complete wins). `View::path_report` returns it with the rows, `Solutions::path_completeness` and `CypherResult::path_completeness` carry it for queries (`None` when no path ran), and the bridge adds it only when asked ([[bindings#JSON Bridge#Operations]]).
+- **State guard:** exhaustion of `path_max_states` is never a verdict: the search fails with `PathLimitExceeded`.
+
+
 #### Path Lowering
 
 The planner routes each `PathPattern` region to `tm_path` ([[crates/tm-exec/src/plan/route.rs#orient]]); the front ends decide which constructs become regions.
@@ -235,7 +248,8 @@ The call starts from the bound start, else from the bound end with the inverted 
 - **Graphs:** a region carries the graph selector of its block (`PathPattern.graph`). `GRAPH <g>` and `FROM <g1> FROM <g2>` pass their graphs as the `graphs` argument. `GRAPH ?g` passes the column of `?g` when a pattern joined with the path binds it; otherwise the SQL generator adds the graphs of the view (objects of visible memberships of visible statements) before the call and runs the path once per graph (`sqlgen/native.rs`).
 - **Zero-length per graph:** the rule for a constant in no statement applies once per graph in scope: once under `GRAPH <g>` (even a graph with no member) and a `FROM` default, once per graph under `GRAPH ?g`, where the call runs from the constant's plan-local id so the engine returns the zero-hop row per graph.
 - **Non-recursive paths in a graph:** each triple of the translation carries the block's selector, like a BGP, so a virtual step (`:b :supportedBy/sys:subject ?x`) reads without a graph there, while a recursive path filters virtual hops too.
-- **Cypher:** `*` patterns are `TRAIL` regions, `shortestPath` and `allShortestPaths` are `ANY_SHORTEST` and `ALL_SHORTEST` (minimum 0 or 1). Relationship isomorphism across fixed and variable-length positions is checked on the result rows.
+- **Cypher:** `*` patterns are `TRAIL` regions, `shortestPath` and `allShortestPaths` are `ANY_SHORTEST` and `ALL_SHORTEST` (minimum 0 or 1). Relationship isomorphism across fixed and variable-length positions is checked on the result rows. An unbounded upper limit becomes `max_hops = path_max_hops` with `hop_cap` set.
+- **Time-respecting:** a region with `PathPattern.time_respecting` is always called from its start ([[query#Temporal Path Syntax]]).
 
 ```plantuml
 @startuml path-bfs
@@ -375,6 +389,68 @@ SELECT ?before ?after WHERE {
   v:alice v:worksAt ?after .
   FILTER (?before != ?after)
 }
+```
+
+## Temporal Path Syntax
+
+Both dialects can ask for a time-respecting journey, an opt-in Tiramemsu extension: SPARQL with a `SERVICE` scope and `tm:arrival`, Cypher with a `MATCH` modifier. Both lower to one IR option.
+
+The option is [[crates/tm-ir/src/path.rs#TemporalPath]] on a `PathPattern`: a start instant (`after`, −∞ when absent) and an optional arrival variable. The planner adds `timeRespecting[/<ms>]` to the `tm_path` view text and binds the `arrival` column, so the journey runs on the native operator ([[query#Physical Planning#Path Engine#Time-Respecting Search]]) in the pattern's own view and graph selection, inside the statement's snapshot, exactly as `View::path_with` with `PathArgs::time_respecting` does.
+
+- **Hop rule:** τ starts at `after`; a stored hop over `[v_from, v_to)` needs `v_to > τ` (or none) and moves τ to `max(τ, v_from)`; a virtual hop (`sys:subject`, `sys:object`, `sys:predicate`) keeps τ.
+- **Arrival:** an integer of epoch milliseconds, the earliest over every journey to the end in `REACH` (SPARQL), the trail's own in `TRAIL` (Cypher). It is −∞ when no `after` was given and no traversed statement has a `v_from`; SPARQL then leaves the variable unbound and Cypher binds `null`. A zero-length match arrives at `after`.
+- **Direction:** a journey runs forward from its start, so the start must be bound; a path bound only at its end is `Unsupported("time-respecting path with no bound start …")` ([[crates/tm-exec/src/plan/route.rs#orient]]).
+- **Row shapes:** without `tm:arrival` or `ARRIVAL AS` the rows have exactly the columns of the same query without the modifier; only the matches change.
+- **Errors:** grammar mistakes are `Parse` before anything runs; the state guard still fails with `PathLimitExceeded` rather than return a prefix ([[query#Physical Planning#Path Engine#Path Completeness]]).
+
+### SPARQL Temporal Paths
+
+A `SERVICE` IRI under `urn:tiramemsu:tm:` names the modifier; every path in its group is time-respecting, and `?end tm:arrival ?t` binds an arrival. The grammar of the IRI and the pattern is below.
+
+```ebnf
+TemporalService ::= 'SERVICE' '<urn:tiramemsu:tm:timeRespecting' Start? '>' GroupGraphPattern
+Start           ::= '/' ( Integer | Date | DateTime | '$' Name )
+Integer         ::= '-'? [0-9]+                      (* epoch milliseconds *)
+Date            ::= xsd:date lexical form            (* 00:00:00 UTC *)
+DateTime        ::= xsd:dateTime lexical form        (* no timezone = UTC *)
+Name            ::= [A-Za-z_] [A-Za-z0-9_]*          (* a SparqlOptions::params key *)
+ArrivalPattern  ::= ( Var | IRI ) 'tm:arrival' Var   (* inside the group *)
+```
+
+- **Which paths:** inside the group (also in nested `SERVICE`, `GRAPH`, `OPTIONAL` and `UNION` parts) every property path the parser hands over is one `REACH` region with the modifier: anything with `*`, `+`, `?`, `^` or `|`. A sequence of plain IRIs `a/b` is turned into triple patterns by the parser and is not part of a journey; write it as `(a/b)+` or `a/b?` style paths, or with `^`/`|`. A group with no such path is a `Parse` error. A nested `SERVICE <…timeRespecting…>` replaces the start for its group.
+- **`tm:arrival`:** `?end tm:arrival ?t` is not a triple pattern. Its subject must be the end of exactly one time-respecting path of the group and its object a variable bound by no other `tm:arrival`; otherwise, and outside a time-respecting group, it is a `Parse` error. Lowering is `Lowerer::temporal_scope` in `crates/tm-sparql/src/lower/path.rs`.
+- **Parameters:** `$name` takes the instant from `SparqlOptions::params` (an `xsd:integer` of epoch ms, an `xsd:date` or an `xsd:dateTime`), bound by the executor like a Cypher parameter; a missing one fails the query. The JSON bridge passes `params: {"name": time}`.
+- **Combining:** the view still comes from `FROM` and time `SERVICE` scopes (`SERVICE <tm:asOf/150> { SERVICE <tm:timeRespecting> { … } }` or the other nesting), and `GRAPH`/`FROM` graphs still restrict every hop. The modifier is not accepted in `FROM` or as a `GRAPH` name (`Parse`).
+
+```sparql
+# who could have caught it from alice after 2024-06-01, and when at the earliest
+SELECT ?who ?when WHERE {
+  SERVICE <urn:tiramemsu:tm:timeRespecting/2024-06-01> {
+    v:alice v:met+ ?who .
+    ?who tm:arrival ?when
+  }
+}
+```
+
+### Cypher Temporal Paths
+
+`TIME RESPECTING` after `MATCH` (or `OPTIONAL MATCH`, after `REPEATABLE ELEMENTS` / `DIFFERENT RELATIONSHIPS` when present) makes the clause's variable-length and shortest-path relationships journeys.
+
+```ebnf
+Match       ::= 'OPTIONAL'? 'MATCH' MatchMode? Temporal? Pattern Where?
+Temporal    ::= 'TIME' 'RESPECTING' ( 'AFTER' TimeArg )? ( 'ARRIVAL' 'AS' Variable )?
+TimeArg     ::= '-'? Integer | Parameter | 'datetime(' String ')' | 'date(' String ')'
+```
+
+- **Recognition:** the pre-pass [[crates/tm-cypher/src/parse/prepass.rs#run]] reads the modifier and blanks it, keeping every byte offset, like the other extensions; `time` and `respecting` stay ordinary names elsewhere. Keywords are case-insensitive.
+- **Start:** `AFTER` takes an Integer (epoch ms), a `$parameter` holding an Integer, DateTime or Date, `datetime('…')` or `date('…')` (00:00 UTC); a float or any other form is a `Parse` error, a parameter of another type an `Eval` error.
+- **Which relationships:** every `*` and `shortestPath` / `allShortestPaths` relationship of the clause, each a journey from `AFTER`; fixed-length relationships are ordinary patterns. A clause without such a relationship is a `Parse` error. The journey starts at the pattern's left node.
+- **`ARRIVAL AS t`:** binds the arrival of the clause's single variable-length relationship (two or more is a `Parse` error); `t` must be a new variable, an Integer or `null`, and is `null` on a row an `OPTIONAL MATCH` did not match. `TRAIL` rows each carry their trail's arrival, so `min(t)` per end equals the SPARQL and Rust `REACH` arrival. Checked in [[crates/tm-cypher/src/sema/check.rs#check]] and lowered in [[crates/tm-cypher/src/exec/pattern.rs#Plan]].
+- **Combining:** `USE AS OF`, `USE HISTORY` and `USE VALID AT` select the view as usual. Cypher has no graph selector (one graph per file), so a Cypher journey is never graph-scoped.
+
+```cypher
+MATCH TIME RESPECTING AFTER $since ARRIVAL AS t (a {`@id`: 'v:alice'})-[:met*]->(who)
+RETURN who, min(t) AS earliest
 ```
 
 ## Bulk Import

@@ -86,6 +86,20 @@ pub fn parse_error(span: Option<Span>, msg: impl Into<String>) -> Error {
     }
 }
 
+/// The parse error of a `tm:timeRespecting` IRI outside `SERVICE`.
+pub fn time_respecting_not_service(iri: &str) -> Error {
+    parse_error(
+        None,
+        format!("<{iri}> is a path modifier: use it as SERVICE <{iri}> {{ … }}"),
+    )
+}
+
+/// The parse error of a time-respecting scope or `tm:arrival` pattern that
+/// cannot be lowered (`lat.md/query#Temporal Path Syntax`).
+pub fn temporal_path_error(msg: impl std::fmt::Display) -> Error {
+    parse_error(None, format!("time-respecting path: {msg}"))
+}
+
 /// The error for a malformed `tm:` time IRI.
 pub fn invalid_time_iri(iri: &str) -> Error {
     parse_error(

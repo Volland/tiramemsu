@@ -484,6 +484,7 @@ fn solutions_from_json(j: &J) -> Result<Solutions> {
         rows,
         provenance,
         provenance_gaps,
+        path_completeness: None,
     })
 }
 

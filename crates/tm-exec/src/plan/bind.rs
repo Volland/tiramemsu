@@ -139,6 +139,9 @@ impl Binder<'_> {
                 let mut p = p.clone();
                 p.start = self.term(&p.start)?;
                 p.end = self.term(&p.end)?;
+                if let Some(a) = p.time_respecting.as_mut().and_then(|t| t.after.as_mut()) {
+                    *a = self.term(a)?;
+                }
                 // the path engine filters by graph itself: only parameters are bound
                 if let GraphSel::Set(gs) = &mut p.graph {
                     for g in gs.iter_mut() {

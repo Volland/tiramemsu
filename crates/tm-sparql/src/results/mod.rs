@@ -27,6 +27,7 @@ pub use term::{RdfTerm, RdfTriple};
 ///     rows: vec![vec![Some(Value::iri("urn:tiramemsu:v:alice")), None]],
 ///     provenance: None,
 ///     provenance_gaps: Vec::new(),
+///     path_completeness: None,
 /// };
 /// assert_eq!(s.col("age"), Some(1));
 /// assert!(s.get(0, "who").is_some());
@@ -47,6 +48,11 @@ pub struct Solutions {
     /// and without duplicates: empty when the provenance is complete or absent.
     /// Read the verdict with [`Solutions::provenance_complete`].
     pub provenance_gaps: Vec<ProvenanceGap>,
+    /// How completely the query's property-path searches were evaluated, merged
+    /// over all of them ([`tm_ir::PathCompleteness`]); `None` when it ran none.
+    /// SPARQL paths are uncapped, so this is `Exhaustive` unless a host sets a
+    /// bound. Filled by the host (the `tiramemsu` facade).
+    pub path_completeness: Option<tm_ir::PathCompleteness>,
 }
 
 /// A part of a query whose matched statements provenance does not list, so rows
@@ -100,6 +106,7 @@ impl Solutions {
     ///     rows: vec![vec![Some(Value::iri("urn:tiramemsu:v:paris"))]],
     ///     provenance: Some(vec![vec![Eid::new(1), Eid::new(2)]]),
     ///     provenance_gaps: Vec::new(),
+    ///     path_completeness: None,
     /// };
     /// assert_eq!(s.provenance(0), Some(&[Eid::new(1), Eid::new(2)][..]));
     /// assert_eq!(s.provenance(1), None);

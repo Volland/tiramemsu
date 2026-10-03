@@ -232,7 +232,7 @@ impl View<'_> {
             };
             let prog = tm_cypher::compile(text, params, &ctx).map_err(|e| e.into_core(text))?;
             let mut runner = ViewRunner { view: self };
-            tm_cypher::exec::run(&prog, params, &mut runner).map_err(|e| e.into_core(text))
+            run_reporting(&prog, params, &mut runner, text)
         })
     }
 }
@@ -258,8 +258,22 @@ impl View<'_> {
             inner: ViewRunner { view: self },
             trace,
         };
-        tm_cypher::exec::run(&prog, params, &mut runner).map_err(|e| e.into_core(text))
+        run_reporting(&prog, params, &mut runner, text)
     }
+}
+
+/// Runs a compiled program, filling [`CypherResult::path_completeness`] from the
+/// path searches it ran.
+fn run_reporting(
+    prog: &tm_cypher::CypherProgram,
+    params: &CypherParams,
+    runner: &mut dyn tm_cypher::Runner,
+    text: &str,
+) -> Result<CypherResult> {
+    let (r, paths) = tm_exec::path::report::collect(|| tm_cypher::exec::run(prog, params, runner));
+    let mut r = r.map_err(|e| e.into_core(text))?;
+    r.path_completeness = paths;
+    Ok(r)
 }
 
 /// Cypher inside a caller's `transact` closure, so Cypher and the Rust operations
@@ -288,7 +302,7 @@ impl TxCypher for Tx<'_> {
             engine,
             now_ms,
         };
-        tm_cypher::exec::run(&prog, params, &mut runner).map_err(|e| e.into_core(text))
+        run_reporting(&prog, params, &mut runner, text)
     }
 }
 

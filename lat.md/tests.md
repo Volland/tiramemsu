@@ -523,6 +523,92 @@ Virtual hops through layers keep the time, a stored hop after them still needs i
 
 The `view` text parser accepts `timeRespecting` alone, with an RFC 3339 date or date-time or epoch milliseconds, in any order with the other parts and with the `tm:` prefix, and rejects a repeated or malformed part.
 
+## Temporal Path Syntax
+
+The SPARQL `SERVICE <urn:tiramemsu:tm:timeRespecting…>` scope with `tm:arrival`, the Cypher `MATCH TIME RESPECTING` modifier, and path completeness, from [[query#Temporal Path Syntax]].
+
+### Reverse Order Does Not Match
+
+Two consecutive facts that cannot be taken in non-decreasing valid time match as an ordinary path but not as a temporal one, in SPARQL (`ASK` and `SELECT`) and Cypher, and match again once a later fact allows the order.
+
+### Virtual Hop Keeps The Arrival
+
+A journey through `sys:subject` keeps the arrival instant across the virtual hop: the arrival at the subject is the support's start, not the statement's, the same in SPARQL, Cypher and the Rust API.
+
+### Earliest Arrival Over Journeys
+
+When a longer journey arrives earlier than a direct one, SPARQL reachability binds the earlier arrival, equal to the Rust API.
+
+Cypher trails carry one arrival each and their minimum is the same; `shortestPath` binds the minimal-length journey's arrival.
+
+### Parameterized Start Matches The API
+
+For a range of epoch-ms starts, `SERVICE <…timeRespecting/$start>` with `SparqlOptions::params` and Cypher `AFTER $start` give the same endpoints and arrivals as `View::path_with`.
+
+Literal integers and dates mean the same, and a missing parameter fails.
+
+### Unbounded Arrival Is Unbound
+
+With no start and no `v_from` on the way, the arrival is −∞: `None` in Rust, unbound in SPARQL, `null` in Cypher. A zero-length match, also from a constant in no statement, arrives at the start instant.
+
+### Uses The Graph Scope And Snapshot
+
+A temporal path reads in its scope's view: an as-of `SERVICE` (outside or inside the modifier) and Cypher `USE AS OF` see a fact retracted later, and `GRAPH` (outside or inside) keeps only member statements, as the Rust API on the same view.
+
+### Row Shapes Are Unchanged
+
+Without `tm:arrival` or `ARRIVAL AS`, `SELECT *` and Cypher columns are those of the query without the modifier, the Cypher rows of a chain that respects time are identical, and `tm_path` keeps a NULL `arrival` for ordinary calls.
+
+### Completeness Tells Bound From Cap
+
+With `path_max_hops = 3`, an unbounded Cypher `*` (also time-respecting) and `shortestPath` report `StoppedAtCap`, while an explicit `*1..2` and a search that runs out of states are `Exhaustive`.
+
+SPARQL paths are `Exhaustive`, a query with no path region has no verdict, and `View::path_report` tells an explicit bound from `capped` and from a bound that leaves nothing to expand.
+
+### State Guard Still Fails
+
+Past `path_max_states`, a temporal SPARQL query, a temporal Cypher query and a time-respecting `View::path_report` fail with `PathLimitExceeded` instead of returning a prefix.
+
+### Grammar Errors
+
+Through the facade, malformed temporal syntax fails before anything runs, and a journey bound only at its end is `Unsupported` in both languages.
+
+SPARQL: `tm:arrival` outside a scope, on a node that ends no temporal path or with a constant object, a scope with no path, a malformed start and the modifier in `FROM` are `Parse`. Cypher rejects a modifier without a variable-length relationship, `ARRIVAL` with two of them or with a bound name, `ARRIVAL` without `AS` and a float start; `OPTIONAL MATCH` keeps the row with a null arrival.
+
+### SPARQL Scope Lowers To The Shared IR
+
+The scope lowers to `PathPattern.time_respecting`, and outside it the IR is unchanged.
+
+Covered: no start, an integer, a date (as its instant) or a `$parameter`, the arrival variable, inheritance through a nested time `SERVICE`, and a non-recursive path in the scope as a region.
+
+### SPARQL Scope Grammar
+
+Every malformed scope or `tm:arrival` pattern is a `Parse` error at lowering.
+
+Covered: starts `soon`, `$` and `$1x`, the modifier in `FROM` or `GRAPH`, a scope with no path, `tm:arrival` outside a scope, on a node that ends no path or ends two, a variable bound by two `tm:arrival` patterns, and `timeRespectingly`.
+
+### Cypher Modifier Lowers To The Shared IR
+
+`TIME RESPECTING` adds the shared IR's modifier to the variable-length region, and an unbounded `*` carries the cap as `:hopCap` while a bounded one does not.
+
+Covered: no start, an integer (also negative), `datetime`, `date` or a parameter as epoch ms, the arrival variable, a preceding match mode and `shortestPath`.
+
+### Cypher Modifier Grammar
+
+`compile` rejects every malformed modifier with `Parse`; the arrival is in scope afterwards, and `time` / `respecting` stay ordinary names.
+
+Covered: no variable-length relationship, `ARRIVAL` with two of them, `ARRIVAL` without `AS` or without a name, `AFTER` without an argument or with a float or a string, and an arrival name already bound.
+
+### Completeness Report Scopes
+
+The thread-local completeness scope returns the least complete verdict of the searches it saw, nested scopes merge outward, and a verdict recorded outside any scope is dropped.
+
+### Bridge Temporal Paths And Completeness
+
+Through the JSON bridge, SPARQL `params` (an integer or an RFC 3339 time) gives the same arrivals as the `path` operation, and Cypher `AFTER $start` works with `params`.
+
+`pathCompleteness` adds the verdict only when asked (`exhaustive` for SPARQL, `cap` for Cypher under `pathMaxHops`), `path` with `capped` and `completeness` returns the object form, and bad arguments are `InvalidArgument`.
+
 ## Named Graphs
 
 Checks of [[data-model#Named Graphs]] across the core, the planner, SPARQL query and update, and Cypher.

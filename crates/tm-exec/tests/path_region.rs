@@ -125,6 +125,8 @@ fn end_bound_path_is_inverted() {
         bind_path: None,
         view: View::NOW,
         graph: tm_ir::GraphSel::Any,
+        time_respecting: None,
+        hop_cap: false,
     });
     let q = b().query(p);
     // acme is not in the dictionary yet: the pattern short-circuits
@@ -253,6 +255,8 @@ fn end_bound_pattern_binds_the_path_forwards() {
         bind_path: Some("p".into()),
         view: View::NOW,
         graph: tm_ir::GraphSel::Any,
+        time_respecting: None,
+        hop_cap: false,
     };
     let q = b().query(Op::Path(pat.clone()));
     let ex = explain(&t.db.now(), &q);
@@ -306,6 +310,8 @@ fn end_bound_pattern_binds_the_path_forwards() {
             bind_path: None,
             view: View::NOW,
             graph: tm_ir::GraphSel::Any,
+            time_respecting: None,
+            hop_cap: false,
         }),
     ]));
     assert_eq!(run(&t.db.now(), &same).len(), 1);
@@ -329,6 +335,8 @@ fn zero_length_match_of_an_unknown_constant() {
             bind_path: None,
             view: View::NOW,
             graph: tm_ir::GraphSel::Any,
+            time_respecting: None,
+            hop_cap: false,
         }))
     };
     let nobody = || TermOrVar::iri(vi("nobody"));
@@ -375,6 +383,8 @@ fn anchor_shapes_golden() {
             bind_path: None,
             view: View::as_of_tx(1),
             graph: tm_ir::GraphSel::Any,
+            time_respecting: None,
+            hop_cap: false,
         })
     };
     let a = || TermOrVar::iri(vi("a"));

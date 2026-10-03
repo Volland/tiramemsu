@@ -134,3 +134,115 @@ fn use_clause_sets_the_pattern_view() {
         ir_of("USE HISTORY VALID AT date('2026-03-01') MATCH (a)-[:worksAt]->(b) RETURN b")
     );
 }
+
+/// The IR of `text` with parameters.
+fn ir_with(text: &str, params: &CypherParams) -> String {
+    let ctx = CompileCtx {
+        vocab: Vocab::default(),
+        view: tm_ir::View::NOW,
+        writable: false,
+    };
+    let prog = compile(text, params, &ctx).unwrap();
+    let mut r = Recorder::default();
+    tm_cypher::exec::run(&prog, params, &mut r).unwrap();
+    r.queries
+        .into_iter()
+        .filter(|q| !q.contains("sys:isEdge"))
+        .collect::<Vec<_>>()
+        .join("\n---\n")
+}
+
+// temporal-language-paths: `MATCH TIME RESPECTING` marks the variable-length
+// region of the clause with the shared IR's TemporalPath; an unbounded `*` carries
+// the configured cap as a cap
+// @lat: [[tests#Temporal Path Syntax#Cypher Modifier Lowers To The Shared IR]]
+#[test]
+fn time_respecting_match_lowers_to_the_temporal_path_pattern() {
+    let plain = ir_of("MATCH (a {id: 'a'})-[:met*]->(b) RETURN b");
+    assert!(
+        plain.contains(":mode TRAIL") && plain.contains(":hopCap"),
+        "{plain}"
+    );
+    assert!(!plain.contains(":timeRespecting"), "{plain}");
+    let bounded = ir_of("MATCH (a {id: 'a'})-[:met*1..3]->(b) RETURN b");
+    assert!(!bounded.contains(":hopCap"), "{bounded}");
+    let s = ir_of("MATCH TIME RESPECTING (a {id: 'a'})-[:met*]->(b) RETURN b");
+    assert!(
+        s.contains(":timeRespecting") && !s.contains(":after"),
+        "{s}"
+    );
+    let s = ir_of(
+        "MATCH TIME RESPECTING AFTER 1717200000000 ARRIVAL AS t (a {id: 'a'})-[:met*]->(b) RETURN b, t",
+    );
+    assert!(
+        s.contains(":timeRespecting :after 1717200000000 :arrival"),
+        "{s}"
+    );
+    let s = ir_of("MATCH TIME RESPECTING AFTER -5 (a {id: 'a'})-[:met*]->(b) RETURN b");
+    assert!(s.contains(":after -5"), "{s}");
+    let s = ir_of(
+        "MATCH TIME RESPECTING AFTER datetime('2024-06-01T00:00:00Z') (a {id: 'a'})-[:met*]->(b) RETURN b",
+    );
+    assert!(s.contains(":after 1717200000000"), "{s}");
+    let s =
+        ir_of("MATCH TIME RESPECTING AFTER date('2024-06-01') (a {id: 'a'})-[:met*]->(b) RETURN b");
+    assert!(s.contains(":after 1717200000000"), "{s}");
+    let mut p = CypherParams::new();
+    p.insert("t0".into(), tm_cypher::CypherValue::Integer(42));
+    let s = ir_with(
+        "MATCH TIME RESPECTING AFTER $t0 (a {id: 'a'})-[:met*]->(b) RETURN b",
+        &p,
+    );
+    assert!(s.contains(":after 42"), "{s}");
+    // with REPEATABLE-free mode keywords first, and shortest paths
+    let s = ir_of(
+        "MATCH DIFFERENT RELATIONSHIPS TIME RESPECTING p = shortestPath((a {id: 'a'})-[:met*]->(b {id: 'c'})) RETURN p",
+    );
+    assert!(
+        s.contains(":mode ANY_SHORTEST") && s.contains(":timeRespecting"),
+        "{s}"
+    );
+}
+
+// @lat: [[tests#Temporal Path Syntax#Cypher Modifier Grammar]]
+#[test]
+fn time_respecting_match_grammar_errors() {
+    let ctx = CompileCtx {
+        vocab: Vocab::default(),
+        view: tm_ir::View::NOW,
+        writable: false,
+    };
+    let params = CypherParams::new();
+    for bad in [
+        "MATCH TIME RESPECTING (a)-[:met]->(b) RETURN b",
+        "MATCH TIME RESPECTING ARRIVAL AS t (a)-[:met*]->(b)-[:met*]->(c) RETURN c",
+        "MATCH TIME RESPECTING ARRIVAL t (a)-[:met*]->(b) RETURN b",
+        "MATCH TIME RESPECTING ARRIVAL AS (a)-[:met*]->(b) RETURN b",
+        "MATCH TIME RESPECTING AFTER (a)-[:met*]->(b) RETURN b",
+        "MATCH TIME RESPECTING AFTER 1.5 (a)-[:met*]->(b) RETURN b",
+        "MATCH TIME RESPECTING AFTER 'soon' (a)-[:met*]->(b) RETURN b",
+        "MATCH (a) MATCH TIME RESPECTING ARRIVAL AS a (x)-[:met*]->(b) RETURN b",
+    ] {
+        assert!(
+            matches!(
+                compile(bad, &params, &ctx),
+                Err(tm_cypher::CypherError::Parse { .. })
+            ),
+            "{bad}"
+        );
+    }
+    // the arrival variable is in scope after the clause
+    assert!(compile(
+        "MATCH TIME RESPECTING ARRIVAL AS t (a)-[:met*]->(b) WITH b, t WHERE t > 3 RETURN b, t",
+        &params,
+        &ctx
+    )
+    .is_ok());
+    // `time` and `respecting` stay ordinary names elsewhere
+    assert!(compile(
+        "MATCH (time)-[:met]->(respecting) RETURN time, respecting",
+        &params,
+        &ctx
+    )
+    .is_ok());
+}

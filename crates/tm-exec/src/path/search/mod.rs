@@ -61,6 +61,10 @@ pub struct Ctx<'a, 'b> {
     /// The start time of a time-respecting search (`i64::MIN` is −∞); `None` for
     /// an ordinary one.
     pub time: Option<i64>,
+    /// Set when the hop bound stopped the search with an entry left that could
+    /// still step (a neighbour along one of its DFA transitions): the completeness
+    /// report.
+    pub cut: bool,
 }
 
 /// A row consumer; returns `false` to stop the search.
@@ -69,6 +73,34 @@ pub type Sink<'s> = &'s mut dyn FnMut(PathRow) -> Result<bool>;
 impl Ctx<'_, '_> {
     pub(super) fn depth_ok(&self, depth: u32) -> bool {
         self.max_hops.is_none_or(|m| depth < m)
+    }
+
+    /// True when the search goes on from the layer at `depth` whose entries are
+    /// the `(node, DFA state)` pairs `entries`: an entry is left and the hop bound
+    /// allows one more hop. When the bound stops a layer, one more fetch round
+    /// probes whether an entry could still step (a stored or virtual neighbour
+    /// along one of its transitions) and records the cut ([`Ctx::cut`]); the probe
+    /// ignores time respect and trail identity, so a cut means "longer paths may
+    /// exist", never a missed result.
+    pub(super) fn more(
+        &mut self,
+        depth: u32,
+        entries: impl IntoIterator<Item = (i64, u32)>,
+    ) -> Result<bool> {
+        let mut entries = entries.into_iter().peekable();
+        if entries.peek().is_none() {
+            return Ok(false);
+        }
+        if self.depth_ok(depth) {
+            return Ok(true);
+        }
+        let live: Vec<(i64, u32)> = entries
+            .filter(|(_, q)| !self.dfa.trans[*q as usize].is_empty())
+            .collect();
+        if !live.is_empty() && expand(self, &live)?.iter().any(|l| !l.is_empty()) {
+            self.cut = true;
+        }
+        Ok(false)
     }
 
     pub(super) fn wants(&self, end: i64) -> bool {

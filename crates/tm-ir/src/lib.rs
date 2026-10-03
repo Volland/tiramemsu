@@ -23,7 +23,7 @@ pub use op::{
     Project, RowNumber, TextPattern, TriplePattern, Union, Unnest, Values,
 };
 pub use params::{params, Params};
-pub use path::{PathExpr, PathMode};
+pub use path::{PathCompleteness, PathExpr, PathMode, TemporalPath};
 pub use semantics::{GraphSet, MatchMode, Missing, Semantics};
 pub use term::TermOrVar;
 pub use var::{Var, VarSet};

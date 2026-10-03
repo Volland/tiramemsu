@@ -38,6 +38,22 @@ fn arg_value(ex: &Exec, a: &TimeArg) -> CResult<Val> {
     })
 }
 
+/// The start instant of `MATCH TIME RESPECTING AFTER t` in epoch ms: an Integer
+/// (epoch ms), a DateTime or a Date (00:00 UTC), literal or parameter.
+pub fn after_ms(ex: &Exec, a: &TimeArg) -> CResult<i64> {
+    let v = arg_value(ex, a)?;
+    match v {
+        Val::Int(i) => Ok(i),
+        other => instant_of(&other).ok_or_else(|| {
+            CypherError::eval(format!(
+                "TIME RESPECTING AFTER needs an integer of epoch milliseconds, a date or a \
+                 datetime, got {}",
+                other.type_name()
+            ))
+        }),
+    }
+}
+
 /// Merges `t` into the current view of `ex` (handle → query → CALL body → nested).
 pub fn resolve(ex: &mut Exec, t: &TimeSel) -> CResult<View> {
     let base = ex.view();

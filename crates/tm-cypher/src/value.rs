@@ -535,6 +535,7 @@ pub enum CypherValue {
 ///     columns: vec!["n".into()],
 ///     rows: vec![vec![CypherValue::Integer(1)]],
 ///     report: None,
+///     path_completeness: None,
 /// };
 /// assert_eq!(r.to_json().to_string(), r#"{"columns":["n"],"rows":[[1]]}"#);
 /// ```
@@ -546,6 +547,11 @@ pub struct CypherResult {
     pub rows: Vec<Vec<CypherValue>>,
     /// The report of the transaction, for queries run through `cypher_write`.
     pub report: Option<tm_core::TxReport>,
+    /// How completely the query's variable-length and shortest-path searches were
+    /// evaluated, merged over all of them ([`tm_ir::PathCompleteness`]): `None`
+    /// when the query ran none. An unbounded `*` stopped by the configured hop cap
+    /// is `StoppedAtCap`. Filled by the host (the `tiramemsu` facade).
+    pub path_completeness: Option<tm_ir::PathCompleteness>,
 }
 
 impl CypherValue {

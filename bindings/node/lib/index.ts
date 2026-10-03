@@ -183,6 +183,8 @@ export type SparqlResult =
        * (`"recursivePath"`); empty when the provenance is complete.
        */
       provenanceGaps?: string[];
+      /** With `{ pathCompleteness: true }`: how completely the property paths were evaluated (`null`: no path ran). */
+      pathCompleteness?: PathCompleteness | null;
     }
   | { kind: "ask"; value: boolean }
   | { kind: "graph"; triples: Array<{ s: Term; p: Term; o: Term }> }
@@ -192,6 +194,28 @@ export type SparqlResult =
 export interface CypherResult {
   columns: string[];
   rows: unknown[][];
+  /** With `{ pathCompleteness: true }`: how completely the variable-length patterns were evaluated (`null`: none ran). */
+  pathCompleteness?: PathCompleteness | null;
+}
+
+/**
+ * How completely a path search was evaluated: `exhaustive` (no state left to
+ * expand), `bound` (an explicit hop bound stopped it: complete within the bound) or
+ * `cap` (the configured `pathMaxHops` stopped an unbounded pattern: longer paths
+ * may exist). A search over `pathMaxStates` fails with `PathLimitExceeded` instead.
+ */
+export interface PathCompleteness {
+  kind: "exhaustive" | "bound" | "cap";
+  /** The hop limit that stopped the search, if one did. */
+  maxHops: number | null;
+  /** False only for `cap`. */
+  complete: boolean;
+}
+
+/** The result of `View.pathReport`: the rows of `View.path` and the completeness. */
+export interface PathReport {
+  rows: PathRow[];
+  completeness: PathCompleteness;
 }
 
 /** One statement row with bitemporal metadata. */
@@ -228,6 +252,8 @@ export interface PathOptions {
   graphs?: TermInput[];
   /** Earliest-arrival evaluation: each hop must start no earlier than the previous one, optionally after `after`. */
   timeRespecting?: boolean | { after?: Date | number | string };
+  /** Without `maxHops`, stop at the database's `pathMaxHops` cap (as a Cypher `*` does); see `pathReport`. */
+  capped?: boolean;
 }
 
 /** A `tiramemsu-bundle/1` JSON document: a statement with its layers and evidence. */
@@ -280,6 +306,7 @@ function decodeSparql(r: Record<string, unknown>): SparqlResult {
     const out: SparqlResult = { kind: "select", vars: r.vars as string[], rows };
     if (r.provenance) out.provenance = r.provenance as StmtTerm[][];
     if (r.provenanceGaps) out.provenanceGaps = r.provenanceGaps as string[];
+    if ("pathCompleteness" in r) out.pathCompleteness = r.pathCompleteness as PathCompleteness | null;
     return out;
   }
   if (r.kind === "ask") return { kind: "ask", value: r.value as boolean };
@@ -291,6 +318,27 @@ function decodeSparql(r: Record<string, unknown>): SparqlResult {
   }
   if (r.kind === "update") return { kind: "update", report: r.report as Report };
   throw new TiramemsuError(`unknown SPARQL result kind: ${String(r.kind)}`, "Error");
+}
+
+/** Decodes one row of the bridge's `path` operation. */
+function decodePathRow(r: Record<string, unknown>): PathRow {
+  return {
+    start: fromJson(r.start),
+    end: fromJson(r.end),
+    hops: r.hops as number,
+    path: r.path
+      ? {
+          nodes: ((r.path as { nodes: unknown[] }).nodes).map(fromJson),
+          hops: ((r.path as { hops: Array<Record<string, unknown>> }).hops).map((h) => ({
+            eid: fromJson(h.eid),
+            predicate: fromJson(h.predicate),
+            dir: h.dir as "out" | "in",
+            kind: h.kind as string,
+          })),
+        }
+      : null,
+    arrival: (r.arrival ?? null) as number | null,
+  };
 }
 
 function decodeTriple(t: Record<string, unknown>): TripleRow {
@@ -490,19 +538,44 @@ export class View {
   /**
    * SPARQL query (SELECT, ASK, CONSTRUCT, DESCRIBE, or UPDATE). With `provenance`, a SELECT
    * result also lists the statements that produced each row; with `queryOnly`, an update
-   * fails with code `Unsupported` before anything runs.
+   * fails with code `Unsupported` before anything runs. `params` gives the start
+   * instants of `SERVICE <urn:tiramemsu:tm:timeRespecting/$name>` scopes; with
+   * `pathCompleteness`, a SELECT result reports how completely its paths were evaluated.
    */
-  sparql(text: string, opts?: { provenance?: boolean; queryOnly?: boolean }): SparqlResult {
+  sparql(
+    text: string,
+    opts?: {
+      provenance?: boolean;
+      queryOnly?: boolean;
+      params?: Record<string, Date | number | string>;
+      pathCompleteness?: boolean;
+    },
+  ): SparqlResult {
     const args: Record<string, unknown> = { ...this._base(), text };
     if (opts?.provenance) args.provenance = true;
     if (opts?.queryOnly) args.queryOnly = true;
+    if (opts?.pathCompleteness) args.pathCompleteness = true;
+    if (opts?.params) {
+      args.params = Object.fromEntries(Object.entries(opts.params).map(([k, v]) => [k, timeArg(v)]));
+    }
     return decodeSparql(callNative(this._db, "sparql", args) as Record<string, unknown>);
   }
 
-  /** openCypher read query. */
-  cypher(text: string, params?: Record<string, unknown>): CypherResult {
-    const r = callNative(this._db, "cypher", { ...this._base(), text, params }) as Record<string, unknown>;
-    return { columns: r.columns as string[], rows: r.rows as unknown[][] };
+  /**
+   * openCypher read query. With `pathCompleteness`, the result reports how completely
+   * its variable-length patterns were evaluated (`cap` when `pathMaxHops` cut one).
+   */
+  cypher(
+    text: string,
+    params?: Record<string, unknown>,
+    opts?: { pathCompleteness?: boolean },
+  ): CypherResult {
+    const args: Record<string, unknown> = { ...this._base(), text, params };
+    if (opts?.pathCompleteness) args.pathCompleteness = true;
+    const r = callNative(this._db, "cypher", args) as Record<string, unknown>;
+    const out: CypherResult = { columns: r.columns as string[], rows: r.rows as unknown[][] };
+    if ("pathCompleteness" in r) out.pathCompleteness = r.pathCompleteness as PathCompleteness | null;
+    return out;
   }
 
   /** Pattern match on statements; each of s, p, o is optional (absent = any). */
@@ -520,32 +593,31 @@ export class View {
     pathExpr: string,
     opts?: PathOptions,
   ): PathRow[] {
+    return (callNative(this._db, "path", this._pathArgs(start, pathExpr, opts)) as Record<string, unknown>[]).map(
+      decodePathRow,
+    );
+  }
+
+  /** `path` with how completely the search was evaluated (`exhaustive`, `bound` or `cap`). */
+  pathReport(start: TermInput, pathExpr: string, opts?: PathOptions): PathReport {
+    const args = { ...this._pathArgs(start, pathExpr, opts), completeness: true };
+    const r = callNative(this._db, "path", args) as { rows: Record<string, unknown>[]; completeness: PathCompleteness };
+    return { rows: r.rows.map(decodePathRow), completeness: r.completeness };
+  }
+
+  /** @internal The arguments of a `path` call. */
+  private _pathArgs(start: TermInput, pathExpr: string, opts?: PathOptions): Record<string, unknown> {
     const args: Record<string, unknown> = { ...this._base(), start: toJson(start), path: pathExpr };
     if (opts?.mode) args.mode = opts.mode;
     if (opts?.maxHops !== undefined) args.maxHops = opts.maxHops;
     if (opts?.graphs) args.graphs = opts.graphs.map(toJson);
+    if (opts?.capped) args.capped = true;
     const tr = opts?.timeRespecting;
     if (tr === true) args.timeRespecting = true;
     else if (tr && typeof tr === "object") {
       args.timeRespecting = tr.after !== undefined ? { after: timeArg(tr.after) } : {};
     }
-    return (callNative(this._db, "path", args) as Record<string, unknown>[]).map((r) => ({
-      start: fromJson(r.start),
-      end: fromJson(r.end),
-      hops: r.hops as number,
-      path: r.path
-        ? {
-            nodes: ((r.path as { nodes: unknown[] }).nodes).map(fromJson),
-            hops: ((r.path as { hops: Array<Record<string, unknown>> }).hops).map((h) => ({
-              eid: fromJson(h.eid),
-              predicate: fromJson(h.predicate),
-              dir: h.dir as "out" | "in",
-              kind: h.kind as string,
-            })),
-          }
-        : null,
-      arrival: (r.arrival ?? null) as number | null,
-    }));
+    return args;
   }
 
   /** Events since transaction `since` (default: 0 = all). */

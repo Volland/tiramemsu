@@ -71,6 +71,19 @@ pub struct Lowerer<'a> {
     pub(crate) active: GraphSel,
     /// How many triple patterns took a `GRAPH ?g` selector so far.
     pub(crate) graph_var_uses: u32,
+    /// The innermost `SERVICE <urn:tiramemsu:tm:timeRespecting…>` scope being
+    /// lowered, if any.
+    pub(crate) temporal: Option<TemporalScope>,
+}
+
+/// The state of a time-respecting `SERVICE` scope (`lat.md/query#Temporal Path
+/// Syntax`): its start instant, how many paths it made time-respecting, and the
+/// `tm:arrival` patterns `(end, variable)` waiting for their path.
+#[derive(Clone, Debug, Default)]
+pub(crate) struct TemporalScope {
+    pub(crate) after: Option<tm_ir::TermOrVar>,
+    pub(crate) paths: u32,
+    pub(crate) arrivals: Vec<(tm_ir::TermOrVar, Var)>,
 }
 
 impl<'a> Lowerer<'a> {
@@ -85,6 +98,7 @@ impl<'a> Lowerer<'a> {
             dataset: GraphDataset::default(),
             active: GraphSel::Any,
             graph_var_uses: 0,
+            temporal: None,
         }
     }
 

@@ -74,7 +74,12 @@ pub(super) fn run(ctx: &mut Ctx<'_, '_>, sink: Sink<'_>, all: bool) -> Result<()
     }
     let mut layer: Vec<u32> = vec![0];
     let mut depth = 0u32;
-    while !layer.is_empty() && ctx.depth_ok(depth) {
+    while ctx.more(
+        depth,
+        layer
+            .iter()
+            .map(|i| (arena[*i as usize].node, arena[*i as usize].state)),
+    )? {
         let entries: Vec<(i64, u32)> = layer
             .iter()
             .map(|i| (arena[*i as usize].node, arena[*i as usize].state))
@@ -190,7 +195,12 @@ pub(super) fn run_timed(ctx: &mut Ctx<'_, '_>, sink: Sink<'_>, all: bool, tau0: 
     }
     let mut layer: Vec<u32> = vec![0];
     let mut depth = 0u32;
-    while !layer.is_empty() && ctx.depth_ok(depth) {
+    while ctx.more(
+        depth,
+        layer
+            .iter()
+            .map(|i| (arena[*i as usize].node, arena[*i as usize].state)),
+    )? {
         let entries: Vec<(i64, u32)> = layer
             .iter()
             .map(|i| (arena[*i as usize].node, arena[*i as usize].state))

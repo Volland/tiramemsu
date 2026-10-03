@@ -65,6 +65,11 @@ pub fn scope(op: &Op) -> Scope {
             if let crate::op::GraphSel::Var(g) = &p.graph {
                 s.push(g);
             }
+            if let Some(a) = p.time_respecting.as_ref().and_then(|t| t.arrival.as_ref()) {
+                // unbound for an arrival of −∞
+                s.push(a);
+                s.maybe_missing.insert(a.clone());
+            }
         }
         Op::Text(t) => {
             s.push(&t.eid);

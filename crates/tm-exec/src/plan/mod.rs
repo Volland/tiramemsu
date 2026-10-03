@@ -105,7 +105,9 @@ pub struct PPath {
     pub max_hops: Option<u32>,
     /// Path variable.
     pub bind_path: Option<Var>,
-    /// View text.
+    /// The arrival variable of a time-respecting path (the `arrival` column).
+    pub bind_arrival: Option<Var>,
+    /// View text, with the `timeRespecting[/<ms>]` and `hopCap` parts of the call.
     pub view_text: String,
     /// Forward or inverted.
     pub note: RouteNote,

@@ -1,5 +1,5 @@
-//! The `view` argument text of `tm_path` (with its `timeRespecting` part) and its
-//! resolution.
+//! The `view` argument text of `tm_path` (with its `timeRespecting` and `hopCap`
+//! parts) and its resolution.
 
 use tm_core::value::{parse_date, parse_datetime};
 use tm_core::vocab::TM;
@@ -39,21 +39,52 @@ pub fn parse_view(text: &str) -> std::result::Result<ViewSpec, String> {
     }
 }
 
+/// The parsed `view` argument of a `tm_path` call.
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub struct ViewArg {
+    /// The view of every hop.
+    pub spec: ViewSpec,
+    /// The `timeRespecting[/<t>]` part.
+    pub time_respecting: Option<TimeRespecting>,
+    /// The `hopCap` part: the `max_hops` argument is the configured hop cap on an
+    /// unbounded expression (completeness reporting only).
+    pub hop_cap: bool,
+}
+
 /// Parses the `view` argument of `tm_path`: the parts of [`parse_view`] plus an
 /// optional `timeRespecting` or `timeRespecting/<t>` part (`t` an RFC 3339 date or
 /// date-time, or an integer of epoch milliseconds), in any order, each part at
-/// most once. `timeRespecting` alone means `now;timeRespecting`.
+/// most once. `timeRespecting` alone means `now;timeRespecting`. A `hopCap` part
+/// is refused here; [`parse_call_view`] reads it.
 pub fn parse_view_arg(
     text: &str,
 ) -> std::result::Result<(ViewSpec, Option<TimeRespecting>), String> {
+    let a = parse_call_view(text)?;
+    if a.hop_cap {
+        return Err(format!(
+            "malformed view `{text}`: hopCap is a tm_path option"
+        ));
+    }
+    Ok((a.spec, a.time_respecting))
+}
+
+/// [`parse_view_arg`] plus a `hopCap` part (at most once, any order), which marks
+/// the `max_hops` argument of the call as the configured hop cap.
+pub fn parse_call_view(text: &str) -> std::result::Result<ViewArg, String> {
     let mut spec = ViewSpec::NOW;
+    let mut hop_cap = false;
     let (mut tx_set, mut valid_set) = (false, false);
     let mut time_respecting = None;
     for part in text.split(';') {
         let part = part.trim();
         let part = part.strip_prefix(TM).unwrap_or(part);
         let bad = || format!("malformed view `{text}`");
-        if part == "timeRespecting" || part.starts_with("timeRespecting/") {
+        if part == "hopCap" {
+            if hop_cap {
+                return Err(bad());
+            }
+            hop_cap = true;
+        } else if part == "timeRespecting" || part.starts_with("timeRespecting/") {
             if time_respecting.is_some() {
                 return Err(bad());
             }
@@ -89,7 +120,11 @@ pub fn parse_view_arg(
             return Err(bad());
         }
     }
-    Ok((spec, time_respecting))
+    Ok(ViewArg {
+        spec,
+        time_respecting,
+        hop_cap,
+    })
 }
 
 /// Resolves a view on `exec`; `None` when it selects a point before transaction 1.
@@ -171,6 +206,12 @@ mod tests {
             parse_view_arg("urn:tiramemsu:tm:timeRespecting/2024-06-01T12:00:00Z").unwrap(),
             (ViewSpec::NOW, tr(Some(1_717_243_200_000)))
         );
+        let a = parse_call_view("hopCap;asOf/15").unwrap();
+        assert!(a.hop_cap);
+        assert_eq!(a.spec, ViewSpec::as_of(TimeRef::Tx(15)));
+        assert!(!parse_call_view("now").unwrap().hop_cap);
+        assert!(parse_view_arg("hopCap").is_err());
+        assert!(parse_call_view("hopCap;hopCap").is_err());
         for bad in [
             "timeRespecting;timeRespecting",
             "timeRespecting/soon",

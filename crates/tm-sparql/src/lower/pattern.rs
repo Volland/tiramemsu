@@ -180,6 +180,12 @@ impl Lowerer<'_> {
                 bindings,
             } => self.values(variables, bindings),
             GraphPattern::Service { name, inner, .. } => match name {
+                NamedNodePattern::NamedNode(n)
+                    if crate::dataset::parse_time_respecting_iri(n.as_str())?.is_some() =>
+                {
+                    let after = crate::dataset::parse_time_respecting_iri(n.as_str())?.flatten();
+                    self.temporal_scope(after, inner, sc)
+                }
                 NamedNodePattern::NamedNode(n) => match sc.enter_service(n)? {
                     Some(inner_scope) => self.pattern(inner, inner_scope),
                     None => Err(unsupported(SERVICE)),

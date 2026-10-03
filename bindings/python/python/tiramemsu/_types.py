@@ -415,11 +415,39 @@ def import_summary_from_json(j: Dict[str, Any]) -> ImportSummary:
 
 
 @dataclass(frozen=True)
+class PathCompleteness:
+    """How completely a path search was evaluated.
+
+    *kind* is ``"exhaustive"`` (no state left to expand), ``"bound"`` (an explicit
+    hop bound stopped it: complete within the bound) or ``"cap"`` (the database's
+    ``path_max_hops`` stopped an unbounded pattern: longer paths may exist).  A
+    search over ``path_max_states`` raises ``PathLimitExceeded`` instead.
+    """
+
+    kind: str
+    max_hops: Optional[int]
+    """The hop limit that stopped the search, if one did."""
+    complete: bool
+    """``False`` only for ``"cap"``."""
+
+    @staticmethod
+    def from_json(j: Optional[Dict[str, Any]]) -> Optional["PathCompleteness"]:
+        """Decode the bridge form; ``None`` stays ``None`` (no path search ran)."""
+        if j is None:
+            return None
+        mh = j.get("maxHops")
+        return PathCompleteness(str(j["kind"]), None if mh is None else int(mh), bool(j["complete"]))
+
+
+@dataclass(frozen=True)
 class CypherResult:
     """The result of a Cypher read query."""
 
     columns: List[str]
     rows: List[List[Any]]
+    path_completeness: Optional[PathCompleteness] = None
+    """With ``path_completeness=True``: how completely the variable-length patterns
+    were evaluated (``None`` when none ran)."""
 
     def __iter__(self) -> Iterator[Dict[str, Any]]:
         """Iterate as dicts mapping column name to value."""
@@ -448,6 +476,7 @@ class SparqlSelectResult:
         rows: List[Dict[str, Any]],
         provenance: Optional[List[List[Any]]] = None,
         provenance_gaps: Optional[List[str]] = None,
+        path_completeness: Optional[Dict[str, Any]] = None,
     ) -> None:
         self.vars: List[str] = vars_
         self._rows = rows
@@ -462,6 +491,11 @@ class SparqlSelectResult:
         )
         """With ``provenance=True``: the query parts whose statements are not cited
         (``"recursivePath"``); empty when the provenance is complete."""
+        self.path_completeness: Optional[PathCompleteness] = PathCompleteness.from_json(
+            path_completeness
+        )
+        """With ``path_completeness=True``: how completely the property paths were
+        evaluated (``None`` when no path ran or it was not asked for)."""
 
     def __iter__(self) -> Iterator[Dict[str, Any]]:
         for row in self._rows:
@@ -504,7 +538,9 @@ def sparql_result_from_json(j: Dict[str, Any]) -> SparqlResult:
     if kind == "select":
         vars_: List[str] = list(j.get("vars") or [])
         rows: List[Dict[str, Any]] = list(j.get("rows") or [])
-        return SparqlSelectResult(vars_, rows, j.get("provenance"), j.get("provenanceGaps"))
+        return SparqlSelectResult(
+            vars_, rows, j.get("provenance"), j.get("provenanceGaps"), j.get("pathCompleteness")
+        )
     if kind == "ask":
         return SparqlAskResult(bool(j.get("value", False)))
     if kind == "graph":
@@ -525,6 +561,14 @@ class PathRow:
     path: Optional[Dict[str, Any]]
     arrival: Optional[int] = None
     """Arrival instant (epoch ms) of a time-respecting search, otherwise ``None``."""
+
+
+@dataclass(frozen=True)
+class PathReport:
+    """The result of :meth:`View.path_report`: the rows and the completeness."""
+
+    rows: List[PathRow]
+    completeness: PathCompleteness
 
 
 @dataclass(frozen=True)

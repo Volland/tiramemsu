@@ -152,6 +152,7 @@ fn json_encoding() {
             ]),
         ]],
         report: None,
+        path_completeness: None,
     };
     insta::assert_json_snapshot!(res.to_json());
 }

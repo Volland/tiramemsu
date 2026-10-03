@@ -67,7 +67,10 @@ pub(super) fn run(ctx: &mut Ctx<'_, '_>, sink: Sink<'_>) -> Result<()> {
     }
     let mut layer: Range<usize> = 0..1;
     let mut depth = 0u32;
-    while !layer.is_empty() && ctx.depth_ok(depth) {
+    while ctx.more(
+        depth,
+        layer.clone().map(|i| (arena[i].node, arena[i].state)),
+    )? {
         let entries: Vec<(i64, u32)> = layer
             .clone()
             .map(|i| (arena[i].node, arena[i].state))

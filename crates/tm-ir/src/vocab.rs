@@ -43,6 +43,12 @@ pub const TM_TEXT_LIMIT: &str = "urn:tiramemsu:tm:textLimit";
 /// `tm:textMode`: `"all"` (default), `"any"` or `"phrase"`.
 pub const TM_TEXT_MODE: &str = "urn:tiramemsu:tm:textMode";
 
+/// `tm:arrival`: in SPARQL, `?end tm:arrival ?t` inside a `SERVICE
+/// <urn:tiramemsu:tm:timeRespecting…>` scope binds the arrival of the
+/// time-respecting path that ends at `?end` (`lat.md/query#Temporal Path Syntax`).
+/// Not a stored or virtual predicate.
+pub const TM_ARRIVAL: &str = "urn:tiramemsu:tm:arrival";
+
 /// The `tm:text*` pattern predicates.
 pub const TEXT: [&str; 6] = [
     TM_TEXT_MATCH,

@@ -9,9 +9,9 @@
 use spargebra::algebra::QueryDataset;
 use spargebra::term::NamedNode;
 use tm_core::{value, vocab, Error, Result, TimeRef, TxSel, ValidSel, Value};
-use tm_ir::View;
+use tm_ir::{TermOrVar, View};
 
-use crate::error::{invalid_time_iri, unsupported, CONFLICTING_TIME};
+use crate::error::{invalid_time_iri, time_respecting_not_service, unsupported, CONFLICTING_TIME};
 
 /// A parsed `tm:` time IRI: `asOf/<t>`, `asOf/<instant>`, `history` or
 /// `validAt/<instant>` under `urn:tiramemsu:tm:`. Only `FROM` and `SERVICE` give
@@ -63,6 +63,9 @@ pub fn parse_time_iri(iri: &str) -> Result<Option<TimeIri>> {
     let Some(rest) = iri.strip_prefix(vocab::TM) else {
         return Ok(None);
     };
+    if parse_time_respecting_iri(iri)?.is_some() {
+        return Err(time_respecting_not_service(iri));
+    }
     let bad = || invalid_time_iri(iri);
     if rest == "history" {
         return Ok(Some(TimeIri::Tx(TxSel::History)));
@@ -80,6 +83,69 @@ pub fn parse_time_iri(iri: &str) -> Result<Option<TimeIri>> {
         return Ok(Some(TimeIri::Valid(ValidSel::At(ms))));
     }
     Err(bad())
+}
+
+/// Parses a `SERVICE` IRI as the time-respecting path modifier
+/// (`lat.md/query#Temporal Path Syntax`): `Ok(None)` when it is not one,
+/// `Ok(Some(None))` for `tm:timeRespecting` (from −∞), and `Ok(Some(Some(t)))` for
+/// `tm:timeRespecting/<t>` with `t` an integer of epoch milliseconds (an integer
+/// constant), an `xsd:date` or `xsd:dateTime` lexical form (its instant in epoch
+/// ms), or `$name`, a parameter of the execution. Anything else after the slash is
+/// a `Parse` error naming the IRI.
+///
+/// # Example
+///
+/// ```
+/// use tm_core::Value;
+/// use tm_ir::TermOrVar;
+/// use tm_sparql::dataset::parse_time_respecting_iri;
+///
+/// let p = "urn:tiramemsu:tm:timeRespecting";
+/// assert_eq!(parse_time_respecting_iri(p)?, Some(None));
+/// assert_eq!(
+///     parse_time_respecting_iri(&format!("{p}/1717200000000"))?,
+///     Some(Some(TermOrVar::Const(Value::Int(1_717_200_000_000))))
+/// );
+/// assert_eq!(
+///     parse_time_respecting_iri(&format!("{p}/2024-06-01"))?,
+///     Some(Some(TermOrVar::Const(Value::Int(1_717_200_000_000))))
+/// );
+/// assert_eq!(
+///     parse_time_respecting_iri(&format!("{p}/$start"))?,
+///     Some(Some(TermOrVar::param("start")))
+/// );
+/// assert_eq!(parse_time_respecting_iri("urn:tiramemsu:tm:asOf/3")?, None);
+/// assert!(parse_time_respecting_iri(&format!("{p}/soon")).is_err());
+/// # Ok::<(), tm_core::Error>(())
+/// ```
+pub fn parse_time_respecting_iri(iri: &str) -> Result<Option<Option<TermOrVar>>> {
+    let Some(rest) = iri.strip_prefix(vocab::TM) else {
+        return Ok(None);
+    };
+    if rest == "timeRespecting" {
+        return Ok(Some(None));
+    }
+    let Some(t) = rest.strip_prefix("timeRespecting/") else {
+        return Ok(None);
+    };
+    let bad = || invalid_time_iri(iri);
+    if let Some(name) = t.strip_prefix('$') {
+        let ok = !name.is_empty()
+            && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
+            && !name.starts_with(|c: char| c.is_ascii_digit());
+        return if ok {
+            Ok(Some(Some(TermOrVar::param(name))))
+        } else {
+            Err(bad())
+        };
+    }
+    let digits = t.strip_prefix('-').unwrap_or(t);
+    let ms = if !digits.is_empty() && digits.bytes().all(|b| b.is_ascii_digit()) {
+        t.parse::<i64>().map_err(|_| bad())?
+    } else {
+        instant_ms(t).ok_or_else(bad)?
+    };
+    Ok(Some(Some(TermOrVar::Const(Value::Int(ms)))))
 }
 
 /// The time parts a clause names; an absent part is inherited.

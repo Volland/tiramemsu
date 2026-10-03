@@ -23,7 +23,7 @@ A statement's `[v_from, v_to)` says when the fact held in the world, as epoch mi
 - Changing valid time, including closing an open interval ("she left in March"), is a [[time-model#Operations#Supersede]], never an in-place update.
 - Two live statements with the same `(s, p, o)` and **non-overlapping** intervals are two episodes of the fact, e.g. Alice at Acme in 2020–22 and again from 2024.
 - Queries never filter on valid time unless asked (`validAt`). See [[query#Temporal Syntax]].
-- A time-respecting path uses each fact at some instant inside its interval, never going back in time, and reports its earliest arrival; `validAt` instead fixes one instant for every hop. See [[query#Physical Planning#Path Engine#Time-Respecting Search]].
+- A time-respecting path uses each fact at some instant inside its interval, never going back in time, and reports its earliest arrival; `validAt` instead fixes one instant for every hop. See [[query#Physical Planning#Path Engine#Time-Respecting Search]] and, for SPARQL and Cypher, [[query#Temporal Path Syntax]].
 
 ## Statement Lifecycle
 

@@ -677,6 +677,45 @@ class TestPathOptions:
         assert arrivals(6) == []
         assert arrivals(False) == [None, None]
 
+    def test_temporal_path_syntax_and_completeness(self, tmp_path: Any) -> None:
+        from tiramemsu import PathCompleteness
+
+        db = Database(str(tmp_path / "t.db"), path_max_hops=2)
+        with db.transact() as tx:
+            tx.assert_(iri("a"), iri("met"), iri("b"), valid_from=1, valid_to=5)
+            tx.assert_(iri("b"), iri("met"), iri("c"), valid_from=3, valid_to=9)
+            tx.assert_(iri("c"), iri("met"), iri("d"), valid_from=4, valid_to=9)
+        api = [r.arrival for r in db.now().path(iri("a"), "v:met+", time_respecting=2)]
+        assert api == [2, 3, 4]
+        # SPARQL with a start parameter
+        r = db.now().sparql(
+            SPARQL_PREFIX
+            + "SELECT ?t WHERE { SERVICE <urn:tiramemsu:tm:timeRespecting/$start> "
+            + "{ v:a v:met+ ?y . ?y tm:arrival ?t } } ORDER BY ?t",
+            params={"start": 2},
+            path_completeness=True,
+        )
+        assert isinstance(r, SparqlSelectResult)
+        assert [row["t"] for row in r] == [2, 3, 4]
+        assert r.path_completeness == PathCompleteness("exhaustive", None, True)
+        # Cypher with a start parameter, capped at path_max_hops = 2
+        c = db.now().cypher(
+            "MATCH TIME RESPECTING AFTER $start ARRIVAL AS t "
+            "(x {`@id`: 'v:a'})-[:met*]->(y) RETURN t ORDER BY t",
+            {"start": 2},
+            path_completeness=True,
+        )
+        assert c.rows == [[2], [3]]
+        assert c.path_completeness == PathCompleteness("cap", 2, False)
+        assert db.now().cypher("MATCH (x) RETURN count(x) AS n").path_completeness is None
+        # the path report
+        capped = db.now().path_report(iri("a"), "v:met+", mode="trail", capped=True)
+        assert len(capped.rows) == 2
+        assert capped.completeness == PathCompleteness("cap", 2, False)
+        bound = db.now().path_report(iri("a"), "v:met+", max_hops=1)
+        assert bound.completeness == PathCompleteness("bound", 1, True)
+        assert db.now().path_report(iri("a"), "v:met+").completeness.kind == "exhaustive"
+
 
 class TestProvenanceDependentsBundles:
     def test_sparql_rows_carry_provenance(self, db: Database) -> None:

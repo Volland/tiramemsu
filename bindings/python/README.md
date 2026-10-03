@@ -122,10 +122,11 @@ Times accept a `datetime`, a `date`, epoch milliseconds or an RFC 3339 string. `
 
 | Method | Returns |
 |---|---|
-| `view.sparql(text, provenance=False, query_only=False)` | A select result (iterate it for rows of variable to term; `.vars` lists the variables, `.provenance` the statements behind each row, `.provenance_gaps` what they leave out), an ask, a graph, or an update result |
-| `view.cypher(text, params=None)` | A result with `columns` and `rows` |
+| `view.sparql(text, provenance=False, query_only=False, params=None, path_completeness=False)` | A select result (iterate it for rows of variable to term; `.vars` lists the variables, `.provenance` the statements behind each row, `.provenance_gaps` what they leave out, `.path_completeness` how completely the paths ran), an ask, a graph, or an update result |
+| `view.cypher(text, params=None, path_completeness=False)` | A result with `columns`, `rows` and `path_completeness` |
 | `view.triples(s=, p=, o=)` | `Statement` values with `eid`, `s`, `p`, `o`, `t_add`, `t_ret`, `valid_from`, `valid_to`, `ret_kind` |
-| `view.path(start, expr, mode="reach", max_hops=None, graphs=None, time_respecting=False)` | Endpoints with hop counts and `arrival`. `mode` is `"reach"`, `"trail"`, `"anyShortest"` or `"allShortest"` |
+| `view.path(start, expr, mode="reach", max_hops=None, graphs=None, time_respecting=False, capped=False)` | Endpoints with hop counts and `arrival`. `mode` is `"reach"`, `"trail"`, `"anyShortest"` or `"allShortest"` |
+| `view.path_report(start, expr, ...)` | `PathReport(rows, completeness)`: the rows of `path` and a `PathCompleteness` |
 | `view.dependents(eid)` | The statements that stand on `eid`: what retracting it would cascade to |
 | `view.bundle(eid)` | The statement with its layers and evidence, as a `tiramemsu-bundle/1` dict |
 | `view.events(since=0)` | The change log after a transaction |
@@ -134,6 +135,10 @@ Times accept a `datetime`, a `date`, epoch milliseconds or an RFC 3339 string. `
 `expr` is SPARQL property-path syntax with the predeclared prefixes `v:`, `sys:`, `tm:`, `rdf:` and `xsd:`, for example `v:knows+`. SPARQL supports RDF 1.2 annotations: `{| v:confidence ?c |}` reads a layer.
 
 With `provenance=True` a select result's `.provenance` holds, for each row, the `Stmt` values that produced it, and `.provenance_gaps` lists the query parts whose statements are not cited (`["recursivePath"]` for a `+` or `*` path; empty means complete). `query_only=True` makes an update raise `Unsupported` before anything runs. `graphs` keeps every hop of a path inside the listed graphs. `time_respecting=True` (or a time to start after) makes each hop start no earlier than the previous one, and every row then carries its earliest `arrival` in epoch milliseconds.
+
+The query languages say the same with opt-in extensions. SPARQL: `SERVICE <urn:tiramemsu:tm:timeRespecting/$since> { v:a v:met+ ?who . ?who tm:arrival ?t }` with `params={"since": 2}` (the start may also be written as epoch ms or an `xsd:date`/`xsd:dateTime` after the slash, or left out for −∞; `?t` is unbound for −∞). Cypher: ``MATCH TIME RESPECTING AFTER $since ARRIVAL AS t (a {`@id`: 'v:a'})-[:met*]->(who) RETURN who, t`` (`AFTER` takes an integer, a parameter, `datetime('…')` or `date('…')`; `t` is `None` for −∞). Both need the start bound, and the rows keep their columns unless the arrival is asked for.
+
+`path_completeness=True` (and `path_report`) report a frozen `PathCompleteness(kind, max_hops, complete)`: `kind` is `"exhaustive"`, `"bound"` (an explicit hop bound stopped the search; complete within it) or `"cap"` (the database's `path_max_hops` cut an unbounded pattern such as a Cypher `*`; longer paths may exist), and `capped=True` applies that cap to `path`. A search over `path_max_states` raises `PathLimitExceeded`.
 
 ## Terms
 

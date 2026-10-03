@@ -8,7 +8,7 @@ use std::sync::{Arc, Mutex};
 use lru::LruCache;
 use tm_core::{Executor, ObjectId, Result, ViewSpec, Vocab};
 use tm_ir::display::path_text_canonical;
-use tm_ir::PathMode;
+use tm_ir::{PathCompleteness, PathMode};
 
 use super::automaton::Dfa;
 use super::fetch::{Fetcher, DEFAULT_BATCH};
@@ -50,6 +50,10 @@ pub struct PathRequest<'a> {
     pub mode: PathMode,
     /// The hop bound; `None` = unbounded.
     pub max_hops: Option<u32>,
+    /// `max_hops` is the configured hop cap on an unbounded expression, not a bound
+    /// the caller wrote: a search it stops is reported as
+    /// [`PathCompleteness::StoppedAtCap`] rather than `StoppedAtBound`.
+    pub hop_cap: bool,
     /// The view of every hop.
     pub view: ViewSpec,
     /// Only rows for this end.
@@ -160,20 +164,25 @@ impl PathEngine {
     }
 
     /// Runs a request, feeding rows to `sink` in the deterministic order of the
-    /// mode; the sink returns `false` to stop early.
+    /// mode; the sink returns `false` to stop early. Returns how completely the
+    /// search was evaluated, which is also recorded in the current
+    /// [`report::collect`](super::report::collect) scope: `Exhaustive` unless the
+    /// hop bound stopped it with an entry that could still step (a sink that stops
+    /// early is the consumer's choice and does not count). A search past the state
+    /// guard fails with `PathLimitExceeded` and reports nothing.
     pub fn run(
         &self,
         exec: &mut dyn Executor,
         req: &PathRequest<'_>,
         sink: Sink<'_>,
-    ) -> Result<()> {
+    ) -> Result<PathCompleteness> {
         let expr = {
             let mut lazy = Lazy::new(exec);
             syntax::parse(req.path, &mut lazy)?
         };
         let dfa = self.dfa(&expr)?;
         let Some(view) = resolve_view(exec, req.view)? else {
-            return Ok(());
+            return Ok(PathCompleteness::Exhaustive);
         };
         let res = resolve(exec, &dfa)?;
         let mut fetch = Fetcher::new(exec, view)
@@ -189,17 +198,34 @@ impl PathEngine {
             end_filter: req.end,
             start: req.start,
             time: req.time_respecting.map(|t| t.after.unwrap_or(i64::MIN)),
+            cut: false,
         };
-        search(req.mode, &mut ctx, sink)
+        search(req.mode, &mut ctx, sink)?;
+        let verdict = match (ctx.cut, req.max_hops) {
+            (true, Some(max_hops)) if req.hop_cap => PathCompleteness::StoppedAtCap { max_hops },
+            (true, Some(max_hops)) => PathCompleteness::StoppedAtBound { max_hops },
+            _ => PathCompleteness::Exhaustive,
+        };
+        super::report::record(verdict);
+        Ok(verdict)
     }
 
     /// Runs a request and collects every row.
     pub fn eval(&self, exec: &mut dyn Executor, req: &PathRequest<'_>) -> Result<Vec<PathRow>> {
+        Ok(self.eval_report(exec, req)?.0)
+    }
+
+    /// Runs a request and collects every row, with the completeness of the search.
+    pub fn eval_report(
+        &self,
+        exec: &mut dyn Executor,
+        req: &PathRequest<'_>,
+    ) -> Result<(Vec<PathRow>, PathCompleteness)> {
         let mut rows = Vec::new();
-        self.run(exec, req, &mut |r| {
+        let verdict = self.run(exec, req, &mut |r| {
             rows.push(r);
             Ok(true)
         })?;
-        Ok(rows)
+        Ok((rows, verdict))
     }
 }

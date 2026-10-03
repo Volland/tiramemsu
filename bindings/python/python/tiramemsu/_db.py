@@ -16,6 +16,8 @@ from ._types import (
     CypherWriteResult,
     ImportProgress,
     ImportSummary,
+    PathCompleteness,
+    PathReport,
     PathRow,
     QueryBudget,
     Report,
@@ -41,6 +43,17 @@ from ._types import (
 
 # A sentinel that is distinct from None (which means "clear the bound").
 _UNSET: Any = object()
+
+
+def _path_row(r: Dict[str, Any]) -> PathRow:
+    """Decode one row of the bridge's ``path`` operation."""
+    return PathRow(
+        start=term_from_json(r["start"]),
+        end=term_from_json(r["end"]),
+        hops=int(r["hops"]),
+        path=r.get("path") if r.get("path") is not None else None,
+        arrival=None if r.get("arrival") is None else int(r["arrival"]),
+    )
 
 
 # --------------------------------------------------------------------------- native call
@@ -503,7 +516,13 @@ class View:
         return _call(self._native, op, json.dumps(args))
 
     def sparql(
-        self, text: str, *, provenance: bool = False, query_only: bool = False
+        self,
+        text: str,
+        *,
+        provenance: bool = False,
+        query_only: bool = False,
+        params: Optional[Dict[str, Any]] = None,
+        path_completeness: bool = False,
     ) -> SparqlResult:
         """Run a SPARQL query on this view.
 
@@ -512,12 +531,19 @@ class View:
         :class:`~._types.SparqlUpdateResult` depending on the query form.  With
         *provenance*, a SELECT result also lists the statements behind each row;
         with *query_only*, an update raises ``Unsupported`` before anything runs.
+        *params* gives the start instants (epoch ms, ``datetime`` or ISO text) of
+        ``SERVICE <urn:tiramemsu:tm:timeRespecting/$name>`` scopes; with
+        *path_completeness*, a SELECT result reports how completely its paths ran.
         """
         args: Dict[str, Any] = {"text": text}
         if provenance:
             args["provenance"] = True
         if query_only:
             args["queryOnly"] = True
+        if params:
+            args["params"] = {k: time_to_json(v) for k, v in params.items()}
+        if path_completeness:
+            args["pathCompleteness"] = True
         result_text = self._call("sparql", args)
         return sparql_result_from_json(json.loads(result_text))
 
@@ -525,16 +551,23 @@ class View:
         self,
         text: str,
         params: Optional[Dict[str, Any]] = None,
+        *,
+        path_completeness: bool = False,
     ) -> CypherResult:
-        """Run a read-only Cypher query on this view."""
+        """Run a read-only Cypher query on this view.  With *path_completeness*, the
+        result reports how completely its variable-length patterns were evaluated
+        (``"cap"`` when ``path_max_hops`` cut one)."""
         args: Dict[str, Any] = {"text": text}
         if params:
             args["params"] = params
+        if path_completeness:
+            args["pathCompleteness"] = True
         result_text = self._call("cypher", args)
         j = json.loads(result_text)
         return CypherResult(
             columns=list(j.get("columns") or []),
             rows=list(j.get("rows") or []),
+            path_completeness=PathCompleteness.from_json(j.get("pathCompleteness")),
         )
 
     def triples(
@@ -563,6 +596,7 @@ class View:
         max_hops: Optional[int] = None,
         graphs: Optional[List[Any]] = None,
         time_respecting: Any = False,
+        capped: bool = False,
     ) -> List[PathRow]:
         """Find all nodes reachable from *start* via *path_expr*.
 
@@ -570,8 +604,44 @@ class View:
         ``"allShortest"``.  *graphs* keeps every hop inside the listed graphs (a term
         that is not stored names no graph).  *time_respecting* is ``True`` or a time
         to start after: each hop must start no earlier than the previous one, and
-        every row carries its ``arrival``.
+        every row carries its ``arrival``.  With *capped* and no *max_hops*, the
+        search stops at the database's ``path_max_hops`` (as a Cypher ``*`` does).
         """
+        args = self._path_args(start, path_expr, mode, max_hops, graphs, time_respecting, capped)
+        rows: List[Any] = json.loads(self._call("path", args))
+        return [_path_row(r) for r in rows]
+
+    def path_report(
+        self,
+        start: Any,
+        path_expr: str,
+        *,
+        mode: str = "reach",
+        max_hops: Optional[int] = None,
+        graphs: Optional[List[Any]] = None,
+        time_respecting: Any = False,
+        capped: bool = False,
+    ) -> PathReport:
+        """:meth:`path` with how completely the search was evaluated: a
+        :class:`~._types.PathReport` whose ``completeness.kind`` is
+        ``"exhaustive"``, ``"bound"`` or ``"cap"``."""
+        args = self._path_args(start, path_expr, mode, max_hops, graphs, time_respecting, capped)
+        args["completeness"] = True
+        j = json.loads(self._call("path", args))
+        completeness = PathCompleteness.from_json(j["completeness"])
+        assert completeness is not None
+        return PathReport([_path_row(r) for r in j["rows"]], completeness)
+
+    @staticmethod
+    def _path_args(
+        start: Any,
+        path_expr: str,
+        mode: str,
+        max_hops: Optional[int],
+        graphs: Optional[List[Any]],
+        time_respecting: Any,
+        capped: bool,
+    ) -> Dict[str, Any]:
         args: Dict[str, Any] = {
             "start": term_to_json(start),
             "path": path_expr,
@@ -585,17 +655,9 @@ class View:
             args["timeRespecting"] = True
         elif time_respecting is not False and time_respecting is not None:
             args["timeRespecting"] = {"after": time_to_json(time_respecting)}
-        rows: List[Any] = json.loads(self._call("path", args))
-        return [
-            PathRow(
-                start=term_from_json(r["start"]),
-                end=term_from_json(r["end"]),
-                hops=int(r["hops"]),
-                path=r.get("path") if r.get("path") is not None else None,
-                arrival=None if r.get("arrival") is None else int(r["arrival"]),
-            )
-            for r in rows
-        ]
+        if capped:
+            args["capped"] = True
+        return args
 
     def events(self, since: int = 0) -> List[Dict[str, Any]]:
         """Return events (asserts / retracts) with ``t > since``."""

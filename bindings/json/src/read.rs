@@ -4,9 +4,9 @@ use std::collections::HashMap;
 
 use serde_json::{json, Map, Value as J};
 use tiramemsu::{
-    BundleFormat, Db, Eid, Event, ObjectId, Op, PathArgs, PathDir, PathMode, PathRow, RdfTerm,
-    RdfTriple, SparqlOptions, SparqlResult, TextMode, TextQuery, TimeRef, TimeRespecting, Triple,
-    TxReport, View,
+    BundleFormat, Db, Eid, Event, ObjectId, Op, Params, PathArgs, PathCompleteness, PathDir,
+    PathMode, PathRow, RdfTerm, RdfTriple, SparqlOptions, SparqlResult, TextMode, TextQuery,
+    TimeRef, TimeRespecting, Triple, TxReport, View,
 };
 
 use crate::value::{eid_from_json, params_from_json, value_from_json, value_to_json};
@@ -52,13 +52,26 @@ pub fn run(view: &View<'_>, op: &str, args: &J) -> Res<J> {
             let opts = SparqlOptions {
                 provenance: flag("provenance")?,
                 query_only: flag("queryOnly")?,
+                params: sparql_params(args.get("params").unwrap_or(&J::Null))?,
             };
-            Ok(sparql_json(&view.sparql_with(text, &opts)?))
+            let r = view.sparql_with(text, &opts)?;
+            let mut out = sparql_json(&r);
+            if flag("pathCompleteness")? {
+                if let Some(s) = r.solutions() {
+                    out["pathCompleteness"] = completeness_json(s.path_completeness);
+                }
+            }
+            Ok(out)
         }
         "cypher" => {
             let text = str_arg(args, "text")?;
             let params = params_from_json(args.get("params").unwrap_or(&J::Null))?;
-            Ok(view.cypher(text, &params)?.to_json())
+            let r = view.cypher(text, &params)?;
+            let mut out = r.to_json();
+            if bool_arg(args, "pathCompleteness")? {
+                out["pathCompleteness"] = completeness_json(r.path_completeness);
+            }
+            Ok(out)
         }
         "triples" => {
             let ids = [
@@ -130,13 +143,25 @@ pub fn run(view: &View<'_>, op: &str, args: &J) -> Res<J> {
                 max_hops: max,
                 graphs,
                 time_respecting,
+                capped: bool_arg(args, "capped")?,
             };
-            let rows = view.path_with(start, str_arg(args, "path")?, &opts)?;
-            Ok(J::Array(
-                rows.iter()
+            let report = view.path_report(start, str_arg(args, "path")?, &opts)?;
+            let rows = J::Array(
+                report
+                    .rows
+                    .iter()
                     .map(|r| path_row_json(view, r))
                     .collect::<Res<_>>()?,
-            ))
+            );
+            // the plain array unless the completeness is asked for
+            Ok(if bool_arg(args, "completeness")? {
+                json!({
+                    "rows": rows,
+                    "completeness": completeness_json(Some(report.completeness)),
+                })
+            } else {
+                rows
+            })
         }
         "events" => {
             let since = args.get("since").and_then(J::as_u64).unwrap_or(0);
@@ -328,6 +353,50 @@ pub(crate) fn ret_kind(k: tiramemsu::RetKind) -> &'static str {
         tiramemsu::RetKind::Cascade => "cascade",
         tiramemsu::RetKind::Supersede => "supersede",
         tiramemsu::RetKind::Cardinality => "cardinality",
+    }
+}
+
+/// An optional boolean argument (`null` or absent is false).
+fn bool_arg(args: &J, key: &str) -> Res<bool> {
+    match args.get(key) {
+        None | Some(J::Null) => Ok(false),
+        Some(J::Bool(b)) => Ok(*b),
+        Some(_) => Err(arg(format!("{key} must be a boolean"))),
+    }
+}
+
+/// The SPARQL execution parameters: `{"name": time}` with a time an integer of
+/// epoch milliseconds or an RFC 3339 date or date-time (the start instants of
+/// `SERVICE <urn:tiramemsu:tm:timeRespecting/$name>`).
+fn sparql_params(j: &J) -> Res<Params> {
+    let mut out = Params::new();
+    match j {
+        J::Null => {}
+        J::Object(o) => {
+            for (k, v) in o {
+                let ms = crate::value::time_from_json(v)?
+                    .ok_or_else(|| arg(format!("parameter {k:?} is null")))?;
+                out.insert(
+                    k.trim_start_matches('$').to_string(),
+                    tiramemsu::Value::Int(ms),
+                );
+            }
+        }
+        _ => return Err(arg("params must be an object")),
+    }
+    Ok(out)
+}
+
+/// A path completeness verdict: `{"kind": "exhaustive" | "bound" | "cap",
+/// "maxHops": n | null, "complete": bool}`; `null` when no path search ran.
+pub(crate) fn completeness_json(c: Option<PathCompleteness>) -> J {
+    match c {
+        None => J::Null,
+        Some(c) => json!({
+            "kind": c.kind(),
+            "maxHops": c.max_hops(),
+            "complete": c.is_complete(),
+        }),
     }
 }
 

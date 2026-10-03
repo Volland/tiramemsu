@@ -14,7 +14,8 @@ The bridge is [[bindings/json/src/lib.rs#Database]]. `call_text(op, args)` retur
 
 Reads take a view and return rows; writes are one transaction each; anything that would surprise a caller is an error, never a silent default.
 
-- **Reads:** `sparql` (`text`, `provenance`, `queryOnly`; with provenance the result adds `provenance` and `provenanceGaps`), `cypher`, `triples`, `path`, `events`, `graphs`, `graphMembers`, `values`, `dependents` (`eid`, see [[time-model#Cascade#Dependents]]) and `bundle` (`eid`, returns the `tiramemsu-bundle/1` JSON of [[data-model#Fact Bundles#Bundle Formats]]), each with `{"view": …}` plus its own arguments. They are [[bindings/json/src/read.rs#run]]. `path` takes `start`, `path`, `mode`, `maxHops`, an optional `graphs` list of terms (a term that is not stored names no graph) and `timeRespecting: true | {"after": time}`, and every row carries `arrival` (epoch ms or `null`).
+- **Reads:** `sparql` (`text`, `provenance`, `queryOnly`, `params`, `pathCompleteness`; with provenance the result adds `provenance` and `provenanceGaps`), `cypher` (`text`, `params`, `pathCompleteness`), `triples`, `path`, `events`, `graphs`, `graphMembers`, `values`, `dependents` (`eid`, see [[time-model#Cascade#Dependents]]) and `bundle` (`eid`, returns the `tiramemsu-bundle/1` JSON of [[data-model#Fact Bundles#Bundle Formats]]), each with `{"view": …}` plus its own arguments. They are [[bindings/json/src/read.rs#run]]. `path` takes `start`, `path`, `mode`, `maxHops`, an optional `graphs` list of terms (a term that is not stored names no graph) and `timeRespecting: true | {"after": time}`, and every row carries `arrival` (epoch ms or `null`). `path` also takes `capped: true` (stop an unbounded search at `pathMaxHops`) and `completeness: true`, which returns `{"rows": [...], "completeness": …}` instead of the plain array.
+- **Temporal paths and completeness:** `sparql` `params` is `{"name": time}` (epoch ms or an RFC 3339 date or date-time), the starts of `SERVICE <urn:tiramemsu:tm:timeRespecting/$name>` ([[query#Temporal Path Syntax]]). With `pathCompleteness: true`, a `select` result and a `cypher` result gain `"pathCompleteness": {"kind": "exhaustive" | "bound" | "cap", "maxHops": n | null, "complete": bool}` or `null` when no path ran; without it the responses are unchanged.
 - **Writes:** `transact` (a list of op objects in one transaction), `cypherWrite`, and `with` (speculation: ops applied hypothetically, then queries run on the result, then everything discarded). They are in [[bindings/json/src/tx.rs#transact]].
 - **Transaction ops:** `assert`, `create`, `retract`, `retractMatching`, `supersede`, `confirm`, `meta`, `upsert`, `newNode`, the five graph ops, `importBundle` (`bundle`; returns `{"root", "statements": [{"id", "eid", "new"}]}`, and `as` names the imported root) and `cypher`. An op may carry `"as": name`, and a later op may use `{"ref": name}` as a statement id or as a subject or object, which is how a layer is written on a statement created earlier in the same transaction.
 - **Housekeeping:** `optimize`, `info` (with `importActive` and `statisticsDue`), `cancel` (`key`, see [[bindings#JSON Bridge#Budgets]]), `rebuildTextIndex` and `enableTextIndex` (see [[bindings#JSON Bridge#Text Recall]]).
@@ -79,6 +80,8 @@ The native class is `Native(path, options)` with `call(op, args)`. The wrapper (
 
 Every bridge operation has a wrapper method: `sparql(text, { provenance })`, `path` with `graphs` and `timeRespecting` (rows carry `arrival`), `dependents`, `bundle`, and `Tx.importBundle`.
 
+Temporal paths: `sparql(text, { params, pathCompleteness })`, `cypher(text, params, { pathCompleteness })`, `PathOptions.capped` and `View.pathReport(start, expr, opts)` returning `{ rows, completeness }` with the typed `PathCompleteness`.
+
 Bulk import: `Database.bulkImport()` returns a `BulkImport` with `chunk(fn | ops, options)`, `progress()`, `finish()` and `cancel()`, and `info()` reports `importActive` and `statisticsDue`.
 
 Budgets: `View.withBudget({ timeoutMs, readerTimeoutMs, maxRows, maxBytes, cancelKey })`, a `budget` member in the options of `transact` and `cypherWrite`, `Database.cancel(key)`, and the open option `readerTimeoutMs`. Because the API is synchronous, `cancel` from the same thread only affects a call that starts later.
@@ -92,6 +95,8 @@ The package carries one addon per platform, and the loader names the platform wh
 The `tiramemsu` package is a PyO3 module (`tiramemsu._native`, stable ABI) plus a typed Python wrapper, in `bindings/python`, built with maturin and checked with pytest and `mypy --strict`.
 
 Every bridge operation has a wrapper method, as in Node.js: `sparql(text, provenance=)`, `path(graphs=, time_respecting=)`, `dependents`, `bundle`, and `TxBuilder.import_bundle`, whose result is in `Report.results`.
+
+Temporal paths: `sparql(text, params=, path_completeness=)`, `cypher(text, params, path_completeness=)`, `path(capped=)` and `View.path_report(...)` returning a `PathReport(rows, completeness)` with the frozen dataclass `PathCompleteness(kind, max_hops, complete)`.
 
 Bulk import: `Database.bulk_import()` returns a `BulkImport` context manager (finish on clean exit, cancel on an exception) with `chunk()` in both `transact` forms, `progress()`, `finish()` and `cancel()`, and the dataclasses `ImportProgress` and `ImportSummary`.
 

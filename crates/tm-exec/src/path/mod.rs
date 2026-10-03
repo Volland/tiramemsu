@@ -8,6 +8,7 @@ pub mod ast;
 pub mod automaton;
 pub mod engine;
 pub mod fetch;
+pub mod report;
 pub mod resolve;
 pub mod row;
 pub mod search;

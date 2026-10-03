@@ -128,6 +128,7 @@ pub fn run(
         columns: cols,
         rows: out,
         report: None,
+        path_completeness: None,
     })
 }
 
@@ -204,12 +205,23 @@ impl Exec<'_> {
                 Clause::Match {
                     optional,
                     mode,
+                    temporal,
                     pattern,
                     where_,
                     ..
                 } => {
                     add_pattern_names(&mut scope, pattern);
-                    rows = self.exec_match(rows, pattern, where_.as_ref(), *optional, *mode)?;
+                    if let Some(a) = temporal.as_ref().and_then(|t| t.arrival.as_ref()) {
+                        add_name(&mut scope, &a.text);
+                    }
+                    rows = self.exec_match(
+                        rows,
+                        pattern,
+                        where_.as_ref(),
+                        *optional,
+                        *mode,
+                        temporal.as_ref(),
+                    )?;
                 }
                 Clause::Unwind { expr, var } => {
                     add_name(&mut scope, &var.text);

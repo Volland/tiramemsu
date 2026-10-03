@@ -11,7 +11,7 @@ use tm_core::{
 use tm_ir::PathMode;
 
 use super::engine::{PathEngine, PathRequest};
-use super::view::parse_view_arg;
+use super::view::parse_call_view;
 use crate::native::{NativeKind, NativeOperator};
 
 /// The SQL name.
@@ -73,16 +73,23 @@ pub fn call(
         SqlValue::Text(t) => t.parse().map_err(|m| arg_err("mode", m))?,
         _ => return Err(arg_err("mode", "expected text")),
     };
-    let max_hops = match get(3) {
-        SqlValue::Null => (mode == PathMode::Trail).then_some(engine.options().max_hops),
-        SqlValue::Integer(n) if *n >= 0 => Some(u32::try_from(*n).unwrap_or(u32::MAX)),
+    // a NULL `max_hops` on TRAIL is the configured cap, as is any with `hopCap`
+    let (max_hops, default_cap) = match get(3) {
+        SqlValue::Null if mode == PathMode::Trail => (Some(engine.options().max_hops), true),
+        SqlValue::Null => (None, false),
+        SqlValue::Integer(n) if *n >= 0 => (Some(u32::try_from(*n).unwrap_or(u32::MAX)), false),
         _ => return Err(arg_err("max_hops", "expected a non-negative integer")),
     };
-    let (view, time_respecting) = match get(4) {
-        SqlValue::Null => (tm_core::ViewSpec::NOW, None),
-        SqlValue::Text(t) => parse_view_arg(t).map_err(|m| arg_err("view", m))?,
+    let va = match get(4) {
+        SqlValue::Null => super::view::ViewArg {
+            spec: tm_core::ViewSpec::NOW,
+            time_respecting: None,
+            hop_cap: false,
+        },
+        SqlValue::Text(t) => parse_call_view(t).map_err(|m| arg_err("view", m))?,
         _ => return Err(arg_err("view", "expected text")),
     };
+    let (view, time_respecting) = (va.spec, va.time_respecting);
     let graphs = parse_graphs(get(5))?;
     let start = match get(0) {
         SqlValue::Integer(n) => ObjectId::from_raw(*n),
@@ -100,6 +107,7 @@ pub fn call(
         path,
         mode,
         max_hops,
+        hop_cap: default_cap || va.hop_cap,
         view,
         end,
         graphs,

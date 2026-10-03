@@ -529,9 +529,16 @@ fn convert_clause(ctx: &Ctx, c: &up::Clause) -> CResult<Clause> {
                 .iter()
                 .find(|e| e.clause_start == c.span.start)
                 .map_or(MatchModeExt::Default, |e| e.mode);
+            let temporal = ctx
+                .pre
+                .temporals
+                .iter()
+                .find(|e| e.clause_start == c.span.start)
+                .map(|e| e.temporal.clone());
             Clause::Match {
                 optional: m.optional,
                 mode,
+                temporal,
                 pattern: convert_pattern(ctx, &m.pattern)?,
                 where_: match &m.where_clause {
                     Some(w) => Some(convert_expr(ctx, w)?),

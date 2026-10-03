@@ -61,6 +61,10 @@ impl Lowerer<'_> {
         let texts = self.text_patterns(&mut triples, view)?;
         eliminate_redundant(&mut triples);
         let reifiers = std::mem::take(&mut items.reifiers);
+        if triples.is_empty() && texts.is_empty() && items.filters.is_empty() {
+            // only tm:arrival patterns
+            return Ok(Op::unit());
+        }
         let ops: Vec<Op> = triples
             .into_iter()
             .map(|t| Op::Triple(self.select_graph(t, &reifiers)))
@@ -113,11 +117,38 @@ impl Lowerer<'_> {
             NamedNodePattern::NamedNode(n) => TermOrVar::Const(Value::Iri(n.as_str().to_string())),
             NamedNodePattern::Variable(v) => TermOrVar::Var(Var::new(v.as_str())),
         };
+        if matches!(&pred, TermOrVar::Const(Value::Iri(i)) if i == tm_ir::vocab::TM_ARRIVAL) {
+            return self.arrival_pattern(s, &p.object);
+        }
         if matches!(p.object, TermPattern::Triple(_)) && matches!(pred, TermOrVar::Var(_)) {
             return Err(unsupported(VARIABLE_PREDICATE_TRIPLE));
         }
         let o = self.position(&p.object, view, items)?;
         items.triples.push(TriplePattern::new(s, pred, o, view));
+        Ok(())
+    }
+
+    /// `?end tm:arrival ?t`: recorded for the enclosing time-respecting scope,
+    /// which binds `?t` from the path ending at `?end`; no triple pattern.
+    fn arrival_pattern(&mut self, end: TermOrVar, object: &TermPattern) -> Result<()> {
+        let TermPattern::Variable(v) = object else {
+            return Err(crate::error::temporal_path_error(
+                "the object of tm:arrival must be a variable",
+            ));
+        };
+        let Some(scope) = self.temporal.as_mut() else {
+            return Err(crate::error::temporal_path_error(
+                "tm:arrival outside a SERVICE <urn:tiramemsu:tm:timeRespecting> group",
+            ));
+        };
+        let var = Var::new(v.as_str());
+        if scope.arrivals.iter().any(|(_, w)| w == &var) {
+            return Err(crate::error::temporal_path_error(format!(
+                "?{} is bound by two tm:arrival patterns",
+                v.as_str()
+            )));
+        }
+        scope.arrivals.push((end, var));
         Ok(())
     }
 

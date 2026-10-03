@@ -178,6 +178,8 @@ impl IrBuilder {
             bind_path: None,
             view: self.view,
             graph: crate::op::GraphSel::Any,
+            time_respecting: None,
+            hop_cap: false,
         })
     }
 

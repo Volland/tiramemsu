@@ -101,6 +101,8 @@ fn error_returns_the_connection() {
         bind_path: None,
         view: tiramemsu::ir::View::NOW,
         graph: tiramemsu::ir::GraphSel::Any,
+        time_respecting: None,
+        hop_cap: false,
     }));
     for _ in 0..3 {
         assert!(matches!(

@@ -238,6 +238,7 @@ fn chunk_sizes(c: &mut Criterion) {
                             end: None,
                             graphs: None,
                             time_respecting: None,
+                            hop_cap: false,
                         },
                     )
                     .unwrap()

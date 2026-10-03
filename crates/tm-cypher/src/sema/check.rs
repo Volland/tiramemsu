@@ -269,8 +269,29 @@ fn check_clause(c: &Clause, scope: &mut Scope, opts: &CheckOpts) -> CResult<Opti
             pattern,
             where_,
             mode,
+            temporal,
             ..
         } => {
+            if let Some(t) = temporal {
+                // @lat: [[query#Temporal Path Syntax#Cypher Temporal Paths]]
+                let n = pattern
+                    .iter()
+                    .flat_map(|p| &p.rels)
+                    .filter(|r| r.var_len.is_some())
+                    .count();
+                if n == 0 {
+                    return Err(CypherError::parse(
+                        t.span,
+                        "TIME RESPECTING needs a variable-length or shortest-path relationship",
+                    ));
+                }
+                if n > 1 && t.arrival.is_some() {
+                    return Err(CypherError::parse(
+                        t.span,
+                        "ARRIVAL with several variable-length relationships (bind one journey per MATCH)",
+                    ));
+                }
+            }
             if *mode == MatchModeExt::Repeatable {
                 if let Some(vl) = pattern.iter().flat_map(|p| &p.rels).find_map(|r| r.var_len) {
                     return Err(CypherError::unsupported(
@@ -280,6 +301,15 @@ fn check_clause(c: &Clause, scope: &mut Scope, opts: &CheckOpts) -> CResult<Opti
                 }
             }
             bind_pattern(pattern, scope, opts, false)?;
+            if let Some(a) = temporal.as_ref().and_then(|t| t.arrival.as_ref()) {
+                if scope.get(&a.text).is_some() {
+                    return Err(CypherError::parse(
+                        a.span,
+                        format!("variable `{}` already declared", a.text),
+                    ));
+                }
+                scope.declare_value(&a.text);
+            }
             if let Some(w) = where_ {
                 check_expr(w, scope, opts, Ctx::where_())?;
             }

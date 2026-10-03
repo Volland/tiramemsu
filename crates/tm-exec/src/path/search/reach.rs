@@ -39,7 +39,7 @@ pub(super) fn run(ctx: &mut Ctx<'_, '_>, sink: Sink<'_>) -> Result<()> {
     }
     let mut frontier = vec![(start, q0)];
     let mut depth = 0u32;
-    while !frontier.is_empty() && ctx.depth_ok(depth) {
+    while ctx.more(depth, frontier.iter().copied())? {
         let exp = expand(ctx, &frontier)?;
         let mut next = Vec::new();
         let mut ends: Vec<i64> = Vec::new();
@@ -91,7 +91,7 @@ pub(super) fn run_timed(ctx: &mut Ctx<'_, '_>, sink: Sink<'_>, tau0: i64) -> Res
     }
     let mut frontier: Vec<(i64, u32, i64)> = vec![(start, q0, tau0)];
     let mut depth = 0u32;
-    while !frontier.is_empty() && ctx.depth_ok(depth) {
+    while ctx.more(depth, frontier.iter().map(|(n, q, _)| (*n, *q)))? {
         let entries: Vec<(i64, u32)> = frontier.iter().map(|(n, q, _)| (*n, *q)).collect();
         let exp = expand(ctx, &entries)?;
         let mut next: Vec<(i64, u32, i64)> = Vec::new();

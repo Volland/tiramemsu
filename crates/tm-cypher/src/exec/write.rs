@@ -378,8 +378,14 @@ impl Exec<'_> {
                 }
             }
             let one = vec![r.clone()];
-            let matched =
-                self.exec_match(one, &vec![part.clone()], None, false, MatchModeExt::Default)?;
+            let matched = self.exec_match(
+                one,
+                &vec![part.clone()],
+                None,
+                false,
+                MatchModeExt::Default,
+                None,
+            )?;
             if matched.is_empty() {
                 let mut row = r;
                 self.create_pattern(&mut row, &vec![part.clone()])?;

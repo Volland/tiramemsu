@@ -371,6 +371,46 @@ describe("paths: graphs and time-respecting", () => {
       expect(arrivals()).toEqual([null, null]);
     } finally { cleanup(dir); }
   });
+
+  it("runs temporal path syntax and reports completeness", () => {
+    const dir = mkdtempSync(join(tmpdir(), "tiramemsu-test-"));
+    const db = Database.open(join(dir, "test.db"), { pathMaxHops: 2 });
+    try {
+      const met = v("met");
+      db.transact((tx) => {
+        tx.assert(v("a"), met, v("b"), { validFrom: 1, validTo: 5 });
+        tx.assert(v("b"), met, v("c"), { validFrom: 3, validTo: 9 });
+        tx.assert(v("c"), met, v("d"), { validFrom: 4, validTo: 9 });
+      });
+      const api = db.now().path(v("a"), "v:met+", { timeRespecting: { after: 2 } }).map((r) => r.arrival);
+      expect(api).toEqual([2, 3, 4]);
+      // SPARQL with a start parameter
+      const s = db.now().sparql(
+        "SELECT ?t WHERE { SERVICE <urn:tiramemsu:tm:timeRespecting/$start> " +
+          "{ v:a v:met+ ?y . ?y tm:arrival ?t } } ORDER BY ?t",
+        { params: { start: 2 }, pathCompleteness: true },
+      );
+      if (s.kind !== "select") throw new Error("expected select");
+      expect(s.rows.map((r) => r.t)).toEqual([2, 3, 4]);
+      expect(s.pathCompleteness).toEqual({ kind: "exhaustive", maxHops: null, complete: true });
+      // Cypher with a start parameter, capped at pathMaxHops = 2
+      const c = db.now().cypher(
+        "MATCH TIME RESPECTING AFTER $start ARRIVAL AS t (x {`@id`: 'v:a'})-[:met*]->(y) RETURN t ORDER BY t",
+        { start: 2 },
+        { pathCompleteness: true },
+      );
+      expect(c.rows).toEqual([[2], [3]]);
+      expect(c.pathCompleteness).toEqual({ kind: "cap", maxHops: 2, complete: false });
+      expect(db.now().cypher("MATCH (x) RETURN count(x) AS n").pathCompleteness).toBeUndefined();
+      // the path report
+      const capped = db.now().pathReport(v("a"), "v:met+", { mode: "trail", capped: true });
+      expect(capped.rows).toHaveLength(2);
+      expect(capped.completeness).toEqual({ kind: "cap", maxHops: 2, complete: false });
+      const bound = db.now().pathReport(v("a"), "v:met+", { maxHops: 1 });
+      expect(bound.completeness).toEqual({ kind: "bound", maxHops: 1, complete: true });
+      expect(db.now().pathReport(v("a"), "v:met+").completeness.kind).toBe("exhaustive");
+    } finally { cleanup(dir); }
+  });
 });
 
 describe("provenance, dependents and bundles", () => {

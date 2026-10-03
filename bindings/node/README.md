@@ -124,10 +124,11 @@ A view chooses when you look and when the fact was true. Every read takes a view
 
 | Method | Returns |
 |---|---|
-| `view.sparql(text, { provenance?, queryOnly? })` | `{ kind: "select", vars, rows, provenance?, provenanceGaps? }`, `{ kind: "ask", value }`, `{ kind: "graph", triples }` or `{ kind: "update", report }` |
-| `view.cypher(text, params?)` | `{ columns, rows }` |
+| `view.sparql(text, { provenance?, queryOnly?, params?, pathCompleteness? })` | `{ kind: "select", vars, rows, provenance?, provenanceGaps?, pathCompleteness? }`, `{ kind: "ask", value }`, `{ kind: "graph", triples }` or `{ kind: "update", report }` |
+| `view.cypher(text, params?, { pathCompleteness? })` | `{ columns, rows, pathCompleteness? }` |
 | `view.triples({ s?, p?, o? })` | Statements with `eid`, the three terms, `tAdd`, `tRet`, `validFrom`, `validTo`, `retKind` |
-| `view.path(start, expr, { mode?, maxHops?, graphs?, timeRespecting? })` | Endpoints with hop counts and `arrival`. `mode` is `reach`, `trail`, `anyShortest` or `allShortest` |
+| `view.path(start, expr, { mode?, maxHops?, graphs?, timeRespecting?, capped? })` | Endpoints with hop counts and `arrival`. `mode` is `reach`, `trail`, `anyShortest` or `allShortest` |
+| `view.pathReport(start, expr, options?)` | `{ rows, completeness }`: the rows of `path` and a `PathCompleteness` |
 | `view.dependents(eid)` | The statements that stand on `eid`: what retracting it would cascade to |
 | `view.bundle(eid)` | The statement with its layers and evidence, as `tiramemsu-bundle/1` JSON |
 | `view.events(since?)` | The change log after a transaction |
@@ -136,6 +137,10 @@ A view chooses when you look and when the fact was true. Every read takes a view
 `expr` is SPARQL property-path syntax with the predeclared prefixes `v:`, `sys:`, `tm:`, `rdf:` and `xsd:`, for example `v:knows+`. SPARQL supports RDF 1.2 annotations: `{| v:confidence ?c |}` reads a layer.
 
 With `provenance: true` a SELECT result also carries, for each row, the statements (`{ stmt }` terms) that produced it, and `provenanceGaps` lists the query parts whose statements are not cited (`["recursivePath"]` for a `+` or `*` path; empty means complete). `queryOnly: true` makes an update fail with `Unsupported` before anything runs. `graphs` keeps every hop of a path inside the listed graphs. `timeRespecting: true` (or `{ after: time }`) makes each hop start no earlier than the previous one, and every row then carries its earliest `arrival` in epoch milliseconds.
+
+The query languages say the same with opt-in extensions. SPARQL: `SERVICE <urn:tiramemsu:tm:timeRespecting/$since> { v:a v:met+ ?who . ?who tm:arrival ?t }` with `{ params: { since: 2 } }` (the start may also be written as epoch ms or an `xsd:date`/`xsd:dateTime` after the slash, or left out for −∞; `?t` is unbound for −∞). Cypher: ``MATCH TIME RESPECTING AFTER $since ARRIVAL AS t (a {`@id`: 'v:a'})-[:met*]->(who) RETURN who, t`` (`AFTER` takes an integer, a parameter, `datetime('…')` or `date('…')`; `t` is `null` for −∞). Both need the start bound, and the rows keep their columns unless the arrival is asked for.
+
+`pathCompleteness: true` (and `pathReport`) report `{ kind: "exhaustive" | "bound" | "cap", maxHops, complete }`: `bound` means an explicit hop bound stopped the search (complete within it), `cap` means the database's `pathMaxHops` cut an unbounded pattern such as a Cypher `*` (longer paths may exist); `capped: true` applies that cap to `path`. A search over `pathMaxStates` fails with `PathLimitExceeded`.
 
 ## Terms
 

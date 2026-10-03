@@ -75,6 +75,7 @@ fn to_solutions(r: &QueryResult) -> Result<Solutions> {
         rows,
         provenance: None,
         provenance_gaps: Vec::new(),
+        path_completeness: None,
     })
 }
 
@@ -92,7 +93,7 @@ fn to_solutions(r: &QueryResult) -> Result<Solutions> {
 /// assert!(!SparqlOptions::default().provenance);
 /// assert!(!SparqlOptions::default().query_only);
 /// ```
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct SparqlOptions {
     /// Attach to each `SELECT` row the eids of the stored statements that matched
     /// to produce it ([`Solutions::provenance`]). Off by default.
@@ -101,6 +102,11 @@ pub struct SparqlOptions {
     /// before anything runs, so text from an untrusted caller can only read. Off
     /// by default.
     pub query_only: bool,
+    /// Execution parameters: `$name` in a `SERVICE
+    /// <urn:tiramemsu:tm:timeRespecting/$name>` scope takes its start instant from
+    /// here (an integer of epoch milliseconds, an `xsd:date` or an `xsd:dateTime`).
+    /// Empty by default.
+    pub params: Params,
 }
 
 impl View<'_> {
@@ -212,8 +218,10 @@ impl View<'_> {
         self.op(|| {
             let env = self.sparql_env()?;
             match tm_sparql::prepare(text, &env)? {
-                Prepared::Query(plan) if opts.provenance => self.run_provenance(&plan),
-                Prepared::Query(plan) => self.run_plan(&plan),
+                Prepared::Query(plan) if opts.provenance => {
+                    self.run_provenance_with(&plan, &opts.params)
+                }
+                Prepared::Query(plan) => self.run_plan_with(&plan, &opts.params),
                 Prepared::Update(_) if opts.query_only => {
                     Err(Error::unsupported(tm_sparql::error::UPDATE_QUERY_ONLY))
                 }
@@ -229,6 +237,11 @@ impl View<'_> {
     /// lookups in one read, so both see the same state, and under one operation
     /// budget, so the lookups draw on what the main query left.
     pub(crate) fn run_provenance(&self, plan: &QueryPlan) -> Result<SparqlResult> {
+        self.run_provenance_with(plan, &Params::new())
+    }
+
+    /// [`View::run_provenance`] with execution parameters.
+    fn run_provenance_with(&self, plan: &QueryPlan, params: &Params) -> Result<SparqlResult> {
         let p = tm_sparql::provenance::instrument(plan)?;
         let engine = self.engine()?;
         let mode = if self.db().is_some() {
@@ -236,14 +249,18 @@ impl View<'_> {
         } else {
             CacheMode::Scoped
         };
-        let main = engine.prepare(&p.query, &Params::new())?;
-        let sol = self.exec(|e, _| {
-            let raw = to_solutions(&engine.execute(&mut *e, mode, &main)?)?;
-            p.assemble(raw, &mut |q| {
-                let lookup = engine.prepare(q, &Params::new())?;
-                to_solutions(&engine.execute(&mut *e, mode, &lookup)?)
+        let main = engine.prepare(&p.query, params)?;
+        let (sol, paths) = tm_exec::path::report::collect(|| {
+            self.exec(|e, _| {
+                let raw = to_solutions(&engine.execute(&mut *e, mode, &main)?)?;
+                p.assemble(raw, &mut |q| {
+                    let lookup = engine.prepare(q, &Params::new())?;
+                    to_solutions(&engine.execute(&mut *e, mode, &lookup)?)
+                })
             })
-        })?;
+        });
+        let mut sol = sol?;
+        sol.path_completeness = paths;
         Ok(SparqlResult::Solutions(sol))
     }
 
@@ -264,8 +281,15 @@ impl View<'_> {
     }
 
     pub(crate) fn run_plan(&self, plan: &QueryPlan) -> Result<SparqlResult> {
-        let r = self.execute_ir(&plan.query, &Params::new())?;
-        let sol = to_solutions(&r)?;
+        self.run_plan_with(plan, &Params::new())
+    }
+
+    /// [`View::run_plan`] with execution parameters; a `SELECT` reports the
+    /// completeness of its path searches in [`Solutions::path_completeness`].
+    fn run_plan_with(&self, plan: &QueryPlan, params: &Params) -> Result<SparqlResult> {
+        let (r, paths) = tm_exec::path::report::collect(|| self.execute_ir(&plan.query, params));
+        let mut sol = to_solutions(&r?)?;
+        sol.path_completeness = paths;
         Ok(match &plan.form {
             QueryForm::Select => SparqlResult::Solutions(sol),
             QueryForm::Ask => SparqlResult::Boolean(!sol.rows.is_empty()),

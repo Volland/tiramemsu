@@ -2,7 +2,7 @@
 
 use crate::agg::{Agg, Key};
 use crate::expr::Expr;
-use crate::path::{PathExpr, PathMode};
+use crate::path::{PathExpr, PathMode, TemporalPath};
 use crate::term::TermOrVar;
 use crate::var::Var;
 use crate::view::View;
@@ -124,6 +124,14 @@ pub struct PathPattern {
     /// binds the graph the whole path lies in (one graph per solution). Membership is
     /// read in the pattern's own view.
     pub graph: GraphSel,
+    /// Time-respecting evaluation with an optional arrival binding (`None` =
+    /// ordinary). It needs a bound start: a journey is not run backwards from its
+    /// end.
+    pub time_respecting: Option<TemporalPath>,
+    /// `max_hops` is the configured hop cap applied to an unbounded expression (the
+    /// Cypher `*`), not a bound the query wrote: a search it stops is reported as
+    /// [`PathCompleteness::StoppedAtCap`](crate::PathCompleteness::StoppedAtCap).
+    pub hop_cap: bool,
 }
 
 impl PathPattern {
@@ -415,6 +423,23 @@ impl Op {
             skip: skip.map(c),
             limit: limit.map(c),
         })
+    }
+
+    /// The direct children of this operator, mutably (not inside expressions).
+    pub fn children_mut(&mut self) -> Vec<&mut Op> {
+        match self {
+            Op::Triple(_) | Op::Path(_) | Op::Text(_) | Op::Values(_) => Vec::new(),
+            Op::Join(j) => j.inputs.iter_mut().collect(),
+            Op::Union(u) => u.inputs.iter_mut().collect(),
+            Op::LeftJoin(l) => vec![&mut *l.left, &mut *l.right],
+            Op::Unnest(x) => vec![&mut *x.input],
+            Op::Filter(x) => vec![&mut *x.input],
+            Op::Extend(x) => vec![&mut *x.input],
+            Op::Aggregate(x) => vec![&mut *x.input],
+            Op::Project(x) => vec![&mut *x.input],
+            Op::OrderLimit(x) => vec![&mut *x.input],
+            Op::RowNumber(x) => vec![&mut *x.input],
+        }
     }
 
     /// The direct children of this operator (not inside expressions).

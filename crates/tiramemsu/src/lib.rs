@@ -22,7 +22,7 @@ pub use saved::{
     SavedQuery, SAVED_ANSWER_LAYOUT,
 };
 pub use sparql::{SparqlOptions, SparqlResult};
-pub use view::{PathArgs, View};
+pub use view::{PathArgs, PathReport, View};
 
 pub use tm_core::text;
 pub use tm_core::{
@@ -41,7 +41,7 @@ pub use tm_exec::{
     QueryResult, RegionInfo, RegionKind, ResultValue, RouteNote, TimeRespecting,
 };
 pub use tm_ir as ir;
-pub use tm_ir::{IrQuery, Params, PathMode};
+pub use tm_ir::{IrQuery, Params, PathCompleteness, PathMode};
 pub use tm_rusqlite::RusqliteHost;
 pub use tm_sparql as sparql_frontend;
 pub use tm_sparql::results::{ProvenanceGap, RdfTerm, RdfTriple, Solutions};

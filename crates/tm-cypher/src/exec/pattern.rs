@@ -28,6 +28,9 @@ pub(crate) struct Bind {
     pub new: bool,
     /// A variable-length relationship: the IR column holds the decoded path text.
     pub path_list: bool,
+    /// A scalar column (the arrival of `TIME RESPECTING … ARRIVAL AS`): an Integer,
+    /// or `null` when missing.
+    pub scalar: bool,
 }
 
 /// One element of a named path, in pattern order.
@@ -257,13 +260,16 @@ impl Exec<'_> {
         Some(exists(op.filter(Expr::eq(Expr::var(&o), rhs))))
     }
 
-    /// Lowers a pattern for the rows' bound variables.
+    /// Lowers a pattern for the rows' bound variables. With `temporal`, each
+    /// variable-length relationship is a time-respecting region from `after` (epoch
+    /// ms), and `ARRIVAL AS` binds the arrival of the (single) one.
     pub(crate) fn lower_pattern(
         &mut self,
         pattern: &Pattern,
         bound: &HashSet<String>,
         mode: MatchModeExt,
         view: View,
+        temporal: Option<(Option<i64>, Option<&Name>)>,
     ) -> CResult<Plan> {
         let flags = self.flags(view)?;
         let mut ir_of: HashMap<String, String> = HashMap::new();
@@ -336,6 +342,7 @@ impl Exec<'_> {
                             generated: false,
                             path_list: false,
                             new: !bound.contains(c),
+                            scalar: false,
                         });
                     }
                 } else {
@@ -346,6 +353,7 @@ impl Exec<'_> {
                         generated: false,
                         path_list: false,
                         new: true,
+                        scalar: false,
                     });
                 }
                 infos.push(info);
@@ -355,7 +363,7 @@ impl Exec<'_> {
                     // a variable-length relationship is a path region
                     let (l, rr) = (node_irs[i].clone(), node_irs[i + 1].clone());
                     let pv = self.fresh("pp");
-                    let op = self.lower_varlen(
+                    let mut op = self.lower_varlen(
                         part.shortest,
                         r,
                         vl,
@@ -365,6 +373,24 @@ impl Exec<'_> {
                         view,
                         &mut impossible,
                     )?;
+                    if let (Some((after, arrival)), Op::Path(p)) = (temporal, &mut op) {
+                        let arrival_ir = arrival.map(|_| self.fresh("arr"));
+                        p.time_respecting = Some(tm_ir::TemporalPath {
+                            after: after.map(|ms| TermOrVar::Const(Value::Int(ms))),
+                            arrival: arrival_ir.as_deref().map(Var::new),
+                        });
+                        if let (Some(name), Some(ir)) = (arrival, arrival_ir) {
+                            binds.push(Bind {
+                                cypher: name.text.clone(),
+                                ir,
+                                is_rel: false,
+                                generated: false,
+                                path_list: false,
+                                scalar: true,
+                                new: true,
+                            });
+                        }
+                    }
                     ops.push(op);
                     binds.push(Bind {
                         cypher: r.var.as_ref().map(|v| v.text.clone()).unwrap_or_default(),
@@ -373,6 +399,7 @@ impl Exec<'_> {
                         generated: false,
                         path_list: true,
                         new: r.var.as_ref().is_none_or(|v| !bound.contains(&v.text)),
+                        scalar: false,
                     });
                     varlens.push(pv.clone());
                     part_rels.push(PItem::Var(pv));
@@ -404,6 +431,7 @@ impl Exec<'_> {
                             generated: false,
                             path_list: false,
                             new: !bound.contains(c),
+                            scalar: false,
                         });
                     }
                 } else {
@@ -414,6 +442,7 @@ impl Exec<'_> {
                         generated: false,
                         path_list: false,
                         new: true,
+                        scalar: false,
                     });
                 }
                 let rel_op = self.lower_rel(r, &a, &b, &e, &flags, view, &mut impossible)?;
@@ -893,6 +922,8 @@ impl Exec<'_> {
             bind_path: Some(Var::new(pv)),
             view,
             graph: tm_ir::GraphSel::Any,
+            time_respecting: None,
+            hop_cap: vl.max.is_none(),
         }))
     }
 
@@ -1024,13 +1055,24 @@ impl Exec<'_> {
         where_: Option<&crate::ast::Expr>,
         optional: bool,
         mode: MatchModeExt,
+        temporal: Option<&TemporalMatch>,
     ) -> CResult<Vec<Row>> {
         if rows.is_empty() {
             return Ok(Vec::new());
         }
         let view = self.view();
         let bound: HashSet<String> = rows[0].keys().cloned().collect();
-        let plan = self.lower_pattern(pattern, &bound, mode, view)?;
+        let temporal = match temporal {
+            None => None,
+            Some(t) => Some((
+                match &t.after {
+                    Some((a, _)) => Some(super::time::after_ms(self, a)?),
+                    None => None,
+                },
+                t.arrival.as_ref(),
+            )),
+        };
+        let plan = self.lower_pattern(pattern, &bound, mode, view, temporal)?;
         let new_vars: Vec<&Bind> = plan
             .binds
             .iter()
@@ -1253,6 +1295,16 @@ impl Exec<'_> {
                 segs.insert(pv.as_str(), seg);
             }
             for b in &plan.binds {
+                if b.scalar {
+                    // an arrival of −∞ is NULL: the row stays, the value is null
+                    let v = match res.col(&b.ir).and_then(|ci| r[ci].as_ref()) {
+                        Some(Value::Int(i)) => Val::Int(*i),
+                        _ => Val::Null,
+                    };
+                    m.insert(b.cypher.clone(), v.clone());
+                    by_ir.insert(b.ir.as_str(), v);
+                    continue;
+                }
                 if b.path_list {
                     let Some(seg) = segs.get(b.ir.as_str()) else {
                         continue 'next;

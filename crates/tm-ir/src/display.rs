@@ -193,8 +193,20 @@ fn write_op(out: &mut String, op: &Op, depth: usize, pretty: bool) {
             if let Some(m) = p.max_hops {
                 let _ = write!(out, " :maxHops {m}");
             }
+            if p.hop_cap {
+                out.push_str(" :hopCap");
+            }
             if let Some(b) = &p.bind_path {
                 let _ = write!(out, " :bind {b}");
+            }
+            if let Some(t) = &p.time_respecting {
+                out.push_str(" :timeRespecting");
+                if let Some(a) = &t.after {
+                    let _ = write!(out, " :after {}", term(a));
+                }
+                if let Some(v) = &t.arrival {
+                    let _ = write!(out, " :arrival {v}");
+                }
             }
             graph_text(&p.graph, out);
             out.push(')');
@@ -687,6 +699,8 @@ mod tests {
                 bind_path: Some("p".into()),
                 view: View::history().valid_at(5),
                 graph: crate::op::GraphSel::Any,
+                time_respecting: None,
+                hop_cap: false,
             }),
             Op::unit().extend(
                 "x",
