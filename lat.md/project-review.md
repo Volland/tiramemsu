@@ -16,6 +16,6 @@ Point SPARQL queries remain near 58 microseconds from 10,000 to 100,000 statemen
 
 ## Proposed Priorities
 
-Resource safety and ingestion observability come first, followed by text recall and an agent adapter. These are proposals, not newly implemented capabilities.
+Resource safety and ingestion observability come first, followed by text recall and an agent adapter. All ten proposed changes were implemented and archived on 2026-10-04 ([[roadmap#Milestones]]).
 
 The report relates retrieval to existing roadmap work, suggests saved-answer invalidation with explicit provenance limitations, and recommends using the existing path and native-operator boundaries for subsequent extensions.
