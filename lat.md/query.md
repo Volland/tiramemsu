@@ -184,7 +184,7 @@ Constants are bound parameters, so SQLite cannot see which predicate is rare. It
 
 Measured on SQLite 3.53 with 1.1 million statements and a four-pattern BGP with bound parameters: without statistics the planner starts from the 500 000-row `knows` pattern and takes 272 ms. With `ANALYZE` it starts from the 50-row pattern and takes 1 ms. With statistics, it also chose the best order for every skewed shape tried, including predicate-only patterns. The bundled SQLite of `rusqlite` enables `STAT4`.
 
-- **Always present:** `Db::open` runs `PRAGMA optimize=0x10002` and, on a populated file without STAT4 samples, a full `ANALYZE`. After bulk loads and at most once every `OpenOptions.optimize_every` commits (default 1000) the writer runs a full `ANALYZE` and then `PRAGMA optimize`. `Db::optimize()` runs a full `ANALYZE`.
+- **Always present:** `Db::open` runs `PRAGMA optimize=0x10002` and, on a populated file without STAT4 samples, a full `ANALYZE`. After bulk loads and at most once every `OpenOptions.optimize_every` commits (default 1000) the writer runs a full `ANALYZE` and then `PRAGMA optimize`. `Db::optimize()` runs a full `ANALYZE`. A bulk import session defers this trigger to one analysis at its end ([[query#Bulk Import]]).
 - **STAT4 and readers:** `PRAGMA optimize` alone analyses with a limit and writes no STAT4 samples, so the planner could not tell a 50-row predicate from an 18 000-row one. Pooled readers also keep the statistics they loaded when they opened, so the writer bumps the schema cookie after each analysis and readers reload the statistics at their next read.
 - **Only plans degrade:** stale statistics change a plan's speed, never its results. `sqlite_stat1` and `sqlite_stat4` are SQLite's own tables, outside the graph and outside [[time-model#Never Forget]].
 - **Index family:** with statistics, SQLite may use a `hist_*` index for a `Now` pattern whose predicate has no retracted rows, because the cost is the same. Once a predicate has churn, the statistics steer it to `live_*`. Plan tests assert the family on a churned fixture.
@@ -375,6 +375,18 @@ SELECT ?before ?after WHERE {
   FILTER (?before != ?after)
 }
 ```
+
+## Bulk Import
+
+An opt-in session for large loads: chunks commit as ordinary transactions under an exclusive write lease, and planner statistics are refreshed once at the end instead of after every large commit.
+
+[[crates/tiramemsu/src/import.rs#BulkImport]] comes from `Db::bulk_import` (borrowing) or `Db::bulk_import_shared` (an `Arc<Db>`, for bindings). It is not an atomic multi-chunk transaction, and it changes no storage format.
+
+- **Chunks:** `chunk(f)` and `chunk_with(opts, budget, f)` run [[crates/tiramemsu/src/db.rs#Db#transact_leased]], the same engine as `Db::transact`. A failing chunk rolls back alone and is counted as rejected; earlier chunks stay committed, and numbering stays gap-free.
+- **Lease:** the session takes an atomic lease on the `Db`. Every write checks it under the writer mutex, so while a session lives other writes and a second session fail with `ImportInProgress`. Readers are untouched and see the last committed chunk.
+- **Deferred statistics:** a chunk's commit sets the core statistics counter to deferred ([[crates/tm-core/src/storage/stats.rs#Stats#set_deferred]]), so it runs no `ANALYZE` and only marks statistics due. `finish` runs one full `ANALYZE` plus the reader refresh of [[query#Physical Planning#Join Ordering]].
+- **Progress:** `ImportProgress` counts committed chunks, rejected chunks, asserted, existing and retracted rows, every chunk's `TxId`, chunk time and maintenance time.
+- **Failure and interruption:** `finish` never fails. A failed analysis is `ImportSummary::maintenance_error` beside the committed chunks. `cancel` or drop only releases the lease, never analyses, and leaves `Db::statistics_due` true. The next ordinary commit then runs the upkeep, and stale statistics only slow plans.
 
 ## Query Budgets
 

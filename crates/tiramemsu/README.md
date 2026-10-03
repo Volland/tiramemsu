@@ -521,6 +521,7 @@ Every failure is a typed `Error` (`#[non_exhaustive]`, so keep a wildcard arm), 
 | `PoolTimeout` | No reader became free within the reader timeout |
 | `ResultLimitExceeded { limit }` | A budgeted operation decoded more than `max_rows` rows or `max_bytes` bytes; no partial result |
 | `Reentrant` | A write or speculation started inside another on the same `Db` and thread |
+| `ImportInProgress` | A write, or a second import session, while a bulk import session holds the write lease |
 | `FormatVersion`, `ForeignFile` | The file is from a newer format, or is some other SQLite database |
 | `IdSpaceExhausted { kind }` | A node, blank node, statement or transaction counter passed 2⁴⁸ − 1 (about 2.8 × 10¹⁴ ids per kind) |
 | `Sqlite(_)`, `Custom(_)` | A SQLite failure with its result code (busy, I/O), or your own error returned from a transaction body |
@@ -588,6 +589,35 @@ assert!(matches!(r, Err(Error::Cancelled)));
 ```
 
 `QueryBudget::run(|| ...)` bounds a sequence of calls as one operation, and `Db::cypher_write_budgeted` bounds a Cypher write.
+
+## Bulk import
+
+A large load in one transaction holds the writer for its whole length, and in many ordinary transactions it triggers a full `ANALYZE` after every big commit. A `BulkImport` session sits between the two: each chunk is one ordinary atomic transaction, chunks never run `ANALYZE`, and `finish` refreshes the planner statistics once. It is not one atomic import: a failing chunk rolls back alone and earlier chunks stay committed.
+
+```rust
+# use tiramemsu::*;
+# let dir = tempfile::tempdir().unwrap();
+# let db = Db::open(dir.path().join("m.db"), OpenOptions::default())?;
+let v = |s: &str| Value::iri(format!("urn:tiramemsu:v:{s}"));
+let mut import = db.bulk_import()?;
+for batch in 0..4 {
+    import.chunk(|tx| {
+        for i in 0..250 {
+            tx.assert(v(&format!("doc{batch}-{i}")), v("mentions"), v("acme"), Valid::ALWAYS)?;
+        }
+        Ok(())
+    })?;
+}
+// other writes are refused while the session holds the lease; reads are not
+assert!(matches!(db.now().sparql("INSERT DATA { v:a v:b v:c }"), Err(Error::ImportInProgress)));
+assert_eq!(db.now().triples(None, None, None)?.len(), 1000);
+let summary = import.finish(); // one full ANALYZE, readers reload the statistics
+assert_eq!((summary.progress.chunks, summary.progress.asserted), (4, 1000));
+assert!(summary.analyzed);
+# Ok::<(), Error>(())
+```
+
+`progress()` counts committed chunks, rejected chunks and rows, and lists every chunk's transaction number. `chunk_with(opts, budget, f)` bounds one chunk with a `QueryBudget`. A failed final analysis is reported in `summary.maintenance_error` with the committed chunks still listed; nothing is rolled back. `cancel()` or dropping the session releases the lease without analysis and leaves `Db::statistics_due()` true, and the next ordinary commit refreshes the statistics. `Db::bulk_import_shared` takes an `Arc<Db>` and returns a session that can be stored or moved to another thread.
 
 ## Concurrency
 

@@ -253,6 +253,11 @@ pub enum Error {
     /// A write was started from inside a running write on the same database.
     #[error("re-entrant write on the same database")]
     Reentrant,
+    /// A write, or a second import session, was started while a bulk import
+    /// session holds the database's write lease. Reads are unaffected; writes
+    /// resume once the session finishes, is cancelled or is dropped.
+    #[error("a bulk import session holds the write lease")]
+    ImportInProgress,
     /// A SQLite file with user tables but no tiramemsu `meta` table.
     #[error("{0} is not a tiramemsu database")]
     ForeignFile(PathBuf),

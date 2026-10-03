@@ -165,6 +165,8 @@ pub struct Db {
     reader_timeout: Option<Duration>,
     path: PathBuf,
     clock: Arc<dyn Clock>,
+    /// The bulk import session holding the write lease (0: none).
+    import_lease: AtomicU64,
 }
 
 impl std::fmt::Debug for Db {
@@ -278,6 +280,7 @@ impl Db {
             reader_timeout: opts.reader_timeout,
             path: path.to_path_buf(),
             clock: opts.clock.clone(),
+            import_lease: AtomicU64::new(0),
         })
     }
 
@@ -399,6 +402,7 @@ impl Db {
 
     /// Runs a full `ANALYZE` on the writer. Worth calling once after a large bulk
     /// load; normal operation runs `PRAGMA optimize` on its own (`optimize_every`).
+    /// A [`BulkImport`](crate::BulkImport) session does this once when finished.
     ///
     /// # Errors
     ///
@@ -406,6 +410,55 @@ impl Db {
     pub fn optimize(&self) -> Result<()> {
         let _held = HeldGuard::acquire(self.id)?;
         self.lock()?.optimize()
+    }
+
+    /// True when commits of a bulk import session changed the data and the
+    /// planner statistics have not been refreshed since (the session was cancelled
+    /// or dropped, or its final analysis failed). The next ordinary commit or
+    /// [`Db::optimize`] refreshes them; stale statistics change plans, never results.
+    ///
+    /// # Errors
+    ///
+    /// `Reentrant` inside a running transaction.
+    pub fn statistics_due(&self) -> Result<bool> {
+        let _held = HeldGuard::acquire(self.id)?;
+        Ok(self.lock()?.statistics_due())
+    }
+
+    /// True while a [`BulkImport`](crate::BulkImport) session holds the write lease.
+    pub fn import_active(&self) -> bool {
+        self.import_lease.load(Ordering::Acquire) != 0
+    }
+
+    /// Takes the write lease for import session `lease`.
+    pub(crate) fn acquire_import_lease(&self, lease: u64) -> Result<()> {
+        if HeldGuard::is_held(self.id) {
+            return Err(Error::Reentrant);
+        }
+        self.import_lease
+            .compare_exchange(0, lease, Ordering::AcqRel, Ordering::Acquire)
+            .map(|_| ())
+            .map_err(|_| Error::ImportInProgress)
+    }
+
+    /// Gives the write lease of session `lease` back, without touching the writer.
+    pub(crate) fn release_import_lease(&self, lease: u64) {
+        let _ = self
+            .import_lease
+            .compare_exchange(lease, 0, Ordering::AcqRel, Ordering::Acquire);
+    }
+
+    /// Ends session `lease`: one full analysis with the reader refresh, then the
+    /// lease is released whatever the analysis returned.
+    pub(crate) fn finish_import(&self, lease: u64) -> Result<()> {
+        let r = (|| {
+            let _held = HeldGuard::acquire(self.id)?;
+            let mut store = self.lock()?;
+            store.defer_statistics(false);
+            store.optimize()
+        })();
+        self.release_import_lease(lease);
+        r
     }
 
     /// Runs one transaction on the single writer and returns its report. This is the
@@ -449,9 +502,34 @@ impl Db {
     where
         F: FnOnce(&mut Tx<'_>) -> Result<()>,
     {
+        self.transact_leased(opts, None, f)
+    }
+
+    /// [`Db::transact`] on behalf of import session `lease` (`None`: an ordinary
+    /// write). The lease is checked under the writer lock: while a session holds
+    /// it, only that session's chunks write, and their commits defer statistics.
+    pub(crate) fn transact_leased<F>(
+        &self,
+        opts: TxOptions,
+        lease: Option<u64>,
+        f: F,
+    ) -> Result<TxReport>
+    where
+        F: FnOnce(&mut Tx<'_>) -> Result<()>,
+    {
         let _held = HeldGuard::acquire(self.id)?;
         let engine = self.engine.clone();
-        armed(&mut *self.lock_bounded(false)?, |store| {
+        let mut guard = self.lock_bounded(false)?;
+        let holder = self.import_lease.load(Ordering::Acquire);
+        if holder != 0 && Some(holder) != lease {
+            return Err(Error::ImportInProgress);
+        }
+        if lease.is_some() && holder == 0 {
+            // the session was released (cannot happen through `BulkImport`)
+            return Err(Error::ImportInProgress);
+        }
+        guard.defer_statistics(lease.is_some());
+        armed(&mut guard, |store| {
             store.transact(opts, move |tx| {
                 if let Some(e) = engine {
                     tx.set_extension(e);

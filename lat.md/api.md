@@ -25,6 +25,18 @@ impl Db {
     pub fn cypher_write(&self, opts: TxOptions, q: &str, params: &CypherParams) -> Result<CypherResult>; // one transaction; rows + TxReport
     pub fn transact_budgeted<F>(&self, opts: TxOptions, budget: &QueryBudget, f: F) -> Result<TxReport>; // bounded; stopped = rolled back
     pub fn cypher_write_budgeted(&self, opts: TxOptions, q: &str, params: &CypherParams, budget: &QueryBudget) -> Result<CypherResult>;
+    pub fn bulk_import(&self) -> Result<BulkImport<'_>>;                    // write lease, deferred statistics
+    pub fn bulk_import_shared(self: &Arc<Db>) -> Result<BulkImport<'static>>;
+    pub fn statistics_due(&self) -> Result<bool>;
+    pub fn import_active(&self) -> bool;
+}
+
+impl BulkImport<'_> {
+    pub fn chunk<F>(&mut self, f: F) -> Result<TxReport>;           // one atomic transaction
+    pub fn chunk_with<F>(&mut self, opts: TxOptions, budget: Option<&QueryBudget>, f: F) -> Result<TxReport>;
+    pub fn progress(&self) -> &ImportProgress;
+    pub fn finish(self) -> ImportSummary;                           // one full ANALYZE; never fails
+    pub fn cancel(self) -> ImportProgress;                          // no analysis; statistics left due
 }
 
 impl View {
@@ -55,6 +67,7 @@ impl View {
 - `SparqlResult` is `Solutions`, `Boolean`, `Graph` or `Update(TxReport)`, with `write_sparql_json` (SELECT, ASK) and `write_ntriples` (CONSTRUCT). A SPARQL update is one transaction on the writer and returns its `TxReport`. See [[query#Front Ends#SPARQL]].
 - `sparql(q)` is `sparql_with(q, &SparqlOptions::default())`. `SparqlOptions { provenance: true }` makes each `SELECT` row carry the eids of the statements that produced it: `Solutions::provenance(row) -> Option<&[Eid]>`, a `"provenance"` member in SPARQL JSON, and `provenance: true` on the JSON bridge's `sparql`. `ASK`, `CONSTRUCT` and updates with it are `Unsupported`. See [[query#Front Ends#SPARQL#Query Provenance]].
 - Query budgets ([[query#Query Budgets]]): `QueryBudget { timeout, cancel, reader_timeout, max_rows, max_bytes }` (all `Option`, `Default` bounds nothing), `CancelToken::{new, cancel, is_cancelled}`, and `QueryBudget::run(f)`, which bounds a sequence of calls as one operation. Hosts receive the stop conditions through `Executor::set_interrupt(Option<Interrupt>)`, a default no-op.
+- Bulk import ([[query#Bulk Import]]): `ImportProgress { chunks, rejected, asserted, existing, retracted, txs, elapsed, maintenance }` and `ImportSummary { progress, analyzed, maintenance_error, statistics_due }`. Dropping a `BulkImport` equals `cancel`.
 - `values(s, key)` is how M0 exposes volatile state before a query language exists. See [[storage#Volatile Table]].
 - `Patch::from_fields` builds a patch from named fields for bindings and rejects `s` and `p` with `InvalidPatch`.
 
@@ -92,6 +105,7 @@ Every failure is a typed error, and a failed transaction leaves no trace: no tx 
 | `NotUniquePredicate(p)` | `upsert` on a predicate without `sys:unique` |
 | `IdSpaceExhausted { kind }` | A `NODE`, `BNODE`, `STMT` or `TX` counter would pass 2⁴⁸ − 1, the largest number format 1 allocates. See [[data-model#ObjectId#Origin Bits]] |
 | `Reentrant` | A write is started from inside a running transaction on the same `Db` |
+| `ImportInProgress` | A write, or a second session, while a bulk import session holds the write lease. Reads are unaffected. See [[query#Bulk Import]] |
 | `DeleteConnectedNode { node, relationships }` | Cypher `DELETE n` while `n` still has live relationships at the end of the query (use `DETACH DELETE`); it lists their eids |
 | `Eval { dialect, msg }` | A runtime expression error during query evaluation: a type error, integer division by zero, an unstorable property value or an invalid `@id` |
 | `Sqlite(e)` / `Custom(msg)` | A host-neutral SQLite error carrying the result code (busy, I/O, corruption), or the caller aborting the transaction body |

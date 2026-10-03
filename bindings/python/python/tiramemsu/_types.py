@@ -351,6 +351,70 @@ def report_from_json(j: Dict[str, Any]) -> Report:
 
 
 @dataclass(frozen=True)
+class ImportProgress:
+    """What a bulk import session has done so far (see :meth:`Database.bulk_import`)."""
+
+    chunks: int
+    """Chunks that committed."""
+    rejected: int
+    """Chunks that failed and were rolled back (they left no trace)."""
+    asserted: int
+    """New statements committed."""
+    existing: int
+    """Assertions that reused a live statement."""
+    retracted: int
+    """Statements retracted."""
+    txs: List[int]
+    """The transaction number of every committed chunk, in commit order."""
+    elapsed_ms: float
+    """Time spent running chunks."""
+    maintenance_ms: float
+    """Time spent in the final statistics refresh."""
+
+
+def import_progress_from_json(j: Dict[str, Any]) -> ImportProgress:
+    """Decode a bridge progress object into an :class:`ImportProgress`."""
+    return ImportProgress(
+        chunks=int(j["chunks"]),
+        rejected=int(j["rejected"]),
+        asserted=int(j["asserted"]),
+        existing=int(j["existing"]),
+        retracted=int(j["retracted"]),
+        txs=[int(t) for t in j.get("txs") or []],
+        elapsed_ms=float(j["elapsedMs"]),
+        maintenance_ms=float(j["maintenanceMs"]),
+    )
+
+
+@dataclass(frozen=True)
+class ImportSummary:
+    """The outcome of finishing a bulk import session.
+
+    Every chunk in ``progress.txs`` is committed even when ``maintenance_error`` is
+    set: a failed final analysis never rolls data back.
+    """
+
+    progress: ImportProgress
+    analyzed: bool
+    """True when the final full analysis succeeded."""
+    statistics_due: bool
+    """True when statistics are still stale (the analysis failed)."""
+    maintenance_error: Optional[TiramemsuError]
+    """The error of the final analysis, if it failed."""
+
+
+def import_summary_from_json(j: Dict[str, Any]) -> ImportSummary:
+    """Decode a bridge ``importFinish`` result into an :class:`ImportSummary`."""
+    err = j.get("maintenanceError")
+    return ImportSummary(
+        progress=import_progress_from_json(j["progress"]),
+        analyzed=bool(j["analyzed"]),
+        statistics_due=bool(j["statisticsDue"]),
+        maintenance_error=TiramemsuError(err["code"], err["message"]) if err else None,
+    )
+
+
+@dataclass(frozen=True)
 class CypherResult:
     """The result of a Cypher read query."""
 

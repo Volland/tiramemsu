@@ -170,6 +170,7 @@ Every failure throws a `TiramemsuError` with a `code`:
 | `ResultLimitExceeded` | A budgeted call decoded more than `maxRows` rows or `maxBytes` bytes |
 | `InvalidPatch` | A `supersede` patch tried to change the subject or predicate |
 | `IdSpaceExhausted` | An id counter passed 2^48 − 1 |
+| `ImportInProgress` | A write, or a second import session, while a bulk import session is open |
 | `Sqlite` | A SQLite failure, such as a locked or unreadable file |
 
 ## Options
@@ -188,6 +189,24 @@ db.cypherWrite("CREATE (:Person {name: 'Bob'})", undefined, { budget: { timeoutM
 ```
 
 `db.cancel(key)` stops the call running with that `cancelKey`. The API is synchronous, so from the same thread it only stops a call that starts later; use a fresh key per call.
+
+## Bulk import
+
+`db.bulkImport()` starts a session for large loads: each `chunk` is one atomic transaction (a function of `tx` or a list of op objects, with the same options as `transact`), chunks skip the per-commit statistics refresh, and `finish()` runs one full analysis. A failing chunk throws and rolls back alone; earlier chunks stay. While the session is open other writes throw `ImportInProgress` and reads see the last committed chunk.
+
+```ts
+const imp = db.bulkImport();
+try {
+  for (const batch of batches) {
+    imp.chunk((tx) => { for (const [s, p, o] of batch) tx.assert(s, p, o); });
+  }
+} finally {
+  const summary = imp.finish(); // { progress, analyzed, statisticsDue, maintenanceError }
+  console.log(summary.progress.chunks, summary.progress.asserted, summary.progress.txs);
+}
+```
+
+`imp.progress()` reports `chunks`, `rejected`, `asserted`, `existing`, `retracted`, `txs`, `elapsedMs` and `maintenanceMs`. `imp.cancel()` ends the session without analysis and keeps every committed chunk; `db.info().statisticsDue` then stays true until the next write or `db.optimize()`. Always end a session, since it holds the write lease until `finish()` or `cancel()`.
 
 ## Good to know
 

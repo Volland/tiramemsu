@@ -767,3 +767,95 @@ fn cancel_stops_a_running_call_from_another_thread() {
         .unwrap();
     assert_eq!(ok.as_array().unwrap().len(), 1);
 }
+
+fn chunk_ops(c: usize, n: usize) -> J {
+    J::Array(
+        (0..n)
+            .map(|i| json!({ "op": "assert", "s": v(&format!("c{c}-{i}")), "p": v("p"), "o": i }))
+            .collect(),
+    )
+}
+
+// @lat: [[tests#Bulk Import#Bridge Import Sessions]]
+#[test]
+fn bulk_import_sessions_cross_the_bridge() {
+    let (_d, db) = open();
+    let s = db.call("importBegin", &json!({})).unwrap()["session"].clone();
+    assert_eq!(db.call("info", &json!({})).unwrap()["importActive"], true);
+    // the lease refuses ordinary writes and a second session
+    let e = db
+        .call("transact", &json!({ "ops": chunk_ops(9, 1) }))
+        .unwrap_err();
+    assert_eq!(e.code(), "ImportInProgress");
+    assert_eq!(
+        db.call("importBegin", &json!({})).unwrap_err().code(),
+        "ImportInProgress"
+    );
+    let r = db
+        .call(
+            "importChunk",
+            &json!({ "session": s, "ops": chunk_ops(0, 3) }),
+        )
+        .unwrap();
+    assert_eq!(r["t"], 1);
+    assert_eq!(r["results"][0]["new"], true);
+    assert_eq!(r["progress"]["chunks"], 1);
+    // a rejected chunk is counted and leaves no trace
+    let e = db
+        .call(
+            "importChunk",
+            &json!({ "session": s, "ops": [{ "op": "confirm", "eid": 99 }] }),
+        )
+        .unwrap_err();
+    assert_eq!(e.code(), "NotLive");
+    let e = db
+        .call(
+            "importChunk",
+            &json!({ "session": s, "ops": chunk_ops(1, 1), "budget": { "cancelKey": "k" } }),
+        )
+        .map(|_| ());
+    assert!(e.is_ok());
+    let p = db.call("importProgress", &json!({ "session": s })).unwrap();
+    assert_eq!(p["chunks"], 2);
+    assert_eq!(p["rejected"], 1);
+    assert_eq!(p["asserted"], 4);
+    assert_eq!(p["txs"], json!([1, 2]));
+    let f = db.call("importFinish", &json!({ "session": s })).unwrap();
+    assert_eq!(f["analyzed"], true);
+    assert_eq!(f["statisticsDue"], false);
+    assert_eq!(f["maintenanceError"], J::Null);
+    assert_eq!(f["progress"]["txs"], json!([1, 2]));
+    assert!(f["progress"]["maintenanceMs"].as_f64().unwrap() >= 0.0);
+    // the session is gone and writes resume
+    assert_eq!(
+        db.call("importProgress", &json!({ "session": s }))
+            .unwrap_err()
+            .code(),
+        "InvalidArgument"
+    );
+    db.call("transact", &json!({ "ops": chunk_ops(2, 1) }))
+        .unwrap();
+
+    // cancel keeps the committed chunk and leaves the statistics due
+    let s = db.call("importBegin", &json!({})).unwrap()["session"].clone();
+    db.call(
+        "importChunk",
+        &json!({ "session": s, "ops": chunk_ops(3, 2) }),
+    )
+    .unwrap();
+    let p = db.call("importCancel", &json!({ "session": s })).unwrap();
+    assert_eq!(p["chunks"], 1);
+    let info = db.call("info", &json!({})).unwrap();
+    assert_eq!(info["importActive"], false);
+    assert_eq!(info["statisticsDue"], true);
+    let rows = db
+        .call("triples", &json!({ "view": { "kind": "now" } }))
+        .unwrap();
+    assert_eq!(rows.as_array().unwrap().len(), 7);
+    assert_eq!(
+        db.call("importChunk", &json!({ "session": "x", "ops": [] }))
+            .unwrap_err()
+            .code(),
+        "InvalidArgument"
+    );
+}

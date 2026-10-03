@@ -134,9 +134,31 @@ impl Store {
         self.stats.runs()
     }
 
-    /// Runs a full `ANALYZE` on the writer.
+    /// Runs a full `ANALYZE` on the writer and makes pooled readers reload the
+    /// statistics. Clears [`Store::statistics_due`] on success.
     pub fn optimize(&mut self) -> Result<()> {
-        storage::stats::analyze(self.exec.as_mut())
+        storage::stats::analyze(self.exec.as_mut())?;
+        self.stats.refreshed();
+        Ok(())
+    }
+
+    /// Suppresses (`true`) or restores (`false`) the per-commit statistics
+    /// trigger. While deferred, commits run no analysis and only mark statistics
+    /// due; the next commit after deferral ends runs the upkeep unless
+    /// [`Store::optimize`] ran first. Used by the facade's bulk import session.
+    pub fn defer_statistics(&mut self, deferred: bool) {
+        self.stats.set_deferred(deferred);
+    }
+
+    /// True while the per-commit statistics trigger is suppressed.
+    pub fn statistics_deferred(&self) -> bool {
+        self.stats.deferred()
+    }
+
+    /// True when deferred commits changed the data and statistics have not been
+    /// refreshed since.
+    pub fn statistics_due(&self) -> bool {
+        self.stats.due()
     }
 
     /// The writer executor (for reads outside transactions and for tests).

@@ -168,6 +168,7 @@ Every failure raises `TiramemsuError` with a `.code`:
 | `ResultLimitExceeded` | A budgeted call decoded more than `max_rows` rows or `max_bytes` bytes |
 | `InvalidPatch` | A `supersede` patch tried to change the subject or predicate |
 | `IdSpaceExhausted` | An id counter passed 2^48 − 1 |
+| `ImportInProgress` | A write, or a second import session, while a bulk import session is open |
 | `Sqlite` | A SQLite failure, such as a locked or unreadable file |
 
 ## Options
@@ -190,6 +191,21 @@ with db.transact(budget=QueryBudget(timeout_ms=1_000)) as tx:
 # from another thread: stop the call running with cancel_key="job-42"
 db.cancel("job-42")
 ```
+
+## Bulk import
+
+`db.bulk_import()` starts a session for large loads: each `chunk` is one atomic transaction (a context manager or a list of op dicts, with the options of `transact`), chunks skip the per-commit statistics refresh, and finishing runs one full analysis. A failing chunk raises and rolls back alone; earlier chunks stay. While the session is open other writes raise `ImportInProgress` and reads see the last committed chunk.
+
+```python
+with db.bulk_import() as imp:          # finishes on a clean exit, cancels if the block raises
+    for batch in batches:
+        with imp.chunk() as tx:
+            for s, p, o in batch:
+                tx.assert_(s, p, o)
+print(imp.summary.progress.chunks, imp.summary.analyzed, imp.summary.maintenance_error)
+```
+
+`imp.progress()` returns an `ImportProgress` (`chunks`, `rejected`, `asserted`, `existing`, `retracted`, `txs`, `elapsed_ms`, `maintenance_ms`); `imp.finish()` returns an `ImportSummary`, and a failed final analysis is its `maintenance_error`, never a rollback. `imp.cancel()` ends the session without analysis; `db.info()["statisticsDue"]` then stays true until the next write or `db.optimize()`.
 
 ## Good to know
 

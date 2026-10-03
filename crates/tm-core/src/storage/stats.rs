@@ -8,6 +8,11 @@ pub struct Stats {
     every: u64,
     since: u64,
     runs: u64,
+    /// A bulk import session suppresses the per-commit trigger.
+    deferred: bool,
+    /// Commits have changed the data since statistics were last refreshed by a
+    /// deferred session: the next commit runs the upkeep.
+    due: bool,
 }
 
 impl Stats {
@@ -17,6 +22,8 @@ impl Stats {
             every: every.max(1),
             since: 0,
             runs: 0,
+            deferred: false,
+            due: false,
         }
     }
 
@@ -30,14 +37,45 @@ impl Stats {
     /// the commit inserted at least `every` statements (a bulk load). Errors are
     /// ignored: the transaction has committed and statistics never change results.
     // @lat: [[query#Physical Planning#Join Ordering]]
+    ///
+    /// While statistics are deferred (a bulk import session) no analysis runs: the
+    /// commit only marks statistics due. Once deferral ends without a refresh, the
+    /// next commit runs the upkeep.
     pub fn after_commit(&mut self, exec: &mut dyn Executor, inserted: usize) {
+        if self.deferred {
+            self.due = true;
+            return;
+        }
         self.since += 1;
-        if self.since >= self.every || inserted as u64 >= self.every {
+        if self.due || self.since >= self.every || inserted as u64 >= self.every {
             self.since = 0;
+            self.due = false;
             self.runs += 1;
             optimize(exec);
             refresh_readers(exec);
         }
+    }
+
+    /// Suppresses (`true`) or restores (`false`) the per-commit trigger. A bulk
+    /// import session defers statistics and refreshes them once when it finishes.
+    // @lat: [[query#Bulk Import]]
+    pub fn set_deferred(&mut self, deferred: bool) {
+        self.deferred = deferred;
+    }
+
+    /// True while the per-commit trigger is suppressed.
+    pub fn deferred(&self) -> bool {
+        self.deferred
+    }
+
+    /// True when deferred commits changed the data and no refresh has run since.
+    pub fn due(&self) -> bool {
+        self.due
+    }
+
+    /// Records a successful full analysis: statistics are no longer due.
+    pub fn refreshed(&mut self) {
+        self.due = false;
     }
 }
 

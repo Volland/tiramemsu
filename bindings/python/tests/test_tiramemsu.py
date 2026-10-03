@@ -804,3 +804,44 @@ class TestQueryBudgets:
         db = Database(str(tmp_path / "r.db"), readers=1, reader_timeout_ms=50)
         assert db.now().triples() == []
         assert db.info()["readers"] == 1
+
+
+# ----------------------------------------------------------------------- bulk import
+
+
+class TestBulkImport:
+    def test_chunks_lease_and_one_final_analysis(self, db: Database) -> None:
+        with db.bulk_import() as imp:
+            with imp.chunk() as tx:
+                for i in range(5):
+                    tx.assert_(iri(f"a{i}"), iri("p"), i)
+            assert tx.report is not None and tx.report.t == 1
+            imp.chunk([{"op": "assert", "s": {"iri": f"{V}b"}, "p": {"iri": f"{V}p"}, "o": 1}])
+            with pytest.raises(TiramemsuError) as e:
+                imp.chunk([{"op": "confirm", "eid": 99}])
+            assert e.value.code == "NotLive"
+            with pytest.raises(TiramemsuError) as e:
+                db.transact([{"op": "assert", "s": {"iri": f"{V}x"}, "p": {"iri": f"{V}p"}, "o": 1}])
+            assert e.value.code == "ImportInProgress"
+            with pytest.raises(TiramemsuError) as e:
+                db.bulk_import()
+            assert e.value.code == "ImportInProgress"
+            assert db.info()["importActive"] is True
+            assert len(db.now().triples()) == 6
+            p = imp.progress()
+            assert (p.chunks, p.rejected, p.asserted) == (2, 1, 6)
+        assert imp.summary is not None
+        assert imp.summary.analyzed and imp.summary.maintenance_error is None
+        assert imp.summary.progress.txs == [1, 2]
+        assert db.info()["importActive"] is False
+        db.transact([{"op": "assert", "s": {"iri": f"{V}x"}, "p": {"iri": f"{V}p"}, "o": 1}])
+
+    def test_a_raising_block_cancels_and_keeps_committed_chunks(self, db: Database) -> None:
+        with pytest.raises(RuntimeError):
+            with db.bulk_import() as imp:
+                imp.chunk([{"op": "assert", "s": {"iri": f"{V}c"}, "p": {"iri": f"{V}p"}, "o": 1}])
+                raise RuntimeError("stop")
+        assert imp.summary is None
+        info = db.info()
+        assert info["importActive"] is False and info["statisticsDue"] is True
+        assert len(db.now().triples()) == 1

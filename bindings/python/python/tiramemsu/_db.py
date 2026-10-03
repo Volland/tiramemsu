@@ -14,6 +14,8 @@ from ._native import Native
 from ._types import (
     CypherResult,
     CypherWriteResult,
+    ImportProgress,
+    ImportSummary,
     PathRow,
     QueryBudget,
     Report,
@@ -21,6 +23,8 @@ from ._types import (
     Statement,
     Stmt,
     TiramemsuError,
+    import_progress_from_json,
+    import_summary_from_json,
     report_from_json,
     sparql_result_from_json,
     statement_from_json,
@@ -303,11 +307,15 @@ class TxContext:
         dry_run: bool = False,
         max_cascade: Optional[int] = None,
         budget: Optional[QueryBudget] = None,
+        op: str = "transact",
+        extra: Optional[Dict[str, Any]] = None,
     ) -> None:
         self._native = native
         self._dry_run = dry_run
         self._max_cascade = max_cascade
         self._budget = budget
+        self._op = op
+        self._extra = extra or {}
         self._builder = TxBuilder()
 
     def __enter__(self) -> TxBuilder:
@@ -321,18 +329,129 @@ class TxContext:
     ) -> None:
         if exc_type is not None:
             return  # don't submit when the block raised
-        args: Dict[str, Any] = {"ops": self._builder._ops}
-        options: Dict[str, Any] = {}
-        if self._dry_run:
-            options["dryRun"] = True
-        if self._max_cascade is not None:
-            options["maxCascade"] = self._max_cascade
-        if options:
-            args["options"] = options
-        if self._budget is not None:
-            args["budget"] = self._budget._to_json()
-        result_text = _call(self._native, "transact", json.dumps(args))
+        args = _tx_args(
+            self._builder._ops, self._dry_run, self._max_cascade, self._budget
+        )
+        args.update(self._extra)
+        result_text = _call(self._native, self._op, json.dumps(args))
         self._builder.report = report_from_json(json.loads(result_text))
+
+
+def _tx_args(
+    ops: List[Any],
+    dry_run: bool,
+    max_cascade: Optional[int],
+    budget: Optional[QueryBudget],
+) -> Dict[str, Any]:
+    """The bridge arguments of a transaction (or import chunk) of *ops*."""
+    args: Dict[str, Any] = {"ops": ops}
+    options: Dict[str, Any] = {}
+    if dry_run:
+        options["dryRun"] = True
+    if max_cascade is not None:
+        options["maxCascade"] = max_cascade
+    if options:
+        args["options"] = options
+    if budget is not None:
+        args["budget"] = budget._to_json()
+    return args
+
+
+# ------------------------------------------------------------------------ BulkImport
+
+
+class BulkImport:
+    """A bulk import session from :meth:`Database.bulk_import`.
+
+    Each chunk is one atomic transaction; planner statistics are refreshed once by
+    :meth:`finish`. While the session is open other writes fail with
+    ``ImportInProgress`` and reads see the last committed chunk. Used as a context
+    manager it finishes on a clean exit and cancels when the block raises; the
+    summary is on :attr:`summary` afterwards.
+    """
+
+    def __init__(self, native: Native, session: int) -> None:
+        self._native = native
+        self.session = session
+        self.summary: Optional[ImportSummary] = None
+
+    @overload
+    def chunk(
+        self,
+        ops: List[Any],
+        *,
+        dry_run: bool = ...,
+        max_cascade: Optional[int] = ...,
+        budget: Optional[QueryBudget] = ...,
+    ) -> Report: ...
+
+    @overload
+    def chunk(
+        self,
+        ops: None = None,
+        *,
+        dry_run: bool = ...,
+        max_cascade: Optional[int] = ...,
+        budget: Optional[QueryBudget] = ...,
+    ) -> TxContext: ...
+
+    def chunk(
+        self,
+        ops: Optional[List[Any]] = None,
+        *,
+        dry_run: bool = False,
+        max_cascade: Optional[int] = None,
+        budget: Optional[QueryBudget] = None,
+    ) -> Union[Report, TxContext]:
+        """Commit one chunk, in the two forms of :meth:`Database.transact`.
+
+        A failing chunk raises and rolls back alone; earlier chunks stay committed.
+        """
+        extra = {"session": self.session}
+        if ops is not None:
+            args = _tx_args(ops, dry_run, max_cascade, budget)
+            args.update(extra)
+            result_text = _call(self._native, "importChunk", json.dumps(args))
+            return report_from_json(json.loads(result_text))
+        return TxContext(
+            self._native,
+            dry_run=dry_run,
+            max_cascade=max_cascade,
+            budget=budget,
+            op="importChunk",
+            extra=extra,
+        )
+
+    def progress(self) -> ImportProgress:
+        """The progress so far."""
+        args = json.dumps({"session": self.session})
+        return import_progress_from_json(
+            json.loads(_call(self._native, "importProgress", args))
+        )
+
+    def finish(self) -> ImportSummary:
+        """Run one full analysis, release the write lease and return the summary."""
+        args = json.dumps({"session": self.session})
+        self.summary = import_summary_from_json(
+            json.loads(_call(self._native, "importFinish", args))
+        )
+        return self.summary
+
+    def cancel(self) -> ImportProgress:
+        """End the session without analysis; committed chunks stay, statistics are due."""
+        args = json.dumps({"session": self.session})
+        return import_progress_from_json(
+            json.loads(_call(self._native, "importCancel", args))
+        )
+
+    def __enter__(self) -> "BulkImport":
+        return self
+
+    def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
+        if exc_type is None:
+            self.finish()
+        else:
+            self.cancel()
 
 
 # ------------------------------------------------------------------------------- View
@@ -635,16 +754,7 @@ class Database:
         *budget* bounds the transaction; a stopped one commits nothing.
         """
         if ops is not None:
-            args: Dict[str, Any] = {"ops": ops}
-            options: Dict[str, Any] = {}
-            if dry_run:
-                options["dryRun"] = True
-            if max_cascade is not None:
-                options["maxCascade"] = max_cascade
-            if options:
-                args["options"] = options
-            if budget is not None:
-                args["budget"] = budget._to_json()
+            args = _tx_args(ops, dry_run, max_cascade, budget)
             result_text = _call(self._native, "transact", json.dumps(args))
             return report_from_json(json.loads(result_text))
         return TxContext(
@@ -703,11 +813,23 @@ class Database:
         result_text = _call(self._native, "cancel", json.dumps({"key": key}))
         return bool(json.loads(result_text)["running"])
 
+    def bulk_import(self) -> BulkImport:
+        """Start a bulk import session: chunked atomic writes, statistics refreshed once.
+
+        Raises ``ImportInProgress`` while another session is open. Use it as a
+        context manager (``with db.bulk_import() as imp:``) so the session always
+        ends.
+        """
+        j = json.loads(_call(self._native, "importBegin", ""))
+        return BulkImport(self._native, int(j["session"]))
+
     def optimize(self) -> None:
         """Refresh query-planner statistics after large imports."""
         _call(self._native, "optimize", "")
 
     def info(self) -> Dict[str, Any]:
-        """Return basic database information: path, reader count and path limits."""
+        """Return database information: path, reader count, path limits, whether an
+        import session is active (``importActive``) and whether planner statistics are
+        due (``statisticsDue``)."""
         result_text = _call(self._native, "info", "")
         return dict(json.loads(result_text))

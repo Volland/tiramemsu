@@ -246,6 +246,46 @@ The bridge's `budget` argument bounds reads, `cypherWrite` and `transact` with c
 
 `cancel` from another thread finds the running call by its `cancelKey`, stops it with `Cancelled`, and leaves other keys unaffected.
 
+## Bulk Import
+
+Opt-in import sessions of [[query#Bulk Import]]: chunks commit atomically under the write lease, statistics are refreshed once, and interruption keeps committed history.
+
+### Later Chunk Fails
+
+Two chunks commit and a third violates `sys:unique`: the first two stay visible with their transaction numbers, the third leaves no `tx` row, statement or term, and the next chunk keeps gap-free numbering.
+
+### Retry An Assertion Chunk
+
+Retrying an assertion chunk reuses the live statements by normal assertion semantics: the retry asserts nothing new and reports the same eids as `existing`.
+
+### Finalize Many Chunks
+
+With `optimize_every: 1`, twenty chunks run no analysis and write no STAT4 samples; `finish` runs one full `ANALYZE`, bumps the schema cookie for pooled readers, and restores the per-commit trigger.
+
+### Analysis Failure
+
+When another connection holds the write lock, the final `ANALYZE` fails with `Sqlite`; the summary lists both committed chunks and the maintenance error, the data stays, and statistics remain due until `optimize`.
+
+### Cancel Between Chunks
+
+Cancelling or dropping a session after a committed chunk keeps it (also across a reopen), runs no analysis, leaves statistics due, frees ordinary writes, and the next commit runs the upkeep.
+
+### Read While Importing
+
+A pooled reader on the importing thread or another thread, queried while a chunk is uncommitted, sees only the last committed chunk; SPARQL between chunks sees each committed one.
+
+### Exclusive Write Lease
+
+While a session lives, `transact`, SPARQL updates, Cypher writes and a second session fail with `ImportInProgress` from any thread; a shared session moves between threads, and a session cannot start inside a transaction.
+
+### Budgeted Chunk
+
+A chunk under a cancelled budget fails with `Cancelled`, leaves no trace and counts as rejected; a dry-run chunk commits nothing and is counted neither way.
+
+### Bridge Import Sessions
+
+The bridge's `importBegin`, `importChunk`, `importProgress`, `importFinish` and `importCancel` run a session by id, report progress and summaries, and map the lease error to `ImportInProgress`.
+
 ## Storage Invariants
 
 Checks of the SQLite-level guarantees in [[storage#Invariant Triggers]] and [[storage#Query Shapes]].

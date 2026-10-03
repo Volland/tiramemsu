@@ -487,3 +487,42 @@ describe("query budgets", () => {
     } finally { cleanup(dir); }
   });
 });
+
+describe("bulk import", () => {
+  const code = (f: () => unknown): string | undefined => {
+    try { f(); return undefined; } catch (e) { return (e as TiramemsuError).code; }
+  };
+
+  it("commits chunks, refuses other writes and analyses once on finish", () => {
+    const { db, dir } = tempDb();
+    try {
+      const imp = db.bulkImport();
+      try {
+        const r = imp.chunk((tx) => { for (let i = 0; i < 5; i++) tx.assert(v(`a${i}`), v("p"), i); });
+        expect(r.t).toBe(1);
+        expect(r.progress.chunks).toBe(1);
+        imp.chunk([{ op: "assert", s: v("b"), p: v("p"), o: 1 }]);
+        expect(code(() => imp.chunk((tx) => { tx.confirm(99); }))).toBe("NotLive");
+        expect(code(() => db.transact((tx) => { tx.assert(v("x"), v("p"), 1); }))).toBe("ImportInProgress");
+        expect(code(() => db.bulkImport())).toBe("ImportInProgress");
+        expect(db.info().importActive).toBe(true);
+        expect(db.now().triples()).toHaveLength(6);
+        const p = imp.progress();
+        expect([p.chunks, p.rejected, p.asserted]).toEqual([2, 1, 6]);
+      } finally {
+        const s = imp.finish();
+        expect(s.analyzed).toBe(true);
+        expect(s.maintenanceError).toBeNull();
+        expect(s.progress.txs).toEqual([1, 2]);
+      }
+      expect(db.info().importActive).toBe(false);
+      db.transact((tx) => { tx.assert(v("x"), v("p"), 1); });
+
+      const second = db.bulkImport();
+      second.chunk((tx) => { tx.assert(v("c"), v("p"), 1); });
+      expect(second.cancel().chunks).toBe(1);
+      expect(db.info().statisticsDue).toBe(true);
+      expect(db.now().triples()).toHaveLength(8);
+    } finally { cleanup(dir); }
+  });
+});

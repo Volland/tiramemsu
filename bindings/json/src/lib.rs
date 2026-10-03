@@ -14,6 +14,11 @@
 //! bounds the call like [`tiramemsu::QueryBudget`]; the `cancel` operation
 //! (`{"key"}`) stops a call running with that `cancelKey` from another thread.
 //!
+//! Bulk imports are sessions held by the bridge: `importBegin` returns
+//! `{"session": n}`, `importChunk` (`session`, `ops`, `options`, `budget`) commits
+//! one chunk like `transact`, and `importProgress`, `importFinish` and
+//! `importCancel` take the `session`. See [`tiramemsu::BulkImport`].
+//!
 // @lat: [[api#Bindings]]
 
 mod read;
@@ -22,9 +27,10 @@ pub mod value;
 
 use serde_json::{json, Value as J};
 use std::collections::HashMap;
-use std::sync::Mutex;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
-use tiramemsu::{CancelToken, Db, Error, OpenOptions, QueryBudget, TxOptions};
+use tiramemsu::{BulkImport, CancelToken, Db, Error, OpenOptions, QueryBudget, TxOptions};
 
 pub use value::{value_from_json, value_to_json};
 
@@ -97,6 +103,7 @@ impl BindError {
                 Error::NotUniquePredicate(_) => "NotUniquePredicate",
                 Error::IdSpaceExhausted { .. } => "IdSpaceExhausted",
                 Error::Reentrant => "Reentrant",
+                Error::ImportInProgress => "ImportInProgress",
                 Error::Cancelled => "Cancelled",
                 Error::DeadlineExceeded { .. } => "DeadlineExceeded",
                 Error::PoolTimeout { .. } => "PoolTimeout",
@@ -119,11 +126,18 @@ impl BindError {
 /// writes serialize on the single writer.
 #[derive(Debug)]
 pub struct Database {
-    db: Db,
+    db: Arc<Db>,
     /// The cancellation tokens of calls running with a `cancelKey`, and of keys
     /// cancelled before their call started.
     cancels: Mutex<HashMap<String, CancelToken>>,
+    /// Open bulk import sessions by id. A finished or cancelled session is `None`
+    /// until its entry is removed.
+    imports: Mutex<HashMap<u64, Session>>,
+    next_session: AtomicU64,
 }
+
+/// One bulk import session; chunks of one session run one at a time.
+type Session = Arc<Mutex<Option<BulkImport<'static>>>>;
 
 /// Removes a call's `cancelKey` when the call ends.
 struct CancelEntry<'a> {
@@ -166,9 +180,79 @@ impl Database {
             return Err(arg("options must be an object"));
         }
         Ok(Database {
-            db: Db::open(path, opts)?,
+            db: Arc::new(Db::open(path, opts)?),
             cancels: Mutex::new(HashMap::new()),
+            imports: Mutex::new(HashMap::new()),
+            next_session: AtomicU64::new(1),
         })
+    }
+
+    fn import_map(&self) -> std::sync::MutexGuard<'_, HashMap<u64, Session>> {
+        self.imports.lock().unwrap_or_else(|p| p.into_inner())
+    }
+
+    /// The session named by `args.session`; with `remove`, it is taken out of the
+    /// map (finish and cancel).
+    fn session(&self, args: &J, remove: bool) -> Res<Session> {
+        let id = args
+            .get("session")
+            .and_then(J::as_u64)
+            .ok_or_else(|| arg("`session` must be a non-negative integer"))?;
+        let mut map = self.import_map();
+        let s = if remove {
+            map.remove(&id)
+        } else {
+            map.get(&id).cloned()
+        };
+        s.ok_or_else(|| arg(format!("unknown import session {id}")))
+    }
+
+    /// Runs one bulk import operation.
+    fn import(&self, op: &str, args: &J) -> Res<J> {
+        let lock = |s: &Session| s.lock().unwrap_or_else(|p| p.into_inner()).take();
+        match op {
+            "importBegin" => {
+                let session = self.db.bulk_import_shared()?;
+                let id = self.next_session.fetch_add(1, Ordering::Relaxed);
+                self.import_map()
+                    .insert(id, Arc::new(Mutex::new(Some(session))));
+                Ok(json!({ "session": id }))
+            }
+            "importChunk" => {
+                let (budget, _entry) = self.budget(args.get("budget"))?;
+                let s = self.session(args, false)?;
+                let mut guard = s.lock().unwrap_or_else(|p| p.into_inner());
+                let session = guard.as_mut().ok_or_else(|| arg("import session ended"))?;
+                let mut out = tx::import_chunk(session, args, budget.as_ref())?;
+                out["progress"] = tx::progress_json(session.progress());
+                Ok(out)
+            }
+            "importProgress" => {
+                let s = self.session(args, false)?;
+                let guard = s.lock().unwrap_or_else(|p| p.into_inner());
+                let session = guard.as_ref().ok_or_else(|| arg("import session ended"))?;
+                Ok(tx::progress_json(session.progress()))
+            }
+            "importFinish" => {
+                let s = self.session(args, true)?;
+                let session = lock(&s).ok_or_else(|| arg("import session ended"))?;
+                let summary = session.finish();
+                Ok(json!({
+                    "progress": tx::progress_json(&summary.progress),
+                    "analyzed": summary.analyzed,
+                    "statisticsDue": summary.statistics_due,
+                    "maintenanceError": summary
+                        .maintenance_error
+                        .map_or(J::Null, |e| BindError::Db(e).to_json()),
+                }))
+            }
+            "importCancel" => {
+                let s = self.session(args, true)?;
+                let session = lock(&s).ok_or_else(|| arg("import session ended"))?;
+                Ok(tx::progress_json(&session.cancel()))
+            }
+            other => Err(arg(format!("unknown operation {other:?}"))),
+        }
     }
 
     fn cancel_map(&self) -> std::sync::MutexGuard<'_, HashMap<String, CancelToken>> {
@@ -236,6 +320,8 @@ impl Database {
     /// `cypherWrite` (`text`, `params`, `options`) and `with` (`ops`, `queries`), plus
     /// `optimize` and `info`. Reads, `transact` and `cypherWrite` take an optional
     /// `budget`, and `cancel` (`key`) stops the call running with that `cancelKey`.
+    /// Bulk imports are `importBegin`, `importChunk` (`session`, `ops`, `options`,
+    /// `budget`), `importProgress`, `importFinish` and `importCancel` (`session`).
     pub fn call(&self, op: &str, args: &J) -> Res<J> {
         match op {
             "sparql" | "cypher" | "triples" | "path" | "events" | "graphs" | "graphMembers"
@@ -265,6 +351,9 @@ impl Database {
                     .ok_or_else(|| arg("`key` must be a string"))?;
                 Ok(json!({ "running": self.cancel(key) }))
             }
+            "importBegin" | "importChunk" | "importProgress" | "importFinish" | "importCancel" => {
+                self.import(op, args)
+            }
             "with" => tx::with(&self.db, args),
             "optimize" => {
                 self.db.optimize()?;
@@ -274,6 +363,8 @@ impl Database {
                 "path": self.db.path().display().to_string(),
                 "readers": self.db.reader_count(),
                 "pathMaxHops": self.db.path_max_hops(),
+                "importActive": self.db.import_active(),
+                "statisticsDue": self.db.statistics_due()?,
             })),
             other => Err(arg(format!("unknown operation {other:?}"))),
         }

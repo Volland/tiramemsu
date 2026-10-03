@@ -3,8 +3,8 @@
 use serde_json::{json, Value as J};
 use std::collections::HashMap;
 use tiramemsu::{
-    AssertOpts, Asserted, Bundle, BundleFormat, Db, Eid, Error, ObjectId, OnExisting, Patch,
-    PatchField, QueryBudget, Tx, TxCypher, Valid,
+    AssertOpts, Asserted, BulkImport, Bundle, BundleFormat, Db, Eid, Error, ImportProgress,
+    ObjectId, OnExisting, Patch, PatchField, QueryBudget, Tx, TxCypher, TxOptions, TxReport, Valid,
 };
 
 use crate::read::{report_json, run};
@@ -15,24 +15,63 @@ use crate::{arg, tx_options, BindError, Res};
 /// `results` (one per op) and `refs` (the eids named with `as`). With a budget the
 /// transaction is bounded by it and a stopped one commits nothing.
 pub fn transact(db: &Db, args: &J, budget: Option<&QueryBudget>) -> Res<J> {
+    run_ops(args, |options, body| match budget {
+        Some(b) => db.transact_budgeted(options, b, body),
+        None => db.transact(options, body),
+    })
+}
+
+/// `{"session", "ops", "options"}` as one chunk of a bulk import session: the
+/// same op list and result as `transact`, committed under the session's lease.
+// @lat: [[bindings#JSON Bridge#Bulk Import]]
+pub fn import_chunk(
+    session: &mut BulkImport<'_>,
+    args: &J,
+    budget: Option<&QueryBudget>,
+) -> Res<J> {
+    run_ops(args, |options, body| {
+        session.chunk_with(options, budget, body)
+    })
+}
+
+/// Applies the `ops` of `args` as the body handed to `commit`, and returns the
+/// report with `results` and `refs`.
+fn run_ops(
+    args: &J,
+    commit: impl FnOnce(
+        TxOptions,
+        &mut dyn FnMut(&mut Tx<'_>) -> Result<(), Error>,
+    ) -> Result<TxReport, Error>,
+) -> Res<J> {
     let ops = ops_arg(args)?;
     let options = tx_options(args.get("options").unwrap_or(&J::Null))?;
     let mut results = Vec::new();
     let mut refs = HashMap::new();
-    let body = |tx: &mut Tx<'_>| {
+    let mut body = |tx: &mut Tx<'_>| {
         let (r, named) = apply(tx, ops).map_err(into_core)?;
         results = r;
         refs = named;
         Ok(())
     };
-    let report = match budget {
-        Some(b) => db.transact_budgeted(options, b, body)?,
-        None => db.transact(options, body)?,
-    };
+    let report = commit(options, &mut body)?;
     let mut out = report_json(&report);
     out["results"] = J::Array(results);
     out["refs"] = J::Object(refs.into_iter().map(|(k, e)| (k, json!(e.n()))).collect());
     Ok(out)
+}
+
+/// The progress of a bulk import session as JSON.
+pub fn progress_json(p: &ImportProgress) -> J {
+    json!({
+        "chunks": p.chunks,
+        "rejected": p.rejected,
+        "asserted": p.asserted,
+        "existing": p.existing,
+        "retracted": p.retracted,
+        "txs": p.txs.iter().map(|t| t.0).collect::<Vec<_>>(),
+        "elapsedMs": p.elapsed.as_secs_f64() * 1000.0,
+        "maintenanceMs": p.maintenance.as_secs_f64() * 1000.0,
+    })
 }
 
 /// `{"text", "params", "options"}`: one Cypher query that may write, in one transaction.

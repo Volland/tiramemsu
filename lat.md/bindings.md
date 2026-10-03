@@ -17,7 +17,8 @@ Reads take a view and return rows; writes are one transaction each; anything tha
 - **Reads:** `sparql`, `cypher`, `triples`, `path`, `events`, `graphs`, `graphMembers`, `values`, `dependents` (`eid`, see [[time-model#Cascade#Dependents]]) and `bundle` (`eid`, returns the `tiramemsu-bundle/1` JSON of [[data-model#Fact Bundles#Bundle Formats]]), each with `{"view": …}` plus its own arguments. They are [[bindings/json/src/read.rs#run]]. `path` takes `start`, `path`, `mode`, `maxHops`, an optional `graphs` list of terms (a term that is not stored names no graph) and `timeRespecting: true | {"after": time}`, and every row carries `arrival` (epoch ms or `null`).
 - **Writes:** `transact` (a list of op objects in one transaction), `cypherWrite`, and `with` (speculation: ops applied hypothetically, then queries run on the result, then everything discarded). They are in [[bindings/json/src/tx.rs#transact]].
 - **Transaction ops:** `assert`, `create`, `retract`, `retractMatching`, `supersede`, `confirm`, `meta`, `upsert`, `newNode`, the five graph ops, `importBundle` (`bundle`; returns `{"root", "statements": [{"id", "eid", "new"}]}`, and `as` names the imported root) and `cypher`. An op may carry `"as": name`, and a later op may use `{"ref": name}` as a statement id or as a subject or object, which is how a layer is written on a statement created earlier in the same transaction.
-- **Housekeeping:** `optimize`, `info` and `cancel` (`key`, see [[bindings#JSON Bridge#Budgets]]).
+- **Housekeeping:** `optimize`, `info` (with `importActive` and `statisticsDue`) and `cancel` (`key`, see [[bindings#JSON Bridge#Budgets]]).
+- **Bulk import:** `importBegin`, `importChunk`, `importProgress`, `importFinish` and `importCancel`, see [[bindings#JSON Bridge#Bulk Import]].
 
 ### Budgets
 
@@ -26,6 +27,14 @@ Reads, `transact` and `cypherWrite` take an optional `budget` object that bounds
 The budget is `{"timeoutMs", "readerTimeoutMs", "maxRows", "maxBytes", "cancelKey"}`, all optional, mapped to a `QueryBudget` ([[query#Query Budgets]]); a read call runs under `QueryBudget::run`, so its term lookups, the read and decoding share one meter. An unknown key or a negative number is `InvalidArgument`. The open option `readerTimeoutMs` sets `OpenOptions::reader_timeout`.
 
 `cancel` (`{"key"}`) cancels the token registered by the call running with that `cancelKey` and returns `{"running": bool}`. A key cancelled before its call starts makes that call fail at once, so callers use a fresh key per call. The key is released when its call ends.
+
+### Bulk Import
+
+The bridge keeps bulk import sessions by id, so a wrapper drives one with plain calls: begin, chunks, progress, then finish or cancel.
+
+`importBegin` returns `{"session": n}` from `Db::bulk_import_shared` ([[query#Bulk Import]]). `importChunk` takes `session`, `ops`, `options` and `budget`, like `transact`, and returns the report with a `progress` member. Chunks of one session run one at a time.
+
+Progress is `{"chunks", "rejected", "asserted", "existing", "retracted", "txs", "elapsedMs", "maintenanceMs"}`. `importFinish` returns `{"progress", "analyzed", "statisticsDue", "maintenanceError"}` (an error object or `null`); `importCancel` returns the progress. Both remove the session, and an unknown session is `InvalidArgument`.
 
 ### Views
 
@@ -53,6 +62,8 @@ The native class is `Native(path, options)` with `call(op, args)`. The wrapper (
 
 Every bridge operation has a wrapper method: `sparql(text, { provenance })`, `path` with `graphs` and `timeRespecting` (rows carry `arrival`), `dependents`, `bundle`, and `Tx.importBundle`.
 
+Bulk import: `Database.bulkImport()` returns a `BulkImport` with `chunk(fn | ops, options)`, `progress()`, `finish()` and `cancel()`, and `info()` reports `importActive` and `statisticsDue`.
+
 Budgets: `View.withBudget({ timeoutMs, readerTimeoutMs, maxRows, maxBytes, cancelKey })`, a `budget` member in the options of `transact` and `cypherWrite`, `Database.cancel(key)`, and the open option `readerTimeoutMs`. Because the API is synchronous, `cancel` from the same thread only affects a call that starts later.
 
 The package carries one addon per platform, and the loader names the platform when none matches. A `Date` is written as an `xsd:dateTime` literal and an `xsd:dateTime` is read back as a `Date`. Releases are built by `.github/workflows/npm-publish.yml`; see `docs/node-publishing.md`.
@@ -62,6 +73,8 @@ The package carries one addon per platform, and the loader names the platform wh
 The `tiramemsu` package is a PyO3 module (`tiramemsu._native`, stable ABI) plus a typed Python wrapper, in `bindings/python`, built with maturin and checked with pytest and `mypy --strict`.
 
 Every bridge operation has a wrapper method, as in Node.js: `sparql(text, provenance=)`, `path(graphs=, time_respecting=)`, `dependents`, `bundle`, and `TxBuilder.import_bundle`, whose result is in `Report.results`.
+
+Bulk import: `Database.bulk_import()` returns a `BulkImport` context manager (finish on clean exit, cancel on an exception) with `chunk()` in both `transact` forms, `progress()`, `finish()` and `cancel()`, and the dataclasses `ImportProgress` and `ImportSummary`.
 
 Budgets: the frozen dataclass `QueryBudget(timeout_ms=, reader_timeout_ms=, max_rows=, max_bytes=, cancel_key=)`, `View.with_budget`, `budget=` on `transact` (both forms) and `cypher_write`, `Database(reader_timeout_ms=)`, and `Database.cancel(key)`, which works from another thread because the GIL is released during calls.
 

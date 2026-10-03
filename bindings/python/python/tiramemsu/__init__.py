@@ -22,11 +22,13 @@ Quick start::
 
 from importlib.metadata import PackageNotFoundError, version
 
-from ._db import Database, Ref, TxBuilder, TxContext, View
+from ._db import BulkImport, Database, Ref, TxBuilder, TxContext, View
 from ._types import (
     BNode,
     CypherResult,
     CypherWriteResult,
+    ImportProgress,
+    ImportSummary,
     Iri,
     Literal,
     Node,
@@ -59,9 +61,12 @@ except PackageNotFoundError:  # pragma: no cover - running from a source tree
 
 __all__ = [
     "BNode",
+    "BulkImport",
     "CypherResult",
     "CypherWriteResult",
     "Database",
+    "ImportProgress",
+    "ImportSummary",
     "Iri",
     "Literal",
     "Node",

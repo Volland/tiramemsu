@@ -6,6 +6,7 @@ mod budget;
 mod bundle;
 mod cypher;
 mod db;
+mod import;
 mod pool;
 mod sparql;
 mod view;
@@ -14,6 +15,7 @@ pub use budget::QueryBudget;
 pub use bundle::{BundleFormat, BUNDLE_FORMAT};
 pub use cypher::TxCypher;
 pub use db::{Db, OpenOptions};
+pub use import::{BulkImport, ImportProgress, ImportSummary};
 pub use sparql::{SparqlOptions, SparqlResult};
 pub use view::{PathArgs, View};
 

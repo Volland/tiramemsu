@@ -485,6 +485,15 @@ function txArgs(args: Record<string, unknown>, options?: TxOptions): Record<stri
   return args;
 }
 
+/** Database metadata returned by `Database.info()`. */
+export interface DatabaseInfo {
+  path: string;
+  readers: number;
+  pathMaxHops: number;
+  importActive: boolean;
+  statisticsDue: boolean;
+}
+
 /** The result of a speculate call. */
 export interface SpeculateResult {
   results: unknown[];
@@ -621,6 +630,92 @@ export class Tx {
   }
 }
 
+// ---- Bulk import --------------------------------------------------------
+
+/** What a bulk import session has done so far. */
+export interface ImportProgress {
+  /** Chunks that committed. */
+  chunks: number;
+  /** Chunks that failed and were rolled back (they left no trace). */
+  rejected: number;
+  /** New statements committed. */
+  asserted: number;
+  /** Assertions that reused a live statement. */
+  existing: number;
+  /** Statements retracted. */
+  retracted: number;
+  /** Transaction number of every committed chunk. */
+  txs: number[];
+  /** Time spent running chunks. */
+  elapsedMs: number;
+  /** Time spent in the final statistics refresh. */
+  maintenanceMs: number;
+}
+
+/** The result of one committed chunk: the transaction report plus the session progress. */
+export interface ChunkReport extends Report {
+  progress: ImportProgress;
+}
+
+/**
+ * The outcome of `BulkImport.finish()`. Every chunk in `progress.txs` is committed even
+ * when `maintenanceError` is set: a failed final analysis never rolls data back.
+ */
+export interface ImportSummary {
+  progress: ImportProgress;
+  analyzed: boolean;
+  statisticsDue: boolean;
+  maintenanceError: { code: string; message: string } | null;
+}
+
+/**
+ * A bulk import session from `Database.bulkImport()`. Each chunk is one atomic
+ * transaction; statistics are refreshed once by `finish()`. While the session is open,
+ * other writes fail with `ImportInProgress`; reads see the last committed chunk. Always
+ * end it with `finish()` or `cancel()` (use `try/finally`): the lease is held until then.
+ */
+export class BulkImport {
+  private readonly _db: NativeInstance;
+  /** The bridge session id. */
+  readonly session: number;
+
+  /** @internal */
+  constructor(db: NativeInstance, session: number) {
+    this._db = db;
+    this.session = session;
+  }
+
+  /** Commits `fn` (or `ops`) as one chunk. A failing chunk throws and rolls back alone. */
+  chunk(fn: (tx: Tx) => void, options?: TxOptions): ChunkReport;
+  chunk(ops: unknown[], options?: TxOptions): ChunkReport;
+  chunk(fnOrOps: ((tx: Tx) => void) | unknown[], options?: TxOptions): ChunkReport {
+    let ops: unknown[];
+    if (typeof fnOrOps === "function") {
+      const t = new Tx();
+      fnOrOps(t);
+      ops = t._ops;
+    } else {
+      ops = fnOrOps;
+    }
+    return callNative(this._db, "importChunk", txArgs({ session: this.session, ops }, options)) as ChunkReport;
+  }
+
+  /** The progress so far. */
+  progress(): ImportProgress {
+    return callNative(this._db, "importProgress", { session: this.session }) as ImportProgress;
+  }
+
+  /** Runs one full analysis, releases the lease and returns the summary. */
+  finish(): ImportSummary {
+    return callNative(this._db, "importFinish", { session: this.session }) as ImportSummary;
+  }
+
+  /** Ends the session without analysis; committed chunks stay and statistics are left due. */
+  cancel(): ImportProgress {
+    return callNative(this._db, "importCancel", { session: this.session }) as ImportProgress;
+  }
+}
+
 // ---- Database -----------------------------------------------------------
 
 /**
@@ -697,11 +792,23 @@ export class Database {
     return callNative(this._db, "with", { ops: t._ops, queries }) as SpeculateResult;
   }
 
+  /**
+   * Starts a bulk import session: chunked atomic writes with planner statistics refreshed
+   * once at `finish()`. Throws `ImportInProgress` while another session is open.
+   */
+  bulkImport(): BulkImport {
+    const r = callNative(this._db, "importBegin", {}) as { session: number };
+    return new BulkImport(this._db, r.session);
+  }
+
   /** Refreshes the query planner's statistics (run after large imports). */
   optimize(): void { callNative(this._db, "optimize", {}); }
 
-  /** Returns database metadata: file path, reader count, pathMaxHops. */
-  info(): { path: string; readers: number; pathMaxHops: number } {
-    return callNative(this._db, "info", {}) as { path: string; readers: number; pathMaxHops: number };
+  /**
+   * Returns database metadata: file path, reader count, pathMaxHops, whether an import
+   * session holds the write lease, and whether planner statistics are due.
+   */
+  info(): DatabaseInfo {
+    return callNative(this._db, "info", {}) as DatabaseInfo;
   }
 }
