@@ -23,10 +23,13 @@ impl Db {
     pub fn history(&self) -> View;
     pub fn events_since(&self, t: u64) -> Result<Vec<Event>>;
     pub fn cypher_write(&self, opts: TxOptions, q: &str, params: &CypherParams) -> Result<CypherResult>; // one transaction; rows + TxReport
+    pub fn transact_budgeted<F>(&self, opts: TxOptions, budget: &QueryBudget, f: F) -> Result<TxReport>; // bounded; stopped = rolled back
+    pub fn cypher_write_budgeted(&self, opts: TxOptions, q: &str, params: &CypherParams, budget: &QueryBudget) -> Result<CypherResult>;
 }
 
 impl View {
     pub fn valid_at(self, epoch_ms: i64) -> View;
+    pub fn with_budget(self, budget: &QueryBudget) -> View;      // every call through it is one bounded operation
     pub fn sparql(&self, q: &str) -> Result<SparqlResult>;        // SELECT | ASK | CONSTRUCT | update (current view only)
     pub fn sparql_with(&self, q: &str, opts: &SparqlOptions) -> Result<SparqlResult>; // opts.provenance: per-row eids
     pub fn cypher(&self, q: &str, params: &CypherParams) -> Result<CypherResult>;   // read-only; a write clause is Unsupported
@@ -51,6 +54,7 @@ impl View {
 - A `View` is a pure value: creating or deriving one does no I/O. Rows from an as-of view report `t_ret` and `ret_kind` as absent, so each row shows what was believed then; `history()` gives real lifetimes.
 - `SparqlResult` is `Solutions`, `Boolean`, `Graph` or `Update(TxReport)`, with `write_sparql_json` (SELECT, ASK) and `write_ntriples` (CONSTRUCT). A SPARQL update is one transaction on the writer and returns its `TxReport`. See [[query#Front Ends#SPARQL]].
 - `sparql(q)` is `sparql_with(q, &SparqlOptions::default())`. `SparqlOptions { provenance: true }` makes each `SELECT` row carry the eids of the statements that produced it: `Solutions::provenance(row) -> Option<&[Eid]>`, a `"provenance"` member in SPARQL JSON, and `provenance: true` on the JSON bridge's `sparql`. `ASK`, `CONSTRUCT` and updates with it are `Unsupported`. See [[query#Front Ends#SPARQL#Query Provenance]].
+- Query budgets ([[query#Query Budgets]]): `QueryBudget { timeout, cancel, reader_timeout, max_rows, max_bytes }` (all `Option`, `Default` bounds nothing), `CancelToken::{new, cancel, is_cancelled}`, and `QueryBudget::run(f)`, which bounds a sequence of calls as one operation. Hosts receive the stop conditions through `Executor::set_interrupt(Option<Interrupt>)`, a default no-op.
 - `values(s, key)` is how M0 exposes volatile state before a query language exists. See [[storage#Volatile Table]].
 - `Patch::from_fields` builds a patch from named fields for bindings and rejects `s` and `p` with `InvalidPatch`.
 
@@ -76,6 +80,10 @@ Every failure is a typed error, and a failed transaction leaves no trace: no tx 
 | `Parse { dialect, span, msg }` / `Unsupported { feature }` | A query is outside the v1 subset. `dialect` is SPARQL, Cypher or Path (the `tm_path` expression text). `Unsupported` also rejects what format 1 reserves for later milestones: tag 15 `SEALED` and the `sys:sensitive` flag (M6), and a `NODE`, `BNODE`, `STMT` or `TX` id with a non-zero origin ([[data-model#ObjectId#Origin Bits]]) |
 | `MissingCapability { capability }` | `Db::open` with the query engine on a host that lacks `functions` or `vtab`. See [[architecture#Executor]] |
 | `InvalidQuery { msg }` | A structurally invalid IR or query plan (e.g. an unbound variable in a projection) that is not a parse error |
+| `Cancelled` | A budgeted operation's `CancelToken` was cancelled. Read resources are released; a write rolls back |
+| `DeadlineExceeded { timeout }` | A budgeted operation ran past its `timeout`, including time spent waiting for a connection |
+| `PoolTimeout { timeout }` | No read connection became free within the reader timeout (`QueryBudget::reader_timeout` or `OpenOptions::reader_timeout`) |
+| `ResultLimitExceeded { limit }` | A budgeted operation decoded more than `max_rows` rows or `max_bytes` bytes (`ResultLimit::Rows(n)` or `Bytes(n)`) across all its statements. No partial result is returned |
 | `PathLimitExceeded { limit }` | A path search exceeds `OpenOptions.path_max_states` (default 1 000 000). Results are never silently truncated |
 | `FormatVersion { found, supported }` | The file was written by a newer format |
 | `ForeignFile` | The file is a SQLite database with user tables but no `meta` table |
@@ -105,6 +113,7 @@ The error enum is `#[non_exhaustive]`. Each OpenSpec change adds the variants it
 | `query_engine` | true; false opens the `tm-core` tier only, for hosts without `functions` or `vtab` | `add-query-ir-and-sql-planner` |
 | `path_max_hops` | 15 | `add-path-engine` |
 | `path_max_states` | 1 000 000 | `add-path-engine` |
+| `reader_timeout` | `None` (wait for a reader without limit); past it a read fails with `PoolTimeout` | `add-query-budgets` |
 
 ## Bindings
 

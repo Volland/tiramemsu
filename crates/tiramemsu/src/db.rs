@@ -1,14 +1,16 @@
 //! The database handle: one writer behind a mutex, a pool of readers.
 
 use std::cell::RefCell;
+use std::panic::{catch_unwind, resume_unwind, AssertUnwindSafe};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Arc, Mutex, MutexGuard};
-use std::time::Duration;
+use std::sync::{Arc, Mutex, MutexGuard, TryLockError};
+use std::time::{Duration, Instant};
 
 use tm_core::{
-    storage, Capabilities, Clock, Error, Event, Executor, Host, HostOptions, ObjectId, Result,
-    Store, StoreOptions, SystemClock, TermReader, TimeRef, Tx, TxOptions, TxReport, ViewSpec,
+    budget, storage, Capabilities, Clock, Error, Event, Executor, Host, HostOptions, ObjectId,
+    Result, Store, StoreOptions, SystemClock, TermReader, TimeRef, Tx, TxOptions, TxReport,
+    ViewSpec,
 };
 use tm_exec::{
     NativeKind, NativeOperator, OperatorRegistry, PathEngine, PathOperator, PathOptions,
@@ -16,6 +18,7 @@ use tm_exec::{
 };
 use tm_rusqlite::RusqliteHost;
 
+use crate::budget::QueryBudget;
 use crate::pool::ReaderPool;
 use crate::view::View;
 
@@ -60,6 +63,11 @@ pub struct OpenOptions {
     /// The bound on the search states of one path evaluation (default 1 000 000).
     /// Exceeding it fails with `PathLimitExceeded`.
     pub path_max_states: usize,
+    /// How long a read waits for a free read connection before failing with
+    /// `PoolTimeout` (default `None`: wait as long as it takes). A
+    /// [`QueryBudget::reader_timeout`] overrides it per operation. It bounds only
+    /// the wait for a connection; `busy_timeout` is SQLite's own lock wait.
+    pub reader_timeout: Option<Duration>,
     /// Native operators registered on every connection (tests). A registered
     /// `Path` operator replaces the built-in `tm_path`.
     #[doc(hidden)]
@@ -88,6 +96,7 @@ impl Default for OpenOptions {
             query_engine: true,
             path_max_hops: 15,
             path_max_states: 1_000_000,
+            reader_timeout: None,
             native_operators: Vec::new(),
         }
     }
@@ -104,6 +113,7 @@ impl std::fmt::Debug for OpenOptions {
             .field("query_engine", &self.query_engine)
             .field("path_max_hops", &self.path_max_hops)
             .field("path_max_states", &self.path_max_states)
+            .field("reader_timeout", &self.reader_timeout)
             .finish()
     }
 }
@@ -151,6 +161,8 @@ pub struct Db {
     engine: Option<Arc<QueryEngine>>,
     caps: Capabilities,
     path_max_hops: u32,
+    /// `OpenOptions::reader_timeout`, also for reads served by the writer.
+    reader_timeout: Option<Duration>,
     path: PathBuf,
     clock: Arc<dyn Clock>,
 }
@@ -251,7 +263,7 @@ impl Db {
                 }
                 readers.push(r);
             }
-            Some(ReaderPool::new(readers))
+            Some(ReaderPool::new(readers, opts.reader_timeout))
         } else {
             None
         };
@@ -263,6 +275,7 @@ impl Db {
             engine,
             caps,
             path_max_hops: opts.path_max_hops,
+            reader_timeout: opts.reader_timeout,
             path: path.to_path_buf(),
             clock: opts.clock.clone(),
         })
@@ -301,6 +314,38 @@ impl Db {
 
     fn lock(&self) -> Result<MutexGuard<'_, Store>> {
         Ok(self.writer.lock().unwrap_or_else(|p| p.into_inner()))
+    }
+
+    /// Locks the writer. Under an operation budget the wait ends with the budget's
+    /// stop conditions and, for a read served by the writer, with the reader
+    /// timeout (`PoolTimeout`); otherwise it is the plain blocking lock.
+    fn lock_bounded(&self, read: bool) -> Result<MutexGuard<'_, Store>> {
+        let interrupt = budget::interrupt();
+        let timeout = if read {
+            budget::reader_timeout().or(self.reader_timeout)
+        } else {
+            None
+        };
+        if interrupt.is_none() && timeout.is_none() {
+            return self.lock();
+        }
+        let start = Instant::now();
+        loop {
+            match self.writer.try_lock() {
+                Ok(g) => return Ok(g),
+                Err(TryLockError::Poisoned(p)) => return Ok(p.into_inner()),
+                Err(TryLockError::WouldBlock) => {}
+            }
+            if let Some(i) = &interrupt {
+                i.check()?;
+            }
+            if let Some(timeout) = timeout {
+                if start.elapsed() >= timeout {
+                    return Err(Error::PoolTimeout { timeout });
+                }
+            }
+            std::thread::sleep(Duration::from_millis(1));
+        }
     }
 
     pub(crate) fn term_reader(&self) -> &TermReader {
@@ -347,7 +392,7 @@ impl Db {
                     return Err(Error::Reentrant);
                 }
                 let _held = HeldGuard::acquire(self.id)?;
-                self.lock()?.read(f)
+                armed(&mut *self.lock_bounded(true)?, |store| store.read(f))
             }
         }
     }
@@ -406,12 +451,64 @@ impl Db {
     {
         let _held = HeldGuard::acquire(self.id)?;
         let engine = self.engine.clone();
-        self.lock()?.transact(opts, move |tx| {
-            if let Some(e) = engine {
-                tx.set_extension(e);
-            }
-            f(tx)
+        armed(&mut *self.lock_bounded(false)?, |store| {
+            store.transact(opts, move |tx| {
+                if let Some(e) = engine {
+                    tx.set_extension(e);
+                }
+                f(tx)?;
+                if budget::active() {
+                    // the last point a budget stops the write; past it the
+                    // bookkeeping and COMMIT run without the interrupt
+                    budget::check()?;
+                    tx.read_with(|e| {
+                        e.set_interrupt(None);
+                        Ok(())
+                    })?;
+                }
+                Ok(())
+            })
         })
+    }
+
+    /// [`Db::transact`] as one operation bounded by `budget`. The deadline and the
+    /// cancellation token cover waiting for the writer and every statement of the
+    /// body, and are checked once more when the body returns; a stopped transaction
+    /// rolls back and leaves no trace. The row and byte budgets cover the queries
+    /// the body runs (Cypher through [`TxCypher`](crate::TxCypher)).
+    ///
+    /// # Errors
+    ///
+    /// Those of [`Db::transact`], plus `Cancelled`, `DeadlineExceeded` and
+    /// `ResultLimitExceeded`.
+    ///
+    /// ```
+    /// # use tiramemsu::*;
+    /// # use std::time::Duration;
+    /// # let dir = tempfile::tempdir().unwrap();
+    /// # let db = Db::open(dir.path().join("m.db"), OpenOptions::default())?;
+    /// let v = |s: &str| Value::iri(format!("urn:tiramemsu:v:{s}"));
+    /// let budget = QueryBudget { timeout: Some(Duration::from_millis(20)), ..Default::default() };
+    /// let r = db.transact_budgeted(TxOptions::default(), &budget, |tx| {
+    ///     tx.assert(v("alice"), v("worksAt"), v("acme"), Valid::ALWAYS)?;
+    ///     std::thread::sleep(Duration::from_millis(40)); // past the deadline
+    ///     Ok(())
+    /// });
+    /// assert!(matches!(r, Err(Error::DeadlineExceeded { .. })));
+    /// assert!(db.now().triples(None, None, None)?.is_empty()); // rolled back
+    /// # Ok::<(), Error>(())
+    /// ```
+    // @lat: [[query#Query Budgets]]
+    pub fn transact_budgeted<F>(
+        &self,
+        opts: TxOptions,
+        budget: &QueryBudget,
+        f: F,
+    ) -> Result<TxReport>
+    where
+        F: FnOnce(&mut Tx<'_>) -> Result<()>,
+    {
+        crate::budget::run(Some(budget), || self.transact(opts, f))
     }
 
     /// Speculation: applies `ops` hypothetically on the single writer, calls `query`
@@ -488,5 +585,21 @@ impl Db {
     #[doc(hidden)]
     pub fn read_sql(&self, sql: &str) -> Result<Vec<Vec<tm_core::SqlValue>>> {
         self.read_committed(|e| e.rows(sql, &[]))
+    }
+}
+
+/// Runs `f` on the writer with the current operation's stop conditions installed on
+/// its connection (when there are any), removing them afterwards, also when `f`
+/// panics.
+fn armed<R>(store: &mut Store, f: impl FnOnce(&mut Store) -> Result<R>) -> Result<R> {
+    let Some(interrupt) = budget::interrupt() else {
+        return f(store);
+    };
+    store.executor().set_interrupt(Some(interrupt));
+    let r = catch_unwind(AssertUnwindSafe(|| f(&mut *store)));
+    store.executor().set_interrupt(None);
+    match r {
+        Ok(r) => r,
+        Err(panic) => resume_unwind(panic),
     }
 }

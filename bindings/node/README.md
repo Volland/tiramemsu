@@ -164,13 +164,30 @@ Every failure throws a `TiramemsuError` with a `code`:
 | `SubjectTypeMismatch` | The subject does not match the predicate's `sys:subjectType`, such as a layer predicate on a plain node |
 | `CascadeLimitExceeded` | A retraction would touch more than `maxCascade` statements |
 | `PathLimitExceeded` | A path search exceeded its state limit |
+| `DeadlineExceeded` | A budgeted call ran past its `timeoutMs` |
+| `Cancelled` | A budgeted call was stopped with `db.cancel(key)` |
+| `PoolTimeout` | No reader became free within `readerTimeoutMs` |
+| `ResultLimitExceeded` | A budgeted call decoded more than `maxRows` rows or `maxBytes` bytes |
 | `InvalidPatch` | A `supersede` patch tried to change the subject or predicate |
 | `IdSpaceExhausted` | An id counter passed 2^48 − 1 |
 | `Sqlite` | A SQLite failure, such as a locked or unreadable file |
 
 ## Options
 
-`Database.open(path, options?)` accepts `readers`, `busyTimeoutMs`, `termCacheCapacity`, `optimizeEvery`, `pathMaxHops` and `pathMaxStates`. Anything else is rejected.
+`Database.open(path, options?)` accepts `readers`, `busyTimeoutMs`, `termCacheCapacity`, `optimizeEvery`, `pathMaxHops`, `pathMaxStates` and `readerTimeoutMs`. Anything else is rejected.
+
+## Budgets
+
+Calls are unbounded by default. A budget bounds one call: `timeoutMs`, `readerTimeoutMs`, `maxRows` and `maxBytes` (counted across every statement the call runs), and `cancelKey`. A stopped write commits nothing, and an over-budget result throws instead of returning a prefix.
+
+```ts
+const view = db.now().withBudget({ timeoutMs: 500, maxRows: 10_000 });
+view.sparql("SELECT ?o WHERE { <urn:ex:alice> <urn:ex:worksAt> ?o }");
+db.transact((tx) => { tx.assert(alice, worksAt, acme); }, { budget: { timeoutMs: 1_000 } });
+db.cypherWrite("CREATE (:Person {name: 'Bob'})", undefined, { budget: { timeoutMs: 1_000 } });
+```
+
+`db.cancel(key)` stops the call running with that `cancelKey`. The API is synchronous, so from the same thread it only stops a call that starts later; use a fresh key per call.
 
 ## Good to know
 

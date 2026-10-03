@@ -17,7 +17,8 @@ use rusqlite::functions::FunctionFlags;
 use std::sync::Mutex;
 use tm_core::{
     AggregateFunction, AggregateState, Capabilities, ConnTableFunction, Error, Executor, Host,
-    HostOptions, HostRegistry, Result, ScalarFunction, SqlValue, TableFunction,
+    HostOptions, HostRegistry, Interrupt, Result, ScalarFunction, SqlError, SqlValue,
+    TableFunction,
 };
 
 pub use error::map_err;
@@ -167,7 +168,12 @@ pub struct RusqliteExec {
     /// Non-owning handles on `conn` that table functions use to read re-entrantly;
     /// their statement caches are flushed before `conn` closes.
     borrowed: Vec<Arc<Mutex<RusqliteExec>>>,
+    /// The stop conditions of the running operation, polled by the progress handler.
+    interrupt: Option<Interrupt>,
 }
+
+/// SQLite VM instructions between two polls of an installed [`Interrupt`].
+const INTERRUPT_EVERY_OPS: std::ffi::c_int = 1000;
 
 /// A per-connection slot for the typed error of a failed native table function.
 pub(crate) type ErrorSlot = Arc<Mutex<Option<Error>>>;
@@ -196,14 +202,25 @@ impl RusqliteExec {
             caps,
             slot: ErrorSlot::default(),
             borrowed: Vec::new(),
+            interrupt: None,
         }
     }
 
     /// The typed error of a failed native table function if there is one, else the
-    /// mapped SQLite error.
+    /// mapped SQLite error; an interrupt caused by the installed stop conditions
+    /// becomes their typed error (`Cancelled`, `DeadlineExceeded`).
     fn fail(&self, e: rusqlite::Error) -> Error {
         let typed = self.slot.lock().ok().and_then(|mut g| g.take());
-        typed.unwrap_or_else(|| map_err(e))
+        self.typed_interrupt(typed.unwrap_or_else(|| map_err(e)))
+    }
+
+    fn typed_interrupt(&self, e: Error) -> Error {
+        match &self.interrupt {
+            Some(i) if e.sql().is_some_and(|s| s.code == SqlError::INTERRUPT) => {
+                i.check().err().unwrap_or(e)
+            }
+            _ => e,
+        }
     }
 
     fn clear_slot(&self) {
@@ -304,7 +321,9 @@ impl Executor for RusqliteExec {
     }
 
     fn execute_batch(&mut self, sql: &str) -> Result<()> {
-        self.conn.execute_batch(sql).map_err(map_err)
+        self.conn
+            .execute_batch(sql)
+            .map_err(|e| self.typed_interrupt(map_err(e)))
     }
 
     fn begin_immediate(&mut self) -> Result<()> {
@@ -333,6 +352,19 @@ impl Executor for RusqliteExec {
 
     fn release(&mut self, name: &str) -> Result<()> {
         self.execute_batch(&format!("RELEASE \"{name}\""))
+    }
+
+    fn set_interrupt(&mut self, interrupt: Option<Interrupt>) {
+        // The progress handler is per connection handle, so it also stops the
+        // neighbour queries a native table function runs on its borrowed handle.
+        let installed = match interrupt.clone() {
+            Some(i) => self
+                .conn
+                .progress_handler(INTERRUPT_EVERY_OPS, Some(move || i.tripped())),
+            None => self.conn.progress_handler(0, None::<fn() -> bool>),
+        };
+        // only an owning connection can install a handler; a borrowed one keeps none
+        self.interrupt = installed.ok().and(interrupt);
     }
 
     fn registry(&mut self) -> Option<&mut dyn HostRegistry> {

@@ -15,6 +15,7 @@ from tiramemsu import (
     Iri,
     Literal,
     Node,
+    QueryBudget,
     Ref,
     Report,
     SparqlAskResult,
@@ -738,3 +739,68 @@ class TestProvenanceDependentsBundles:
         assert report is not None
         edge_eid, fact_eid = report.asserted[:2]
         assert db.now().graph_members(Stmt(edge_eid)) == [fact_eid]
+
+
+# ------------------------------------------------------------------------- query budgets
+
+CROSS = SPARQL_PREFIX + "SELECT (COUNT(*) AS ?c) WHERE { ?a v:p ?x . ?b v:p ?y . ?c2 v:p ?z }"
+
+
+def _seed(db: Database, n: int) -> None:
+    db.transact([{"op": "assert", "s": {"iri": f"{V}n{i}"}, "p": {"iri": f"{V}p"}, "o": i} for i in range(n)])
+
+
+class TestQueryBudgets:
+    def test_budgets_bound_calls_with_typed_codes(self, db: Database) -> None:
+        _seed(db, 1500)
+        with pytest.raises(TiramemsuError) as e:
+            db.now().with_budget(QueryBudget(timeout_ms=100)).sparql(CROSS)
+        assert e.value.code == "DeadlineExceeded"
+        capped = db.now().with_budget(QueryBudget(max_rows=10))
+        with pytest.raises(TiramemsuError) as e:
+            capped.triples()
+        assert e.value.code == "ResultLimitExceeded"
+        assert len(capped.triples(s=iri("n1"))) == 1
+        before = len(db.now().triples(p=iri("q")))
+        with pytest.raises(TiramemsuError) as e:
+            db.cypher_write(
+                "MATCH (a), (b), (c) WHERE a.p >= 0 AND b.p >= 0 AND c.p >= 0 CREATE (a)-[:q]->(b)",
+                budget=QueryBudget(timeout_ms=100),
+            )
+        assert e.value.code == "DeadlineExceeded"
+        assert db.cancel("pre") is False
+        with pytest.raises(TiramemsuError) as e:
+            with db.transact(budget=QueryBudget(cancel_key="pre")) as tx:
+                tx.assert_(iri("x"), iri("q"), iri("y"))
+        assert e.value.code == "Cancelled"
+        assert len(db.now().triples(p=iri("q"))) == before
+        report = db.transact(
+            [{"op": "assert", "s": {"iri": f"{V}x"}, "p": {"iri": f"{V}q"}, "o": 1}],
+            budget=QueryBudget(timeout_ms=10_000, max_rows=1000),
+        )
+        assert len(report.asserted) == 1
+
+    def test_cancel_from_another_thread(self, db: Database) -> None:
+        _seed(db, 1500)
+        found: List[bool] = []
+
+        def canceller() -> None:
+            for _ in range(500):
+                threading.Event().wait(0.01)
+                if db.cancel("q1"):
+                    found.append(True)
+                    return
+
+        t = threading.Thread(target=canceller)
+        t.start()
+        with pytest.raises(TiramemsuError) as e:
+            db.now().with_budget(QueryBudget(cancel_key="q1")).sparql(CROSS)
+        t.join()
+        assert e.value.code == "Cancelled"
+        assert found == [True]
+        assert len(db.now().triples(s=iri("n0"))) == 1
+
+    def test_reader_timeout_option(self, tmp_path: Any) -> None:
+        db = Database(str(tmp_path / "r.db"), readers=1, reader_timeout_ms=50)
+        assert db.now().triples() == []
+        assert db.info()["readers"] == 1

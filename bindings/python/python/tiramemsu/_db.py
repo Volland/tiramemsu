@@ -15,6 +15,7 @@ from ._types import (
     CypherResult,
     CypherWriteResult,
     PathRow,
+    QueryBudget,
     Report,
     SparqlResult,
     Statement,
@@ -301,10 +302,12 @@ class TxContext:
         *,
         dry_run: bool = False,
         max_cascade: Optional[int] = None,
+        budget: Optional[QueryBudget] = None,
     ) -> None:
         self._native = native
         self._dry_run = dry_run
         self._max_cascade = max_cascade
+        self._budget = budget
         self._builder = TxBuilder()
 
     def __enter__(self) -> TxBuilder:
@@ -326,6 +329,8 @@ class TxContext:
             options["maxCascade"] = self._max_cascade
         if options:
             args["options"] = options
+        if self._budget is not None:
+            args["budget"] = self._budget._to_json()
         result_text = _call(self._native, "transact", json.dumps(args))
         self._builder.report = report_from_json(json.loads(result_text))
 
@@ -340,9 +345,15 @@ class View:
     :meth:`Database.history`, then optionally narrow with :meth:`valid_at`.
     """
 
-    def __init__(self, native: Native, view_json: Dict[str, Any]) -> None:
+    def __init__(
+        self,
+        native: Native,
+        view_json: Dict[str, Any],
+        budget: Optional[QueryBudget] = None,
+    ) -> None:
         self._native = native
         self._view = view_json
+        self._budget = budget
 
     def valid_at(self, when: Any) -> "View":
         """Return a view further restricted to facts valid at *when*.
@@ -350,10 +361,21 @@ class View:
         *when* may be a ``datetime``, ``date``, epoch-ms ``int``, or RFC 3339 ``str``.
         """
         new_view = {**self._view, "validAt": time_to_json(when)}
-        return View(self._native, new_view)
+        return View(self._native, new_view, self._budget)
+
+    def with_budget(self, budget: QueryBudget) -> "View":
+        """Return the same view with every call through it bounded by *budget*.
+
+        Each call (``sparql``, ``cypher``, ``triples``, ``path``, ...) is one operation
+        with its own deadline and its own row and byte budget.
+        """
+        return View(self._native, self._view, budget)
 
     def _call(self, op: str, extra: Dict[str, Any]) -> str:
-        return _call(self._native, op, json.dumps({**extra, "view": self._view}))
+        args = {**extra, "view": self._view}
+        if self._budget is not None:
+            args["budget"] = self._budget._to_json()
+        return _call(self._native, op, json.dumps(args))
 
     def sparql(self, text: str, *, provenance: bool = False) -> SparqlResult:
         """Run a SPARQL query on this view.
@@ -504,6 +526,7 @@ class Database:
         optimize_every: Optional[int] = None,
         path_max_hops: Optional[int] = None,
         path_max_states: Optional[int] = None,
+        reader_timeout_ms: Optional[int] = None,
     ) -> None:
         options: Dict[str, Any] = {}
         if readers is not None:
@@ -518,6 +541,8 @@ class Database:
             options["pathMaxHops"] = path_max_hops
         if path_max_states is not None:
             options["pathMaxStates"] = path_max_states
+        if reader_timeout_ms is not None:
+            options["readerTimeoutMs"] = reader_timeout_ms
         opts_str: Optional[str] = json.dumps(options) if options else None
         try:
             self._native = Native(path, opts_str)
@@ -577,6 +602,7 @@ class Database:
         *,
         dry_run: bool = ...,
         max_cascade: Optional[int] = ...,
+        budget: Optional[QueryBudget] = ...,
     ) -> Report: ...
 
     @overload
@@ -586,6 +612,7 @@ class Database:
         *,
         dry_run: bool = ...,
         max_cascade: Optional[int] = ...,
+        budget: Optional[QueryBudget] = ...,
     ) -> TxContext: ...
 
     def transact(
@@ -594,6 +621,7 @@ class Database:
         *,
         dry_run: bool = False,
         max_cascade: Optional[int] = None,
+        budget: Optional[QueryBudget] = None,
     ) -> Union[Report, TxContext]:
         """Submit a transaction.
 
@@ -603,6 +631,8 @@ class Database:
 
         **Direct form** (with ``ops``): pass a list of bridge op dicts and receive a
         :class:`Report` directly.
+
+        *budget* bounds the transaction; a stopped one commits nothing.
         """
         if ops is not None:
             args: Dict[str, Any] = {"ops": ops}
@@ -613,9 +643,13 @@ class Database:
                 options["maxCascade"] = max_cascade
             if options:
                 args["options"] = options
+            if budget is not None:
+                args["budget"] = budget._to_json()
             result_text = _call(self._native, "transact", json.dumps(args))
             return report_from_json(json.loads(result_text))
-        return TxContext(self._native, dry_run=dry_run, max_cascade=max_cascade)
+        return TxContext(
+            self._native, dry_run=dry_run, max_cascade=max_cascade, budget=budget
+        )
 
     def cypher_write(
         self,
@@ -623,13 +657,19 @@ class Database:
         params: Optional[Dict[str, Any]] = None,
         *,
         dry_run: bool = False,
+        budget: Optional[QueryBudget] = None,
     ) -> CypherWriteResult:
-        """Run a Cypher statement that may write, in its own transaction."""
+        """Run a Cypher statement that may write, in its own transaction.
+
+        *budget* bounds the statement; a stopped one commits nothing.
+        """
         args: Dict[str, Any] = {"text": text}
         if params:
             args["params"] = params
         if dry_run:
             args["options"] = {"dryRun": True}
+        if budget is not None:
+            args["budget"] = budget._to_json()
         result_text = _call(self._native, "cypherWrite", json.dumps(args))
         j = json.loads(result_text)
         rep_j = j.get("report")
@@ -652,6 +692,16 @@ class Database:
         result_text = _call(self._native, "with", json.dumps(args))
         j: Dict[str, Any] = json.loads(result_text)
         return list(j.get("results") or [])
+
+    def cancel(self, key: str) -> bool:
+        """Cancel the call running with ``QueryBudget(cancel_key=key)``.
+
+        A call that has not started yet is cancelled as soon as it starts, so use a
+        fresh key per call. Returns whether a running call held the key. Safe to call
+        from another thread: the GIL is released while a call runs.
+        """
+        result_text = _call(self._native, "cancel", json.dumps({"key": key}))
+        return bool(json.loads(result_text)["running"])
 
     def optimize(self) -> None:
         """Refresh query-planner statistics after large imports."""

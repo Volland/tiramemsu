@@ -194,6 +194,58 @@ Caught query panics on a pooled reader or the writer roll back the snapshot, ret
 
 An injected read-commit error on either the writer or a pooled reader triggers rollback before connection reuse; the next read succeeds.
 
+## Query Budgets
+
+Opt-in budgets of [[query#Query Budgets]]: bounded reader waits, deadlines and cancellation of SQL and native work, atomic writes, and result budgets per operation.
+
+### Pool Exhaustion Times Out
+
+With the only reader held, a budgeted read fails with `PoolTimeout` after its reader timeout, `DeadlineExceeded` under a shorter deadline, or `Cancelled`; once released, reads succeed again.
+
+### Default Reader Timeout
+
+`OpenOptions::reader_timeout` (default `None`) bounds every read's wait with `PoolTimeout`, a budget overrides it, and without a pool the wait for the writer is bounded the same way.
+
+### Reader Freed Before The Deadline
+
+A read waiting under a long budget gets the reader once it is released and returns one committed state that includes a transaction committed while it waited.
+
+### Cancel A Path
+
+Cancelling or timing out a trail search on a dense graph (`View::path`, and Cypher `-[:knows*]->` through `tm_path`) stops it quickly with the typed error; the single reader is reusable at once.
+
+### Native Checks Without Host Interrupts
+
+On a host whose executors ignore `set_interrupt`, cancelling a native trail search still stops it during frontier expansion, through the path engine's own polling.
+
+### Cancel SQL Execution
+
+A cross join in SPARQL or Cypher stops with `DeadlineExceeded` or `Cancelled` through the progress handler; afterwards the reader carries no stale interrupt and runs a long plain query.
+
+### Cancel A Write
+
+A SPARQL update or Cypher write stopped by its deadline or token, and a budgeted transaction whose body outlives its deadline, commit no `tx` row, statement, term or event; later writes keep gap-free numbers.
+
+### Result Overflow Fails
+
+Past `max_rows` or `max_bytes`, SPARQL, Cypher, `triples`, `path` and `events_since` fail with `ResultLimitExceeded` instead of a truncated result, and an overflowing Cypher write commits nothing.
+
+### Composite Operations Share One Budget
+
+A row budget that fits a plain `SELECT` fails the same query with provenance, because its sibling lookups draw on the same meter; the statements of a multi-clause Cypher query do too.
+
+### Default Budget Changes Nothing
+
+`QueryBudget::default()` returns the same results as no budget, keeps the view's time selection and numbering, and budgeted reads still run in parallel on the pool.
+
+### Bridge Budgets And Error Codes
+
+The bridge's `budget` argument bounds reads, `cypherWrite` and `transact` with codes `DeadlineExceeded`, `ResultLimitExceeded` and `Cancelled`, rejects malformed budgets, and accepts `readerTimeoutMs`.
+
+### Bridge Cancels A Running Call
+
+`cancel` from another thread finds the running call by its `cancelKey`, stops it with `Cancelled`, and leaves other keys unaffected.
+
 ## Storage Invariants
 
 Checks of the SQLite-level guarantees in [[storage#Invariant Triggers]] and [[storage#Query Shapes]].

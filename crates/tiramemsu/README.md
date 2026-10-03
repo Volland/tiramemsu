@@ -517,6 +517,9 @@ Every failure is a typed `Error` (`#[non_exhaustive]`, so keep a wildcard arm), 
 | `Eval { dialect, msg }` | A runtime error inside a query (type error, division by zero) |
 | `DeleteConnectedNode` | Cypher `DELETE` of a node that still has relationships |
 | `PathLimitExceeded` | A path search passed `path_max_states` |
+| `DeadlineExceeded`, `Cancelled` | A budgeted operation ran past its `timeout` or its `CancelToken` was cancelled; a write rolls back |
+| `PoolTimeout` | No reader became free within the reader timeout |
+| `ResultLimitExceeded { limit }` | A budgeted operation decoded more than `max_rows` rows or `max_bytes` bytes; no partial result |
 | `Reentrant` | A write or speculation started inside another on the same `Db` and thread |
 | `FormatVersion`, `ForeignFile` | The file is from a newer format, or is some other SQLite database |
 | `IdSpaceExhausted { kind }` | A node, blank node, statement or transaction counter passed 2⁴⁸ − 1 (about 2.8 × 10¹⁴ ids per kind) |
@@ -534,6 +537,7 @@ Every failure is a typed `Error` (`#[non_exhaustive]`, so keep a wildcard arm), 
 | `optimize_every` | 1000 | Run `PRAGMA optimize` every this many commits (and after a commit that big) |
 | `path_max_hops` | 15 | Hop cap of unbounded Cypher path patterns and `TRAIL` in `tm_path` |
 | `path_max_states` | 1 000 000 | Search-state budget per path evaluation; exceeding it is an error |
+| `reader_timeout` | `None` | How long a read waits for a free reader before `PoolTimeout`; `None` waits without limit |
 | `term_cache_capacity`, `planner`, `query_engine` | 16 384, defaults, true | Term cache size, planner routing, and the switch for opening the storage tier only |
 
 ```rust
@@ -556,6 +560,34 @@ assert_eq!(then.triples(None, None, None)?.len(), 1);
 assert!(db.as_of(TimeRef::Instant(999)).triples(None, None, None)?.is_empty());
 # Ok::<(), Error>(())
 ```
+
+## Query budgets
+
+Every call is unbounded by default. A `QueryBudget` bounds one operation: `timeout` (waiting, SQL and path search), `cancel` (a `CancelToken` you can cancel from any thread), `reader_timeout` (the wait for a pooled connection, separate from SQLite's `busy_timeout`), and `max_rows` / `max_bytes` (everything the operation decodes, across all its statements). A stopped read releases its connection and a stopped write commits nothing; an over-budget result is an error, never a silent prefix.
+
+```rust
+# use tiramemsu::*;
+# use std::time::Duration;
+# let dir = tempfile::tempdir().unwrap();
+# let db = Db::open(dir.path().join("m.db"), OpenOptions::default())?;
+db.now().sparql("INSERT DATA { v:alice v:worksAt v:acme }")?;
+let budget = QueryBudget {
+    timeout: Some(Duration::from_millis(500)),
+    max_rows: Some(10_000),
+    ..Default::default()
+};
+let rows = db.now().with_budget(&budget).sparql("SELECT ?o WHERE { v:alice v:worksAt ?o }")?;
+assert_eq!(rows.solutions().unwrap().rows.len(), 1);
+// writes take a budget too, and a stopped one leaves no trace
+let token = CancelToken::new();
+token.cancel();
+let stopped = QueryBudget { cancel: Some(token), ..Default::default() };
+let r = db.transact_budgeted(TxOptions::default(), &stopped, |_tx| Ok(()));
+assert!(matches!(r, Err(Error::Cancelled)));
+# Ok::<(), Error>(())
+```
+
+`QueryBudget::run(|| ...)` bounds a sequence of calls as one operation, and `Db::cypher_write_budgeted` bounds a Cypher write.
 
 ## Concurrency
 

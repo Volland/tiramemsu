@@ -116,6 +116,7 @@ pub fn borrowed_exec(
         caps,
         slot,
         borrowed: Vec::new(),
+        interrupt: None,
     })
 }
 

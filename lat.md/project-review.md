@@ -6,7 +6,7 @@ The 2026-10-03 review records measured behavior and proposed work without changi
 
 Caught panics can leave a transaction open or lose a checked-out reader. Review transaction and reader lifetimes before expanding agent integrations.
 
-The original probes reproduced an unusable writer and reader loss after caught panics. The follow-up patch restores transaction, dictionary, and pooled-reader cleanup while retaining panic payloads and speculative burned ids. Regression tests are under [[tests#Recovery]]. Bounded borrowing remains proposed work.
+The original probes reproduced an unusable writer and reader loss after caught panics. The follow-up patch restores transaction, dictionary, and pooled-reader cleanup while retaining panic payloads and speculative burned ids. Regression tests are under [[tests#Recovery]]. Bounded borrowing followed in `add-query-budgets`: reader timeouts, deadlines, cancellation and result limits ([[query#Query Budgets]]).
 
 ## Performance Evidence
 

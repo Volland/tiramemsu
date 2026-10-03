@@ -30,13 +30,15 @@ impl StateBudget {
         StateBudget { used: 0, limit }
     }
 
-    /// Charges `n` states; fails with `PathLimitExceeded` past the limit.
+    /// Charges `n` states; fails with `PathLimitExceeded` past the limit, and with
+    /// `Cancelled` or `DeadlineExceeded` when the operation budget says to stop
+    /// (polled here, during frontier expansion).
     pub fn charge(&mut self, n: usize) -> Result<()> {
         self.used += n;
         if self.used > self.limit {
             return Err(Error::PathLimitExceeded { limit: self.limit });
         }
-        Ok(())
+        tm_core::budget::poll()
     }
 }
 

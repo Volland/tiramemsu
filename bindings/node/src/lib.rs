@@ -29,7 +29,8 @@ pub struct Native {
 impl Native {
     /// Opens (creating if needed) the database at `path`.
     /// `options` may be a JSON object with `readers`, `busyTimeoutMs`,
-    /// `termCacheCapacity`, `optimizeEvery`, `pathMaxHops` and `pathMaxStates`.
+    /// `termCacheCapacity`, `optimizeEvery`, `pathMaxHops`, `pathMaxStates` and
+    /// `readerTimeoutMs`.
     #[napi(constructor)]
     pub fn new(path: String, options: Option<String>) -> Result<Self> {
         let opts: serde_json::Value = options

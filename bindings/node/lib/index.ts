@@ -309,6 +309,27 @@ export interface OpenOptions {
   optimizeEvery?: number;
   pathMaxHops?: number;
   pathMaxStates?: number;
+  /** How long a read waits for a free reader before failing with `PoolTimeout` (default: no limit). */
+  readerTimeoutMs?: number;
+}
+
+/**
+ * The bounds of one call, for `View.withBudget` and the `budget` transaction option.
+ * Every field is optional and independent; an empty budget bounds nothing.
+ * Failures are `TiramemsuError`s with code `DeadlineExceeded`, `Cancelled`,
+ * `PoolTimeout` or `ResultLimitExceeded`; a stopped write commits nothing.
+ */
+export interface QueryBudget {
+  /** The longest the whole call may take. */
+  timeoutMs?: number;
+  /** How long to wait for a free reader (overrides `OpenOptions.readerTimeoutMs`). */
+  readerTimeoutMs?: number;
+  /** The most rows the call may decode, across every statement it runs. */
+  maxRows?: number;
+  /** The most decoded result bytes the call may produce. */
+  maxBytes?: number;
+  /** A key that `Database.cancel(key)` uses to stop the call. */
+  cancelKey?: string;
 }
 
 /** A time reference for `Database.asOf`. */
@@ -324,11 +345,26 @@ export class View {
   /** @internal */ constructor(
     private readonly _db: NativeInstance,
     private readonly _view: ViewJson,
+    private readonly _budget?: QueryBudget,
   ) {}
 
   /** Returns a new View narrowed to facts valid at `t`. */
   validAt(t: Date | number | string): View {
-    return new View(this._db, { ...this._view, validAt: timeArg(t) });
+    return new View(this._db, { ...this._view, validAt: timeArg(t) }, this._budget);
+  }
+
+  /**
+   * Returns the same view with every call through it bounded by `budget`: each call
+   * (`sparql`, `cypher`, `triples`, `path`, ...) is one operation with its own deadline
+   * and its own row and byte budget.
+   */
+  withBudget(budget: QueryBudget): View {
+    return new View(this._db, this._view, budget);
+  }
+
+  /** @internal The view (and budget) every read sends. */
+  private _base(): Record<string, unknown> {
+    return this._budget ? { view: this._view, budget: this._budget } : { view: this._view };
   }
 
   /**
@@ -336,20 +372,20 @@ export class View {
    * result also lists the statements that produced each row.
    */
   sparql(text: string, opts?: { provenance?: boolean }): SparqlResult {
-    const args: Record<string, unknown> = { view: this._view, text };
+    const args: Record<string, unknown> = { ...this._base(), text };
     if (opts?.provenance) args.provenance = true;
     return decodeSparql(callNative(this._db, "sparql", args) as Record<string, unknown>);
   }
 
   /** openCypher read query. */
   cypher(text: string, params?: Record<string, unknown>): CypherResult {
-    const r = callNative(this._db, "cypher", { view: this._view, text, params }) as Record<string, unknown>;
+    const r = callNative(this._db, "cypher", { ...this._base(), text, params }) as Record<string, unknown>;
     return { columns: r.columns as string[], rows: r.rows as unknown[][] };
   }
 
   /** Pattern match on statements; each of s, p, o is optional (absent = any). */
   triples(pattern?: { s?: TermInput; p?: TermInput; o?: TermInput }): TripleRow[] {
-    const args: Record<string, unknown> = { view: this._view };
+    const args: Record<string, unknown> = this._base();
     if (pattern?.s !== undefined) args.s = toJson(pattern.s);
     if (pattern?.p !== undefined) args.p = toJson(pattern.p);
     if (pattern?.o !== undefined) args.o = toJson(pattern.o);
@@ -362,7 +398,7 @@ export class View {
     pathExpr: string,
     opts?: PathOptions,
   ): PathRow[] {
-    const args: Record<string, unknown> = { view: this._view, start: toJson(start), path: pathExpr };
+    const args: Record<string, unknown> = { ...this._base(), start: toJson(start), path: pathExpr };
     if (opts?.mode) args.mode = opts.mode;
     if (opts?.maxHops !== undefined) args.maxHops = opts.maxHops;
     if (opts?.graphs) args.graphs = opts.graphs.map(toJson);
@@ -392,33 +428,33 @@ export class View {
 
   /** Events since transaction `since` (default: 0 = all). */
   events(since?: number): EventRow[] {
-    return callNative(this._db, "events", { view: this._view, since: since ?? 0 }) as EventRow[];
+    return callNative(this._db, "events", { ...this._base(), since: since ?? 0 }) as EventRow[];
   }
 
   /** Named graphs known in this view. */
   graphs(): Term[] {
-    return (callNative(this._db, "graphs", { view: this._view }) as unknown[]).map(fromJson);
+    return (callNative(this._db, "graphs", this._base()) as unknown[]).map(fromJson);
   }
 
   /** Statement eids that belong to graph `g`. */
   graphMembers(g: TermInput): number[] {
-    return callNative(this._db, "graphMembers", { view: this._view, graph: toJson(g) }) as number[];
+    return callNative(this._db, "graphMembers", { ...this._base(), graph: toJson(g) }) as number[];
   }
 
   /** Statements that stand on `eid` (its layers and memberships, transitively): what a retraction would cascade to. */
   dependents(eid: number | StmtTerm): number[] {
-    return callNative(this._db, "dependents", { view: this._view, eid }) as number[];
+    return callNative(this._db, "dependents", { ...this._base(), eid }) as number[];
   }
 
   /** The statement `eid` with its layers and evidence, as `tiramemsu-bundle/1` JSON for `Tx.importBundle`. */
   bundle(eid: number | StmtTerm): Bundle {
-    return callNative(this._db, "bundle", { view: this._view, eid }) as Bundle;
+    return callNative(this._db, "bundle", { ...this._base(), eid }) as Bundle;
   }
 
   /** All object values for a given subject and predicate. */
   values(s: TermInput, key: TermInput): Term[] {
     return (
-      callNative(this._db, "values", { view: this._view, s: toJson(s), key: toJson(key) }) as unknown[]
+      callNative(this._db, "values", { ...this._base(), s: toJson(s), key: toJson(key) }) as unknown[]
     ).map(fromJson);
   }
 }
@@ -436,6 +472,17 @@ export interface AssertOpts {
 export interface TxOptions {
   dryRun?: boolean;
   maxCascade?: number;
+  /** Bounds the transaction; a stopped one commits nothing. */
+  budget?: QueryBudget;
+}
+
+/** Splits the `budget` off transaction options into the call arguments. */
+function txArgs(args: Record<string, unknown>, options?: TxOptions): Record<string, unknown> {
+  if (!options) return args;
+  const { budget, ...rest } = options;
+  if (Object.keys(rest).length > 0) args.options = rest;
+  if (budget) args.budget = budget;
+  return args;
 }
 
 /** The result of a speculate call. */
@@ -619,17 +666,22 @@ export class Database {
     } else {
       ops = fnOrOps;
     }
-    const args: Record<string, unknown> = { ops };
-    if (options) args.options = options;
-    return callNative(this._db, "transact", args) as Report;
+    return callNative(this._db, "transact", txArgs({ ops }, options)) as Report;
   }
 
   /** A Cypher statement that may write, executed as one transaction. */
   cypherWrite(text: string, params?: Record<string, unknown>, options?: TxOptions): unknown {
     const args: Record<string, unknown> = { text };
     if (params) args.params = params;
-    if (options) args.options = options;
-    return callNative(this._db, "cypherWrite", args);
+    return callNative(this._db, "cypherWrite", txArgs(args, options));
+  }
+
+  /**
+   * Cancels the call running with `budget.cancelKey === key` (or the next one to start
+   * with it). Returns whether a running call held the key. Use a fresh key per call.
+   */
+  cancel(key: string): boolean {
+    return (callNative(this._db, "cancel", { key }) as { running: boolean }).running;
   }
 
   /**

@@ -14,7 +14,7 @@ rust-version.workspace = true
 
 [dependencies]
 tm-core = { workspace = true }
-rusqlite = { version = "0.40", features = ["bundled", "functions", "vtab", "array"] }
+rusqlite = { version = "0.40", features = ["bundled", "functions", "vtab", "array", "hooks"] }
 
 [dev-dependencies]
 tempfile = "3"

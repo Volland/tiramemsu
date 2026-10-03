@@ -436,3 +436,54 @@ describe("provenance, dependents and bundles", () => {
     } finally { cleanup(dir); }
   });
 });
+
+// ---- query budgets -------------------------------------------------------
+
+describe("query budgets", () => {
+  const code = (f: () => unknown): string | undefined => {
+    try { f(); } catch (e) { return (e as TiramemsuError).code; }
+    return undefined;
+  };
+
+  it("bounds reads and writes with typed error codes", () => {
+    const { db, dir } = tempDb();
+    try {
+      db.transact((tx) => {
+        for (let i = 0; i < 1500; i++) tx.assert(v(`n${i}`), v("p"), i);
+      });
+      const cross = "SELECT (COUNT(*) AS ?c) WHERE { ?a v:p ?x . ?b v:p ?y . ?c2 v:p ?z }";
+      expect(code(() => db.now().withBudget({ timeoutMs: 100 }).sparql(cross))).toBe("DeadlineExceeded");
+      const capped = db.now().withBudget({ maxRows: 10 });
+      expect(code(() => capped.triples())).toBe("ResultLimitExceeded");
+      expect(code(() => capped.sparql("SELECT ?s WHERE { ?s v:p ?o }"))).toBe("ResultLimitExceeded");
+      // a fitting budget changes nothing, and the view keeps its time selection
+      expect(capped.triples({ s: v("n1") })).toHaveLength(1);
+      expect(db.asOf({ tx: 0 }).withBudget({ maxRows: 1 }).triples()).toEqual([]);
+      // a stopped write commits nothing
+      const before = db.now().triples({ p: v("q") }).length;
+      expect(code(() => db.cypherWrite(
+        "MATCH (a), (b), (c) WHERE a.p >= 0 AND b.p >= 0 AND c.p >= 0 CREATE (a)-[:q]->(b)",
+        undefined,
+        { budget: { timeoutMs: 100 } },
+      ))).toBe("DeadlineExceeded");
+      expect(db.cancel("pre")).toBe(false);
+      expect(code(() => db.transact((tx) => { tx.assert(v("x"), v("q"), v("y")); },
+        { budget: { cancelKey: "pre" } }))).toBe("Cancelled");
+      expect(db.now().triples({ p: v("q") })).toHaveLength(before);
+      // budget and transaction options travel together
+      const r = db.transact((tx) => { tx.assert(v("x"), v("q"), v("y")); },
+        { dryRun: true, budget: { timeoutMs: 10000 } });
+      expect(r.asserted).toHaveLength(1);
+      expect(db.now().triples({ p: v("q") })).toHaveLength(before);
+    } finally { cleanup(dir); }
+  });
+
+  it("opens with a reader timeout", () => {
+    const dir = mkdtempSync(join(tmpdir(), "tiramemsu-test-"));
+    try {
+      const db = Database.open(join(dir, "r.db"), { readers: 1, readerTimeoutMs: 50 });
+      expect(db.now().triples()).toEqual([]);
+      expect(db.info().readers).toBe(1);
+    } finally { cleanup(dir); }
+  });
+});

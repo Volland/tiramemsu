@@ -4,7 +4,7 @@ use serde_json::{json, Value as J};
 use std::collections::HashMap;
 use tiramemsu::{
     AssertOpts, Asserted, Bundle, BundleFormat, Db, Eid, Error, ObjectId, OnExisting, Patch,
-    PatchField, Tx, TxCypher, Valid,
+    PatchField, QueryBudget, Tx, TxCypher, Valid,
 };
 
 use crate::read::{report_json, run};
@@ -12,18 +12,23 @@ use crate::value::{eid_from_json, into_core, params_from_json, time_from_json, v
 use crate::{arg, tx_options, BindError, Res};
 
 /// `{"ops": [...], "options": {...}}` as one transaction; returns the report with
-/// `results` (one per op) and `refs` (the eids named with `as`).
-pub fn transact(db: &Db, args: &J) -> Res<J> {
+/// `results` (one per op) and `refs` (the eids named with `as`). With a budget the
+/// transaction is bounded by it and a stopped one commits nothing.
+pub fn transact(db: &Db, args: &J, budget: Option<&QueryBudget>) -> Res<J> {
     let ops = ops_arg(args)?;
     let options = tx_options(args.get("options").unwrap_or(&J::Null))?;
     let mut results = Vec::new();
     let mut refs = HashMap::new();
-    let report = db.transact(options, |tx| {
+    let body = |tx: &mut Tx<'_>| {
         let (r, named) = apply(tx, ops).map_err(into_core)?;
         results = r;
         refs = named;
         Ok(())
-    })?;
+    };
+    let report = match budget {
+        Some(b) => db.transact_budgeted(options, b, body)?,
+        None => db.transact(options, body)?,
+    };
     let mut out = report_json(&report);
     out["results"] = J::Array(results);
     out["refs"] = J::Object(refs.into_iter().map(|(k, e)| (k, json!(e.n()))).collect());
@@ -31,14 +36,17 @@ pub fn transact(db: &Db, args: &J) -> Res<J> {
 }
 
 /// `{"text", "params", "options"}`: one Cypher query that may write, in one transaction.
-pub fn cypher_write(db: &Db, args: &J) -> Res<J> {
+pub fn cypher_write(db: &Db, args: &J, budget: Option<&QueryBudget>) -> Res<J> {
     let text = args
         .get("text")
         .and_then(J::as_str)
         .ok_or_else(|| arg("`text` must be a string"))?;
     let params = params_from_json(args.get("params").unwrap_or(&J::Null))?;
     let options = tx_options(args.get("options").unwrap_or(&J::Null))?;
-    let r = db.cypher_write(options, text, &params)?;
+    let r = match budget {
+        Some(b) => db.cypher_write_budgeted(options, text, &params, b)?,
+        None => db.cypher_write(options, text, &params)?,
+    };
     let mut out = r.to_json();
     out["report"] = r.report.as_ref().map_or(J::Null, report_json);
     Ok(out)

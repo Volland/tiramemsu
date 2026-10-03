@@ -375,3 +375,17 @@ SELECT ?before ?after WHERE {
   FILTER (?before != ?after)
 }
 ```
+
+## Query Budgets
+
+An opt-in budget bounds one operation: how long it waits for a reader, how long it runs, and how much it decodes. Without one every call behaves as before.
+
+A [[crates/tiramemsu/src/budget.rs#QueryBudget]] has five independent fields: `timeout`, `cancel` (a `CancelToken`), `reader_timeout`, `max_rows` and `max_bytes`. `View::with_budget`, `Db::transact_budgeted`, `Db::cypher_write_budgeted` and `QueryBudget::run` (a sequence of calls as one operation) apply it. The JSON bridge takes the same budget per call ([[bindings#JSON Bridge#Budgets]]).
+
+- **One operation, one meter:** the facade enters a `tm_core::budget::Meter` on the calling thread for the whole call ([[crates/tiramemsu/src/budget.rs#run]]); the deadline starts then. A call nested in a budgeted operation (an update's `WHERE`, provenance sibling lookups, the statements of a Cypher query, the lookups of a bridge call) draws on the same meter, never on a fresh one.
+- **Reader acquisition:** the pool waits on its condition variable until the reader timeout (`PoolTimeout`), the deadline (`DeadlineExceeded`) or cancellation (`Cancelled`, polled every 10 ms), whichever comes first. `OpenOptions::reader_timeout` is the default and the budget overrides it. With no pool the writer's mutex wait is bounded the same way. SQLite's `busy_timeout` is unrelated and unchanged.
+- **SQL:** the reader or writer carries the operation's `Interrupt` while the operation runs (`Executor::set_interrupt`). The `rusqlite` host installs it as SQLite's progress handler every 1 000 VM steps, so a running statement stops with `SQLITE_INTERRUPT`, reported as the typed error. The handler is removed before the read snapshot ends and the connection goes back to the pool, so no stale deadline survives the call.
+- **Native work:** the path engine polls the meter while charging search states during frontier expansion ([[crates/tm-exec/src/path/search/mod.rs#StateBudget#charge]]), so a path stops even on a host that cannot interrupt SQL.
+- **Writes:** the stop conditions cover waiting for the writer and every statement of the body; the facade checks them once more when the body returns, then removes the interrupt so bookkeeping and `COMMIT` run uninterrupted. A stopped write rolls back like any failed transaction: no statement, term, event or `tx` row.
+- **Result budgets:** the engine charges each SQL row as it streams and each decoded row's bytes (8 per cell plus the UTF-8 length of every string) in [[crates/tm-exec/src/exec.rs#run]]; `View::path`, `triples`, `events_since` and the other list reads charge their rows. Past `max_rows` or `max_bytes` the operation fails with `ResultLimitExceeded { limit }`; no prefix is ever returned as a result.
+

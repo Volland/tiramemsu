@@ -3,12 +3,13 @@
 use std::cell::RefCell;
 
 use tm_core::{
-    read, Bundle, Eid, Error, Event, Executor, ObjectId, Result, TermReader, Triple, Value,
+    budget, read, Bundle, Eid, Error, Event, Executor, ObjectId, Result, TermReader, Triple, Value,
     ViewSpec,
 };
 use tm_exec::{CacheMode, Explain, PathRequest, PathRow, QueryEngine, QueryResult, TimeRespecting};
 use tm_ir::{IrQuery, Params, PathMode};
 
+use crate::budget::QueryBudget;
 use crate::db::Db;
 
 /// Access to the writer executor inside a speculation.
@@ -45,6 +46,8 @@ enum Source<'a> {
 pub struct View<'a> {
     spec: ViewSpec,
     src: Source<'a>,
+    /// The bounds of every operation run through this view ([`View::with_budget`]).
+    budget: Option<&'a QueryBudget>,
 }
 
 impl std::fmt::Debug for View<'_> {
@@ -58,6 +61,7 @@ impl<'a> View<'a> {
         View {
             spec,
             src: Source::Db(db),
+            budget: None,
         }
     }
 
@@ -69,6 +73,7 @@ impl<'a> View<'a> {
         View {
             spec,
             src: Source::Writer(w, engine),
+            budget: None,
         }
     }
 
@@ -94,6 +99,50 @@ impl<'a> View<'a> {
             spec: self.spec.valid_at(epoch_ms),
             ..self
         }
+    }
+
+    /// The same view with every operation run through it bounded by `budget`: one
+    /// call (`sparql`, `cypher`, `path`, `triples`, ...) is one operation, with its
+    /// own deadline and its own row and byte budget shared by every statement it
+    /// runs. See [`QueryBudget`] for the fields and the errors. The original view is
+    /// unchanged; without a budget a view behaves exactly as before.
+    ///
+    /// ```
+    /// # use tiramemsu::*;
+    /// # use std::time::Duration;
+    /// # let dir = tempfile::tempdir().unwrap();
+    /// # let db = Db::open(dir.path().join("m.db"), OpenOptions::default())?;
+    /// db.now().sparql("INSERT DATA { v:a v:p v:b }")?;
+    /// let budget = QueryBudget {
+    ///     timeout: Some(Duration::from_secs(1)),
+    ///     reader_timeout: Some(Duration::from_millis(100)),
+    ///     max_rows: Some(1_000),
+    ///     ..Default::default()
+    /// };
+    /// let view = db.now().with_budget(&budget);
+    /// assert_eq!(view.triples(None, None, None)?.len(), 1);
+    /// # Ok::<(), Error>(())
+    /// ```
+    // @lat: [[query#Query Budgets]]
+    pub fn with_budget<'b>(self, budget: &'b QueryBudget) -> View<'b>
+    where
+        'a: 'b,
+    {
+        View {
+            spec: self.spec,
+            src: self.src,
+            budget: Some(budget),
+        }
+    }
+
+    /// The budget of this view, if it has one.
+    pub fn budget(&self) -> Option<&'a QueryBudget> {
+        self.budget
+    }
+
+    /// Runs one public operation under this view's budget.
+    pub(crate) fn op<R>(&self, f: impl FnOnce() -> Result<R>) -> Result<R> {
+        crate::budget::run(self.budget, f)
     }
 
     pub(crate) fn exec<R>(
@@ -145,7 +194,7 @@ impl<'a> View<'a> {
         o: Option<ObjectId>,
     ) -> Result<Vec<Triple>> {
         let spec = self.spec;
-        self.exec(|e, _| read::triples(e, &spec, s, p, o))
+        self.op(|| charged(self.exec(|e, _| read::triples(e, &spec, s, p, o))?, 7))
     }
 
     /// The graphs of this view: every graph with at least one visible membership of a
@@ -170,7 +219,7 @@ impl<'a> View<'a> {
     // @lat: [[data-model#Named Graphs]]
     pub fn graphs(&self) -> Result<Vec<ObjectId>> {
         let spec = self.spec;
-        self.exec(|e, _| read::graphs(e, &spec))
+        self.op(|| charged(self.exec(|e, _| read::graphs(e, &spec))?, 1))
     }
 
     /// The eids of the statements that are members of `graph` in this view, ascending:
@@ -178,7 +227,7 @@ impl<'a> View<'a> {
     /// that no statement is in gives an empty list.
     pub fn graph_members(&self, graph: ObjectId) -> Result<Vec<Eid>> {
         let spec = self.spec;
-        self.exec(|e, _| read::graph_members(e, &spec, graph))
+        self.op(|| charged(self.exec(|e, _| read::graph_members(e, &spec, graph))?, 1))
     }
 
     /// The values of `(s, key)`: the objects of the statements the view selects,
@@ -186,21 +235,23 @@ impl<'a> View<'a> {
     /// value.
     pub fn values(&self, s: ObjectId, key: ObjectId) -> Result<Vec<ObjectId>> {
         let spec = self.spec;
-        self.exec(|e, _| read::values(e, &spec, s, key))
+        self.op(|| charged(self.exec(|e, _| read::values(e, &spec, s, key))?, 1))
     }
 
     /// Encodes a value for a lookup, so it can be passed to [`View::triples`],
     /// [`View::path`] or [`View::values`]. Never inserts: `None` when a dictionary value
     /// is not stored, so any pattern using it matches nothing.
     pub fn encode(&self, v: &Value) -> Result<Option<ObjectId>> {
-        self.exec(|e, _| TermReader::encode(e, v))
+        self.op(|| self.exec(|e, _| TermReader::encode(e, v)))
     }
 
     /// Decodes an ObjectId into its value.
     pub fn decode(&self, id: ObjectId) -> Result<Value> {
-        self.exec(|e, cache| match cache {
-            Some(r) => r.decode(e, id, true),
-            None => TermReader::new(1).decode(e, id, false),
+        self.op(|| {
+            self.exec(|e, cache| match cache {
+                Some(r) => r.decode(e, id, true),
+                None => TermReader::new(1).decode(e, id, false),
+            })
         })
     }
 
@@ -231,7 +282,8 @@ impl<'a> View<'a> {
             Source::Db(_) => CacheMode::Shared,
             Source::Writer(..) => CacheMode::Scoped,
         };
-        self.exec(|e, _| engine.execute(e, mode, &p))
+        // rows and bytes are charged by the engine as it decodes
+        self.op(|| self.exec(|e, _| engine.execute(e, mode, &p)))
     }
 
     /// Explains an IR query: regions, SQL, parameters and `EXPLAIN QUERY PLAN`
@@ -240,7 +292,7 @@ impl<'a> View<'a> {
     pub fn explain_ir(&self, q: &IrQuery, params: &Params) -> Result<Explain> {
         let engine = self.engine()?;
         let p = engine.prepare(q, params)?;
-        self.exec(|e, _| engine.explain(e, &p))
+        self.op(|| self.exec(|e, _| engine.explain(e, &p)))
     }
 
     /// Evaluates a path from `start` under this view's transaction-time and
@@ -359,26 +411,37 @@ impl<'a> View<'a> {
             })?
             .clone();
         let view = self.spec;
-        self.exec(|e, _| {
-            engine.eval(
-                e,
-                &PathRequest {
-                    start,
-                    path,
-                    mode: args.mode,
-                    max_hops: Some(args.max_hops),
-                    view,
-                    end: None,
-                    graphs: args.graphs.clone(),
-                    time_respecting: args.time_respecting,
-                },
-            )
+        self.op(|| {
+            let rows = self.exec(|e, _| {
+                engine.eval(
+                    e,
+                    &PathRequest {
+                        start,
+                        path,
+                        mode: args.mode,
+                        max_hops: Some(args.max_hops),
+                        view,
+                        end: None,
+                        graphs: args.graphs.clone(),
+                        time_respecting: args.time_respecting,
+                    },
+                )
+            })?;
+            if budget::active() {
+                budget::charge_rows(rows.len() as u64)?;
+                let hops: u64 = rows
+                    .iter()
+                    .map(|r| r.path.as_ref().map_or(0, |p| p.hops.len() as u64))
+                    .sum();
+                budget::charge_bytes(rows.len() as u64 * 40 + hops * 24)?;
+            }
+            Ok(rows)
         })
     }
 
     /// Events with `t > since` visible to this view's snapshot (the whole log).
     pub fn events_since(&self, since: u64) -> Result<Vec<Event>> {
-        self.exec(|e, _| read::events_since(e, since))
+        self.op(|| charged(self.exec(|e, _| read::events_since(e, since))?, 8))
     }
 }
 
@@ -417,7 +480,7 @@ impl View<'_> {
     // @lat: [[time-model#Cascade#Dependents]]
     pub fn dependents(&self, eid: Eid) -> Result<Vec<Eid>> {
         let spec = self.spec;
-        self.exec(|e, _| read::dependents(e, &spec, eid))
+        self.op(|| charged(self.exec(|e, _| read::dependents(e, &spec, eid))?, 1))
     }
 
     /// The fact bundle of `root` in this view: the statements that stand on `root`
@@ -458,8 +521,27 @@ impl View<'_> {
     // @lat: [[data-model#Fact Bundles]]
     pub fn bundle(&self, root: Eid) -> Result<Bundle> {
         let spec = self.spec;
-        self.exec(|e, _| read::bundle(e, &spec, root))
+        self.op(|| {
+            let b = self.exec(|e, _| read::bundle(e, &spec, root))?;
+            charge(b.statements.len(), 5)?;
+            Ok(b)
+        })
     }
+}
+
+/// Charges `n` rows of `cells` cells each to the operation budget, 8 bytes per cell.
+fn charge(n: usize, cells: u64) -> Result<()> {
+    if budget::active() {
+        budget::charge_rows(n as u64)?;
+        budget::charge_bytes(n as u64 * cells * 8)?;
+    }
+    Ok(())
+}
+
+/// [`charge`] for a list read, passing the list through.
+fn charged<T>(rows: Vec<T>, cells: u64) -> Result<Vec<T>> {
+    charge(rows.len(), cells)?;
+    Ok(rows)
 }
 
 /// The options of [`View::path_with`]. `PathArgs::default()` is `REACH` with no hop

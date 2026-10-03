@@ -162,13 +162,34 @@ Every failure raises `TiramemsuError` with a `.code`:
 | `SubjectTypeMismatch` | The subject does not match the predicate's `sys:subjectType`, such as a layer predicate on a plain node |
 | `CascadeLimitExceeded` | A retraction would touch more than `max_cascade` statements |
 | `PathLimitExceeded` | A path search exceeded its state limit |
+| `DeadlineExceeded` | A budgeted call ran past its `timeout_ms` |
+| `Cancelled` | A budgeted call was stopped with `db.cancel(key)` |
+| `PoolTimeout` | No reader became free within `reader_timeout_ms` |
+| `ResultLimitExceeded` | A budgeted call decoded more than `max_rows` rows or `max_bytes` bytes |
 | `InvalidPatch` | A `supersede` patch tried to change the subject or predicate |
 | `IdSpaceExhausted` | An id counter passed 2^48 − 1 |
 | `Sqlite` | A SQLite failure, such as a locked or unreadable file |
 
 ## Options
 
-`Database(path, readers=, busy_timeout_ms=, term_cache_capacity=, optimize_every=, path_max_hops=, path_max_states=)`. It works as a context manager, and Python threads can query one `Database` in parallel, because the GIL is released during each call.
+`Database(path, readers=, busy_timeout_ms=, term_cache_capacity=, optimize_every=, path_max_hops=, path_max_states=, reader_timeout_ms=)`. It works as a context manager, and Python threads can query one `Database` in parallel, because the GIL is released during each call.
+
+## Budgets
+
+Calls are unbounded by default. A `QueryBudget` bounds one call: `timeout_ms`, `reader_timeout_ms`, `max_rows` and `max_bytes` (counted across every statement the call runs), and `cancel_key`. A stopped write commits nothing, and an over-budget result raises instead of returning a prefix.
+
+```python
+from tiramemsu import QueryBudget
+
+view = db.now().with_budget(QueryBudget(timeout_ms=500, max_rows=10_000))
+view.sparql("SELECT ?o WHERE { <urn:ex:alice> <urn:ex:worksAt> ?o }")
+
+with db.transact(budget=QueryBudget(timeout_ms=1_000)) as tx:
+    tx.assert_(alice, works_at, acme)
+
+# from another thread: stop the call running with cancel_key="job-42"
+db.cancel("job-42")
+```
 
 ## Good to know
 

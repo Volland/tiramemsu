@@ -5,7 +5,7 @@
 
 use std::collections::HashMap;
 
-use tm_core::{Executor, Result, SqlValue, Value};
+use tm_core::{budget, Executor, Result, SqlValue, Value};
 use tm_ir::{IrQuery, Var};
 
 use crate::decode::{CacheMode, Decoder};
@@ -111,6 +111,8 @@ pub fn run(engine: &QueryEngine, ctx: ExecContext<'_>, p: &Prepared) -> Result<Q
     let planned = plan(engine, &mut *exec, p)?;
     let mut dec = Decoder::new(engine.term_cache(), ctx.cache, &planned.synthetic);
     let mut rows = Vec::new();
+    // only an operation with a budget pays for counting decoded bytes
+    let metered = budget::active();
     match &planned.body {
         Body::Empty => {}
         Body::Rows(v, proj) => {
@@ -130,17 +132,33 @@ pub fn run(engine: &QueryEngine, ctx: ExecContext<'_>, p: &Prepared) -> Result<Q
                     };
                     out.push(cell);
                 }
+                if metered {
+                    budget::charge_rows(1)?;
+                    charge_row(&out)?;
+                }
                 rows.push(out);
             }
         }
         Body::Sql { sql, params, doms } => {
             engine.run_hook();
-            let raw = exec.rows(sql, params)?;
+            // an operation budget counts rows as SQL produces them, so a runaway
+            // result fails before it is materialised (lat.md/query#Query Budgets)
+            let mut raw = Vec::new();
+            exec.query(sql, params, &mut |r| {
+                if metered {
+                    budget::charge_rows(1)?;
+                }
+                raw.push(r.to_vec());
+                Ok(())
+            })?;
             dec.stats.sql_executed = true;
             for r in raw {
                 let mut out = Vec::with_capacity(doms.len());
                 for (v, d) in r.iter().zip(doms) {
                     out.push(dec.cell(&mut *exec, v, d)?);
+                }
+                if metered {
+                    charge_row(&out)?;
                 }
                 rows.push(out);
             }
@@ -151,6 +169,18 @@ pub fn run(engine: &QueryEngine, ctx: ExecContext<'_>, p: &Prepared) -> Result<Q
         rows,
         stats: dec.stats,
     })
+}
+
+/// Charges the decoded bytes of one result row to the operation budget.
+fn charge_row(row: &[Option<ResultValue>]) -> Result<()> {
+    fn bytes(c: &Option<ResultValue>) -> u64 {
+        match c {
+            None => 8,
+            Some(ResultValue::Term(v)) => budget::value_bytes(v),
+            Some(ResultValue::List(xs)) => 8 + xs.iter().map(bytes).sum::<u64>(),
+        }
+    }
+    budget::charge_bytes(row.iter().map(bytes).sum())
 }
 
 fn scan_target(detail: &str) -> Option<&str> {

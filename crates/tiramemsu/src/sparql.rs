@@ -181,19 +181,22 @@ impl View<'_> {
     /// # Ok::<(), Error>(())
     /// ```
     pub fn sparql_with(&self, text: &str, opts: &SparqlOptions) -> Result<SparqlResult> {
-        let env = self.sparql_env()?;
-        match tm_sparql::prepare(text, &env)? {
-            Prepared::Query(plan) if opts.provenance => self.run_provenance(&plan),
-            Prepared::Query(plan) => self.run_plan(&plan),
-            Prepared::Update(_) if opts.provenance => {
-                Err(Error::unsupported(tm_sparql::error::PROVENANCE_UPDATE))
+        self.op(|| {
+            let env = self.sparql_env()?;
+            match tm_sparql::prepare(text, &env)? {
+                Prepared::Query(plan) if opts.provenance => self.run_provenance(&plan),
+                Prepared::Query(plan) => self.run_plan(&plan),
+                Prepared::Update(_) if opts.provenance => {
+                    Err(Error::unsupported(tm_sparql::error::PROVENANCE_UPDATE))
+                }
+                Prepared::Update(plan) => self.run_update(&plan),
             }
-            Prepared::Update(plan) => self.run_update(&plan),
-        }
+        })
     }
 
     /// Runs a `SELECT` with provenance: the instrumented query and its sibling
-    /// lookups in one read, so both see the same state.
+    /// lookups in one read, so both see the same state, and under one operation
+    /// budget, so the lookups draw on what the main query left.
     fn run_provenance(&self, plan: &QueryPlan) -> Result<SparqlResult> {
         let p = tm_sparql::provenance::instrument(plan)?;
         let engine = self.engine()?;

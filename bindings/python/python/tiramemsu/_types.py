@@ -44,6 +44,39 @@ class TiramemsuError(Exception):
 
 
 @dataclass(frozen=True)
+class QueryBudget:
+    """The bounds of one call, for :meth:`View.with_budget` and ``budget=`` on writes.
+
+    Every field is optional and independent; ``QueryBudget()`` bounds nothing. A call
+    that runs past ``timeout_ms`` fails with code ``DeadlineExceeded``, one waiting
+    longer than ``reader_timeout_ms`` for a reader with ``PoolTimeout``, one decoding
+    more than ``max_rows`` rows or ``max_bytes`` bytes (across every statement it runs)
+    with ``ResultLimitExceeded``, and one stopped by :meth:`Database.cancel` with
+    ``Cancelled``. A stopped write commits nothing.
+    """
+
+    timeout_ms: Optional[int] = None
+    reader_timeout_ms: Optional[int] = None
+    max_rows: Optional[int] = None
+    max_bytes: Optional[int] = None
+    cancel_key: Optional[str] = None
+
+    def _to_json(self) -> Dict[str, Any]:
+        out: Dict[str, Any] = {}
+        if self.timeout_ms is not None:
+            out["timeoutMs"] = self.timeout_ms
+        if self.reader_timeout_ms is not None:
+            out["readerTimeoutMs"] = self.reader_timeout_ms
+        if self.max_rows is not None:
+            out["maxRows"] = self.max_rows
+        if self.max_bytes is not None:
+            out["maxBytes"] = self.max_bytes
+        if self.cancel_key is not None:
+            out["cancelKey"] = self.cancel_key
+        return out
+
+
+@dataclass(frozen=True)
 class Iri:
     """An IRI (named node) term."""
 

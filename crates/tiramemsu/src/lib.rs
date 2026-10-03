@@ -2,6 +2,7 @@
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
 
+mod budget;
 mod bundle;
 mod cypher;
 mod db;
@@ -9,6 +10,7 @@ mod pool;
 mod sparql;
 mod view;
 
+pub use budget::QueryBudget;
 pub use bundle::{BundleFormat, BUNDLE_FORMAT};
 pub use cypher::TxCypher;
 pub use db::{Db, OpenOptions};
@@ -16,10 +18,11 @@ pub use sparql::{SparqlOptions, SparqlResult};
 pub use view::{PathArgs, View};
 
 pub use tm_core::{
-    codec, read, value, vocab, AssertOpts, Asserted, Capabilities, Clock, Dialect, Eid, Error,
-    Event, Executor, Host, HostOptions, IntoObject, ManualClock, ObjectId, OnExisting, Op, Patch,
-    PatchField, Position, PredicateSchema, Result, RetKind, Span, SqlError, SqlValue, SystemClock,
-    Tag, TimeRef, Triple, Tx, TxId, TxOptions, TxReport, TxSel, Valid, ValidSel, Value, ViewSpec,
+    codec, read, value, vocab, AssertOpts, Asserted, CancelToken, Capabilities, Clock, Dialect,
+    Eid, Error, Event, Executor, Host, HostOptions, Interrupt, IntoObject, ManualClock, ObjectId,
+    OnExisting, Op, Patch, PatchField, Position, PredicateSchema, Result, ResultLimit, RetKind,
+    Span, SqlError, SqlValue, SystemClock, Tag, TimeRef, Triple, Tx, TxId, TxOptions, TxReport,
+    TxSel, Valid, ValidSel, Value, ViewSpec,
 };
 pub use tm_core::{BTerm, Bundle, BundleStatement, ImportReport, ImportedStatement};
 pub use tm_cypher as cypher_frontend;

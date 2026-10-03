@@ -1,7 +1,9 @@
 //! The error type shared by every Tiramemsu crate.
 
 use std::path::PathBuf;
+use std::time::Duration;
 
+use crate::budget::ResultLimit;
 use crate::exec::SqlError;
 use crate::id::{Eid, ObjectId, Tag};
 
@@ -109,6 +111,30 @@ pub enum Error {
     PathLimitExceeded {
         /// The configured limit.
         limit: usize,
+    },
+    /// The operation was cancelled through its [`CancelToken`](crate::budget::CancelToken).
+    /// Read resources are released and a write is rolled back.
+    #[error("operation cancelled")]
+    Cancelled,
+    /// The operation ran past the deadline of its budget. Read resources are
+    /// released and a write is rolled back.
+    #[error("operation exceeded its timeout of {} ms", timeout.as_millis())]
+    DeadlineExceeded {
+        /// The configured timeout.
+        timeout: Duration,
+    },
+    /// No read connection became free within the reader acquisition timeout.
+    #[error("no reader became available within {} ms", timeout.as_millis())]
+    PoolTimeout {
+        /// The configured reader timeout.
+        timeout: Duration,
+    },
+    /// An operation produced more rows or decoded bytes than its budget allows. No
+    /// partial result is returned.
+    #[error("result exceeds the limit of {limit}")]
+    ResultLimitExceeded {
+        /// The budget that was exceeded.
+        limit: ResultLimit,
     },
     /// `supersede` or `confirm` on a retracted or unknown eid.
     #[error("statement {0} is not live")]

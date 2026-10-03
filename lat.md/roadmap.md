@@ -18,7 +18,7 @@ The core comes first. After the IR lands, the two front ends and the path engine
 | M6 | future: `add-crypto-shredding` | `sys:sensitive`, `SEALED` terms, `seal_key`, erase transaction. See [[time-model#Erasure]] | M0 |
 | M7 | future: `add-retrieval` | FTS5 over string terms (`term_fts`) and, on hosts with vector support, k-nearest-neighbour indexes defined as `sys:` triples, both usable from SPARQL, Cypher and paths | M1, M2 |
 
-Six smaller changes built on M0–M3 add the layer features of [[recipes]]: `add-statement-instants`, `add-typed-layers`, `add-query-provenance`, `add-fact-bundles`, `add-graph-scoped-paths` and `add-time-respecting-paths` (all archived). `reserve-replica-id` is a proposal only: it reserves origin bits in allocated ids so that agent memories can merge later, and waits for a decision.
+Six smaller changes built on M0–M3 add the layer features of [[recipes]]: `add-statement-instants`, `add-typed-layers`, `add-query-provenance`, `add-fact-bundles`, `add-graph-scoped-paths` and `add-time-respecting-paths` (all archived). `add-query-budgets` adds opt-in deadlines, cancellation, reader timeouts and result limits ([[query#Query Budgets]]). `reserve-replica-id` is a proposal only: it reserves origin bits in allocated ids so that agent memories can merge later, and waits for a decision.
 
 M7 exists because recall by text or embedding, not by graph pattern, is how agents usually query their memory. Ranking by support is part of it: a hit can be ordered by its confidence layers, its `sys:confirmedBy` count, the number of distinct transaction authors behind it and its `tm:addedAt`, all of which the store already holds ([[recipes]]). oxilite's design (index definitions stored as data, tables kept current by triggers, one k-NN statement per query) is the template ([[prior-art#oxilite]]).
 
@@ -55,7 +55,7 @@ M2b --> M5
 
 The benchmarks are tracked from M0 onwards. Targets will be fixed once the scale ceiling is known. See [[overview#Open Inputs]].
 
-The unimplemented follow-up proposals are indexed in `docs/feature-proposals.md`, with separate OpenSpec changes for budgets, bulk import, retrieval, MCP, saved answers, temporal syntax, cyclic joins, conflict previews, optional frontends, and a WASM host.
+The unimplemented follow-up proposals are indexed in `docs/feature-proposals.md`, with separate OpenSpec changes for bulk import, retrieval, MCP, saved answers, temporal syntax, cyclic joins, conflict previews, optional frontends, and a WASM host.
 
 - **Churn:** N updates per key (N = 1, 10, 100, 1000). As-of throughput should stay at ≥ 70 % of the no-history baseline, the bar set by CozoDB's measurements. See [[prior-art#CozoDB]].
 - **Point and 2-hop latency** at 10⁶ and 10⁷ statements, for the now, asOf and validAt views. The SPARQL variant (`crates/tiramemsu/benches/sparql.rs`) runs the same shapes through `View::sparql`; `SPARQL_BENCH_STATEMENTS` sets the size (default 10⁵).

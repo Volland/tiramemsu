@@ -7,6 +7,7 @@ use std::fmt;
 use std::path::Path;
 use std::time::Duration;
 
+use crate::budget::Interrupt;
 use crate::error::Result;
 
 /// A SQLite value crossing the executor boundary.
@@ -105,6 +106,8 @@ impl SqlError {
     pub const ERROR: i32 = 1;
     /// `SQLITE_BUSY`.
     pub const BUSY: i32 = 5;
+    /// `SQLITE_INTERRUPT`: a statement stopped by the host's interrupt.
+    pub const INTERRUPT: i32 = 9;
     /// `SQLITE_FULL`.
     pub const FULL: i32 = 13;
     /// `SQLITE_CONSTRAINT`.
@@ -192,6 +195,16 @@ pub trait Executor: Send {
 
     /// `RELEASE name`.
     fn release(&mut self, name: &str) -> Result<()>;
+
+    /// Installs (`Some`) or removes (`None`) the stop conditions of the operation
+    /// running on this connection. A host that can stop a running statement aborts
+    /// it once `interrupt` trips and reports the typed error of
+    /// [`Interrupt::check`] (the `rusqlite` host uses SQLite's progress handler).
+    /// The default ignores the request; on such a host only the engine's own checks
+    /// between steps stop an operation.
+    fn set_interrupt(&mut self, interrupt: Option<Interrupt>) {
+        let _ = interrupt;
+    }
 
     /// The host's registration hooks for user functions and virtual tables on this
     /// connection, when the host declares `functions` or `vtab`. The default is

@@ -2,6 +2,7 @@
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
 
+pub mod budget;
 pub mod bundle;
 pub mod clock;
 pub mod codec;
@@ -19,6 +20,7 @@ pub mod value;
 pub mod view;
 pub mod vocab;
 
+pub use budget::{CancelToken, Interrupt, ResultLimit};
 pub use bundle::{BTerm, Bundle, BundleStatement, ImportReport, ImportedStatement};
 pub use clock::{Clock, ManualClock, SystemClock};
 pub use engine::{IntoObject, PredicateSchema, Store, StoreOptions, Tx};

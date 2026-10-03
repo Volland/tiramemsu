@@ -609,3 +609,161 @@ fn reserved_origins_and_exhausted_counters_have_codes() {
     });
     assert_eq!(e.code(), "IdSpaceExhausted");
 }
+
+/// `n` statements `v:n<i> v:p i` in one transaction: enough for a cross join that
+/// never finishes.
+fn seed(db: &Database, n: usize) {
+    let ops: Vec<J> = (0..n)
+        .map(|i| json!({ "op": "assert", "s": v(&format!("n{i}")), "p": v("p"), "o": i }))
+        .collect();
+    db.call("transact", &json!({ "ops": ops })).unwrap();
+}
+
+const CROSS: &str = "SELECT (COUNT(*) AS ?c) WHERE { ?a v:p ?x . ?b v:p ?y . ?c2 v:p ?z }";
+
+// query-budgets: the bridge's `budget` argument, `readerTimeoutMs` and error codes
+// @lat: [[tests#Query Budgets#Bridge Budgets And Error Codes]]
+#[test]
+fn budgets_bound_bridge_calls_with_typed_codes() {
+    let (_d, db) = open();
+    seed(&db, 1_500);
+    let r = db
+        .call(
+            "sparql",
+            &json!({ "text": CROSS, "budget": { "timeoutMs": 100 } }),
+        )
+        .unwrap_err();
+    assert_eq!(r.code(), "DeadlineExceeded");
+    let r = db
+        .call(
+            "sparql",
+            &json!({ "text": "SELECT ?s WHERE { ?s v:p ?o }", "budget": { "maxRows": 10 } }),
+        )
+        .unwrap_err();
+    assert_eq!(r.code(), "ResultLimitExceeded");
+    assert_eq!(
+        r.to_json()["message"],
+        "result exceeds the limit of 10 rows"
+    );
+    let r = db
+        .call("triples", &json!({ "budget": { "maxBytes": 64 } }))
+        .unwrap_err();
+    assert_eq!(r.code(), "ResultLimitExceeded");
+    // a fitting budget changes nothing
+    let few = db
+        .call(
+            "triples",
+            &json!({ "s": v("n1"), "budget": { "maxRows": 5, "timeoutMs": 10000 } }),
+        )
+        .unwrap();
+    assert_eq!(few.as_array().unwrap().len(), 1);
+    // an interrupted write commits nothing
+    let r = db
+        .call(
+            "cypherWrite",
+            &json!({
+                "text": "MATCH (a), (b), (c) WHERE a.p >= 0 AND b.p >= 0 AND c.p >= 0 CREATE (a)-[:q]->(b)",
+                "budget": { "timeoutMs": 100 }
+            }),
+        )
+        .unwrap_err();
+    assert_eq!(r.code(), "DeadlineExceeded");
+    // a cancel key that nobody cancels changes nothing
+    db.call(
+        "transact",
+        &json!({ "ops": [{ "op": "assert", "s": v("x"), "p": v("q"), "o": v("y") }],
+                 "budget": { "cancelKey": "kept" } }),
+    )
+    .unwrap();
+    assert_eq!(
+        db.call("cancel", &json!({ "key": "w" })).unwrap()["running"],
+        false
+    );
+    let r = db
+        .call(
+            "transact",
+            &json!({ "ops": [{ "op": "assert", "s": v("z"), "p": v("q"), "o": v("y") }],
+                     "budget": { "cancelKey": "w" } }),
+        )
+        .unwrap_err();
+    assert_eq!(r.code(), "Cancelled"); // cancelled before it started
+    assert_eq!(
+        db.call("triples", &json!({ "p": v("q") }))
+            .unwrap()
+            .as_array()
+            .unwrap()
+            .len(),
+        1
+    );
+    // malformed budgets are argument errors
+    for bad in [
+        json!(5),
+        json!({ "timeoutMs": -1 }),
+        json!({ "bogus": 1 }),
+        json!({ "cancelKey": 3 }),
+    ] {
+        let e = db.call("triples", &json!({ "budget": bad })).unwrap_err();
+        assert_eq!(e.code(), "InvalidArgument", "{bad}");
+    }
+    assert_eq!(
+        db.call("cancel", &json!({})).unwrap_err().code(),
+        "InvalidArgument"
+    );
+
+    // the database-wide reader timeout
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("r.db");
+    let db = Database::open(
+        path.to_str().unwrap(),
+        &json!({ "readers": 1, "readerTimeoutMs": 50 }),
+    )
+    .unwrap();
+    assert_eq!(db.call("triples", &json!({})).unwrap(), json!([]));
+    assert_eq!(
+        Database::open(path.to_str().unwrap(), &json!({ "readerTimeoutMs": "x" }))
+            .unwrap_err()
+            .code(),
+        "InvalidArgument"
+    );
+}
+
+// query-budgets: `cancel` from another thread stops a running call
+// @lat: [[tests#Query Budgets#Bridge Cancels A Running Call]]
+#[test]
+fn cancel_stops_a_running_call_from_another_thread() {
+    let (_d, db) = open();
+    seed(&db, 1_500);
+    let db = std::sync::Arc::new(db);
+    let canceller = {
+        let db = db.clone();
+        std::thread::spawn(move || {
+            // wait until the call holds its key, then cancel it
+            for _ in 0..500 {
+                std::thread::sleep(std::time::Duration::from_millis(10));
+                let r = db.call("cancel", &json!({ "key": "q1" })).unwrap();
+                if r["running"] == json!(true) {
+                    return true;
+                }
+            }
+            false
+        })
+    };
+    let t0 = std::time::Instant::now();
+    let e = db
+        .call(
+            "sparql",
+            &json!({ "text": CROSS, "budget": { "cancelKey": "q1" } }),
+        )
+        .unwrap_err();
+    assert_eq!(e.code(), "Cancelled");
+    assert!(t0.elapsed() < std::time::Duration::from_secs(10));
+    assert!(canceller.join().unwrap());
+    // other keys are unaffected
+    let ok = db
+        .call(
+            "triples",
+            &json!({ "s": v("n0"), "budget": { "cancelKey": "fresh" } }),
+        )
+        .unwrap();
+    assert_eq!(ok.as_array().unwrap().len(), 1);
+}

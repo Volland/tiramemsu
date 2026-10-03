@@ -8,6 +8,7 @@ use tm_cypher::{CompileCtx, CypherParams, CypherResult, Rows, Runner, Vocab};
 use tm_exec::{CacheMode, QueryEngine, QueryResult};
 use tm_ir::{IrQuery, Params};
 
+use crate::budget::QueryBudget;
 use crate::db::Db;
 use crate::sparql::read_settings;
 use crate::view::View;
@@ -176,15 +177,17 @@ impl View<'_> {
     /// # Ok::<(), Error>(())
     /// ```
     pub fn cypher(&self, text: &str, params: &CypherParams) -> Result<CypherResult> {
-        let vocab = vocab_of(self.exec(|e, _| read_settings(e))?);
-        let ctx = CompileCtx {
-            vocab,
-            view: self.descriptor(),
-            writable: false,
-        };
-        let prog = tm_cypher::compile(text, params, &ctx).map_err(|e| e.into_core(text))?;
-        let mut runner = ViewRunner { view: self };
-        tm_cypher::exec::run(&prog, params, &mut runner).map_err(|e| e.into_core(text))
+        self.op(|| {
+            let vocab = vocab_of(self.exec(|e, _| read_settings(e))?);
+            let ctx = CompileCtx {
+                vocab,
+                view: self.descriptor(),
+                writable: false,
+            };
+            let prog = tm_cypher::compile(text, params, &ctx).map_err(|e| e.into_core(text))?;
+            let mut runner = ViewRunner { view: self };
+            tm_cypher::exec::run(&prog, params, &mut runner).map_err(|e| e.into_core(text))
+        })
     }
 }
 
@@ -256,5 +259,37 @@ impl Db {
         let mut r = result.ok_or_else(|| Error::invalid_query("no result"))?;
         r.report = Some(report);
         Ok(r)
+    }
+
+    /// [`Db::cypher_write`] as one operation bounded by `budget`: the deadline and
+    /// cancellation cover the whole query (a stopped query commits nothing), and the
+    /// row and byte budgets cover every statement it runs.
+    ///
+    /// # Errors
+    ///
+    /// Those of [`Db::cypher_write`], plus `Cancelled`, `DeadlineExceeded` and
+    /// `ResultLimitExceeded`; after any of them nothing is committed.
+    ///
+    /// ```
+    /// # use tiramemsu::*;
+    /// # let dir = tempfile::tempdir().unwrap();
+    /// # let db = Db::open(dir.path().join("m.db"), OpenOptions::default())?;
+    /// let token = CancelToken::new();
+    /// token.cancel();
+    /// let budget = QueryBudget { cancel: Some(token), ..Default::default() };
+    /// let none = CypherParams::default();
+    /// let r = db.cypher_write_budgeted(TxOptions::default(), "CREATE (:Person)", &none, &budget);
+    /// assert!(matches!(r, Err(Error::Cancelled)));
+    /// assert!(db.now().triples(None, None, None)?.is_empty());
+    /// # Ok::<(), Error>(())
+    /// ```
+    pub fn cypher_write_budgeted(
+        &self,
+        opts: TxOptions,
+        text: &str,
+        params: &CypherParams,
+        budget: &QueryBudget,
+    ) -> Result<CypherResult> {
+        crate::budget::run(Some(budget), || self.cypher_write(opts, text, params))
     }
 }

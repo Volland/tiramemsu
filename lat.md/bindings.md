@@ -17,7 +17,15 @@ Reads take a view and return rows; writes are one transaction each; anything tha
 - **Reads:** `sparql`, `cypher`, `triples`, `path`, `events`, `graphs`, `graphMembers`, `values`, `dependents` (`eid`, see [[time-model#Cascade#Dependents]]) and `bundle` (`eid`, returns the `tiramemsu-bundle/1` JSON of [[data-model#Fact Bundles#Bundle Formats]]), each with `{"view": …}` plus its own arguments. They are [[bindings/json/src/read.rs#run]]. `path` takes `start`, `path`, `mode`, `maxHops`, an optional `graphs` list of terms (a term that is not stored names no graph) and `timeRespecting: true | {"after": time}`, and every row carries `arrival` (epoch ms or `null`).
 - **Writes:** `transact` (a list of op objects in one transaction), `cypherWrite`, and `with` (speculation: ops applied hypothetically, then queries run on the result, then everything discarded). They are in [[bindings/json/src/tx.rs#transact]].
 - **Transaction ops:** `assert`, `create`, `retract`, `retractMatching`, `supersede`, `confirm`, `meta`, `upsert`, `newNode`, the five graph ops, `importBundle` (`bundle`; returns `{"root", "statements": [{"id", "eid", "new"}]}`, and `as` names the imported root) and `cypher`. An op may carry `"as": name`, and a later op may use `{"ref": name}` as a statement id or as a subject or object, which is how a layer is written on a statement created earlier in the same transaction.
-- **Housekeeping:** `optimize` and `info`.
+- **Housekeeping:** `optimize`, `info` and `cancel` (`key`, see [[bindings#JSON Bridge#Budgets]]).
+
+### Budgets
+
+Reads, `transact` and `cypherWrite` take an optional `budget` object that bounds the whole call, and `cancel` stops a running call by key from another thread.
+
+The budget is `{"timeoutMs", "readerTimeoutMs", "maxRows", "maxBytes", "cancelKey"}`, all optional, mapped to a `QueryBudget` ([[query#Query Budgets]]); a read call runs under `QueryBudget::run`, so its term lookups, the read and decoding share one meter. An unknown key or a negative number is `InvalidArgument`. The open option `readerTimeoutMs` sets `OpenOptions::reader_timeout`.
+
+`cancel` (`{"key"}`) cancels the token registered by the call running with that `cancelKey` and returns `{"running": bool}`. A key cancelled before its call starts makes that call fail at once, so callers use a fresh key per call. The key is released when its call ends.
 
 ### Views
 
@@ -33,7 +41,7 @@ What JSON cannot hold exactly comes back as `{"lex", "datatype"}`: integers beyo
 
 ### Errors
 
-Every failure has a code: the name of the core `Error` variant (`Parse`, `NotLive`, `UniqueViolation`, ...), or `InvalidArgument` when the bridge rejected the call itself.
+Every failure has a code: the name of the core `Error` variant (`Parse`, `NotLive`, `UniqueViolation`, `DeadlineExceeded`, `Cancelled`, `PoolTimeout`, `ResultLimitExceeded`, ...), or `InvalidArgument` when the bridge rejected the call itself.
 
 A malformed op, an unknown operation, or a term of the wrong shape is `InvalidArgument`, and inside a transaction it fails the whole transaction, so nothing is committed. Codes are [[bindings/json/src/lib.rs#BindError]]`::code`.
 
@@ -45,6 +53,8 @@ The native class is `Native(path, options)` with `call(op, args)`. The wrapper (
 
 Every bridge operation has a wrapper method: `sparql(text, { provenance })`, `path` with `graphs` and `timeRespecting` (rows carry `arrival`), `dependents`, `bundle`, and `Tx.importBundle`.
 
+Budgets: `View.withBudget({ timeoutMs, readerTimeoutMs, maxRows, maxBytes, cancelKey })`, a `budget` member in the options of `transact` and `cypherWrite`, `Database.cancel(key)`, and the open option `readerTimeoutMs`. Because the API is synchronous, `cancel` from the same thread only affects a call that starts later.
+
 The package carries one addon per platform, and the loader names the platform when none matches. A `Date` is written as an `xsd:dateTime` literal and an `xsd:dateTime` is read back as a `Date`. Releases are built by `.github/workflows/npm-publish.yml`; see `docs/node-publishing.md`.
 
 ## Python
@@ -52,6 +62,8 @@ The package carries one addon per platform, and the loader names the platform wh
 The `tiramemsu` package is a PyO3 module (`tiramemsu._native`, stable ABI) plus a typed Python wrapper, in `bindings/python`, built with maturin and checked with pytest and `mypy --strict`.
 
 Every bridge operation has a wrapper method, as in Node.js: `sparql(text, provenance=)`, `path(graphs=, time_respecting=)`, `dependents`, `bundle`, and `TxBuilder.import_bundle`, whose result is in `Report.results`.
+
+Budgets: the frozen dataclass `QueryBudget(timeout_ms=, reader_timeout_ms=, max_rows=, max_bytes=, cancel_key=)`, `View.with_budget`, `budget=` on `transact` (both forms) and `cypher_write`, `Database(reader_timeout_ms=)`, and `Database.cancel(key)`, which works from another thread because the GIL is released during calls.
 
 `Database.transact` is both a context manager, which records ops and submits them when the block exits cleanly, and a function of a list of op dicts. The GIL is released during each call, so threads can query one `Database` in parallel.
 
