@@ -381,8 +381,9 @@ mod random {
             .unwrap_or(default)
     }
 
-    /// Random layered graphs written with assert only, so no two live statements
-    /// share their content (import collapses those, as assert does).
+    /// Random layered graphs in which no two live statements share their content
+    /// (import collapses those, as assert does): assertions are idempotent and
+    /// correction objects are unique per transaction.
     #[derive(Clone, Debug)]
     enum GenOp {
         Base { s: u8, o: u8, from: Option<i64> },
@@ -449,7 +450,9 @@ mod random {
             }
             GenOp::Supersede { target, o } => {
                 if let Some(e) = pick(known, target) {
-                    tx.supersede(e, Patch::object(Value::Int(100 + o as i64)))?;
+                    // unique per transaction, so two corrections never share content
+                    let fresh = 100 + 4 * tx.t().0 as i64 + o as i64;
+                    tx.supersede(e, Patch::object(Value::Int(fresh)))?;
                 }
             }
             GenOp::Retract { target } => {
