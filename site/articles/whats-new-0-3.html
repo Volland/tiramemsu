@@ -1,0 +1,405 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>What’s new in 0.3: tiramemsu</title>
+<meta name="description" content="Nine new tiramemsu features and how to use them from Rust, Python, Node.js, SPARQL, Cypher and MCP: text recall, conflict review, saved answers, journeys, budgets, bulk import, cyclic joins, an MCP server and optional query front ends.">
+<link rel="icon" href="../assets/logo.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+<header class="top"><div class="wrap">
+  <a class="brand" href="../"><img src="../assets/logo.svg" alt="">Tiramemsu</a>
+  <nav class="menu"><a href="../#features">Features</a><a href="../#start">Quick start</a><a href="./" aria-current="page">Articles</a><a href="https://github.com/Volland/tiramemsu">GitHub</a></nav>
+</div></header>
+
+<article class="post">
+<h1>What’s new in 0.3</h1>
+<p class="meta">Tiramemsu guide · 3 October 2026</p>
+
+<p>Version 0.2 could remember facts with layers and two clocks, and answer questions in SPARQL and Cypher. The work since then is about what an agent does with that memory every day: find things by words, notice when sources disagree, know when an old answer has gone stale, follow chains of events in time order, stay within a time limit, load a lot of data, and talk to the store over MCP.</p>
+<p>There are nine features. The first eight are opt-in: if you do not ask for them, the store behaves as it did before. The ninth changes how the Rust crate is built, and needs one line of attention if you turned default features off. The code is on <code>main</code> and the version number moves to 0.3 at the next release. This page shows each one with short examples. The longer stories are in four articles, linked as we go.</p>
+
+<div class="note"><strong>Setup for the examples.</strong> They follow the <a href="../#start">quick start</a>. <code>v("alice")</code> (Rust, Node) and <code>Iri(V + "alice")</code> (Python) make the IRI <code>urn:tiramemsu:v:alice</code>, which queries write <code>v:alice</code>. Names like <code>alice</code>, <code>works_at</code> and <code>acme</code> are such IRIs. Setup lines are trimmed.</div>
+
+<ol class="toc">
+  <li><a href="#text">Text recall with evidence ranking</a></li>
+  <li><a href="#conflicts">Conflict review and import previews</a></li>
+  <li><a href="#saved">Saved answers that know when they are stale</a></li>
+  <li><a href="#journeys">Journeys in SPARQL and Cypher</a></li>
+  <li><a href="#budgets">Query budgets and cancellation</a></li>
+  <li><a href="#bulk">Bulk import</a></li>
+  <li><a href="#lftj">A join operator for cyclic patterns</a></li>
+  <li><a href="#mcp">An MCP server for agents</a></li>
+  <li><a href="#cargo-features">Optional query front ends</a></li>
+</ol>
+
+<h2 id="text">1. Text recall with evidence ranking</h2>
+<p><strong>What it is.</strong> Search the string values of statements by words, in any view. Each hit is a statement, with its rank, a lexical score and the evidence the store holds about it: confidence, confirmations, how many authors, when it was added.</p>
+<p><strong>Why an agent wants it.</strong> People remember words, not graph patterns. “Something about Lisbon” is a fine place to start, as long as the answer also says how much to trust it.</p>
+<div class="tabs">
+  <input type="radio" name="g-text" id="text-py" checked><label for="text-py">Python</label>
+  <input type="radio" name="g-text" id="text-js"><label for="text-js">Node.js</label>
+  <input type="radio" name="g-text" id="text-rs"><label for="text-rs">Rust</label>
+  <input type="radio" name="g-text" id="text-q"><label for="text-q">SPARQL · Cypher</label>
+  <div class="panel">
+<pre><code>db = Database(<span class="s">"memory.db"</span>, text_index=<span class="k">True</span>)
+<span class="k">with</span> db.transact() <span class="k">as</span> tx:
+    note = tx.assert_(alice, Iri(V + <span class="s">"note"</span>), <span class="s">"met at the Lisbon offsite"</span>)
+    tx.assert_(note, confidence, 0.9)
+
+<span class="k">for</span> hit <span class="k">in</span> db.now().text_search(<span class="s">"lisbon offsite"</span>, limit=10):
+    print(hit.rank, hit.text, hit.evidence.confidence)  <span class="c"># 1 met at the Lisbon offsite 0.9</span></code></pre>
+  </div>
+  <div class="panel">
+<pre><code><span class="k">const</span> db = Database.open(<span class="s">"memory.db"</span>, { textIndex: <span class="k">true</span> });
+db.transact((tx) =&gt; {
+  <span class="k">const</span> note = tx.assert(alice, v(<span class="s">"note"</span>), <span class="s">"met at the Lisbon offsite"</span>);
+  tx.assert(note, confidence, 0.9);
+});
+
+<span class="k">for</span> (<span class="k">const</span> hit <span class="k">of</span> db.now().textSearch(<span class="s">"lisbon offsite"</span>, { limit: 10 })) {
+  console.log(hit.rank, hit.text, hit.evidence.confidence); <span class="c">// 1 met at the Lisbon offsite 0.9</span>
+}</code></pre>
+  </div>
+  <div class="panel">
+<pre><code><span class="k">let</span> db = Db::open(path, OpenOptions { text_index: <span class="k">true</span>, ..OpenOptions::default() })?;
+db.transact(TxOptions::default(), |tx| {
+    <span class="k">let</span> e = tx.assert(v(<span class="s">"alice"</span>), v(<span class="s">"note"</span>), Value::str(<span class="s">"met at the Lisbon offsite"</span>), Valid::ALWAYS)?.eid();
+    tx.assert(e, v(<span class="s">"confidence"</span>), Value::Double(0.9), Valid::ALWAYS)?;
+    Ok(())
+})?;
+
+<span class="k">let</span> q = TextQuery { limit: Some(10), ..TextQuery::new(<span class="s">"lisbon offsite"</span>) };
+<span class="k">for</span> hit <span class="k">in</span> db.now().text_search(&amp;q)? {
+    println!(<span class="s">"{} {} {:?}"</span>, hit.rank, hit.text, hit.evidence.confidence); <span class="c">// 1 met at the Lisbon offsite Some(0.9)</span>
+}</code></pre>
+  </div>
+  <div class="panel">
+<pre><code><span class="c"># SPARQL: tm:textMatch binds the statement id; join it back to its triple with ~</span>
+SELECT ?s ?o ?score WHERE {
+  ?e tm:textMatch "lisbon" ; tm:textScore ?score ; tm:textLimit 10 .
+  ?s ?p ?o ~ ?e
+}
+
+<span class="c">// Cypher: a procedure call</span>
+CALL tiramemsu.text.search('lisbon', {limit: 10}) YIELD statement, score
+RETURN statement, score</code></pre>
+  </div>
+</div>
+<p><strong>Limits.</strong> It matches words, not meaning: there are no embeddings. Plain and language-tagged strings are indexed; typed literals are not. The index is built only when you ask (<code>text_index</code>, or <code>rebuild_text_index()</code> on an open file), and it needs SQLite with FTS5; without it, recall fails with <code>MissingCapability</code> and everything else works. Ranking is in a fixed order (lexical score, then confidence, confirmations, authors, recency, then id). There is no single blended score.</p>
+
+<h2 id="conflicts">2. Conflict review and import previews</h2>
+<p><strong>What it is.</strong> <code>conflicts</code> lists the places where one subject and predicate have different values at overlapping valid times, with every statement’s evidence: valid time, when it was added, confidence, confirmations, authors and sources. <code>preview_bundle</code> runs an import as a dry run and reports what it would do. Neither one writes a fact.</p>
+<p><strong>Why an agent wants it.</strong> Two sources disagree about where Alice worked in the spring of 2024. The agent should see both sides and decide, not have the store pick one quietly. And before it takes memories from another agent, it should see what they would change.</p>
+<div class="tabs">
+  <input type="radio" name="g-conf" id="conf-py" checked><label for="conf-py">Python</label>
+  <input type="radio" name="g-conf" id="conf-js"><label for="conf-js">Node.js</label>
+  <input type="radio" name="g-conf" id="conf-rs"><label for="conf-rs">Rust</label>
+  <div class="panel">
+<pre><code><span class="k">with</span> db.transact() <span class="k">as</span> tx:
+    tx.assert_(alice, works_at, acme, valid_from=<span class="s">"2020-01-01"</span>)
+    tx.assert_(alice, works_at, initech, valid_from=<span class="s">"2024-01-01"</span>, valid_to=<span class="s">"2024-06-01"</span>)
+
+<span class="k">for</span> c <span class="k">in</span> db.now().conflicts(p=works_at):
+    print(c.overlaps)  <span class="c"># [(1704067200000, 1717200000000)]: January to June 2024</span>
+    <span class="k">for</span> val <span class="k">in</span> c.values:
+        print(val.o, [(e.eid, e.confidence, e.authors) <span class="k">for</span> e <span class="k">in</span> val.statements])
+
+bundle = db.now().bundle(eid)            <span class="c"># a fact with its layers, for another database</span>
+preview = other.preview_bundle(bundle)   <span class="c"># a dry run: nothing is committed</span>
+<span class="k">if</span> preview.would_commit:
+    <span class="k">with</span> other.transact() <span class="k">as</span> tx:
+        tx.import_bundle(bundle)         <span class="c"># checked again on the real write</span></code></pre>
+  </div>
+  <div class="panel">
+<pre><code>db.transact((tx) =&gt; {
+  tx.assert(alice, worksAt, acme, { validFrom: <span class="s">"2020-01-01"</span> });
+  tx.assert(alice, worksAt, initech, { validFrom: <span class="s">"2024-01-01"</span>, validTo: <span class="s">"2024-06-01"</span> });
+});
+
+<span class="k">const</span> [c] = db.now().conflicts({ p: worksAt });
+c.overlaps;                        <span class="c">// [{ validFrom: 1704067200000, validTo: 1717200000000 }]</span>
+c.values.map((x) =&gt; [x.o, x.statements.map((e) =&gt; [e.eid, e.confidence, e.authors])]);
+
+<span class="k">const</span> preview = other.previewBundle(bundle);   <span class="c">// dry run</span>
+<span class="k">if</span> (preview.wouldCommit) other.transact((tx) =&gt; { tx.importBundle(bundle); });</code></pre>
+  </div>
+  <div class="panel">
+<pre><code>db.transact(TxOptions::default(), |tx| {
+    tx.assert(v(<span class="s">"alice"</span>), v(<span class="s">"worksAt"</span>), v(<span class="s">"acme"</span>), Valid::from(0))?;
+    tx.assert(v(<span class="s">"alice"</span>), v(<span class="s">"worksAt"</span>), v(<span class="s">"initech"</span>), Valid::between(10, 20))?;
+    Ok(())
+})?;
+<span class="k">let</span> view = db.now();
+<span class="k">let</span> works_at = view.encode(&amp;v(<span class="s">"worksAt"</span>))?.unwrap();
+<span class="k">let</span> cs = view.conflicts(&amp;ConflictQuery { predicate: Some(works_at), ..Default::default() })?;
+assert_eq!(cs[0].overlaps, vec![Valid::between(10, 20)]); <span class="c">// when both were true</span>
+
+<span class="k">let</span> preview = other.preview_bundle(&amp;bundle)?;           <span class="c">// dry run</span>
+<span class="k">if</span> preview.would_commit() {
+    other.transact(TxOptions::default(), |tx| tx.import_bundle(&amp;bundle).map(|_| ()))?;
+}</code></pre>
+  </div>
+</div>
+<p><strong>Limits.</strong> It reports, it does not resolve: no majority vote and no automatic belief. Statements with the same object count as support for one value, not as a conflict. A predicate declared <code>sys:many</code> is flagged, not treated as a violation. The history view is refused. A preview burns the ids it allocated (they are never reused) but reserves nothing, so the real import checks everything again.</p>
+
+<h2 id="saved">3. Saved answers that know when they are stale</h2>
+<p><strong>What it is.</strong> Save a query with its result and the statements it cited. Later, <code>check_saved_answers</code> reads what changed since and marks the answer: <code>stale</code> when a cited statement was retracted or superseded, <code>recheck</code> when some other write might have changed it. Only a successful refresh makes it <code>fresh</code> again.</p>
+<p><strong>Why an agent wants it.</strong> Agents cache answers in prompts, notes and plans. The cache is only useful if the agent knows when to stop trusting it.</p>
+<div class="tabs">
+  <input type="radio" name="g-saved" id="saved-py" checked><label for="saved-py">Python</label>
+  <input type="radio" name="g-saved" id="saved-js"><label for="saved-js">Node.js</label>
+  <input type="radio" name="g-saved" id="saved-rs"><label for="saved-rs">Rust</label>
+  <div class="panel">
+<pre><code>q = <span class="s">"SELECT ?o WHERE { v:alice v:worksAt ?o }"</span>
+db.save_answer(<span class="s">"employer"</span>, q)
+db.save_answer(<span class="s">"then"</span>, q, view=db.as_of(tx=1))   <span class="c"># a fixed past: stays fresh</span>
+
+<span class="k">with</span> db.transact() <span class="k">as</span> tx:
+    tx.supersede(job, o=globex)                    <span class="c"># the cited fact is corrected</span>
+
+<span class="k">for</span> m <span class="k">in</span> db.check_saved_answers():                <span class="c"># each mark is reported once</span>
+    print(m.name, m.status, m.cause)               <span class="c"># employer stale supportRetracted</span>
+db.refresh_answer(<span class="s">"employer"</span>).status             <span class="c"># 'fresh', now with globex</span></code></pre>
+  </div>
+  <div class="panel">
+<pre><code><span class="k">const</span> text = <span class="s">"SELECT ?o WHERE { v:alice v:worksAt ?o }"</span>;
+db.saveAnswer(<span class="s">"employer"</span>, { text });
+db.saveAnswer(<span class="s">"then"</span>, { text, view: db.asOf({ tx: 1 }) });   <span class="c">// stays fresh</span>
+
+db.transact((tx) =&gt; { tx.supersede(job, { o: globex }); });
+
+<span class="k">for</span> (<span class="k">const</span> m <span class="k">of</span> db.checkSavedAnswers()) console.log(m.name, m.status, m.cause);
+<span class="c">// employer stale supportRetracted</span>
+db.refreshAnswer(<span class="s">"employer"</span>).status;                         <span class="c">// "fresh"</span></code></pre>
+  </div>
+  <div class="panel">
+<pre><code><span class="k">let</span> q = SavedQuery::sparql(<span class="s">"SELECT ?o WHERE { v:alice v:worksAt ?o }"</span>);
+db.save_answer(<span class="s">"employer"</span>, &amp;q)?;
+db.save_answer(<span class="s">"then"</span>, &amp;q.clone().on(ViewSpec::as_of(TimeRef::Tx(1))))?;
+
+db.now().sparql(<span class="s">"DELETE DATA { v:alice v:worksAt v:acme }"</span>)?;
+<span class="k">for</span> m <span class="k">in</span> db.check_saved_answers()? {
+    println!(<span class="s">"{} {:?} {:?}"</span>, m.name, m.status, m.cause); <span class="c">// employer Stale SupportRetracted</span>
+}
+<span class="k">let</span> fresh = db.refresh_answer(<span class="s">"employer"</span>)?;            <span class="c">// AnswerStatus::Fresh</span></code></pre>
+  </div>
+</div>
+<p><strong>Limits.</strong> It is conservative on purpose. Under a current view, any later write marks the answer <code>recheck</code>, because a new row could change it. Each answer lists why its citations cannot prove it fresh: <code>mutableView</code>, <code>noProvenance</code> (Cypher, <code>ASK</code>), <code>negativePattern</code>, <code>existsPattern</code>, <code>recursivePath</code>, <code>virtualPredicate</code>, <code>volatile</code>, <code>clock</code>. Nothing re-runs in the background: you call <code>check</code> and <code>refresh</code>. Saved answers live in tables added by storage format 3. Opening an older file migrates it forward, and 0.2 cannot open the migrated file.</p>
+<p>More in <a href="recall-review-recheck.html">Recall, review, recheck</a>.</p>
+
+<h2 id="journeys">4. Journeys in SPARQL and Cypher</h2>
+<p><strong>What it is.</strong> A time-respecting path never goes back in valid time: each hop must still hold when the walk reaches it. The path engine could already do this from Rust. Now both query languages can ask for it, and get the earliest arrival at each end. Every path query can also report whether it was complete.</p>
+<p><strong>Why an agent wants it.</strong> “Who could have heard this from Ana after the first of March?” is a question about the order of events. A plain path ignores order and gives wrong answers.</p>
+<div class="tabs">
+  <input type="radio" name="g-jour" id="jour-q" checked><label for="jour-q">SPARQL · Cypher</label>
+  <input type="radio" name="g-jour" id="jour-py"><label for="jour-py">Python</label>
+  <input type="radio" name="g-jour" id="jour-js"><label for="jour-js">Node.js</label>
+  <input type="radio" name="g-jour" id="jour-rs"><label for="jour-rs">Rust</label>
+  <div class="panel">
+<pre><code><span class="c"># SPARQL: every property path in the group is a journey</span>
+SELECT ?who ?t WHERE {
+  SERVICE &lt;urn:tiramemsu:tm:timeRespecting/2026-03-01&gt; {
+    v:ana v:met+ ?who .
+    ?who tm:arrival ?t
+  }
+} ORDER BY ?t
+
+<span class="c">// Cypher: a MATCH modifier</span>
+MATCH TIME RESPECTING AFTER date('2026-03-01') ARRIVAL AS t
+      (a {`@id`: 'v:ana'})-[:met*]-&gt;(who)
+RETURN who, min(t) AS arrived ORDER BY arrived</code></pre>
+  </div>
+  <div class="panel">
+<pre><code>q = <span class="s">"""SELECT ?who ?t WHERE {
+  SERVICE &lt;urn:tiramemsu:tm:timeRespecting/$since&gt; { v:ana v:met+ ?who . ?who tm:arrival ?t }
+} ORDER BY ?t"""</span>
+r = db.now().sparql(q, params={<span class="s">"since"</span>: <span class="s">"2026-03-01"</span>}, path_completeness=<span class="k">True</span>)
+[(row[<span class="s">"who"</span>], row[<span class="s">"t"</span>]) <span class="k">for</span> row <span class="k">in</span> r]   <span class="c"># ben at 2026-03-02, cara at 2026-03-05 (epoch ms)</span>
+r.path_completeness                     <span class="c"># PathCompleteness(kind='exhaustive', max_hops=None, complete=True)</span></code></pre>
+  </div>
+  <div class="panel">
+<pre><code><span class="k">const</span> q = <span class="s">"SELECT ?who ?t WHERE { SERVICE &lt;urn:tiramemsu:tm:timeRespecting/$since&gt; "</span> +
+  <span class="s">"{ v:ana v:met+ ?who . ?who tm:arrival ?t } } ORDER BY ?t"</span>;
+<span class="k">const</span> r = db.now().sparql(q, { params: { since: <span class="s">"2026-03-01"</span> }, pathCompleteness: <span class="k">true</span> });
+r.rows;              <span class="c">// ben at 1772409600000 (2026-03-02), cara at 1772668800000 (2026-03-05)</span>
+r.pathCompleteness;  <span class="c">// { kind: "exhaustive", maxHops: null, complete: true }</span>
+
+<span class="k">const</span> rep = db.now().pathReport(v(<span class="s">"ana"</span>), <span class="s">"met+"</span>, { maxHops: 1 });
+rep.completeness;    <span class="c">// { kind: "bound", maxHops: 1, complete: true }</span></code></pre>
+  </div>
+  <div class="panel">
+<pre><code><span class="c">// here the valid times are small integers (epoch ms), as in the crate README</span>
+<span class="k">let</span> q = <span class="s">"SELECT ?who ?t WHERE { SERVICE &lt;urn:tiramemsu:tm:timeRespecting/$since&gt; \
+         { v:a v:met+ ?who . ?who tm:arrival ?t } } ORDER BY ?t"</span>;
+<span class="k">let</span> opts = SparqlOptions { params: ir::params([(<span class="s">"since"</span>, Value::Int(2))]), ..Default::default() };
+<span class="k">let</span> r = view.sparql_with(q, &amp;opts)?;
+<span class="k">let</span> s = r.solutions().unwrap();
+s.path_completeness;   <span class="c">// Some(PathCompleteness::Exhaustive)</span></code></pre>
+  </div>
+</div>
+<p><strong>Limits.</strong> The start of a journey must be bound, because it runs forward. In SPARQL only real path expressions (<code>*</code>, <code>+</code>, <code>?</code>, <code>^</code>, <code>|</code>) are journeys; a plain <code>a/b</code> is turned into triple patterns. Arrivals are epoch milliseconds. A Cypher <code>*</code> is cut at <code>path_max_hops</code> (15 by default), and the report then says <code>cap</code>: longer journeys may exist.</p>
+<p>More in <a href="journeys-in-time.html">Journeys that respect time</a>.</p>
+
+<h2 id="budgets">5. Query budgets and cancellation</h2>
+<p><strong>What it is.</strong> A <code>QueryBudget</code> bounds one call: a deadline, a cancel handle, how long to wait for a free reader, and how many rows and bytes the result may hold. A call past a bound fails with a typed error: <code>DeadlineExceeded</code>, <code>Cancelled</code>, <code>PoolTimeout</code> or <code>ResultLimitExceeded</code>.</p>
+<p><strong>Why an agent wants it.</strong> An agent loop has a time limit. One unlucky query should not eat it, and a huge result should not fill the context window.</p>
+<div class="tabs">
+  <input type="radio" name="g-bud" id="bud-py" checked><label for="bud-py">Python</label>
+  <input type="radio" name="g-bud" id="bud-js"><label for="bud-js">Node.js</label>
+  <input type="radio" name="g-bud" id="bud-rs"><label for="bud-rs">Rust</label>
+  <div class="panel">
+<pre><code><span class="k">from</span> tiramemsu <span class="k">import</span> QueryBudget, TiramemsuError
+
+view = db.now().with_budget(QueryBudget(timeout_ms=500, max_rows=10_000))
+view.sparql(<span class="s">"SELECT ?o WHERE { v:alice v:worksAt ?o }"</span>)
+
+<span class="k">with</span> db.transact(budget=QueryBudget(timeout_ms=1_000)) <span class="k">as</span> tx:
+    tx.assert_(alice, works_at, acme)
+
+db.cancel(<span class="s">"job-42"</span>)   <span class="c"># from another thread: stops the call that uses cancel_key="job-42"</span></code></pre>
+  </div>
+  <div class="panel">
+<pre><code><span class="k">const</span> view = db.now().withBudget({ timeoutMs: 500, maxRows: 10_000 });
+view.sparql(<span class="s">"SELECT ?o WHERE { v:alice v:worksAt ?o }"</span>);
+
+db.transact((tx) =&gt; { tx.assert(alice, worksAt, acme); }, { budget: { timeoutMs: 1_000 } });
+
+<span class="k">try</span> {
+  db.now().withBudget({ maxRows: 1 }).sparql(<span class="s">"SELECT ?s WHERE { ?s v:worksAt ?o }"</span>);
+} <span class="k">catch</span> (e) {
+  e.code;   <span class="c">// "ResultLimitExceeded" when there are two or more rows: never a silent prefix</span>
+}</code></pre>
+  </div>
+  <div class="panel">
+<pre><code><span class="k">let</span> budget = QueryBudget {
+    timeout: Some(Duration::from_millis(500)),
+    max_rows: Some(10_000),
+    ..Default::default()
+};
+<span class="k">let</span> rows = db.now().with_budget(&amp;budget).sparql(<span class="s">"SELECT ?o WHERE { v:alice v:worksAt ?o }"</span>)?;
+
+<span class="k">let</span> token = CancelToken::new();          <span class="c">// clone it into another thread and call cancel()</span>
+<span class="k">let</span> stopped = QueryBudget { cancel: Some(token.clone()), ..Default::default() };
+token.cancel();
+<span class="k">let</span> r = db.transact_budgeted(TxOptions::default(), &amp;stopped, |tx| { <span class="c">/* … */</span> Ok(()) });
+assert!(matches!(r, Err(Error::Cancelled)));   <span class="c">// and nothing was committed</span></code></pre>
+  </div>
+</div>
+<p><strong>Limits.</strong> Calls are unbounded unless you set a budget. A result over a limit is an error, not a truncated list, so ask for less with <code>LIMIT</code> when you want a prefix. The Node and Python APIs are synchronous: <code>db.cancel(key)</code> from the same thread only stops a call that starts later, so cancel from another thread (Python) or use a deadline.</p>
+<p>More in <a href="bounded-queries-bulk-loads.html">Bounded queries and bulk loads</a>.</p>
+
+<h2 id="bulk">6. Bulk import</h2>
+<p><strong>What it is.</strong> A session for large loads. Each chunk is one ordinary atomic transaction. Chunks skip the planner statistics refresh, and <code>finish</code> runs it once at the end. While the session is open, other writes are refused with <code>ImportInProgress</code>, and reads see the last committed chunk.</p>
+<p><strong>Why an agent wants it.</strong> Loading a chat archive or a document set should neither hold the writer for minutes in one transaction nor re-analyse the whole file after every batch.</p>
+<div class="tabs">
+  <input type="radio" name="g-bulk" id="bulk-py" checked><label for="bulk-py">Python</label>
+  <input type="radio" name="g-bulk" id="bulk-js"><label for="bulk-js">Node.js</label>
+  <input type="radio" name="g-bulk" id="bulk-rs"><label for="bulk-rs">Rust</label>
+  <div class="panel">
+<pre><code><span class="k">with</span> db.bulk_import() <span class="k">as</span> imp:     <span class="c"># finishes on a clean exit, cancels if the block raises</span>
+    <span class="k">for</span> batch <span class="k">in</span> batches:
+        <span class="k">with</span> imp.chunk() <span class="k">as</span> tx:
+            <span class="k">for</span> s, p, o <span class="k">in</span> batch:
+                tx.assert_(s, p, o)
+print(imp.summary.progress.chunks, imp.summary.analyzed)   <span class="c"># 4 True</span></code></pre>
+  </div>
+  <div class="panel">
+<pre><code><span class="k">const</span> imp = db.bulkImport();
+<span class="k">try</span> {
+  <span class="k">for</span> (<span class="k">const</span> batch <span class="k">of</span> batches) {
+    imp.chunk((tx) =&gt; { <span class="k">for</span> (<span class="k">const</span> [s, p, o] <span class="k">of</span> batch) tx.assert(s, p, o); });
+  }
+} <span class="k">finally</span> {
+  <span class="k">const</span> summary = imp.finish();   <span class="c">// { progress, analyzed, statisticsDue, maintenanceError }</span>
+}</code></pre>
+  </div>
+  <div class="panel">
+<pre><code><span class="k">let</span> <span class="k">mut</span> import = db.bulk_import()?;
+<span class="k">for</span> batch <span class="k">in</span> 0..4 {
+    import.chunk(|tx| {
+        <span class="k">for</span> i <span class="k">in</span> 0..250 {
+            tx.assert(v(&amp;format!(<span class="s">"doc{batch}-{i}"</span>)), v(<span class="s">"mentions"</span>), v(<span class="s">"acme"</span>), Valid::ALWAYS)?;
+        }
+        Ok(())
+    })?;
+}
+<span class="k">let</span> summary = import.finish();       <span class="c">// one ANALYZE; summary.analyzed == true</span></code></pre>
+  </div>
+</div>
+<p><strong>Limits.</strong> It is not one atomic import. A failing chunk rolls back alone and earlier chunks stay committed. Cancelling, or dropping the session in Rust, keeps the committed chunks and skips the analysis. A failed final analysis is reported in <code>maintenance_error</code>, never a rollback. There is no new file-format parser: you still turn your data into statements.</p>
+
+<h2 id="lftj">7. A join operator for cyclic patterns</h2>
+<p><strong>What it is.</strong> A native leapfrog triejoin for pure cyclic patterns, such as triangles <code>a→b→c→a</code>. It runs inside SQLite as a table function and is off by default. When on, the planner routes a cyclic pattern to it only if the pattern is large enough, and <code>explain</code> tells you which route it took and why.</p>
+<p><strong>Why an agent wants it.</strong> Questions like “which of my contacts know each other?” are cycles. On skewed graphs SQLite’s nested loops can get very slow there.</p>
+<div class="tabs">
+  <input type="radio" name="g-lftj" id="lftj-py" checked><label for="lftj-py">Python</label>
+  <input type="radio" name="g-lftj" id="lftj-js"><label for="lftj-js">Node.js</label>
+  <input type="radio" name="g-lftj" id="lftj-rs"><label for="lftj-rs">Rust</label>
+  <div class="panel">
+<pre><code>db = Database(<span class="s">"memory.db"</span>, lftj=<span class="k">True</span>, lftj_min_rows=0)   <span class="c"># 0: route even small patterns</span>
+q = <span class="s">"SELECT * WHERE { ?a v:knows ?b . ?b v:knows ?c . ?c v:knows ?a }"</span>
+plan = db.now().explain_sparql(q)
+[(r[<span class="s">"kind"</span>], r[<span class="s">"note"</span>]) <span class="k">for</span> r <span class="k">in</span> plan[<span class="s">"regions"</span>]]
+<span class="c"># [('sql', 'none'), ('nativeLftj', 'lftjNative')]</span></code></pre>
+  </div>
+  <div class="panel">
+<pre><code><span class="k">const</span> db = Database.open(<span class="s">"memory.db"</span>, { lftj: <span class="k">true</span>, lftjMinRows: 0 });
+<span class="k">const</span> plan = db.now().explainSparql(q);
+plan.regions.map((r) =&gt; [r.kind, r.note]);   <span class="c">// [["sql", "none"], ["nativeLftj", "lftjNative"]]</span>
+<span class="c">// with lftj off: [["sql", "cyclicLftjDisabled"]]</span></code></pre>
+  </div>
+  <div class="panel">
+<pre><code><span class="k">let</span> opts = OpenOptions {
+    planner: PlannerOptions { lftj: LftjConfig { enabled: <span class="k">true</span>, min_rows_estimate: 0 } },
+    ..OpenOptions::default()
+};
+<span class="k">let</span> db = Db::open(path, opts)?;
+<span class="k">let</span> plan = db.now().explain_sparql(q)?;
+<span class="k">for</span> r <span class="k">in</span> &amp;plan.regions { println!(<span class="s">"{:?} {:?}"</span>, r.kind, r.note); }
+<span class="c">// Sql None
+// NativeLftj LftjNative</span></code></pre>
+  </div>
+</div>
+<p><strong>Limits.</strong> Only pure cyclic basic graph patterns (up to 32 variables) go to the operator. Everything else, and anything below <code>min_rows_estimate</code> (100 000 statements by default), stays in SQL, and <code>explain</code> says why: <code>cyclicLftjDisabled</code>, <code>lftjUnavailable</code>, <code>lftjUnsupportedShape</code> or <code>lftjBelowEstimate</code>. Results are the same on both routes, and budgets still apply. The operator builds all its output rows in memory before SQLite reads them, so very large outputs cost memory. The speed-ups so far are from a small benchmark, described in <a href="bounded-queries-bulk-loads.html#lftj">Bounded queries and bulk loads</a>.</p>
+
+<h2 id="mcp">8. An MCP server for agents</h2>
+<p><strong>What it is.</strong> <code>tiramemsu-mcp</code> is a separate binary that serves one memory file to an MCP client, such as Claude Code or Claude Desktop, over stdio. It has fourteen typed tools: write verbs (<code>assert</code>, <code>confirm</code>, <code>supersede</code>, <code>import_bundle</code>), read tools (<code>query</code>, <code>text_search</code>, <code>conflicts</code>, <code>preview_bundle</code>, <code>dependents</code>, <code>export_bundle</code>) and the saved-answer tools.</p>
+<p><strong>Why an agent wants it.</strong> The agent gets a memory without anyone writing glue code, and the memory keeps its rules: queries only read, every call has a budget, and answers say which statements back them.</p>
+<pre><code><span class="c"># build and install from the repository (it is not on crates.io yet)</span>
+cargo install --git https://github.com/Volland/tiramemsu tiramemsu-mcp
+
+<span class="c"># register it with Claude Code</span>
+claude mcp add tiramemsu -- tiramemsu-mcp --db ./memory.db --text-index
+
+<span class="c"># or a read-only memory, with tighter bounds</span>
+claude mcp add tiramemsu-ro -- tiramemsu-mcp --db ./memory.db --read-only --timeout-ms 5000 --max-rows 500</code></pre>
+<p><strong>Limits.</strong> Local stdio only: no HTTP transport, no users, no remote server. The server opens only the file it was started with; an argument such as <code>path</code> or <code>db</code> is refused with <code>PathNotAllowed</code>. There is no raw SQL and no update through <code>query</code>. It does not extract facts from text or compute embeddings; the agent decides what to remember.</p>
+<p>More in <a href="mcp-memory.html">Give your agent a memory over MCP</a>.</p>
+
+<h2 id="cargo-features">9. Optional query front ends</h2>
+<p><strong>What it is.</strong> The Rust crate <code>tiramemsu</code> now has Cargo features. <code>exec</code> is the shared query engine: the IR, the planner, the path engine and the cyclic-join operator. <code>sparql</code> and <code>cypher</code> are the two front ends, and each one brings in <code>exec</code>. The default build has both, as before. With <code>default-features = false</code> you get the core tier: transactions, speculation, the <code>now</code>, <code>as_of</code> and <code>history</code> views, <code>triples</code>, dependents, fact bundles, bundle previews, conflict review, text recall, bulk import and query budgets, with no parser at all.</p>
+<p><strong>Why an agent wants it.</strong> An agent that only writes facts and reads them back by pattern or by words does not need two query parsers in its binary. A smaller build compiles faster and has less code to audit.</p>
+<pre><code><span class="c"># Cargo.toml: core only, no query engine and no parser</span>
+tiramemsu = { git = "https://github.com/Volland/tiramemsu", default-features = false }
+
+<span class="c"># SPARQL and paths, no Cypher parser</span>
+tiramemsu = { git = "https://github.com/Volland/tiramemsu", default-features = false, features = ["sparql"] }</code></pre>
+<p><strong>Limits.</strong> A disabled API is missing at compile time, not an error at run time. Saved answers need both front ends. Build <code>OpenOptions</code> with <code>..OpenOptions::default()</code>, because its query-engine fields exist only with <code>exec</code>. The file format does not depend on the features: a file written by a core-only build opens in a full build, and the other way round. The JSON bridge, the MCP server and the Node and Python packages always use the full build.</p>
+<div class="note"><strong>Migrating from 0.2.</strong> <code>default-features = false</code> used to build both front ends anyway, and the <code>sparql</code> feature only switched on a test suite. Now it means the core tier. If you declared the dependency with <code>default-features = false</code> and use SPARQL, Cypher or paths, add <code>features = ["sparql", "cypher"]</code> (or the one you use). If you kept the defaults, nothing changes.</div>
+
+<h2>Still to come</h2>
+<p>A WASM host, so the store can run in a browser, is still not shipped. The Node.js and Python packages build and pass their tests but are not on npm or PyPI yet. The <a href="../#numbers">numbers on the home page</a> will be refreshed at the release.</p>
+
+<p><a href="recall-review-recheck.html">Next: recall, review, recheck →</a></p>
+</article>
+
+<footer><div class="wrap">
+  <span>Tiramemsu · MIT OR Apache-2.0 · <a href="https://github.com/Volland/tiramemsu">github.com/Volland/tiramemsu</a></span>
+  <span><a href="../">Home</a> · <a href="./">All articles</a></span>
+  <span><a href="../impressum.html">Impressum</a> · <a href="../datenschutz.html">Datenschutz</a> · <a href="../agb.html">AGB</a></span>
+</div></footer>
+</body>
+</html>

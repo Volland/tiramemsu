@@ -38,7 +38,16 @@
     <div class="card"><span class="tag">Graphs</span><h3>Named graphs as tags</h3><p>A graph is a node, or a statement, and membership is one more layer statement. <code>GRAPH</code>, <code>FROM</code> and <code>WITH</code> work with no new column or table.</p></div>
     <div class="card"><span class="tag">Metagraphs</span><h3>Edges that hold graphs</h3><p>An edge is a node, and a node or an edge can hold a subgraph. Nest them, fold and unfold them, and ask how the structure looked last week. <a href="articles/metagraphs.html">Read more</a>.</p></div>
     <div class="card"><span class="tag">Embedded</span><h3>One file, one crate</h3><p>Rust library over bundled SQLite (WAL, STRICT). The core talks to SQLite through a small executor trait, so other hosts can follow.</p></div>
+    <div class="card"><span class="tag">Recall</span><h3>Find it by words</h3><p>Text recall over string values, in any view. Each hit comes with its evidence: confidence, confirmations, authors and age, ranked in a fixed, named order. From Rust, SPARQL and Cypher.</p></div>
+    <div class="card"><span class="tag">Agents</span><h3>An MCP server</h3><p><code>tiramemsu-mcp</code> serves one memory file to Claude Code or Claude Desktop as typed tools. Queries only read, every call has a budget, and answers say which statements back them.</p></div>
+    <div class="card"><span class="tag">Recheck</span><h3>Answers that know they are stale</h3><p>Save a query with the statements it cited. Later writes mark it <code>stale</code> or <code>recheck</code>, each mark once, and only a successful refresh makes it fresh again.</p></div>
+    <div class="card"><span class="tag">Review</span><h3>Conflicts and import previews</h3><p>See where two values overlap in valid time, with every statement’s evidence. Dry-run an import from another memory before you take it. Neither one decides for you.</p></div>
+    <div class="card"><span class="tag">Journeys</span><h3>Paths that respect time</h3><p>Ask who could have heard it from Ana after March 1st, in SPARQL or Cypher, with the earliest arrival. Every path query can say whether it was complete or cut at a cap.</p></div>
+    <div class="card"><span class="tag">Budgets</span><h3>Deadlines and cancellation</h3><p>Bound a call by time, rows, bytes or the wait for a reader, or cancel it. Over a limit is a typed error, never a silent prefix, and a stopped write leaves no trace.</p></div>
+    <div class="card"><span class="tag">Bulk</span><h3>Large loads in chunks</h3><p>A bulk import session commits in chunks, holds the write lease, and refreshes planner statistics once at the end instead of after every big commit.</p></div>
+    <div class="card"><span class="tag">Joins</span><h3>Leapfrog triejoin for cycles</h3><p>An opt-in native operator for triangle-shaped patterns, with <code>explain</code> saying which route ran and why. Up to 12× faster on a small hub-and-spoke benchmark, same counts.</p></div>
   </div>
+  <p class="sub">New in 0.3: <a href="articles/whats-new-0-3.html">what’s new, with examples in every language →</a></p>
 </div></section>
 
 <section id="feedback"><div class="wrap">
@@ -161,6 +170,11 @@ db.now().cypher(<span class="s">"MATCH (p)-[r:worksAt]-&gt;(o) RETURN p, o, r.co
     </div>
   </div>
   <p class="sub">Every binding wraps the same core, so all three see the same past. See the <a href="https://github.com/Volland/tiramemsu/tree/main/bindings">bindings</a> for the full API.</p>
+  <h3 id="agent">Use it from an agent</h3>
+  <p class="sub">No code needed: register the MCP server and the agent gets tools such as <code>assert</code>, <code>query</code>, <code>text_search</code> and <code>check_answers</code>. <a href="articles/mcp-memory.html">How it works →</a></p>
+<pre><code><span class="c"># install from the repository, then register it with Claude Code</span>
+cargo install --git https://github.com/Volland/tiramemsu tiramemsu-mcp
+claude mcp add tiramemsu -- tiramemsu-mcp --db ./memory.db --text-index</code></pre>
 </div></section>
 
 <section id="numbers"><div class="wrap">
@@ -172,7 +186,7 @@ db.now().cypher(<span class="s">"MATCH (p)-[r:worksAt]-&gt;(o) RETURN p, o, r.co
     <div class="card"><h3>Cypher</h3><p>2 615 of 3 880 openCypher TCK scenarios (67 %). Temporal types, <code>CALL</code> and a few dual-view cases are deferred and listed.</p></div>
     <div class="card"><h3>Speed</h3><p>Raw SQLite lookups on its schema take about 4 µs at 11 million statements. Statements cost about 150 bytes each with all indexes. <a href="articles/tiramemsu-vs-oxilite.html#numbers">Details and caveats</a>.</p></div>
   </div>
-  <p class="note"><strong>Known limits.</strong> As-of lookups slow down as one key collects many updates. Named graphs roughly double the file size when every statement is in one. Decimals come back as doubles in SPARQL. There is no server, WASM binding or MCP crate yet, and the Node.js and Python packages are built but not published.</p>
+  <p class="note"><strong>Known limits.</strong> As-of lookups slow down as one key collects many updates. Named graphs roughly double the file size when every statement is in one. Decimals come back as doubles in SPARQL. There is no network server and no WASM host yet; the MCP server is local and speaks stdio only. Neither the crates nor the Node.js and Python packages are published yet.</p>
 </div></section>
 
 <section id="articles"><div class="wrap">
@@ -183,6 +197,11 @@ db.now().cypher(<span class="s">"MATCH (p)-[r:worksAt]-&gt;(o) RETURN p, o, r.co
     <li class="card"><h3><a href="articles/layered-graphs.html">Layered graphs, explained</a></h3><p>Why giving every fact an id turns provenance, confidence and beliefs into ordinary queries.</p></li>
     <li class="card"><h3><a href="articles/tiramemsu-vs-oxilite.html">How tiramemsu differs from oxilite</a></h3><p>Same author, same SQLite base, different answers to “what is a statement?”. With a benchmark.</p></li>
     <li class="card"><h3><a href="articles/time-travel.html">Time travel and bitemporality, explained</a></h3><p>Two clocks, when we knew and when it was true, how to query the past in Rust, SPARQL and Cypher, and why an agent wants both.</p></li>
+    <li class="card"><h3><a href="articles/whats-new-0-3.html">What’s new in 0.3</a></h3><p>Nine new features, each with what it is, why an agent wants it, examples in Python, Node.js and Rust, and its limits.</p></li>
+    <li class="card"><h3><a href="articles/recall-review-recheck.html">Recall, review, recheck</a></h3><p>How an agent’s memory finds things by words, sees where sources disagree, and knows when a saved answer has gone stale.</p></li>
+    <li class="card"><h3><a href="articles/mcp-memory.html">Give your agent a memory over MCP</a></h3><p>Setting up tiramemsu-mcp in Claude Code and Claude Desktop: the tools, read-only mode, budgets, provenance coverage and a sample session.</p></li>
+    <li class="card"><h3><a href="articles/journeys-in-time.html">Journeys that respect time</a></h3><p>Time-respecting paths in SPARQL and Cypher, earliest arrival, and how a query says whether its paths were complete.</p></li>
+    <li class="card"><h3><a href="articles/bounded-queries-bulk-loads.html">Bounded queries and bulk loads</a></h3><p>Budgets, cancellation and result limits, bulk import sessions, and a join operator for cyclic patterns with a small triangle benchmark.</p></li>
   </ul>
 </div></section>
 </main>

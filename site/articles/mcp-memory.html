@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Give your agent a memory over MCP: tiramemsu</title>
+<meta name="description" content="Set up tiramemsu-mcp in Claude Code or Claude Desktop: the fourteen tools, read-only mode, per-call budgets, provenance coverage, and a sample session with real responses.">
+<link rel="icon" href="../assets/logo.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+<header class="top"><div class="wrap">
+  <a class="brand" href="../"><img src="../assets/logo.svg" alt="">Tiramemsu</a>
+  <nav class="menu"><a href="../#features">Features</a><a href="../#start">Quick start</a><a href="./" aria-current="page">Articles</a><a href="https://github.com/Volland/tiramemsu">GitHub</a></nav>
+</div></header>
+
+<article class="post">
+<h1>Give your agent a memory over MCP</h1>
+<p class="meta">Tiramemsu articles · 3 October 2026</p>
+
+<p>Until now, using tiramemsu from an agent meant writing code: a Rust program, or a Python or Node.js script, that turns the agent’s intentions into calls. That is fine when you build the agent. It is a lot of work when you just want Claude Code to remember things between sessions.</p>
+<p><code>tiramemsu-mcp</code> closes that gap. It is a small binary that serves one memory file over the Model Context Protocol (MCP). Any MCP client that speaks stdio can use it: Claude Code, Claude Desktop, or your own. The agent sees typed tools such as <code>assert</code>, <code>query</code> and <code>text_search</code>, and the memory keeps all of its rules.</p>
+
+<h2>Install</h2>
+<p>The server is a separate crate, so the database crates carry no protocol code. It is not on crates.io yet, so install it from the repository. SQLite is compiled in, and the binary has no other dependencies.</p>
+<pre><code>cargo install --git https://github.com/Volland/tiramemsu tiramemsu-mcp
+tiramemsu-mcp --help</code></pre>
+
+<h2>Register it</h2>
+<h3>Claude Code</h3>
+<pre><code><span class="c"># a memory for this project, with text recall</span>
+claude mcp add tiramemsu -- tiramemsu-mcp --db ./memory.db --text-index
+
+<span class="c"># the same file, read-only, for an agent that should only look</span>
+claude mcp add tiramemsu-ro -- tiramemsu-mcp --db ./memory.db --read-only --text-index</code></pre>
+<p>Everything after <code>--</code> is the command Claude Code starts. The file is created if it does not exist.</p>
+<h3>Claude Desktop</h3>
+<p>Add the server to <code>claude_desktop_config.json</code>. Use an absolute path: the working directory of a desktop app is not yours.</p>
+<pre><code>{
+  "mcpServers": {
+    "tiramemsu": {
+      "command": "tiramemsu-mcp",
+      "args": ["--db", "/Users/me/memory.db", "--text-index"]
+    }
+  }
+}</code></pre>
+
+<h2>Options</h2>
+<table>
+<thead><tr><th>Flag</th><th>Meaning</th><th>Default</th></tr></thead>
+<tbody>
+<tr><td><code>--db &lt;path&gt;</code></td><td>The database file. The only file the server opens.</td><td>required</td></tr>
+<tr><td><code>--read-only</code></td><td>Hide and refuse the tools that write</td><td>off</td></tr>
+<tr><td><code>--timeout-ms</code></td><td>Deadline of one tool call</td><td>30 000</td></tr>
+<tr><td><code>--reader-timeout-ms</code></td><td>How long to wait for a free read connection</td><td>no limit</td></tr>
+<tr><td><code>--max-rows</code></td><td>Rows one call may decode</td><td>10 000</td></tr>
+<tr><td><code>--max-bytes</code></td><td>Bytes one call may produce</td><td>8 MiB</td></tr>
+<tr><td><code>--text-index</code></td><td>Build the text index at open, for <code>text_search</code></td><td>off</td></tr>
+</tbody>
+</table>
+<p><code>0</code> turns a bound off.</p>
+
+<h2>The tools</h2>
+<p>There are fourteen. Arguments use the JSON forms of the bindings: a plain string is a string literal, <code>{"iri": "urn:tiramemsu:v:alice"}</code> is an IRI (which queries write <code>v:alice</code>), and <code>{"stmt": 7}</code> is a statement id. A view is <code>{"kind": "now" | "asOf" | "history", "tx": n, "validAt": time}</code> and defaults to now. Every read echoes the view it used, so the agent always knows <em>when</em> it was looking.</p>
+<table>
+<thead><tr><th>Tool</th><th>What it does</th></tr></thead>
+<tbody>
+<tr><td><code>assert</code></td><td>Add a fact, with optional valid time and graph. Repeating a fact returns the existing id with <code>new: false</code></td></tr>
+<tr><td><code>confirm</code></td><td>Record that another source agrees with a fact</td></tr>
+<tr><td><code>supersede</code></td><td>Correct a fact; its layers move to the new one and the old one stays in history</td></tr>
+<tr><td><code>import_bundle</code></td><td>Import a fact with its layers from another memory</td></tr>
+<tr><td><code>query</code></td><td>Run a SPARQL or Cypher read, in any view, with provenance</td></tr>
+<tr><td><code>text_search</code></td><td>Recall statements by words, with evidence per hit</td></tr>
+<tr><td><code>conflicts</code></td><td>List disagreeing values with their evidence</td></tr>
+<tr><td><code>preview_bundle</code></td><td>Dry-run an import and report what it would do</td></tr>
+<tr><td><code>dependents</code></td><td>What retracting a fact would take with it</td></tr>
+<tr><td><code>export_bundle</code></td><td>A fact with its layers and evidence, to hand to another memory</td></tr>
+<tr><td><code>save_answer</code>, <code>saved_answers</code>, <code>check_answers</code>, <code>refresh_answer</code></td><td>Keep answers and learn when they go stale (see <a href="recall-review-recheck.html">Recall, review, recheck</a>)</td></tr>
+</tbody>
+</table>
+<p>There is no <code>retract</code> tool. To change its mind, an agent supersedes a fact with a correction. Forgetting on purpose stays a decision for code you write, not for a tool call.</p>
+
+<h2>A sample session</h2>
+<p>These are real responses from the server (the <code>structuredContent</code> of each tool result), trimmed only where marked. The agent starts with an empty file.</p>
+<p>It learns where Alice works, and makes a note:</p>
+<pre><code>→ assert {"s": {"iri": "urn:tiramemsu:v:alice"}, "p": {"iri": "urn:tiramemsu:v:worksAt"},
+          "o": {"iri": "urn:tiramemsu:v:acme"}, "validFrom": "2020-01-01"}
+← {"eid": 1, "new": true, "t": 1}
+
+→ assert {"s": {"iri": "urn:tiramemsu:v:alice"}, "p": {"iri": "urn:tiramemsu:v:note"},
+          "o": "met at the Lisbon offsite"}
+← {"eid": 2, "new": true, "t": 2}</code></pre>
+<p>Later, it asks, and the answer says which statement backs it:</p>
+<pre><code>→ query {"language": "sparql", "text": "SELECT ?o WHERE { v:alice v:worksAt ?o }"}
+← {"language": "sparql", "view": {"kind": "now"},
+   "result": {"kind": "select", "vars": ["o"],
+              "rows": [{"o": {"iri": "urn:tiramemsu:v:acme"}}],
+              "provenance": [[{"stmt": 1}]]},
+   "provenance": {"coverage": "complete", "gaps": []}}</code></pre>
+<p>It remembers a word, not a pattern:</p>
+<pre><code>→ text_search {"text": "lisbon", "limit": 5}
+← {"view": {"kind": "now"},
+   "hits": [{"eid": 2, "rank": 1, "text": "met at the Lisbon offsite",
+             "s": {"iri": "urn:tiramemsu:v:alice"}, "p": {"iri": "urn:tiramemsu:v:note"},
+             "evidence": {"confidence": null, "confirmations": 0, "authors": 0, "tAdd": 2, …}, …}]}</code></pre>
+<p>It saves the employer answer, then learns that it was wrong and corrects it:</p>
+<pre><code>→ save_answer {"name": "employer", "language": "sparql", "text": "SELECT ?o WHERE { v:alice v:worksAt ?o }"}
+← {"answer": {"name": "employer", "status": "fresh", "dependencies": [1], "coverage": ["mutableView"], …}}
+
+→ supersede {"eid": 1, "patch": {"o": {"iri": "urn:tiramemsu:v:globex"}}}
+← {"old": 1, "eid": 3, "t": 3, "retracted": [{"eid": 1, "kind": "supersede"}]}
+
+→ check_answers {}
+← {"invalidations": [{"name": "employer", "status": "stale", "cause": "supportRetracted", "t": 3,
+                      "event": {"eid": 1, "kind": "supersede", "op": "retract", "t": 3}}]}
+
+→ refresh_answer {"name": "employer"}
+← {"answer": {"status": "fresh", "dependencies": [3],
+              "result": {"rows": [{"o": {"iri": "urn:tiramemsu:v:globex"}}], …}, …}}</code></pre>
+<p>And it can still say what it believed before the correction:</p>
+<pre><code>→ query {"language": "sparql", "text": "SELECT ?o WHERE { v:alice v:worksAt ?o }",
+         "view": {"kind": "asOf", "tx": 1}}
+← {"view": {"kind": "asOf", "tx": 1},
+   "result": {"rows": [{"o": {"iri": "urn:tiramemsu:v:acme"}}], …},
+   "provenance": {"coverage": "complete", "gaps": []}}</code></pre>
+
+<h2>The rules it keeps</h2>
+<h3>Queries only read</h3>
+<p>The <code>query</code> tool refuses a SPARQL update or a Cypher write clause before anything runs. There is no raw SQL. Writes go through the typed verbs, so every write is a plain transaction with a number and a place in history.</p>
+<pre><code>→ query {"language": "sparql", "text": "INSERT DATA { v:a v:b v:c }"}
+← isError: {"code": "Unsupported", "message": "unsupported: update in a query-only call"}</code></pre>
+
+<h3>One file, no other</h3>
+<p>The server opens only the file it was started with. An argument such as <code>path</code>, <code>db</code> or <code>database</code> is refused, and so is any argument a tool does not declare.</p>
+<pre><code>← isError: {"code": "PathNotAllowed",
+            "message": "argument \"path\" would select a database; this server only serves the file it was started with"}</code></pre>
+
+<h3>Read-only mode</h3>
+<p>With <code>--read-only</code>, the server lists seven tools: <code>query</code>, <code>dependents</code>, <code>export_bundle</code>, <code>conflicts</code>, <code>preview_bundle</code>, <code>text_search</code> and <code>saved_answers</code>. The write verbs are hidden, and calling one anyway fails with <code>ReadOnly</code>. The tools that save, check and refresh answers are hidden too, because they write answer records, even though they never write facts. <code>preview_bundle</code> stays: its dry run leaves the graph and history unchanged.</p>
+
+<h3>Every call has a budget</h3>
+<p>The flags above become one <code>QueryBudget</code> per tool call. A call past a bound fails with a structured error, commits nothing, and the server goes on serving. A result over the row limit is an error, never a quietly cut list, so the agent knows to ask a narrower question.</p>
+<pre><code>tiramemsu-mcp --db ./memory.db --max-rows 1
+→ query {"language": "sparql", "text": "SELECT * WHERE { ?s ?p ?o }"}
+← isError: {"code": "ResultLimitExceeded", "message": "result exceeds the limit of 1 rows"}</code></pre>
+
+<h3>Provenance coverage</h3>
+<p>A SPARQL <code>SELECT</code> lists, for each row, the statements behind it. The response also says how far to trust that list. <code>complete</code> means every row is fully cited. <code>incomplete</code> comes with the gaps. A <code>+</code> path, for example, cites nothing for the steps along the way:</p>
+<pre><code>→ query {"language": "sparql", "text": "SELECT ?x WHERE { v:alice v:worksAt+ ?x }"}
+← {"provenance": {"coverage": "incomplete", "gaps": ["recursivePath"],
+                  "reason": "the query has a recursive path, whose statements are not cited"},
+   "result": {"rows": [{"x": {"iri": "urn:tiramemsu:v:acme"}}], "provenance": [[]]}, …}</code></pre>
+<p><code>unavailable</code> means nothing was cited: a Cypher query, an <code>ASK</code> or a <code>CONSTRUCT</code>, or provenance turned off. An agent that quotes its sources should treat only <code>complete</code> as a full citation.</p>
+
+<h2>What it does not do</h2>
+<ul>
+  <li>It is local and stdio only. There is no HTTP transport, no users and no remote server.</li>
+  <li>It does not extract facts from text and does not compute embeddings. The agent decides what to remember and how to phrase it.</li>
+  <li>It serves one file per process. Two memories are two servers.</li>
+</ul>
+
+<h2>A note on vocabulary</h2>
+<p>The server’s instructions tell the agent the basics: facts have ids, layers are facts about facts, nothing is deleted, and <code>v:alice</code> is <code>urn:tiramemsu:v:alice</code>. Agents do better with a little more. A line in your project’s <code>CLAUDE.md</code>, such as “store people as <code>v:firstname</code>, use <code>v:worksAt</code>, <code>v:livesIn</code> and <code>v:note</code>, and put a <code>v:confidence</code> on facts you are not sure of”, keeps the memory consistent across sessions.</p>
+
+<p><a href="journeys-in-time.html">Next: journeys that respect time →</a></p>
+</article>
+
+<footer><div class="wrap">
+  <span>Tiramemsu · MIT OR Apache-2.0 · <a href="https://github.com/Volland/tiramemsu">github.com/Volland/tiramemsu</a></span>
+  <span><a href="../">Home</a> · <a href="./">All articles</a></span>
+  <span><a href="../impressum.html">Impressum</a> · <a href="../datenschutz.html">Datenschutz</a> · <a href="../agb.html">AGB</a></span>
+</div></footer>
+</body>
+</html>

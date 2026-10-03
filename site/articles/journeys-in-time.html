@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Journeys that respect time: tiramemsu</title>
+<meta name="description" content="Time-respecting paths in tiramemsu’s SPARQL and Cypher: why plain paths give wrong answers about chains of events, how earliest arrival works, and how a query reports whether its paths were complete.">
+<link rel="icon" href="../assets/logo.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+<header class="top"><div class="wrap">
+  <a class="brand" href="../"><img src="../assets/logo.svg" alt="">Tiramemsu</a>
+  <nav class="menu"><a href="../#features">Features</a><a href="../#start">Quick start</a><a href="./" aria-current="page">Articles</a><a href="https://github.com/Volland/tiramemsu">GitHub</a></nav>
+</div></header>
+
+<article class="post">
+<h1>Journeys that respect time</h1>
+<p class="meta">Tiramemsu articles · 3 October 2026</p>
+
+<p>Ana tells Ben a secret on the 2nd of March. Ben meets Cara on the 5th. Cara met Dan on the 1st. Who could know the secret?</p>
+<p>Ben and Cara, but not Dan: Cara met Dan before she could have heard it. Any person gets this right. A plain graph path gets it wrong, because <code>met+</code> follows edges without looking at when they happened. It says Dan, too. This article is about asking that question correctly in SPARQL and Cypher, and about knowing whether a path answer is complete.</p>
+
+<h2>The data</h2>
+<p>Each meeting is a statement with a <a href="time-travel.html">valid time</a>: the day it happened, as a half-open interval. Ben also met Eve, in February, long before Ana spoke to him.</p>
+<pre><code><span class="k">with</span> db.transact() <span class="k">as</span> tx:
+    tx.assert_(ana,  met, ben,  valid_from=<span class="s">"2026-03-02"</span>, valid_to=<span class="s">"2026-03-03"</span>)
+    tx.assert_(ben,  met, cara, valid_from=<span class="s">"2026-03-05"</span>, valid_to=<span class="s">"2026-03-06"</span>)
+    tx.assert_(cara, met, dan,  valid_from=<span class="s">"2026-03-01"</span>, valid_to=<span class="s">"2026-03-02"</span>)
+    tx.assert_(ben,  met, eve,  valid_from=<span class="s">"2026-02-20"</span>, valid_to=<span class="s">"2026-02-21"</span>)</code></pre>
+<p>A plain path from Ana finds everyone:</p>
+<pre><code>db.now().sparql(<span class="s">"SELECT ?who WHERE { v:ana v:met+ ?who }"</span>)
+<span class="c"># ben, cara, dan, eve</span></code></pre>
+
+<h2>The hop rule</h2>
+<p>A time-respecting path, or <em>journey</em>, carries a clock τ. It starts at a time you give, or at minus infinity. A hop over a statement valid during <code>[from, to)</code> is allowed only if the statement is still valid after τ (<code>to &gt; τ</code>, or no end). Taking the hop moves the clock to <code>max(τ, from)</code>: you cannot use a meeting before it happens, so you wait for it. The clock never goes back.</p>
+<p>Start at the 1st of March. Ana meets Ben on the 2nd: allowed, the clock moves to the 2nd. Ben meets Cara on the 5th: allowed, clock at the 5th. Cara met Dan on the 1st, and that interval ended on the 2nd: not allowed. Ben met Eve in February: not allowed. The answer is Ben and Cara.</p>
+<p>The time when the walk reaches a node is its <strong>arrival</strong>. A longer walk can arrive earlier than a shorter one, so the engine keeps the earliest arrival for each node and goes on while some node improves.</p>
+
+<h2>In SPARQL</h2>
+<p>A <code>SERVICE</code> scope turns every property path inside it into a journey. <code>tm:arrival</code> binds the earliest arrival at the end of a path.</p>
+<pre><code>SELECT ?who ?t WHERE {
+  SERVICE &lt;urn:tiramemsu:tm:timeRespecting/2026-03-01&gt; {
+    v:ana v:met+ ?who .
+    ?who tm:arrival ?t
+  }
+} ORDER BY ?t</code></pre>
+<pre><code><span class="c"># who   t</span>
+<span class="c"># ben   1772409600000   (2026-03-02)</span>
+<span class="c"># cara  1772668800000   (2026-03-05)</span></code></pre>
+<ul>
+  <li><strong>The start</strong> goes after the slash: epoch milliseconds, an <code>xsd:date</code> such as <code>2026-03-01</code> (midnight UTC), an <code>xsd:dateTime</code>, or <code>$name</code> for a parameter. Leave it out to start at minus infinity.</li>
+  <li><strong>Parameters</strong> come from the call: <code>params={"since": "2026-03-01"}</code> in Python, <code>{ params: { since: "2026-03-01" } }</code> in Node.js, <code>SparqlOptions::params</code> in Rust, with <code>timeRespecting/$since</code> in the query.</li>
+  <li><strong>Arrivals</strong> are integers of epoch milliseconds. With no start and no valid time on any hop, the arrival is minus infinity and <code>?t</code> stays unbound.</li>
+  <li><strong>Which paths count.</strong> Anything with <code>*</code>, <code>+</code>, <code>?</code>, <code>^</code> or <code>|</code>. A plain sequence <code>v:a/v:b</code> is split into triple patterns by the parser and is not a journey. Write <code>(v:a/v:b)+</code> if you mean one.</li>
+  <li><strong>Other scopes still apply.</strong> Nest it in <code>SERVICE &lt;urn:tiramemsu:tm:asOf/150&gt;</code> to ask what the journeys looked like by what we knew at transaction 150. <code>GRAPH</code> and <code>FROM</code> still restrict every hop.</li>
+</ul>
+
+<h2>In Cypher</h2>
+<p>Cypher gets a modifier on <code>MATCH</code>. <code>AFTER</code> sets the start and <code>ARRIVAL AS</code> names the arrival.</p>
+<pre><code>MATCH TIME RESPECTING AFTER date('2026-03-01') ARRIVAL AS t
+      (a {`@id`: 'v:ana'})-[:met*]-&gt;(who)
+RETURN who, min(t) AS arrived ORDER BY arrived</code></pre>
+<p><code>AFTER</code> takes an integer, a <code>$parameter</code>, <code>datetime('…')</code> or <code>date('…')</code>. A Cypher variable-length pattern walks trails, so each row has the arrival of its own trail; <code>min(t)</code> gives the earliest per person. The result is the same two people.</p>
+
+<h2>From code</h2>
+<p>The query languages and the API run on the same engine, so they agree. In the bindings, <code>path</code> takes a <code>time_respecting</code> start (Python) or <code>timeRespecting</code> (Node.js), and in Rust <code>PathArgs::time_respecting</code>:</p>
+<pre><code>rep = db.now().path_report(ana, <span class="s">"met+"</span>, time_respecting=<span class="s">"2026-03-01"</span>)
+[row.end <span class="k">for</span> row <span class="k">in</span> rep.rows]   <span class="c"># [ben, cara]</span></code></pre>
+
+<h2>Was the answer complete?</h2>
+<p>Path searches have limits, and a cut answer looks just like a full one. So every path search now reports a verdict, and queries return it when asked (<code>path_completeness=True</code>, <code>pathCompleteness: true</code>, or <code>Solutions::path_completeness</code> in Rust):</p>
+<table>
+<thead><tr><th>Kind</th><th>Means</th><th>Complete?</th></tr></thead>
+<tbody>
+<tr><td><code>exhaustive</code></td><td>Nothing was left to explore</td><td>Yes</td></tr>
+<tr><td><code>bound</code></td><td>A hop bound you asked for stopped it, with more left to explore</td><td>Yes, within the bound you asked for</td></tr>
+<tr><td><code>cap</code></td><td>The database’s <code>path_max_hops</code> cut an unbounded pattern</td><td>No: longer paths may exist</td></tr>
+</tbody>
+</table>
+<p>The difference between <code>bound</code> and <code>cap</code> is who set the limit. If you asked for at most one hop, a one-hop answer is what you wanted:</p>
+<pre><code>db.now().path_report(ana, <span class="s">"met+"</span>, max_hops=1).completeness
+<span class="c"># PathCompleteness(kind='bound', max_hops=1, complete=True)</span></code></pre>
+<p>A Cypher <code>*</code> has no upper bound in the query, but it walks trails, so the engine cuts it at <code>path_max_hops</code> (15 by default). If the cut leaves anything unexplored, the verdict is <code>cap</code>. Here is a chain Ana → Ben → Cara on a database opened with <code>path_max_hops=1</code>:</p>
+<pre><code>db.now().cypher(<span class="s">"MATCH (a {`@id`: 'v:ana'})-[:met*]-&gt;(who) RETURN who"</span>, path_completeness=<span class="k">True</span>)
+<span class="c"># rows: ben only
+# PathCompleteness(kind='cap', max_hops=1, complete=False)</span></code></pre>
+<p>Two cases that may surprise:</p>
+<ul>
+  <li>A SPARQL <code>+</code> or <code>*</code> asks for reachability, which is finite, so it is not capped and reports <code>exhaustive</code>.</li>
+  <li>A bounded pattern such as Cypher <code>*1..2</code> carries its bound in the pattern itself. When the pattern has no move left, the search is <code>exhaustive</code> for what the pattern asked, even if longer chains exist in the data.</li>
+</ul>
+<p>Running out of the search-state budget (<code>path_max_states</code>) is never a verdict. It is the error <code>PathLimitExceeded</code>, so a huge search never comes back as a partial answer.</p>
+
+<h2>Limits</h2>
+<ul>
+  <li>A journey runs forward, so its start must be bound. A path bound only at its end is refused as unsupported.</li>
+  <li>The clock is valid time. A statement with no valid time is valid forever: it never blocks a hop and never moves the clock.</li>
+  <li>These are opt-in extensions of SPARQL and Cypher. Other stores will not understand them.</li>
+</ul>
+
+<h2>Why an agent wants this</h2>
+<p>Agents reason about causes. Could this email have influenced that decision? Could this person have known about the change when they signed? Which tasks were unblocked in time? Each one is a chain of events that must happen in order. A plain path answers a different, easier question, and an agent that does not know the difference will be confidently wrong. A journey answers the real question, says when each step became possible, and says whether it looked far enough.</p>
+
+<p><a href="bounded-queries-bulk-loads.html">Next: bounded queries and bulk loads →</a></p>
+</article>
+
+<footer><div class="wrap">
+  <span>Tiramemsu · MIT OR Apache-2.0 · <a href="https://github.com/Volland/tiramemsu">github.com/Volland/tiramemsu</a></span>
+  <span><a href="../">Home</a> · <a href="./">All articles</a></span>
+  <span><a href="../impressum.html">Impressum</a> · <a href="../datenschutz.html">Datenschutz</a> · <a href="../agb.html">AGB</a></span>
+</div></footer>
+</body>
+</html>

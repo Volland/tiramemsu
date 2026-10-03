@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Recall, review, recheck: tiramemsu</title>
+<meta name="description" content="How an agent’s memory finds, doubts and refreshes what it knows with tiramemsu: text recall with evidence ranking, conflict review, import previews and saved answers with conservative invalidation.">
+<link rel="icon" href="../assets/logo.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+<header class="top"><div class="wrap">
+  <a class="brand" href="../"><img src="../assets/logo.svg" alt="">Tiramemsu</a>
+  <nav class="menu"><a href="../#features">Features</a><a href="../#start">Quick start</a><a href="./" aria-current="page">Articles</a><a href="https://github.com/Volland/tiramemsu">GitHub</a></nav>
+</div></header>
+
+<article class="post">
+<h1>Recall, review, recheck</h1>
+<p class="meta">Tiramemsu articles · 3 October 2026</p>
+
+<p>A memory is only half the job. The other half is using it well: finding the right thing when you only half remember it, noticing when two things you remember cannot both be true, and knowing when an answer you worked out last week is no longer safe to repeat. People do this without thinking. An agent has to be told.</p>
+<p>Tiramemsu 0.3 adds one tool for each step. <strong>Text recall</strong> finds statements by words. <strong>Conflict review</strong> shows where memory disagrees with itself. <strong>Saved answers</strong> say when a stored answer has gone stale. None of them changes a fact on its own. They report, and the agent decides.</p>
+
+<h2>One small memory</h2>
+<p>Two agents have written about Alice. Agent 7 says she has worked at Acme since 2020, with a confidence of 0.9. Agent 9 says she worked at Initech from January to June 2024, with a confidence of 0.6. Each also left a note. The examples are Python; Rust and Node.js have the same calls, shown in <a href="whats-new-0-3.html">What’s new in 0.3</a>.</p>
+<pre><code><span class="k">from</span> tiramemsu <span class="k">import</span> Database, Iri
+
+V = <span class="s">"urn:tiramemsu:v:"</span>
+SYS_AUTHOR = Iri(<span class="s">"urn:tiramemsu:sys:author"</span>)
+alice, works_at, note, confidence, acme, initech, agent7, agent9 = (
+    Iri(V + n) <span class="k">for</span> n <span class="k">in</span> (<span class="s">"alice"</span>, <span class="s">"worksAt"</span>, <span class="s">"note"</span>, <span class="s">"confidence"</span>, <span class="s">"acme"</span>, <span class="s">"initech"</span>, <span class="s">"agent7"</span>, <span class="s">"agent9"</span>))
+
+db = Database(<span class="s">"memory.db"</span>, text_index=<span class="k">True</span>)
+
+<span class="k">with</span> db.transact() <span class="k">as</span> tx:
+    tx.meta(SYS_AUTHOR, agent7)                      <span class="c"># who wrote this transaction</span>
+    job = tx.assert_(alice, works_at, acme, valid_from=<span class="s">"2020-01-01"</span>)
+    tx.assert_(job, confidence, 0.9)
+    tx.assert_(alice, note, <span class="s">"met Alice at the Lisbon offsite, she leads the Acme data team"</span>)
+
+<span class="k">with</span> db.transact() <span class="k">as</span> tx:
+    tx.meta(SYS_AUTHOR, agent9)
+    other = tx.assert_(alice, works_at, initech, valid_from=<span class="s">"2024-01-01"</span>, valid_to=<span class="s">"2024-06-01"</span>)
+    tx.assert_(other, confidence, 0.6)
+    tx.assert_(alice, note, <span class="s">"Alice mentioned Lisbon when we talked about Initech"</span>)</code></pre>
+
+<h2>Recall: find it by words</h2>
+<p>The user says “what do we know about Alice and Lisbon?”. There is no graph pattern in that sentence, only words. <code>text_search</code> takes the words and returns statements.</p>
+<pre><code><span class="k">for</span> hit <span class="k">in</span> db.now().text_search(<span class="s">"alice lisbon"</span>, limit=5):
+    print(hit.rank, hit.text, hit.evidence.authors)
+<span class="c"># 1 Alice mentioned Lisbon when we talked about Initech 1
+# 2 met Alice at the Lisbon offsite, she leads the Acme data team 1</span></code></pre>
+<p>Each hit is a whole statement, with its id, subject, predicate and object, so the agent can follow it into the graph. It also carries <code>evidence</code>: the stated confidence (<code>None</code> when the statement has no confidence layer, never a guess), how many times it was confirmed, how many distinct authors wrote or confirmed it, and when it was added.</p>
+<p>The ranking is a fixed order, not a blended score. First the lexical score (FTS5’s bm25, so rarer words and shorter texts count more). Ties are broken by confidence, with absent confidence last, then confirmations, then authors, then the newer statement, then the id. The rule has a name, <code>tiramemsu-text-rank/1</code>, so if it ever changes, the name changes with it.</p>
+<p>Recall respects time like every other read. <code>db.as_of(tx=1).text_search("lisbon")</code> returns only the first note, because the second did not exist yet. A retracted statement drops out of <code>now()</code> but can still be recalled as of before the retraction.</p>
+<p>The same recall works inside queries. In SPARQL, <code>tm:textMatch</code> binds the statement id, and <code>~</code> joins it back to its triple:</p>
+<pre><code>SELECT ?s ?o ?score WHERE {
+  ?e tm:textMatch "lisbon" ; tm:textScore ?score ; tm:textLimit 10 .
+  ?s ?p ?o ~ ?e
+}</code></pre>
+<p>In Cypher it is a procedure: <code>CALL tiramemsu.text.search('lisbon', {limit: 10}) YIELD statement, score RETURN statement, score</code>.</p>
+<div class="note"><strong>What recall is not.</strong> It matches words, case and accent insensitive, with <code>all</code>, <code>any</code> or <code>phrase</code> modes and a trailing <code>*</code> for a prefix. It does not know that “Lisboa” is “Lisbon”. There are no embeddings. The index is derived: build it with <code>text_index=True</code>, and every write keeps it current. It needs SQLite with FTS5.</div>
+
+<h2>Review: see where memory disagrees</h2>
+<p>Both agents wrote about Alice’s employer, and for five months of 2024 they cannot both be right, unless she had two jobs. <code>conflicts</code> finds such places: same subject, same predicate, different objects, overlapping valid time.</p>
+<pre><code><span class="k">for</span> c <span class="k">in</span> db.now().conflicts(p=works_at):
+    print(c.overlaps)                           <span class="c"># [(1704067200000, 1717200000000)]: Jan to Jun 2024</span>
+    <span class="k">for</span> val <span class="k">in</span> c.values:
+        <span class="k">for</span> e <span class="k">in</span> val.statements:
+            print(val.o, e.eid, e.confidence, e.authors)
+<span class="c"># acme     2  0.9  [agent7]
+# initech  6  0.6  [agent9]</span></code></pre>
+<p>For each value the agent gets every statement that supports it and that statement’s evidence: valid time, the transaction that added it, the stated confidence, the transactions that confirmed it, and the authors and sources of those transactions. Two statements with the same object are support for one value, not a conflict. A predicate declared <code>sys:many</code> (several values are normal) is flagged with <code>declared_many</code> rather than reported as a problem.</p>
+<p>What it does not do is choose. There is no majority vote and no “highest confidence wins”. Those are policies, and the right one depends on the agent. Here the agent might ask the user, or trust agent 7 because it has been right before. Whatever it decides, it writes it down with an ordinary verb: <code>retract</code> the wrong statement, <code>supersede</code> it with a corrected valid time, or <code>confirm</code> the one it believes. The history keeps both sides, so the decision can be reviewed later.</p>
+
+<h3>Preview before you import</h3>
+<p>The same caution applies to memories from outside. A <a href="layer-recipes.html">bundle</a> carries a fact with its layers and evidence from one database to another. <code>preview_bundle</code> runs the import as a dry run on the writer and reports what it would do: which statements are new, which already exist and would be reused, what a cardinality-one predicate would retract, and whether it would fail a schema check.</p>
+<pre><code>bundle = db.now().bundle(job)
+preview = other_db.preview_bundle(bundle)    <span class="c"># nothing is committed</span>
+<span class="k">if</span> preview.would_commit:
+    <span class="k">with</span> other_db.transact() <span class="k">as</span> tx:
+        tx.import_bundle(bundle)             <span class="c"># checked again on the real write</span></code></pre>
+<p>A schema failure comes back as <code>preview.failure</code> instead of an exception, so the agent can read it. The preview burns the ids it allocated, which are never reused, and reserves nothing: if the database changes between the preview and the import, the import checks everything again.</p>
+
+<h2>Recheck: know when an answer is stale</h2>
+<p>Agents keep answers around: in a plan, a summary, a system prompt. “Alice works at Acme and Initech” was true of the memory an hour ago. Is it still? <code>save_answer</code> runs a query and stores the result together with the statements it cited.</p>
+<pre><code>db.save_answer(<span class="s">"employer"</span>, <span class="s">"SELECT ?org WHERE { v:alice v:worksAt ?org }"</span>)
+db.saved_answer(<span class="s">"employer"</span>).coverage        <span class="c"># ['mutableView']</span></code></pre>
+<p>Now the agent settles the conflict and retracts agent 9’s statement. Later, it asks what changed:</p>
+<pre><code><span class="k">with</span> db.transact() <span class="k">as</span> tx:
+    tx.retract(6)
+
+<span class="k">for</span> m <span class="k">in</span> db.check_saved_answers():
+    print(m.name, m.status, m.cause, m.event)
+<span class="c"># employer stale supportRetracted {'eid': 6, 'kind': 'explicit', 'op': 'retract', 't': 3}</span>
+
+db.refresh_answer(<span class="s">"employer"</span>).status       <span class="c"># 'fresh', and the result is now only acme</span></code></pre>
+<p>There are three states, and the rules are short:</p>
+<ul>
+  <li><strong>Stale</strong>: a statement the answer cited was retracted or superseded. The answer is known to rest on something we no longer believe.</li>
+  <li><strong>Recheck</strong>: some other write happened after the answer, and the answer reads the current state. A new row could change it, so the store cannot promise it is still right.</li>
+  <li><strong>Fresh</strong>: only a successful <code>refresh_answer</code> makes an answer fresh again. A failed refresh keeps the old result and its mark, and records the error.</li>
+</ul>
+<p>Each invalidation is reported once, with the event that caused it, so an agent can poll <code>check_saved_answers</code> after every turn without seeing the same news twice.</p>
+
+<h3>Why “conservative”</h3>
+<p>Citations can prove that an answer is <em>wrong</em>: a cited fact is gone. They cannot prove that it is <em>right</em>. A new fact might add a row. A <code>NOT EXISTS</code> might stop being true. A path query does not cite the statements along the path. So every saved answer lists why its citations are not enough, in <code>coverage</code>:</p>
+<table>
+<thead><tr><th>Reason</th><th>Means</th></tr></thead>
+<tbody>
+<tr><td><code>mutableView</code></td><td>It reads the current state, so new writes can change it</td></tr>
+<tr><td><code>noProvenance</code></td><td>The query cites nothing: Cypher, or <code>ASK</code></td></tr>
+<tr><td><code>negativePattern</code>, <code>existsPattern</code></td><td>It depends on something being absent, or on a nested test</td></tr>
+<tr><td><code>recursivePath</code></td><td>A <code>+</code> or <code>*</code> path, whose steps are not cited</td></tr>
+<tr><td><code>virtualPredicate</code>, <code>volatile</code></td><td>It reads bookkeeping or the volatile table, which have no statement ids</td></tr>
+<tr><td><code>clock</code></td><td>It uses <code>NOW()</code>, so it changes when the clock moves</td></tr>
+</tbody>
+</table>
+<p>An answer saved on a fixed past, for example <code>view=db.as_of(tx=1)</code>, stays fresh forever: the past does not change. That is a useful trick. If an agent wants to quote what it knew at a decision point, it saves the answer as of that transaction, and the quote never goes stale.</p>
+<div class="note"><strong>No magic.</strong> Nothing runs in the background. The agent calls <code>check</code> and <code>refresh</code> when it wants to. Saved answers are derived records in their own tables (storage format 3): saving, checking and refreshing never take a transaction number or touch the history of facts.</div>
+
+<h2>The loop</h2>
+<p>Put together, the three steps make a loop an agent can run every turn:</p>
+<ol>
+  <li><strong>Recall</strong> by words, and look at the evidence on each hit before using it.</li>
+  <li><strong>Review</strong> the conflicts on what it is about to say, and before importing someone else’s memory, preview it.</li>
+  <li><strong>Decide</strong> with an ordinary write: retract, supersede or confirm. The history records who decided what.</li>
+  <li><strong>Recheck</strong> its saved answers, and refresh the stale ones before repeating them.</li>
+</ol>
+<p>All of this is also available to an agent over MCP, as the tools <code>text_search</code>, <code>conflicts</code>, <code>preview_bundle</code>, <code>save_answer</code>, <code>check_answers</code> and <code>refresh_answer</code>. That is the subject of the next article.</p>
+
+<p><a href="mcp-memory.html">Next: give your agent a memory over MCP →</a></p>
+</article>
+
+<footer><div class="wrap">
+  <span>Tiramemsu · MIT OR Apache-2.0 · <a href="https://github.com/Volland/tiramemsu">github.com/Volland/tiramemsu</a></span>
+  <span><a href="../">Home</a> · <a href="./">All articles</a></span>
+  <span><a href="../impressum.html">Impressum</a> · <a href="../datenschutz.html">Datenschutz</a> · <a href="../agb.html">AGB</a></span>
+</div></footer>
+</body>
+</html>

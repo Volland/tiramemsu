@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bounded queries and bulk loads: tiramemsu</title>
+<meta name="description" content="Query budgets, cancellation and result limits, bulk import sessions with deferred statistics, and an opt-in leapfrog triejoin for cyclic patterns in tiramemsu, with a small triangle benchmark and its caveats.">
+<link rel="icon" href="../assets/logo.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+<header class="top"><div class="wrap">
+  <a class="brand" href="../"><img src="../assets/logo.svg" alt="">Tiramemsu</a>
+  <nav class="menu"><a href="../#features">Features</a><a href="../#start">Quick start</a><a href="./" aria-current="page">Articles</a><a href="https://github.com/Volland/tiramemsu">GitHub</a></nav>
+</div></header>
+
+<article class="post">
+<h1>Bounded queries and bulk loads</h1>
+<p class="meta">Tiramemsu articles · 3 October 2026</p>
+
+<p>This article is about the plumbing: what happens when a query takes too long, when a result is too big, when you need to load a million facts, and when a pattern is shaped like a triangle. None of it is exciting until it goes wrong. Then it decides whether your agent answers in a second or hangs until someone kills it.</p>
+
+<h2>Query budgets</h2>
+<p>By default every call is unbounded, as before. A <code>QueryBudget</code> puts limits on one call:</p>
+<table>
+<thead><tr><th>Field</th><th>Bounds</th><th>Error</th></tr></thead>
+<tbody>
+<tr><td><code>timeout</code></td><td>The whole call: waiting, SQL and path search</td><td><code>DeadlineExceeded</code></td></tr>
+<tr><td><code>cancel</code></td><td>A token (Rust) or a key (bindings) you can trigger from elsewhere</td><td><code>Cancelled</code></td></tr>
+<tr><td><code>reader_timeout</code></td><td>The wait for a free read connection</td><td><code>PoolTimeout</code></td></tr>
+<tr><td><code>max_rows</code>, <code>max_bytes</code></td><td>Everything the call decodes, across all the statements it runs</td><td><code>ResultLimitExceeded</code></td></tr>
+</tbody>
+</table>
+<pre><code><span class="k">from</span> tiramemsu <span class="k">import</span> QueryBudget, TiramemsuError
+
+view = db.now().with_budget(QueryBudget(timeout_ms=500, max_rows=10_000))
+<span class="k">try</span>:
+    rows = view.sparql(<span class="s">"SELECT ?s ?o WHERE { ?s v:worksAt ?o }"</span>)
+<span class="k">except</span> TiramemsuError <span class="k">as</span> e:
+    <span class="k">if</span> e.code == <span class="s">"ResultLimitExceeded"</span>:
+        ...   <span class="c"># ask a narrower question, or add LIMIT</span></code></pre>
+<p>Three rules make budgets safe to use:</p>
+<ul>
+  <li><strong>Over a limit is an error, never a prefix.</strong> If the answer has 10 001 rows and the limit is 10 000, you get <code>ResultLimitExceeded</code>, not the first 10 000. A silently cut answer looks like a complete one, and an agent would trust it. If you want a prefix, say so with <code>LIMIT</code>.</li>
+  <li><strong>A stopped write leaves no trace.</strong> <code>transact</code> takes a budget too. If it is cancelled or runs out of time, the transaction rolls back and nothing is committed.</li>
+  <li><strong>A stopped read gives back its connection.</strong> The reader pool does not leak, and the next call is not slowed down by the last one.</li>
+</ul>
+<p>In Rust, a <code>CancelToken</code> can be cloned into another thread and cancelled there. <code>QueryBudget::run(|| …)</code> bounds a sequence of calls as one operation, so three queries share one deadline:</p>
+<pre><code><span class="k">let</span> budget = QueryBudget { timeout: Some(Duration::from_secs(1)), ..Default::default() };
+<span class="k">let</span> (rows, known) = budget.run(|| {
+    <span class="k">let</span> a = db.now().sparql(<span class="s">"SELECT * WHERE { ?s ?p ?o }"</span>)?;
+    <span class="k">let</span> b = db.now().sparql(<span class="s">"ASK { v:alice v:worksAt v:acme }"</span>)?;
+    Ok::&lt;_, Error&gt;((a, b))
+})?;</code></pre>
+<p><code>reader_timeout</code> is separate from SQLite’s <code>busy_timeout</code> on purpose. One is “all readers are busy”, the other is “the file is locked”, and they need different fixes. Set a default for every read with <code>OpenOptions::reader_timeout</code> (<code>reader_timeout_ms</code>, <code>readerTimeoutMs</code> in the bindings).</p>
+<div class="note"><strong>Cancelling from Node.js and Python.</strong> The bindings are synchronous. Give the call a <code>cancel_key</code> (<code>cancelKey</code>), and <code>db.cancel(key)</code> stops it. In Python, call it from another thread; the GIL is released while a call runs. In Node.js, the same thread cannot run code during a call, so <code>cancel</code> only stops a call that starts later. Use a deadline there, and a fresh key per call.</div>
+<p>The <a href="mcp-memory.html">MCP server</a> uses all of this: its <code>--timeout-ms</code>, <code>--max-rows</code> and <code>--max-bytes</code> flags become one budget per tool call.</p>
+
+<h2>Bulk import</h2>
+<p>Loading a lot of data used to leave two bad choices. One huge transaction holds the writer for the whole load, and a failure at the end throws everything away. Many small transactions are each fine, but every big commit triggers a full <code>ANALYZE</code> of the file, so a large load spends much of its time refreshing planner statistics it will throw away a moment later.</p>
+<p>A bulk import session sits in between:</p>
+<pre><code><span class="k">with</span> db.bulk_import() <span class="k">as</span> imp:              <span class="c"># finishes on a clean exit, cancels if the block raises</span>
+    <span class="k">for</span> batch <span class="k">in</span> batches:
+        <span class="k">with</span> imp.chunk() <span class="k">as</span> tx:              <span class="c"># one atomic transaction</span>
+            <span class="k">for</span> s, p, o <span class="k">in</span> batch:
+                tx.assert_(s, p, o)
+        print(imp.progress().chunks, imp.progress().asserted)
+
+s = imp.summary
+print(s.progress.chunks, s.analyzed, s.maintenance_error)   <span class="c"># 4 True None</span></code></pre>
+<ul>
+  <li><strong>Each chunk is an ordinary transaction</strong>, with its own number in history. It commits or rolls back on its own.</li>
+  <li><strong>Chunks skip the statistics refresh.</strong> <code>finish</code> runs one full analysis at the end, and the readers reload the new statistics.</li>
+  <li><strong>The session holds the write lease.</strong> Other writes fail with <code>ImportInProgress</code> until it ends. Reads go on, and see the last committed chunk.</li>
+  <li><strong>Progress is counted.</strong> <code>progress()</code> reports chunks, rejected chunks, asserted, existing and retracted rows, the transaction of every chunk, and the time spent.</li>
+</ul>
+<p>In Rust, <code>chunk_with(opts, Some(&amp;budget), f)</code> bounds one chunk with a budget, and <code>Db::bulk_import_shared</code> takes an <code>Arc&lt;Db&gt;</code> and returns a session you can move to another thread. In Node.js, end the session in a <code>finally</code> block with <code>finish()</code> or <code>cancel()</code>.</p>
+<div class="note"><strong>It is not one atomic import.</strong> A failing chunk rolls back alone; earlier chunks stay committed. Cancelling (or dropping the session in Rust) keeps the committed chunks, skips the analysis, and leaves <code>statistics_due</code> true until the next ordinary commit or <code>optimize()</code>. If the final analysis fails, that is reported in <code>maintenance_error</code>, and nothing is rolled back. Never-forget still holds: an import adds statements, like any other write.</div>
+
+<h2 id="lftj">Cyclic patterns and the leapfrog triejoin</h2>
+<p>Most graph questions are trees: start somewhere and branch out. Some are cycles. “Which of my contacts know each other?” is a triangle:</p>
+<pre><code>SELECT * WHERE { ?a v:knows ?b . ?b v:knows ?c . ?c v:knows ?a }</code></pre>
+<p>SQLite answers this with nested loops: for each <code>a→b</code>, for each <code>b→c</code>, check <code>c→a</code>. On a graph with hubs, the middle loop explodes, because a hub has thousands of neighbours and almost none of them close a triangle. A worst-case optimal join, such as the <em>leapfrog triejoin</em> (LFTJ), binds one variable at a time and intersects sorted lists of candidates, so it never builds the large intermediate result.</p>
+<p>Tiramemsu 0.3 has an LFTJ operator. It runs inside SQLite as the table function <code>tm_lftj</code>, reading the same covering indexes, and it is <strong>off by default</strong>.</p>
+<pre><code>db = Database(<span class="s">"memory.db"</span>, lftj=<span class="k">True</span>)           <span class="c"># default threshold: 100 000 statements</span>
+db = Database(<span class="s">"memory.db"</span>, lftj=<span class="k">True</span>, lftj_min_rows=0)   <span class="c"># route every cyclic pattern</span>
+
+plan = db.now().explain_sparql(<span class="s">"SELECT * WHERE { ?a v:knows ?b . ?b v:knows ?c . ?c v:knows ?a }"</span>)
+[(r[<span class="s">"kind"</span>], r[<span class="s">"note"</span>]) <span class="k">for</span> r <span class="k">in</span> plan[<span class="s">"regions"</span>]]
+<span class="c"># [('sql', 'none'), ('nativeLftj', 'lftjNative')]</span></code></pre>
+<p>In Rust it is <code>OpenOptions { planner: PlannerOptions { lftj: LftjConfig { enabled: true, min_rows_estimate: 0 } }, ..OpenOptions::default() }</code>, and in Node.js <code>{ lftj: true, lftjMinRows: 0 }</code>.</p>
+<p>The planner is careful about what it routes. A region goes to the operator only when LFTJ is enabled, the operator is installed, the pattern is a pure cyclic basic graph pattern of at most 32 variables, and at least one of its patterns matches <code>min_rows_estimate</code> statements or more. Otherwise it stays in SQL, and <code>explain</code> says why:</p>
+<table>
+<thead><tr><th>Note</th><th>Why it stayed in SQL</th></tr></thead>
+<tbody>
+<tr><td><code>cyclicLftjDisabled</code></td><td>The pattern is cyclic, but LFTJ is off</td></tr>
+<tr><td><code>lftjUnavailable</code></td><td>The operator is not installed on this connection</td></tr>
+<tr><td><code>lftjUnsupportedShape</code></td><td>The pattern is not a pure cyclic join the operator handles</td></tr>
+<tr><td><code>lftjBelowEstimate</code></td><td>The pattern is too small to be worth it</td></tr>
+</tbody>
+</table>
+<p>The answers are the same on both routes, including duplicate rows where SPARQL and Cypher expect them. Budgets still apply inside the operator.</p>
+
+<h3>The triangle benchmark</h3>
+<p>The repository has a harness, <code>crates/tiramemsu/examples/triangles.rs</code>. It loads a graph, opens the file twice (default options, and LFTJ on with a threshold of 0), checks that the second really routes to <code>tm_lftj</code>, and counts triangles on both routes. If the counts differ, it stops with an error. Only then does it time a <code>COUNT(*)</code> of the triangle pattern on each route, best of three.</p>
+<pre><code>cargo run --release -p tiramemsu --example triangles            <span class="c"># small: seconds</span>
+cargo run --release -p tiramemsu --example triangles -- full    <span class="c"># larger graphs</span></code></pre>
+<p>Results at the small scale, on an Apple M2 Max with bundled SQLite, 3 October 2026:</p>
+<table>
+<thead><tr><th>Graph</th><th>Edges</th><th>Triangles</th><th>SQL</th><th>LFTJ</th><th>SQL / LFTJ</th></tr></thead>
+<tbody>
+<tr><td>Uniform, out-degree 5</td><td>25 000</td><td>126</td><td>30.2 ms</td><td>23.4 ms</td><td>1.3×</td></tr>
+<tr><td>30 hubs × 150 spokes, both ways, plus noise</td><td>13 960</td><td>620</td><td>143.3 ms</td><td>11.8 ms</td><td class="win">12.1×</td></tr>
+<tr><td>3 layers of 40, 3 closing edges each</td><td>3 317</td><td>14 040</td><td>12.5 ms</td><td>5.7 ms</td><td>2.2×</td></tr>
+<tr><td>3 layers of 80, 3 closing edges each</td><td>13 034</td><td>56 160</td><td>88.2 ms</td><td>23.3 ms</td><td>3.8×</td></tr>
+</tbody>
+</table>
+<p>The counts were identical on both routes for every graph. The pattern matches each directed triangle once per rotation, so the counts are three times the distinct triangles. The pattern is the one you would expect: on a uniform graph the two routes are close, and on the hub-and-spoke graph, where nested loops waste most of their work, the intersection join is twelve times faster.</p>
+<div class="note"><strong>Read these numbers with care.</strong> They are small graphs on one machine, generated by hand, not a real data set. The LFTJ times include each pattern’s ordered scan. The <code>full</code> scale has not been measured for the operator yet, for a known reason: <strong>the operator materialises its output rows before SQLite reads them</strong>, so layered graphs with 0.8 and 3.2 million output rows would hold hundreds of megabytes during the count. Streaming the output is still to do. That is also why LFTJ stays off by default, and why its threshold is high.</div>
+<p>An earlier, pure-Python version of the same idea (<code>bench/triangles/bench.py</code>) measured larger graphs against SQLite’s plan: on the 1.1-million-edge hub graph, 79.6 s for nested loops against 1.9 s for an intersection join written in plain Python. That is the evidence that led to the operator, not a measurement of it.</p>
+
+<h2>Summary</h2>
+<ul>
+  <li>Give agent-facing calls a <strong>budget</strong>. Errors are typed, results are never cut silently, and stopped writes leave no trace.</li>
+  <li>Load large data in a <strong>bulk import</strong> session: chunked commits, one analysis at the end, and a write lease so nothing else interleaves.</li>
+  <li>If your questions are <strong>cyclic</strong> and your graph is skewed, try <code>lftj=True</code>, look at <code>explain</code>, and measure on your own data.</li>
+</ul>
+
+<p><a href="whats-new-0-3.html">Back to what’s new in 0.3 →</a></p>
+</article>
+
+<footer><div class="wrap">
+  <span>Tiramemsu · MIT OR Apache-2.0 · <a href="https://github.com/Volland/tiramemsu">github.com/Volland/tiramemsu</a></span>
+  <span><a href="../">Home</a> · <a href="./">All articles</a></span>
+  <span><a href="../impressum.html">Impressum</a> · <a href="../datenschutz.html">Datenschutz</a> · <a href="../agb.html">AGB</a></span>
+</div></footer>
+</body>
+</html>
