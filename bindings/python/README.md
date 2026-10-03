@@ -112,7 +112,8 @@ A view chooses when you look and when the fact was true. Every read takes a view
 | `supersede(eid, o=, valid_from=, valid_to=)` | Corrects a statement and replays its layers on the new one. A bound you leave out is kept; `None` clears it |
 | `confirm(eid)` | Records that another source agrees |
 | `meta(p, o)`, `upsert(p, o)`, `new_node()` | Transaction metadata, unique upsert, an anonymous node |
-| `add_to_graph(eid, g)`, `remove_from_graph`, `clear_graph`, `create_graph`, `drop_graph` | Named graphs as tags on statements |
+| `add_to_graph(eid, g)`, `remove_from_graph`, `clear_graph`, `create_graph`, `drop_graph` | Named graphs as tags on statements. A statement (`Stmt(eid)` or a `Ref`) can name a graph, so an edge can hold a subgraph |
+| `import_bundle(bundle)` | Imports a bundle from `view.bundle`, possibly read from another database; returns a `Ref` to the imported root, and its entry in `tx.report.results` lists the imported statements |
 | `cypher(text, params=None)` | A Cypher query that may write, inside the same transaction |
 
 Times accept a `datetime`, a `date`, epoch milliseconds or an RFC 3339 string. `db.transact(dry_run=True)` reports what would happen and commits nothing. `db.speculate(ops, queries)` applies changes hypothetically, runs queries on the result, and keeps nothing.
@@ -121,14 +122,18 @@ Times accept a `datetime`, a `date`, epoch milliseconds or an RFC 3339 string. `
 
 | Method | Returns |
 |---|---|
-| `view.sparql(text)` | A select result (iterate it for rows of variable to term; `.vars` lists the variables), an ask, a graph, or an update result |
+| `view.sparql(text, provenance=False)` | A select result (iterate it for rows of variable to term; `.vars` lists the variables, `.provenance` the statements behind each row), an ask, a graph, or an update result |
 | `view.cypher(text, params=None)` | A result with `columns` and `rows` |
 | `view.triples(s=, p=, o=)` | `Statement` values with `eid`, `s`, `p`, `o`, `t_add`, `t_ret`, `valid_from`, `valid_to`, `ret_kind` |
-| `view.path(start, expr, mode="reach", max_hops=None)` | Endpoints with hop counts. `mode` is `"reach"`, `"trail"`, `"anyShortest"` or `"allShortest"` |
+| `view.path(start, expr, mode="reach", max_hops=None, graphs=None, time_respecting=False)` | Endpoints with hop counts and `arrival`. `mode` is `"reach"`, `"trail"`, `"anyShortest"` or `"allShortest"` |
+| `view.dependents(eid)` | The statements that stand on `eid`: what retracting it would cascade to |
+| `view.bundle(eid)` | The statement with its layers and evidence, as a `tiramemsu-bundle/1` dict |
 | `view.events(since=0)` | The change log after a transaction |
 | `view.graphs()`, `view.graph_members(g)`, `view.values(s, key)` | Named graphs and values |
 
 `expr` is SPARQL property-path syntax with the predeclared prefixes `v:`, `sys:`, `tm:`, `rdf:` and `xsd:`, for example `v:knows+`. SPARQL supports RDF 1.2 annotations: `{| v:confidence ?c |}` reads a layer.
+
+With `provenance=True` a select result's `.provenance` holds, for each row, the `Stmt` values that produced it. `graphs` keeps every hop of a path inside the listed graphs. `time_respecting=True` (or a time to start after) makes each hop start no earlier than the previous one, and every row then carries its earliest `arrival` in epoch milliseconds.
 
 ## Terms
 
@@ -154,9 +159,11 @@ Every failure raises `TiramemsuError` with a `.code`:
 | `Unsupported` | Valid but outside the supported subset, such as a Cypher write through a read view |
 | `UniqueViolation` | A `sys:unique` predicate already has a live holder of that value |
 | `ValueTypeMismatch` | The object does not match the predicate's `sys:valueType` |
+| `SubjectTypeMismatch` | The subject does not match the predicate's `sys:subjectType`, such as a layer predicate on a plain node |
 | `CascadeLimitExceeded` | A retraction would touch more than `max_cascade` statements |
 | `PathLimitExceeded` | A path search exceeded its state limit |
 | `InvalidPatch` | A `supersede` patch tried to change the subject or predicate |
+| `IdSpaceExhausted` | An id counter passed 2^48 − 1 |
 | `Sqlite` | A SQLite failure, such as a locked or unreadable file |
 
 ## Options

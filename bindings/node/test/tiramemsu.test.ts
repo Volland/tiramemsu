@@ -5,7 +5,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it, expect } from "vitest";
-import { Database, iri, TiramemsuError } from "../lib/index.ts";
+import { Database, iri, stmt, TiramemsuError } from "../lib/index.ts";
 
 // Helpers matching the bridge test namespace.
 const v = (s: string) => iri(`urn:tiramemsu:v:${s}`);
@@ -332,6 +332,107 @@ describe("annotations, dates and immutable views", () => {
       expect(filtered.triples({ s: alice }).length).toBe(0);
       // the original still sees the statement after the filtered view was made
       expect(plain.triples({ s: alice }).length).toBe(1);
+    } finally { cleanup(dir); }
+  });
+});
+
+// ---- Features added after 0.1.0 -------------------------------------------
+
+describe("paths: graphs and time-respecting", () => {
+  it("stays inside the listed graphs", () => {
+    const { db, dir } = tempDb();
+    try {
+      db.transact((tx) => {
+        const ab = tx.assert(v("a"), knows, v("b"));
+        tx.assert(v("b"), knows, v("c"));
+        tx.addToGraph(ab, v("session12"));
+      });
+      const ends = (graphs?: ReturnType<typeof v>[]) =>
+        db.now().path(v("a"), "v:knows+", { graphs }).map((r) => JSON.stringify(r.end));
+      expect(ends([v("session12")])).toEqual([JSON.stringify(v("b"))]);
+      expect(ends()).toHaveLength(2);
+      expect(ends([v("nowhere")])).toEqual([]);
+    } finally { cleanup(dir); }
+  });
+
+  it("reports the earliest arrival", () => {
+    const { db, dir } = tempDb();
+    try {
+      const met = v("met");
+      db.transact((tx) => {
+        tx.assert(v("a"), met, v("b"), { validFrom: 1, validTo: 5 });
+        tx.assert(v("b"), met, v("c"), { validFrom: 3, validTo: 9 });
+      });
+      const arrivals = (timeRespecting?: boolean | { after?: number }) =>
+        db.now().path(v("a"), "v:met+", { timeRespecting }).map((r) => r.arrival);
+      expect(arrivals(true)).toEqual([1, 3]);
+      expect(arrivals({ after: 2 })).toEqual([2, 3]);
+      expect(arrivals({ after: 6 })).toEqual([]);
+      expect(arrivals()).toEqual([null, null]);
+    } finally { cleanup(dir); }
+  });
+});
+
+describe("provenance, dependents and bundles", () => {
+  it("lists the statements behind each SPARQL row", () => {
+    const { db, dir } = tempDb();
+    try {
+      db.transact((tx) => { tx.assert(v("a"), v("p"), v("b")); });
+      const r = db.now().sparql("SELECT ?o WHERE { v:a v:p ?o }", { provenance: true });
+      if (r.kind !== "select") throw new Error("expected select");
+      expect(r.provenance).toEqual([[stmt(1)]]);
+      const plain = db.now().sparql("SELECT ?o WHERE { v:a v:p ?o }");
+      expect(plain.kind === "select" && plain.provenance).toBeFalsy();
+    } finally { cleanup(dir); }
+  });
+
+  it("previews what a retraction would cascade to", () => {
+    const { db, dir } = tempDb();
+    try {
+      const r = db.transact((tx) => {
+        const job = tx.assert(alice, worksAt, acme);
+        tx.assert(job, v("source"), "chat-1");
+      });
+      const job = r.asserted[0];
+      expect(db.now().dependents(job)).toEqual(r.asserted);
+      db.transact((tx) => { tx.retract(job); });
+      expect(db.now().dependents(job)).toEqual([]);
+      expect(db.asOf({ tx: 1 }).dependents(stmt(job))).toEqual(r.asserted);
+    } finally { cleanup(dir); }
+  });
+
+  it("moves a belief with its layers and graphs to another database", () => {
+    const a = tempDb();
+    const b = tempDb();
+    try {
+      const r = a.db.transact((tx) => {
+        const job = tx.assert(alice, worksAt, acme, { validFrom: "2020-01-01" });
+        tx.assert(job, confidence, 0.8);
+        tx.addToGraph(job, v("session12"));
+      });
+      const bundle = a.db.now().bundle(r.asserted[0]);
+      expect(bundle.format).toBe("tiramemsu-bundle/1");
+      const t = b.db.transact((tx) => {
+        const fact = tx.importBundle(bundle);
+        tx.assert(fact, v("importedFrom"), v("agentA"));
+      });
+      const imported = t.results[0] as { root: number; statements: Array<{ new: boolean }> };
+      expect(imported.statements).toHaveLength(3);
+      expect(imported.statements.every((s) => s.new)).toBe(true);
+      expect(b.db.now().graphMembers(v("session12"))).toEqual([imported.root]);
+    } finally { cleanup(a.dir); cleanup(b.dir); }
+  });
+
+  it("uses a statement as a graph name", () => {
+    const { db, dir } = tempDb();
+    try {
+      const r = db.transact((tx) => {
+        const edge = tx.assert(alice, knows, v("bob"));
+        const fact = tx.assert(v("bob"), worksAt, acme);
+        tx.addToGraph(fact, edge);
+      });
+      const [edge, fact] = r.asserted;
+      expect(db.now().graphMembers(stmt(edge))).toEqual([fact]);
     } finally { cleanup(dir); }
   });
 });

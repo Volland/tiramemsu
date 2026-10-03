@@ -648,3 +648,93 @@ class TestDatetimesBoundsAndViews:
             with db.transact() as tx:
                 tx.confirm(99)
         assert e.value.code == "NotLive"
+
+
+# ------------------------------------------------------- features added after 0.1.0
+
+
+class TestPathOptions:
+    def test_paths_stay_inside_the_listed_graphs(self, db: Database) -> None:
+        with db.transact() as tx:
+            ab = tx.assert_(iri("a"), iri("knows"), iri("b"))
+            tx.assert_(iri("b"), iri("knows"), iri("c"))
+            tx.add_to_graph(ab, iri("session12"))
+        ends = lambda **kw: [r.end for r in db.now().path(iri("a"), "v:knows+", **kw)]
+        assert ends(graphs=[iri("session12")]) == [iri("b")]
+        assert len(ends()) == 2
+        assert ends(graphs=[iri("nowhere")]) == []
+
+    def test_time_respecting_paths_report_arrival(self, db: Database) -> None:
+        with db.transact() as tx:
+            tx.assert_(iri("a"), iri("met"), iri("b"), valid_from=1, valid_to=5)
+            tx.assert_(iri("b"), iri("met"), iri("c"), valid_from=3, valid_to=9)
+        arrivals = lambda tr: [
+            r.arrival for r in db.now().path(iri("a"), "v:met+", time_respecting=tr)
+        ]
+        assert arrivals(True) == [1, 3]
+        assert arrivals(2) == [2, 3]
+        assert arrivals(6) == []
+        assert arrivals(False) == [None, None]
+
+
+class TestProvenanceDependentsBundles:
+    def test_sparql_rows_carry_provenance(self, db: Database) -> None:
+        with db.transact() as tx:
+            tx.assert_(iri("a"), iri("p"), iri("b"))
+        q = SPARQL_PREFIX + "SELECT ?o WHERE { v:a v:p ?o }"
+        r = db.now().sparql(q, provenance=True)
+        assert isinstance(r, SparqlSelectResult)
+        assert r.provenance == [[Stmt(1)]]
+        plain = db.now().sparql(q)
+        assert isinstance(plain, SparqlSelectResult)
+        assert plain.provenance is None
+
+    def test_dependents_preview_a_retraction(self, db: Database) -> None:
+        ctx = db.transact()
+        with ctx as tx:
+            job = tx.assert_(iri("alice"), iri("worksAt"), iri("acme"))
+            tx.assert_(job, iri("source"), "chat-1")
+        report = ctx._builder.report
+        assert report is not None
+        eid = report.asserted[0]
+        assert db.now().dependents(eid) == report.asserted
+        with db.transact() as tx:
+            tx.retract(eid)
+        assert db.now().dependents(eid) == []
+        assert db.as_of(tx=1).dependents(Stmt(eid)) == report.asserted
+
+    def test_a_bundle_moves_between_databases(self, tmp_path: Any) -> None:
+        a = Database(str(tmp_path / "a.db"))
+        b = Database(str(tmp_path / "b.db"))
+        ctx = a.transact()
+        with ctx as tx:
+            job = tx.assert_(iri("alice"), iri("worksAt"), iri("acme"), valid_from="2020-01-01")
+            tx.assert_(job, iri("confidence"), 0.8)
+            tx.add_to_graph(job, iri("session12"))
+        assert ctx._builder.report is not None
+        bundle = a.now().bundle(ctx._builder.report.asserted[0])
+        assert bundle["format"] == "tiramemsu-bundle/1"
+        ctx = b.transact()
+        with ctx as tx:
+            fact = tx.import_bundle(bundle)
+            tx.assert_(fact, iri("importedFrom"), iri("agentA"))
+        report = ctx._builder.report
+        assert report is not None
+        imported = report.results[0]
+        assert len(imported["statements"]) == 3
+        assert all(s["new"] for s in imported["statements"])
+        assert b.now().graph_members(iri("session12")) == [imported["root"]]
+        with pytest.raises(TiramemsuError) as e:
+            b.transact([{"op": "importBundle", "bundle": {"format": "tiramemsu-bundle/9"}}])
+        assert e.value.code == "InvalidTerm"
+
+    def test_a_statement_names_a_graph(self, db: Database) -> None:
+        ctx = db.transact()
+        with ctx as tx:
+            edge = tx.assert_(iri("alice"), iri("knows"), iri("bob"))
+            fact = tx.assert_(iri("bob"), iri("worksAt"), iri("acme"))
+            tx.add_to_graph(fact, edge)
+        report = ctx._builder.report
+        assert report is not None
+        edge_eid, fact_eid = report.asserted[:2]
+        assert db.now().graph_members(Stmt(edge_eid)) == [fact_eid]

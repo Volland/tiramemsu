@@ -172,7 +172,13 @@ export type SelectRow = Record<string, Term>;
 
 /** A discriminated SPARQL result. */
 export type SparqlResult =
-  | { kind: "select"; vars: string[]; rows: SelectRow[] }
+  | {
+      kind: "select";
+      vars: string[];
+      rows: SelectRow[];
+      /** With `{ provenance: true }`: the statements behind each row, parallel to `rows`. */
+      provenance?: StmtTerm[][];
+    }
   | { kind: "ask"; value: boolean }
   | { kind: "graph"; triples: Array<{ s: Term; p: Term; o: Term }> }
   | { kind: "update"; report: Report };
@@ -205,6 +211,27 @@ export interface PathRow {
     nodes: Term[];
     hops: Array<{ eid: Term; predicate: Term; dir: "out" | "in"; kind: string }>;
   } | null;
+  /** Arrival instant (epoch ms) of a time-respecting search, otherwise `null`. */
+  arrival: number | null;
+}
+
+/** Options for `View.path`. */
+export interface PathOptions {
+  mode?: "reach" | "trail" | "anyShortest" | "allShortest";
+  maxHops?: number;
+  /** Only hops whose statements belong to one of these graphs (a term that is not stored names no graph). */
+  graphs?: TermInput[];
+  /** Earliest-arrival evaluation: each hop must start no earlier than the previous one, optionally after `after`. */
+  timeRespecting?: boolean | { after?: Date | number | string };
+}
+
+/** A `tiramemsu-bundle/1` JSON document: a statement with its layers and evidence. */
+export type Bundle = Record<string, unknown>;
+
+/** The result of an `importBundle` op. */
+export interface ImportedBundle {
+  root: number;
+  statements: Array<{ id: string; eid: number; new: boolean }>;
 }
 
 /** An event log entry. */
@@ -245,7 +272,9 @@ function decodeSparql(r: Record<string, unknown>): SparqlResult {
       for (const [k, v] of Object.entries(row)) out[k] = fromJson(v);
       return out;
     });
-    return { kind: "select", vars: r.vars as string[], rows };
+    const out: SparqlResult = { kind: "select", vars: r.vars as string[], rows };
+    if (r.provenance) out.provenance = r.provenance as StmtTerm[][];
+    return out;
   }
   if (r.kind === "ask") return { kind: "ask", value: r.value as boolean };
   if (r.kind === "graph") {
@@ -302,11 +331,14 @@ export class View {
     return new View(this._db, { ...this._view, validAt: timeArg(t) });
   }
 
-  /** SPARQL query (SELECT, ASK, CONSTRUCT, DESCRIBE, or UPDATE). */
-  sparql(text: string): SparqlResult {
-    return decodeSparql(
-      callNative(this._db, "sparql", { view: this._view, text }) as Record<string, unknown>,
-    );
+  /**
+   * SPARQL query (SELECT, ASK, CONSTRUCT, DESCRIBE, or UPDATE). With `provenance`, a SELECT
+   * result also lists the statements that produced each row.
+   */
+  sparql(text: string, opts?: { provenance?: boolean }): SparqlResult {
+    const args: Record<string, unknown> = { view: this._view, text };
+    if (opts?.provenance) args.provenance = true;
+    return decodeSparql(callNative(this._db, "sparql", args) as Record<string, unknown>);
   }
 
   /** openCypher read query. */
@@ -328,11 +360,17 @@ export class View {
   path(
     start: TermInput,
     pathExpr: string,
-    opts?: { mode?: "reach" | "trail" | "anyShortest" | "allShortest"; maxHops?: number },
+    opts?: PathOptions,
   ): PathRow[] {
     const args: Record<string, unknown> = { view: this._view, start: toJson(start), path: pathExpr };
     if (opts?.mode) args.mode = opts.mode;
     if (opts?.maxHops !== undefined) args.maxHops = opts.maxHops;
+    if (opts?.graphs) args.graphs = opts.graphs.map(toJson);
+    const tr = opts?.timeRespecting;
+    if (tr === true) args.timeRespecting = true;
+    else if (tr && typeof tr === "object") {
+      args.timeRespecting = tr.after !== undefined ? { after: timeArg(tr.after) } : {};
+    }
     return (callNative(this._db, "path", args) as Record<string, unknown>[]).map((r) => ({
       start: fromJson(r.start),
       end: fromJson(r.end),
@@ -348,6 +386,7 @@ export class View {
             })),
           }
         : null,
+      arrival: (r.arrival ?? null) as number | null,
     }));
   }
 
@@ -364,6 +403,16 @@ export class View {
   /** Statement eids that belong to graph `g`. */
   graphMembers(g: TermInput): number[] {
     return callNative(this._db, "graphMembers", { view: this._view, graph: toJson(g) }) as number[];
+  }
+
+  /** Statements that stand on `eid` (its layers and memberships, transitively): what a retraction would cascade to. */
+  dependents(eid: number | StmtTerm): number[] {
+    return callNative(this._db, "dependents", { view: this._view, eid }) as number[];
+  }
+
+  /** The statement `eid` with its layers and evidence, as `tiramemsu-bundle/1` JSON for `Tx.importBundle`. */
+  bundle(eid: number | StmtTerm): Bundle {
+    return callNative(this._db, "bundle", { view: this._view, eid }) as Bundle;
   }
 
   /** All object values for a given subject and predicate. */
@@ -509,6 +558,14 @@ export class Tx {
   /** Drops a named graph and all its memberships. */
   dropGraph(graph: TermInput): void {
     this._ops.push({ op: "dropGraph", graph: toJson(graph) });
+  }
+
+  /**
+   * Imports a bundle read with `View.bundle` (possibly from another database). The Ref names
+   * the imported root statement; the op result is an `ImportedBundle`.
+   */
+  importBundle(bundle: Bundle): Ref {
+    return this._push({ op: "importBundle", bundle }, true);
   }
 
   /** Runs a Cypher write statement inside this transaction. */

@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import json as _json
 import re as _re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta, timezone
 from typing import Any, Dict, Iterator, List, Optional, Union
 
@@ -298,6 +298,8 @@ class Report:
     """Eids of graph-membership statements asserted."""
     memberships_retracted: List[Dict[str, Any]]
     """Eids and kinds of graph-membership statements retracted."""
+    results: List[Any] = field(default_factory=list)
+    """One result object per op, in order (for ``import_bundle``: ``{"root", "statements"}``)."""
 
 
 def report_from_json(j: Dict[str, Any]) -> Report:
@@ -311,6 +313,7 @@ def report_from_json(j: Dict[str, Any]) -> Report:
         superseded=list(j.get("superseded") or []),
         memberships=[int(x) for x in j.get("memberships") or []],
         memberships_retracted=list(j.get("membershipsRetracted") or []),
+        results=list(j.get("results") or []),
     )
 
 
@@ -342,9 +345,20 @@ class CypherWriteResult:
 class SparqlSelectResult:
     """SPARQL SELECT result: iterate to get rows as dicts mapping variable to term."""
 
-    def __init__(self, vars_: List[str], rows: List[Dict[str, Any]]) -> None:
+    def __init__(
+        self,
+        vars_: List[str],
+        rows: List[Dict[str, Any]],
+        provenance: Optional[List[List[Any]]] = None,
+    ) -> None:
         self.vars: List[str] = vars_
         self._rows = rows
+        self.provenance: Optional[List[List[Stmt]]] = (
+            None
+            if provenance is None
+            else [[term_from_json(e) for e in row] for row in provenance]
+        )
+        """With ``provenance=True``: the statements behind each row, parallel to the rows."""
 
     def __iter__(self) -> Iterator[Dict[str, Any]]:
         for row in self._rows:
@@ -387,7 +401,7 @@ def sparql_result_from_json(j: Dict[str, Any]) -> SparqlResult:
     if kind == "select":
         vars_: List[str] = list(j.get("vars") or [])
         rows: List[Dict[str, Any]] = list(j.get("rows") or [])
-        return SparqlSelectResult(vars_, rows)
+        return SparqlSelectResult(vars_, rows, j.get("provenance"))
     if kind == "ask":
         return SparqlAskResult(bool(j.get("value", False)))
     if kind == "graph":
@@ -406,3 +420,5 @@ class PathRow:
     end: Any
     hops: int
     path: Optional[Dict[str, Any]]
+    arrival: Optional[int] = None
+    """Arrival instant (epoch ms) of a time-respecting search, otherwise ``None``."""

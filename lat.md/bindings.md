@@ -43,11 +43,15 @@ A malformed op, an unknown operation, or a term of the wrong shape is `InvalidAr
 
 The native class is `Native(path, options)` with `call(op, args)`. The wrapper (`lib/index.ts`) adds `Database`, `View`, `Tx`, `Ref`, term helpers and `TiramemsuError`. It is synchronous, like the Rust API.
 
+Every bridge operation has a wrapper method: `sparql(text, { provenance })`, `path` with `graphs` and `timeRespecting` (rows carry `arrival`), `dependents`, `bundle`, and `Tx.importBundle`.
+
 The package carries one addon per platform, and the loader names the platform when none matches. A `Date` is written as an `xsd:dateTime` literal and an `xsd:dateTime` is read back as a `Date`. Releases are built by `.github/workflows/npm-publish.yml`; see `docs/node-publishing.md`.
 
 ## Python
 
 The `tiramemsu` package is a PyO3 module (`tiramemsu._native`, stable ABI) plus a typed Python wrapper, in `bindings/python`, built with maturin and checked with pytest and `mypy --strict`.
+
+Every bridge operation has a wrapper method, as in Node.js: `sparql(text, provenance=)`, `path(graphs=, time_respecting=)`, `dependents`, `bundle`, and `TxBuilder.import_bundle`, whose result is in `Report.results`.
 
 `Database.transact` is both a context manager, which records ops and submits them when the block exits cleanly, and a function of a list of op dicts. The GIL is released during each call, so threads can query one `Database` in parallel.
 

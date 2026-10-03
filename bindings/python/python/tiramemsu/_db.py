@@ -18,6 +18,7 @@ from ._types import (
     Report,
     SparqlResult,
     Statement,
+    Stmt,
     TiramemsuError,
     report_from_json,
     sparql_result_from_json,
@@ -43,6 +44,15 @@ def _call(native: Native, op: str, args: str) -> str:
         if msg.startswith("tiramemsu:"):
             raise TiramemsuError._from_json(msg[len("tiramemsu:") :]) from exc
         raise
+
+
+def _eid_json(v: Any) -> Any:
+    """A statement id (``int`` or :class:`Stmt`) as bridge JSON."""
+    if isinstance(v, Stmt):
+        return {"stmt": v.eid}
+    if isinstance(v, int) and not isinstance(v, bool):
+        return v
+    raise TypeError(f"eid must be int or Stmt; got {type(v).__name__!r}")
 
 
 # ------------------------------------------------------------------------------- Ref
@@ -261,6 +271,16 @@ class TxBuilder:
         """Drop a named graph and all its membership statements."""
         self._ops.append({"op": "dropGraph", "graph": self._v(graph)})
 
+    def import_bundle(self, bundle: Dict[str, Any]) -> Ref:
+        """Import a bundle read with :meth:`View.bundle`, possibly from another database.
+
+        Returns a :class:`Ref` to the imported root statement; the op's entry in
+        ``report.results`` is ``{"root", "statements": [{"id", "eid", "new"}]}``.
+        """
+        name = self._fresh()
+        self._ops.append({"op": "importBundle", "bundle": bundle, "as": name})
+        return Ref(name)
+
     def cypher(self, text: str, params: Optional[Dict[str, Any]] = None) -> None:
         """Run a Cypher write statement as part of this transaction."""
         op: Dict[str, Any] = {"op": "cypher", "text": text}
@@ -335,14 +355,18 @@ class View:
     def _call(self, op: str, extra: Dict[str, Any]) -> str:
         return _call(self._native, op, json.dumps({**extra, "view": self._view}))
 
-    def sparql(self, text: str) -> SparqlResult:
+    def sparql(self, text: str, *, provenance: bool = False) -> SparqlResult:
         """Run a SPARQL query on this view.
 
         Returns :class:`~._types.SparqlSelectResult`,
         :class:`~._types.SparqlAskResult`, :class:`~._types.SparqlGraphResult`, or
-        :class:`~._types.SparqlUpdateResult` depending on the query form.
+        :class:`~._types.SparqlUpdateResult` depending on the query form.  With
+        *provenance*, a SELECT result also lists the statements behind each row.
         """
-        result_text = self._call("sparql", {"text": text})
+        args: Dict[str, Any] = {"text": text}
+        if provenance:
+            args["provenance"] = True
+        result_text = self._call("sparql", args)
         return sparql_result_from_json(json.loads(result_text))
 
     def cypher(
@@ -385,11 +409,16 @@ class View:
         *,
         mode: str = "reach",
         max_hops: Optional[int] = None,
+        graphs: Optional[List[Any]] = None,
+        time_respecting: Any = False,
     ) -> List[PathRow]:
         """Find all nodes reachable from *start* via *path_expr*.
 
         *mode* is ``"reach"`` (default), ``"trail"``, ``"anyShortest"`` or
-        ``"allShortest"``.
+        ``"allShortest"``.  *graphs* keeps every hop inside the listed graphs (a term
+        that is not stored names no graph).  *time_respecting* is ``True`` or a time
+        to start after: each hop must start no earlier than the previous one, and
+        every row carries its ``arrival``.
         """
         args: Dict[str, Any] = {
             "start": term_to_json(start),
@@ -398,6 +427,12 @@ class View:
         }
         if max_hops is not None:
             args["maxHops"] = max_hops
+        if graphs is not None:
+            args["graphs"] = [term_to_json(g) for g in graphs]
+        if time_respecting is True:
+            args["timeRespecting"] = True
+        elif time_respecting is not False and time_respecting is not None:
+            args["timeRespecting"] = {"after": time_to_json(time_respecting)}
         rows: List[Any] = json.loads(self._call("path", args))
         return [
             PathRow(
@@ -405,6 +440,7 @@ class View:
                 end=term_from_json(r["end"]),
                 hops=int(r["hops"]),
                 path=r.get("path") if r.get("path") is not None else None,
+                arrival=None if r.get("arrival") is None else int(r["arrival"]),
             )
             for r in rows
         ]
@@ -425,6 +461,17 @@ class View:
             self._call("graphMembers", {"graph": term_to_json(graph)})
         )
         return [int(e) for e in items]
+
+    def dependents(self, eid: Any) -> List[int]:
+        """Return the statements that stand on *eid* (its layers and memberships,
+        transitively): what retracting it would cascade to."""
+        items: List[Any] = json.loads(self._call("dependents", {"eid": _eid_json(eid)}))
+        return [int(e) for e in items]
+
+    def bundle(self, eid: Any) -> Dict[str, Any]:
+        """Return statement *eid* with its layers and evidence as ``tiramemsu-bundle/1``
+        JSON, for :meth:`TxBuilder.import_bundle`."""
+        return dict(json.loads(self._call("bundle", {"eid": _eid_json(eid)})))
 
     def values(self, s: Any, key: Any) -> List[Any]:
         """Return all objects ``o`` where ``(s, key, o)`` exists in this view."""

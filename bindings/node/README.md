@@ -114,7 +114,8 @@ A view chooses when you look and when the fact was true. Every read takes a view
 | `supersede(eid, { o?, validFrom?, validTo? })` | Corrects a statement and replays its layers on the new one |
 | `confirm(eid)` | Records that another source agrees |
 | `meta(p, o)`, `upsert(p, o)`, `newNode()` | Transaction metadata, unique upsert, an anonymous node |
-| `addToGraph(eid, g)`, `removeFromGraph`, `clearGraph`, `createGraph`, `dropGraph` | Named graphs as tags on statements |
+| `addToGraph(eid, g)`, `removeFromGraph`, `clearGraph`, `createGraph`, `dropGraph` | Named graphs as tags on statements. A statement (`stmt(eid)` or a `Ref`) can name a graph, so an edge can hold a subgraph |
+| `importBundle(bundle)` | Imports a bundle from `view.bundle`, possibly read from another database; returns a `Ref` to the imported root |
 | `cypher(text, params?)` | A Cypher query that may write, inside the same transaction |
 
 `opts` takes `validFrom`, `validTo` (a `Date`, epoch milliseconds or an RFC 3339 string) and `onExisting: "confirm"`. `transact(fn, { dryRun: true })` reports what would happen and commits nothing. `db.speculate(fn, queries)` applies changes hypothetically, runs queries on the result, and keeps nothing.
@@ -123,14 +124,18 @@ A view chooses when you look and when the fact was true. Every read takes a view
 
 | Method | Returns |
 |---|---|
-| `view.sparql(text)` | `{ kind: "select", vars, rows }`, `{ kind: "ask", value }`, `{ kind: "graph", triples }` or `{ kind: "update", report }` |
+| `view.sparql(text, { provenance? })` | `{ kind: "select", vars, rows, provenance? }`, `{ kind: "ask", value }`, `{ kind: "graph", triples }` or `{ kind: "update", report }` |
 | `view.cypher(text, params?)` | `{ columns, rows }` |
 | `view.triples({ s?, p?, o? })` | Statements with `eid`, the three terms, `tAdd`, `tRet`, `validFrom`, `validTo`, `retKind` |
-| `view.path(start, expr, { mode?, maxHops? })` | Endpoints with hop counts. `mode` is `reach`, `trail`, `anyShortest` or `allShortest` |
+| `view.path(start, expr, { mode?, maxHops?, graphs?, timeRespecting? })` | Endpoints with hop counts and `arrival`. `mode` is `reach`, `trail`, `anyShortest` or `allShortest` |
+| `view.dependents(eid)` | The statements that stand on `eid`: what retracting it would cascade to |
+| `view.bundle(eid)` | The statement with its layers and evidence, as `tiramemsu-bundle/1` JSON |
 | `view.events(since?)` | The change log after a transaction |
 | `view.graphs()`, `view.graphMembers(g)`, `view.values(s, key)` | Named graphs and values |
 
 `expr` is SPARQL property-path syntax with the predeclared prefixes `v:`, `sys:`, `tm:`, `rdf:` and `xsd:`, for example `v:knows+`. SPARQL supports RDF 1.2 annotations: `{| v:confidence ?c |}` reads a layer.
+
+With `provenance: true` a SELECT result also carries, for each row, the statements (`{ stmt }` terms) that produced it. `graphs` keeps every hop of a path inside the listed graphs. `timeRespecting: true` (or `{ after: time }`) makes each hop start no earlier than the previous one, and every row then carries its earliest `arrival` in epoch milliseconds.
 
 ## Terms
 
@@ -156,9 +161,11 @@ Every failure throws a `TiramemsuError` with a `code`:
 | `Unsupported` | Valid but outside the supported subset, such as a Cypher write through a read view |
 | `UniqueViolation` | A `sys:unique` predicate already has a live holder of that value |
 | `ValueTypeMismatch` | The object does not match the predicate's `sys:valueType` |
+| `SubjectTypeMismatch` | The subject does not match the predicate's `sys:subjectType`, such as a layer predicate on a plain node |
 | `CascadeLimitExceeded` | A retraction would touch more than `maxCascade` statements |
 | `PathLimitExceeded` | A path search exceeded its state limit |
 | `InvalidPatch` | A `supersede` patch tried to change the subject or predicate |
+| `IdSpaceExhausted` | An id counter passed 2^48 − 1 |
 | `Sqlite` | A SQLite failure, such as a locked or unreadable file |
 
 ## Options
