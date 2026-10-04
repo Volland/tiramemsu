@@ -132,3 +132,4 @@ section > .wrap > p.sub.more { margin: 20px 0 0; }
 /* Diagrams drawn on white: keep them on a light card in both themes. */
 .diagram { background: #fff; border: 1px solid var(--line); border-radius: 14px; padding: 14px; }
 .diagram img { display: block; margin: 0 auto; }
+.grid.four { grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); }

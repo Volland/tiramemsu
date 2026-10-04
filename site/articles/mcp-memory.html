@@ -11,7 +11,7 @@
 <body>
 <header class="top"><div class="wrap">
   <a class="brand" href="../"><img src="../assets/logo.svg" alt="">Tiramemsu</a>
-  <nav class="menu"><a href="../#features">Features</a><a href="../#start">Quick start</a><a href="./" aria-current="page">Articles</a><a href="https://github.com/Volland/tiramemsu">GitHub</a></nav>
+  <nav class="menu"><a href="../#features">Features</a><a href="../#start">Quick start</a><a href="./" aria-current="page">Articles</a><a href="../paper/">Paper</a><a href="https://github.com/Volland/tiramemsu">GitHub</a></nav>
 </div></header>
 
 <article class="post">
@@ -22,7 +22,7 @@
 <p><code>tiramemsu-mcp</code> closes that gap. It is a small binary that serves one memory file over the Model Context Protocol (MCP). Any MCP client that speaks stdio can use it: Claude Code, Claude Desktop, or your own. The agent sees typed tools such as <code>assert</code>, <code>query</code> and <code>text_search</code>, and the memory keeps all of its rules.</p>
 
 <h2>Install</h2>
-<p>The server is a separate crate, so the database crates carry no protocol code. It is not on crates.io yet, so install it from the repository. SQLite is compiled in, and the binary has no other dependencies.</p>
+<p>The server is a separate crate, so the database crates carry no protocol code. Install it from crates.io. SQLite is compiled in, and the binary has no other dependencies.</p>
 <pre><code>cargo install tiramemsu-mcp
 tiramemsu-mcp --help</code></pre>
 

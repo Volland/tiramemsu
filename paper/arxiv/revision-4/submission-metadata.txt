@@ -1,0 +1,41 @@
+Title:
+Layered Bitemporal Graphs: Statement Identity, Two Clocks, and Metagraphs as Tags
+
+Authors:
+Volodymyr Pavlyshyn
+
+Affiliation:
+Independent researcher
+
+Abstract:
+Agent memory needs durable statement identity, provenance, and a distinction between when a claim held and when the system recorded it. We study layered bitemporal graphs, in which statement occurrences can reference other occurrences and carry both transaction-time lifetimes and valid-time intervals. On a referentially complete history, reference-closed sets form an Alexandrov topology. Its interior operator, the ground core, characterises minimal retraction cascades, grounded snapshots, and effective valid-time intervals. We give a correction contract that preserves structural closure under explicit patch and lineage conditions; preservation of references excludes changes made to the corrected root. A typed anchor-and-role encoding of metagraphs commutes with well-formed bitemporal snapshots. Compact binary encodings require additional acyclicity for insertion under a live-reference discipline. The calculus is realised in Tiramemsu, an embedded SQLite graph database. Retained checks identified four implementation gaps; endpoint validation, closed retention and transaction-date guards now prevent those counterexamples. These checks support selected contracts rather than certifying the entire implementation. Our contribution is an operational account of recursive temporal reference integrity, rather than a new theory of temporal databases or finite topologies.
+
+Recommended Primary Category:
+cs.DB (Databases)
+
+Suggested License:
+CC BY 4.0
+
+Comments:
+22 pages. Original research preprint.
+
+Journal Reference:
+
+
+Doi:
+
+
+Report Number:
+
+
+Top Level Tex:
+layered-bitemporal-graphs.tex
+
+Compiler:
+pdfLaTeX
+
+Internal Manuscript Revision:
+4
+
+Status:
+Prepared locally; not submitted to arXiv.

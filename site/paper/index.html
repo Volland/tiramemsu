@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The paper: Layered Bitemporal Graphs: tiramemsu</title>
+<meta name="description" content="Layered Bitemporal Graphs: Statement Identity, Two Clocks, and Metagraphs as Tags. The model behind tiramemsu, with proofs. Download the revision-4 preprint (PDF, CC BY 4.0).">
+<link rel="icon" href="../assets/logo.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+<header class="top"><div class="wrap">
+  <a class="brand" href="../"><img src="../assets/logo.svg" alt="">Tiramemsu</a>
+  <nav class="menu"><a href="../#features">Features</a><a href="../#start">Quick start</a><a href="../articles/">Articles</a><a href="./" aria-current="page">Paper</a><a href="https://github.com/Volland/tiramemsu">GitHub</a></nav>
+</div></header>
+
+<article class="post">
+<h1>Layered Bitemporal Graphs</h1>
+<p class="meta"><em>Statement Identity, Two Clocks, and Metagraphs as Tags</em> · Volodymyr Pavlyshyn · Revision 4, 3 October 2026 · Draft preprint, CC BY 4.0</p>
+
+<p>This paper writes down the model behind tiramemsu precisely and proves what its operations guarantee. A statement has its own id, so other statements can point at it. Every statement has two clocks: when the database knew it, and when it was true. The paper asks what it means for such a memory to stay consistent when facts are retracted, corrected and read in the past.</p>
+
+<div class="btns">
+  <a class="btn primary" href="layered-bitemporal-graphs-v4.pdf">Download the PDF (revision 4, 22 pages)</a>
+  <a class="btn" href="../articles/grounded-memory.html">Read the companion article</a>
+  <a class="btn" href="https://github.com/Volland/tiramemsu/tree/main/paper">LaTeX source</a>
+</div>
+
+<h2>Abstract</h2>
+<p>Agent memory needs durable statement identity, provenance, and a distinction between when a claim held and when the system recorded it. We study layered bitemporal graphs, in which statement occurrences can reference other occurrences and carry both transaction-time lifetimes and valid-time intervals. On a referentially complete history, reference-closed sets form an Alexandrov topology. Its interior operator, the ground core, characterises minimal retraction cascades, grounded snapshots, and effective valid-time intervals. We give a correction contract that preserves structural closure under explicit patch and lineage conditions; preservation of references excludes changes made to the corrected root. A typed anchor-and-role encoding of metagraphs commutes with well-formed bitemporal snapshots. Compact binary encodings require additional acyclicity for insertion under a live-reference discipline. The calculus is realised in Tiramemsu, an embedded SQLite graph database. Retained checks identified four implementation gaps; endpoint validation, closed retention and transaction-date guards now prevent those counterexamples. These checks support selected contracts rather than certifying the entire implementation. Our contribution is an operational account of recursive temporal reference integrity, rather than a new theory of temporal databases or finite topologies.</p>
+
+<h2>The main results</h2>
+<div class="grid">
+  <div class="card"><span class="tag">Grounded</span><h3>One operator</h3><p>The ground core keeps the statements whose whole support is present. It is the interior operator of a topology, and the other results follow from it.</p></div>
+  <div class="card"><span class="tag">Cascade</span><h3>Retraction is forced</h3><p>The cascade is the least retraction that leaves memory grounded. It takes everything it must and nothing more.</p></div>
+  <div class="card"><span class="tag">Two clocks</span><h3>Lifetimes nest</h3><p>Every as-of view is grounded exactly when lifetimes nest along layers. Valid time is a claim, so the reader takes its grounded slice through effective validity.</p></div>
+  <div class="card"><span class="tag">Metagraphs</span><h3>Bitemporal lifting</h3><p>For well-formed temporal metagraphs, taking a snapshot commutes with the encoding. Metagraphs get time travel without a temporal theory of their own.</p></div>
+</div>
+
+<h2>Who it is for</h2>
+<p>Readers who want to know why tiramemsu behaves as it does: why a retraction takes a fact's layers with it, why the past never changes once written, why a valid-time slice can hold a layer whose fact was not valid then, and why a correction keeps everything that was said about the fact. If you want the ideas without the proofs, start with the <a href="../articles/grounded-memory.html">companion article</a>.</p>
+
+<h2>Status</h2>
+<p>This is a draft preprint, prepared for arXiv (primary category cs.DB) but not yet submitted. It has not been peer reviewed. The source, the bibliography, a retained verification artifact and the arXiv upload package are in the <a href="https://github.com/Volland/tiramemsu/tree/main/paper">repository</a>.</p>
+<div class="note"><strong>Paper and engine.</strong> Checking the engine against the paper found gaps where it did not meet the paper's assumptions. Revision 4 describes repairs for them: writes that require live statement endpoints, corrections that drop the layers of dropped memberships, and transaction-date guards. Those repairs are <em>not</em> in the released tiramemsu 0.3.0. They will ship in a later release. Until then, the companion article lists what the released engine does not yet guarantee, and the ground core of a view is always a grounded reading.</div>
+
+<h2>Cite</h2>
+<pre><code>@misc{pavlyshyn2026layered,
+  author = {Pavlyshyn, Volodymyr},
+  title  = {Layered Bitemporal Graphs: Statement Identity, Two Clocks,
+            and Metagraphs as Tags},
+  year   = {2026},
+  note   = {Draft preprint, revision 4. CC BY 4.0},
+  url    = {https://github.com/Volland/tiramemsu/tree/main/paper}
+}</code></pre>
+
+<p><a href="../articles/architecture.html">How tiramemsu is built →</a></p>
+</article>
+
+<footer><div class="wrap">
+  <span>Tiramemsu · MIT OR Apache-2.0 · Paper CC BY 4.0 · <a href="https://github.com/Volland/tiramemsu">github.com/Volland/tiramemsu</a></span>
+  <span><a href="../">Home</a> · <a href="../articles/">All articles</a></span>
+  <span><a href="../impressum.html">Impressum</a> · <a href="../datenschutz.html">Datenschutz</a> · <a href="../agb.html">AGB</a></span>
+</div></footer>
+</body>
+</html>

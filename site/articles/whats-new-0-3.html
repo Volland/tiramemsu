@@ -11,7 +11,7 @@
 <body>
 <header class="top"><div class="wrap">
   <a class="brand" href="../"><img src="../assets/logo.svg" alt="">Tiramemsu</a>
-  <nav class="menu"><a href="../#features">Features</a><a href="../#start">Quick start</a><a href="./" aria-current="page">Articles</a><a href="https://github.com/Volland/tiramemsu">GitHub</a></nav>
+  <nav class="menu"><a href="../#features">Features</a><a href="../#start">Quick start</a><a href="./" aria-current="page">Articles</a><a href="../paper/">Paper</a><a href="https://github.com/Volland/tiramemsu">GitHub</a></nav>
 </div></header>
 
 <article class="post">
@@ -369,7 +369,7 @@ plan.regions.map((r) =&gt; [r.kind, r.note]);   <span class="c">// [["sql", "non
 <h2 id="mcp">8. An MCP server for agents</h2>
 <p><strong>What it is.</strong> <code>tiramemsu-mcp</code> is a separate binary that serves one memory file to an MCP client, such as Claude Code or Claude Desktop, over stdio. It has fourteen typed tools: write verbs (<code>assert</code>, <code>confirm</code>, <code>supersede</code>, <code>import_bundle</code>), read tools (<code>query</code>, <code>text_search</code>, <code>conflicts</code>, <code>preview_bundle</code>, <code>dependents</code>, <code>export_bundle</code>) and the saved-answer tools.</p>
 <p><strong>Why an agent wants it.</strong> The agent gets a memory without anyone writing glue code, and the memory keeps its rules: queries only read, every call has a budget, and answers say which statements back them.</p>
-<pre><code><span class="c"># build and install from the repository (it is not on crates.io yet)</span>
+<pre><code><span class="c"># install from crates.io</span>
 cargo install tiramemsu-mcp
 
 <span class="c"># register it with Claude Code</span>

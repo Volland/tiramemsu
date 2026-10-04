@@ -11,7 +11,7 @@
 <body>
 <header class="top"><div class="wrap">
   <a class="brand" href="./"><img src="assets/logo.svg" alt="">Tiramemsu</a>
-  <nav class="menu"><a href="#features">Features</a><a href="#feedback">Feedback</a><a href="#layers">Layers</a><a href="#start">Quick start</a><a href="articles/">Articles</a><a href="https://github.com/Volland/tiramemsu">GitHub</a></nav>
+  <nav class="menu"><a href="#features">Features</a><a href="#feedback">Feedback</a><a href="#layers">Layers</a><a href="#start">Quick start</a><a href="articles/">Articles</a><a href="paper/">Paper</a><a href="https://github.com/Volland/tiramemsu">GitHub</a></nav>
 </div></header>
 
 <main>
@@ -20,7 +20,7 @@
     <p class="slogan">Your agent’s brain loves Tiramemsu.</p>
     <h1>Memory that has <em>layers</em> and never forgets.</h1>
     <p class="lead">Tiramemsu is an embedded graph database on SQLite for agent and personal memory. Every fact has its own id, so a fact can carry a confidence, a source, or a belief about it, layer on layer. Every change is kept, with when it was made and when it was true.</p>
-    <div class="btns"><a class="btn primary" href="#start">Quick start</a><a class="btn" href="articles/layered-graphs.html">What are layered graphs?</a><a class="btn" href="articles/tiramemsu-vs-oxilite.html">Tiramemsu vs oxilite</a></div>
+    <div class="btns"><a class="btn primary" href="#start">Quick start</a><a class="btn" href="articles/layered-graphs.html">What are layered graphs?</a><a class="btn" href="articles/tiramemsu-vs-oxilite.html">Tiramemsu vs oxilite</a><a class="btn" href="paper/">Read the paper</a></div>
   </div>
   <img src="assets/logo.svg" alt="A brain taking a bite out of a tiramisu whose layers are a graph">
 </div>
@@ -165,7 +165,7 @@ db.now().cypher(<span class="s">"MATCH (p)-[r:worksAt]-&gt;(o) RETURN p, o, r.co
 </code></pre>
     </div>
     <div class="panel p-rs">
-      <p class="install"><code>cargo add --git https://github.com/Volland/tiramemsu tiramemsu</code> · not on crates.io yet</p>
+      <p class="install"><code>cargo add tiramemsu</code> · <a href="https://crates.io/crates/tiramemsu">crates.io</a></p>
 <pre><code><span class="k">let</span> db = Db::open(dir.join(<span class="s">"memory.db"</span>), OpenOptions::default())?;
 
 <span class="c">// 1. A fact is a statement with its own id, so it can carry layers.</span>
@@ -196,7 +196,7 @@ db.now().cypher(<span class="s">"MATCH (p)-[r:worksAt]-&gt;(o) RETURN p, o, r.co
   <p class="sub">Every binding wraps the same core, so all three see the same past. See the <a href="https://github.com/Volland/tiramemsu/tree/main/bindings">bindings</a> for the full API.</p>
   <h3 id="agent">Use it from an agent</h3>
   <p class="sub">No code needed: register the MCP server and the agent gets tools such as <code>assert</code>, <code>query</code>, <code>text_search</code> and <code>check_answers</code>. <a href="articles/mcp-memory.html">How it works →</a></p>
-<pre><code><span class="c"># install from the repository, then register it with Claude Code</span>
+<pre><code><span class="c"># install from crates.io, then register it with Claude Code</span>
 cargo install tiramemsu-mcp
 claude mcp add tiramemsu -- tiramemsu-mcp --db ./memory.db --text-index</code></pre>
 </div></section>
@@ -213,6 +213,18 @@ claude mcp add tiramemsu -- tiramemsu-mcp --db ./memory.db --text-index</code></
   <p class="note"><strong>Known limits.</strong> As-of lookups slow down as one key collects many updates. Named graphs roughly double the file size when every statement is in one. Decimals come back as doubles in SPARQL. There is no network server; the MCP server is local and speaks stdio only. In the browser the database uses a rollback journal and refuses query budgets and bulk import. The crates are on crates.io and the Python package on PyPI; the Node.js and browser packages are not on npm yet.</p>
 </div></section>
 
+<section id="paper"><div class="wrap">
+  <h2>The paper</h2>
+  <p class="sub"><em>Layered Bitemporal Graphs: Statement Identity, Two Clocks, and Metagraphs as Tags.</em> The model behind tiramemsu, written down precisely and with proofs. Draft preprint, revision 4, CC BY 4.0.</p>
+  <div class="grid four">
+    <div class="card"><span class="tag">Grounded</span><h3>One operator</h3><p>The ground core keeps the statements whose whole support is present. It is the interior operator of a topology, and the other results follow from it.</p></div>
+    <div class="card"><span class="tag">Cascade</span><h3>Retraction is forced</h3><p>The cascade is the least retraction that leaves memory grounded. It takes everything it must and nothing more.</p></div>
+    <div class="card"><span class="tag">Two clocks</span><h3>Lifetimes nest</h3><p>Every as-of view is grounded exactly when lifetimes nest along layers. Valid time is a claim, so the reader takes its grounded slice through effective validity.</p></div>
+    <div class="card"><span class="tag">Metagraphs</span><h3>Bitemporal lifting</h3><p>For well-formed temporal metagraphs, taking a snapshot commutes with the encoding. Metagraphs get time travel without a temporal theory of their own.</p></div>
+  </div>
+  <div class="btns" style="margin-top:18px"><a class="btn primary" href="paper/layered-bitemporal-graphs-v4.pdf">Download the PDF</a><a class="btn" href="paper/">About the paper</a><a class="btn" href="articles/grounded-memory.html">Read the companion article</a></div>
+</div></section>
+
 <section id="articles"><div class="wrap">
   <h2>Articles</h2>
   <ul class="list-articles">
@@ -227,6 +239,7 @@ claude mcp add tiramemsu -- tiramemsu-mcp --db ./memory.db --text-index</code></
     <li class="card"><h3><a href="articles/journeys-in-time.html">Journeys that respect time</a></h3><p>Time-respecting paths in SPARQL and Cypher, earliest arrival, and how a query says whether its paths were complete.</p></li>
     <li class="card"><h3><a href="articles/bounded-queries-bulk-loads.html">Bounded queries and bulk loads</a></h3><p>Budgets, cancellation and result limits, bulk import sessions, and a join operator for cyclic patterns with a small triangle benchmark.</p></li>
     <li class="card"><h3><a href="articles/architecture.html">How tiramemsu is built</a></h3><p>One diagram of the layers, from the query front ends down to the one SQLite file, and the four ways to use it.</p></li>
+    <li class="card"><h3><a href="articles/grounded-memory.html">Memory that stays grounded</a></h3><p>A plain-language companion to the paper: one operator explains the cascade, time travel, valid-time slices and corrections, and why metagraphs get two clocks for free.</p></li>
   </ul>
 </div></section>
 </main>

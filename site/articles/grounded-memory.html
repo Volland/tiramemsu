@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Memory that stays grounded: tiramemsu</title>
+<meta name="description" content="A plain-language companion to the paper Layered Bitemporal Graphs: one operator, the ground core, explains the cascade, time travel, valid-time slices, corrections and why metagraphs get two clocks for free.">
+<link rel="icon" href="../assets/logo.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+<header class="top"><div class="wrap">
+  <a class="brand" href="../"><img src="../assets/logo.svg" alt="">Tiramemsu</a>
+  <nav class="menu"><a href="../#features">Features</a><a href="../#start">Quick start</a><a href="./" aria-current="page">Articles</a><a href="../paper/">Paper</a><a href="https://github.com/Volland/tiramemsu">GitHub</a></nav>
+</div></header>
+
+<article class="post">
+<h1>Memory that stays grounded</h1>
+<p class="meta">Tiramemsu articles · 3 October 2026 · companion to the paper <a href="../paper/"><em>Layered Bitemporal Graphs</em></a></p>
+
+<p>Tiramemsu stores facts with their own ids, so a fact can carry a confidence, a source or a belief about it, layer on layer. Every statement also has two clocks: when the database knew it, and when it was true in the world. Nothing is ever deleted.</p>
+<p>Each of these ideas is old and well studied: reification and RDF-star for the first, temporal databases for the second, Datomic for the third. What happens when all three meet in one statement is less well charted. Corrections have to carry annotations along. A snapshot of the past can contain a confidence score whose fact is missing. A container can be retracted while its contents stay. We wrote a paper that gives this combination a precise meaning and proves what the operations guarantee. This article is the version without the proofs.</p>
+
+<h2>One question: is what I see grounded?</h2>
+<p>Call a set of statements <strong>grounded</strong> when every statement in it can find the statements it points at. A confidence on <code>e1</code> is grounded if <code>e1</code> is there too. A belief that cites <code>e1</code> is grounded if <code>e1</code> is there. An ungrounded view is what an agent should never be shown: an annotation about nothing.</p>
+<p>The whole paper turns on one operator. The <strong>ground core</strong> of any set of statements, written γ(X), keeps exactly the statements whose whole support is inside the set: the statement itself, what it points at, what that points at, and so on. It is the largest grounded part of X. Mathematically it is the interior operator of a topology, which sounds grand but buys something practical: γ is idempotent, monotone and distributes over intersection, so you can apply it to any view, in any order, and it never surprises you.</p>
+
+<h2>Retraction takes exactly what it must</h2>
+<p>When you retract a fact, tiramemsu retracts everything that rests on it: its layers, the beliefs that cite it, the layers on those. The paper proves this cascade is not a design whim. The facts left after retracting <code>e</code> are exactly γ(memory without <code>e</code>). Any retraction that keeps memory grounded must take at least the cascade, and the cascade takes nothing more. A truth maintenance system makes a similar promise. Here it holds without forgetting anything, because a retraction only closes a lifetime.</p>
+<p>You can see the set before committing to it, on any view, without taking the writer lock:</p>
+<pre><code><span class="k">let</span> at_risk = db.now().dependents(e1)?;                   <span class="c">// what a retraction of e1 would take</span>
+<span class="k">let</span> then    = db.as_of(TimeRef::Tx(<span class="s">150</span>)).dependents(e1)?; <span class="c">// what depended on it back then</span></code></pre>
+<p>A property test checks that this read, a dry-run retraction and the reverse path query <code>(^sys:subject|^sys:object)*</code> always return the same set.</p>
+
+<h2>The past is grounded when lifetimes nest</h2>
+<figure>
+  <img src="../assets/grounded.svg" alt="Left: the lifetimes of a fact, its confidence and a belief on the transaction-time axis, each inside the one it rests on, all ending at the retraction. Right: a confidence written after its fact was retracted, so a view as of t5 holds the confidence without the fact." width="760" height="340">
+  <figcaption>Draw each statement's lifetime as a bar on the transaction-time axis. Every as-of view is grounded exactly when each layer's bar sits inside the bar it rests on.</figcaption>
+</figure>
+<p>Two results make time travel safe. First, an <code>as_of(t)</code> view never changes once transaction <code>t</code> has committed, and it equals a replay of the event log up to <code>t</code>. An answer about the past is reproducible forever. Second, every as-of view is grounded if and only if lifetimes nest along layers, as in the left half of the figure. The engine gets nesting for free if a write may only point at statements that are live at that moment. The paper calls this the <em>live-reference discipline</em>.</p>
+<p>There is one deliberate exception. When a fact is corrected, the new version points back at the old one with <code>sys:supersedes</code>. That link points into the past on purpose. The paper calls such predicates <em>lineage</em> and exempts them.</p>
+
+<h2>Valid time is a claim, so the reader decides</h2>
+<p>Valid time is different. A confidence assessed in 2026 about a job someone held in 2020 is valid in 2026. Tiramemsu does not clamp a layer's interval to its fact's, and that is on purpose. The consequence is that a <code>validAt</code> slice can contain a layer whose fact was not valid at that instant.</p>
+<p>The paper gives the reader a cheap fix. A statement's <strong>effective validity</strong> is the intersection of the valid intervals of everything in its support. The largest grounded valid-time slice is exactly the set of statements whose effective validity contains the instant. Intersecting intervals gives an interval, so the effective validity can be computed during the traversal that reads the layers anyway. The two clocks end up asymmetric. The engine keeps transaction time grounded, because it controls that clock. Valid time is the writer's claim about the world, and it is grounded only when the reader asks.</p>
+
+<h2>A correction is an isomorphism</h2>
+<p><code>supersede</code> fixes a fact while keeping what was said about it. It retracts the fact's cascade set and replays it under new ids. The paper proves the replay is a structure-preserving copy: every layer, citation and edge's contents lands on the corrected fact exactly as it stood on the old one. Meanwhile the old structure stays visible as of the transaction before. After <em>n</em> corrections, the edit history is a path of length <em>n</em> over <code>sys:supersedes</code>.</p>
+
+<h2>Metagraphs get two clocks for free</h2>
+<p>A <a href="metagraphs.html">metagraph</a> has edges that are vertices and vertices, or edges, that hold subgraphs. In tiramemsu the first comes from statement ids. The second comes from membership statements <code>(e sys:inGraph g)</code>, where the graph name <code>g</code> may itself be a statement. The paper turns this into an encoding: every vertex, edge, membership and annotation of a metagraph becomes one statement, and every dependency becomes a reference.</p>
+<p>The headline result is the <strong>Bitemporal Lifting Theorem</strong>. A temporal metagraph is <em>well-formed</em> when no part outlives, on either clock, the things it mentions. For such a metagraph, taking a snapshot and encoding commute. Snapshot then encode gives the same result as encode then snapshot. So a metagraph needs no temporal theory of its own. These all act on metagraphs through the encoding:</p>
+<ul>
+  <li>as-of views and valid-time slices</li>
+  <li>history</li>
+  <li>cascades and corrections</li>
+  <li>time-respecting paths</li>
+</ul>
+<p>Some consequences you can rely on:</p>
+<ul>
+  <li><strong>Unfold in time:</strong> the members of a container as of any transaction are a <code>GRAPH</code> query in that view.</li>
+  <li><strong>Containers retract, contents stay:</strong> retracting an edge that holds a subgraph retracts its memberships and annotations, never the facts inside.</li>
+  <li><strong>Fold is a write of tags:</strong> folding changes no earlier view, and unfolding afterwards returns what was folded.</li>
+  <li><strong>Linear size:</strong> the encoding costs one statement per vertex, edge, endpoint, membership and annotation, and a binary edge is just one statement.</li>
+</ul>
+
+<h2>What the theory found in the code</h2>
+<p>Writing down the hypotheses made it possible to check the engine against them. It does not yet meet them in three places, each confirmed by a test on 3 October 2026:</p>
+<ul>
+  <li><strong>Layers on retracted facts.</strong> <code>assert</code> accepts a statement that is no longer live as subject or object, so the current view can hold an annotation about nothing. <code>confirm</code> and <code>add_to_graph</code> already check liveness.</li>
+  <li><strong>Forward references.</strong> An id that was never allocated is accepted as a subject. This is the only way, outside a correction, to build a reference cycle.</li>
+  <li><strong>A layer on a dropped membership.</strong> A correction drops the fact's memberships in outside graphs. A layer on such a membership, such as who added the fact to a session, is still replayed, and its copy points at an id that was never written.</li>
+</ul>
+<p>The fixes come from the same operator. A correction should replay γ of what it keeps, so the layers of a dropped membership are dropped with it. User writes should follow the live-reference discipline, with predicates that point into the past declared as lineage. Annotating a fact <em>after</em> it was retracted, to record why it was wrong, is a legitimate thing to do. Declaring it makes the intent explicit. Until the fixes land, γ(view) is always a grounded reading.</p>
+<div class="note"><strong>Since then.</strong> Revision 4 of the paper reports a fourth gap, the order of transaction dates, and describes repairs for all four. Those repairs are not in the released tiramemsu 0.3.0 and will ship in a later release, so what this section says still holds for 0.3.0. See <a href="../paper/">the paper page</a>.</div>
+
+<h2>Read the paper</h2>
+<p>The paper, <em>Layered Bitemporal Graphs: Statement Identity, Two Clocks, and Metagraphs as Tags</em>, has the definitions, every theorem with its proof, and a related-work section. It covers bitemporal databases, temporal graphs, statement-level identity, metagraphs, truth maintenance and agent memory. It is a draft preprint under CC BY 4.0.</p>
+<p><a class="btn primary" href="../paper/layered-bitemporal-graphs-v4.pdf">Download the PDF</a> <a class="btn" href="../paper/">About the paper</a> <a class="btn" href="https://github.com/Volland/tiramemsu/tree/main/paper">LaTeX source</a></p>
+<p><a href="metagraphs.html">Related: metagraphs from one row shape →</a></p>
+</article>
+
+<footer><div class="wrap">
+  <span>Tiramemsu · MIT OR Apache-2.0 · <a href="https://github.com/Volland/tiramemsu">github.com/Volland/tiramemsu</a></span>
+  <span><a href="../">Home</a> · <a href="./">All articles</a></span>
+  <span><a href="../impressum.html">Impressum</a> · <a href="../datenschutz.html">Datenschutz</a> · <a href="../agb.html">AGB</a></span>
+</div></footer>
+</body>
+</html>

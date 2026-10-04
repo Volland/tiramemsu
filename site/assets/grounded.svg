@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 340" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif" role="img" aria-labelledby="t d">
+  <title id="t">Grounded memory: lifetimes nest along layers</title>
+  <desc id="d">Left: lifetimes on the transaction-time axis. The fact e1 lives from t1 to t9. Its confidence layer e2 lives from t3 to t9, inside e1's lifetime, and the belief e7 from t4 to t9. Retracting e1 at t9 ends all three together. Right: the ungrounded case. e1 lives from t1 to t2; a confidence layer added at t3 lives from t3 onward, outside e1's lifetime, so the view as of t5 holds a confidence about nothing.</desc>
+  <rect width="760" height="340" rx="18" fill="#fffaf0" stroke="#ecdcc0" stroke-width="2"/>
+  <g font-size="13" font-weight="700" fill="#6b5443" letter-spacing=".06em">
+    <text x="32" y="40">GROUNDED: LIFETIMES NEST</text>
+    <text x="410" y="40">UNGROUNDED: A LAYER ABOUT NOTHING</text>
+  </g>
+
+  <!-- left panel -->
+  <g font-size="14" fill="#2a1a10">
+    <text x="32" y="92" font-weight="700">e1</text><text x="58" y="92" fill="#6b5443">fact</text>
+    <rect x="110" y="76" width="240" height="22" rx="6" fill="#ffe0b0" stroke="#3b2418" stroke-width="2"/>
+    <text x="32" y="142" font-weight="700">e2</text><text x="58" y="142" fill="#6b5443">conf</text>
+    <rect x="170" y="126" width="180" height="22" rx="6" fill="#fff1d6" stroke="#3b2418" stroke-width="2"/>
+    <text x="32" y="192" font-weight="700">e7</text><text x="58" y="192" fill="#6b5443">belief</text>
+    <rect x="200" y="176" width="150" height="22" rx="6" fill="#fff1d6" stroke="#3b2418" stroke-width="2"/>
+    <line x1="350" y1="64" x2="350" y2="214" stroke="#d2456a" stroke-width="2.5" stroke-dasharray="6 4"/>
+    <text x="356" y="234" text-anchor="end" fill="#d2456a" font-weight="700" font-size="13">retract e1 → cascade</text>
+    <line x1="110" y1="262" x2="360" y2="262" stroke="#3b2418" stroke-width="2"/>
+    <g font-size="12" fill="#6b5443" text-anchor="middle">
+      <text x="110" y="280">t1</text><text x="170" y="280">t3</text><text x="200" y="280">t4</text><text x="350" y="280">t9</text>
+    </g>
+    <text x="32" y="316" font-size="13" fill="#6b5443">Each layer's bar sits inside the bar it rests on.</text>
+  </g>
+
+  <!-- divider -->
+  <line x1="390" y1="60" x2="390" y2="310" stroke="#ecdcc0" stroke-width="2"/>
+
+  <!-- right panel -->
+  <g font-size="14" fill="#2a1a10">
+    <text x="410" y="92" font-weight="700">e1</text><text x="436" y="92" fill="#6b5443">fact</text>
+    <rect x="490" y="76" width="50" height="22" rx="6" fill="#ffe0b0" stroke="#3b2418" stroke-width="2"/>
+    <text x="410" y="142" font-weight="700">e2</text><text x="436" y="142" fill="#6b5443">conf</text>
+    <rect x="570" y="126" width="160" height="22" rx="6" fill="#ffe3ea" stroke="#d2456a" stroke-width="2"/>
+    <line x1="630" y1="64" x2="630" y2="214" stroke="#3b2418" stroke-width="2" stroke-dasharray="3 4"/>
+    <text x="630" y="234" text-anchor="middle" font-size="13" fill="#3b2418" font-weight="700">as of t5: e2 without e1</text>
+    <line x1="490" y1="262" x2="740" y2="262" stroke="#3b2418" stroke-width="2"/>
+    <g font-size="12" fill="#6b5443" text-anchor="middle">
+      <text x="490" y="280">t1</text><text x="540" y="280">t2</text><text x="570" y="280">t3</text><text x="630" y="280">t5</text>
+    </g>
+    <text x="410" y="316" font-size="13" fill="#6b5443">The layer was written after its fact was retracted.</text>
+  </g>
+</svg>
