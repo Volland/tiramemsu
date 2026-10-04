@@ -437,6 +437,26 @@ fn text_search_returns_ranked_hits_with_evidence() {
     assert_eq!(hits[0]["rank"], 1);
     assert_eq!(hits[0]["o"], "Lisbon offsite in May");
     assert!(hits[0]["evidence"].is_object());
+    // the write tool's graph adds a membership; the search tool's graphs filter by it
+    server
+        .call_tool(
+            "assert",
+            &json!({ "s": v("call"), "p": v("note"), "o": "Lisbon flights booked", "graph": v("chat1") }),
+        )
+        .unwrap();
+    let all = server
+        .call_tool("text_search", &json!({ "text": "lisbon" }))
+        .unwrap();
+    assert_eq!(all["hits"].as_array().unwrap().len(), 2);
+    let scoped = server
+        .call_tool(
+            "text_search",
+            &json!({ "text": "lisbon", "graphs": [v("chat1")] }),
+        )
+        .unwrap();
+    let scoped = scoped["hits"].as_array().unwrap();
+    assert_eq!(scoped.len(), 1);
+    assert_eq!(scoped[0]["o"], "Lisbon flights booked");
 }
 
 // the JSON-RPC layer: handshake, negotiation, ping, listing and protocol errors

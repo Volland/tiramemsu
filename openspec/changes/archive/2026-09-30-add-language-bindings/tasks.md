@@ -45,4 +45,4 @@
 
 - [x] 5.1 Update `lat.md/bindings.md` and `lat.md/api.md`, the site (an article or a page section), and the README (install lines, status). `lat check` passes.
 - [x] 5.2 Run `cargo fmt --check`, `cargo clippy --workspace --all-targets -- -D warnings` and `cargo test --workspace`.
-- [ ] 5.3 Archive the change (`openspec archive add-language-bindings`) so its specs merge into `openspec/specs/`.
+- [x] 5.3 Archive the change (`openspec archive add-language-bindings`) so its specs merge into `openspec/specs/`. (Archived 2026-09-30; specs merged.)

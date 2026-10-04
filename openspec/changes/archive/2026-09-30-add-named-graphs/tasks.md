@@ -52,7 +52,7 @@
 ## 6. Facade, MCP and API docs
 
 - [x] 6.1 Export the `Tx` and `View` methods from `tiramemsu`, with rustdoc examples that are doc-tested.
-- [ ] 6.2 Add an optional `graph` argument to the MCP write tool (adds membership) and to the MCP search tool (filters by graph). Add tool-schema tests.
+- [x] 6.2 Add an optional `graph` argument to the MCP write tool (adds membership) and to the MCP search tool (filters by graph). Add tool-schema tests. (Done with add-mcp-adapter: `assert` takes `graph`, `text_search` takes `graphs`; covered in `crates/tiramemsu-mcp/tests/server.rs`.)
   - **Deferred to the MCP milestone (M5):** the repo has no MCP crate yet, so there is no tool or schema to extend. The contract is documented in `lat.md/api.md`.
 
 > Notes (group 6): `Tx` methods are the `tm_core::Tx` methods re-exported by the facade; `View::graphs` and `View::graph_members` are new, with a doctest. Task 6.2 is NOT done: the repository has no MCP server crate (`tiramemsu-mcp` is a later milestone, see `lat.md/api.md#MCP Tools`), so there is no write or search tool to extend and no tool schema to test. The `graph` argument is documented in `lat.md/api.md` for that crate.
