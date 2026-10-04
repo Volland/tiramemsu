@@ -15,12 +15,18 @@ fn b() -> IrBuilder {
 #[test]
 fn every_kind_round_trips() {
     let t = TestDb::new();
+    let statement = t
+        .tx(|tx| {
+            tx.assert(v("seed"), v("kind"), v("statement"), Valid::ALWAYS)
+                .map(|_| ())
+        })
+        .asserted[0];
     let xsd = "http://www.w3.org/2001/XMLSchema#";
     let vals = vec![
         v("iri"),
         Value::Node(7),
         Value::BNode(8),
-        Value::Stmt(Eid::new(9)),
+        Value::Stmt(statement),
         Value::Tx(TxId(3)),
         Value::Int(-42),
         Value::Bool(true),

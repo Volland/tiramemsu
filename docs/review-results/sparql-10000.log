@@ -1,0 +1,60 @@
+    Finished `bench` profile [optimized] target(s) in 0.24s
+     Running benches/sparql.rs (target/release/deps/sparql-883ec08072816dd1)
+Benchmarking sparql_latency_10000/point/now
+Benchmarking sparql_latency_10000/point/now: Warming up for 200.00 ms
+Benchmarking sparql_latency_10000/point/now: Collecting 20 samples in estimated 501.04 ms (8610 iterations)
+Benchmarking sparql_latency_10000/point/now: Analyzing
+sparql_latency_10000/point/now
+                        time:   [57.785 µs 58.416 µs 59.294 µs]
+                        change: [−4.4585% −2.6604% −0.9521%] (p = 0.01 < 0.05)
+                        Change within noise threshold.
+Found 1 outliers among 20 measurements (5.00%)
+  1 (5.00%) high mild
+Benchmarking sparql_latency_10000/two_hop/now
+Benchmarking sparql_latency_10000/two_hop/now: Warming up for 200.00 ms
+Benchmarking sparql_latency_10000/two_hop/now: Collecting 20 samples in estimated 508.54 ms (5250 iterations)
+Benchmarking sparql_latency_10000/two_hop/now: Analyzing
+sparql_latency_10000/two_hop/now
+                        time:   [94.253 µs 95.010 µs 96.001 µs]
+                        change: [−3.4814% −1.6575% +0.1802%] (p = 0.09 > 0.05)
+                        No change in performance detected.
+Benchmarking sparql_latency_10000/point/asOf
+Benchmarking sparql_latency_10000/point/asOf: Warming up for 200.00 ms
+Benchmarking sparql_latency_10000/point/asOf: Collecting 20 samples in estimated 504.95 ms (8190 iterations)
+Benchmarking sparql_latency_10000/point/asOf: Analyzing
+sparql_latency_10000/point/asOf
+                        time:   [62.562 µs 63.188 µs 63.699 µs]
+                        change: [−3.6206% −2.4805% −1.3512%] (p = 0.00 < 0.05)
+                        Performance has improved.
+Benchmarking sparql_latency_10000/two_hop/asOf
+Benchmarking sparql_latency_10000/two_hop/asOf: Warming up for 200.00 ms
+Benchmarking sparql_latency_10000/two_hop/asOf: Collecting 20 samples in estimated 512.61 ms (4200 iterations)
+Benchmarking sparql_latency_10000/two_hop/asOf: Analyzing
+sparql_latency_10000/two_hop/asOf
+                        time:   [120.67 µs 121.51 µs 122.69 µs]
+                        change: [−4.9057% −3.4872% −2.1981%] (p = 0.00 < 0.05)
+                        Performance has improved.
+Found 1 outliers among 20 measurements (5.00%)
+  1 (5.00%) high severe
+Benchmarking sparql_latency_10000/point/validAt
+Benchmarking sparql_latency_10000/point/validAt: Warming up for 200.00 ms
+Benchmarking sparql_latency_10000/point/validAt: Collecting 20 samples in estimated 503.29 ms (7770 iterations)
+Benchmarking sparql_latency_10000/point/validAt: Analyzing
+sparql_latency_10000/point/validAt
+                        time:   [64.442 µs 64.811 µs 65.261 µs]
+                        change: [−15.009% −10.286% −5.7440%] (p = 0.00 < 0.05)
+                        Performance has improved.
+Found 5 outliers among 20 measurements (25.00%)
+  2 (10.00%) low mild
+  3 (15.00%) high mild
+Benchmarking sparql_latency_10000/two_hop/validAt
+Benchmarking sparql_latency_10000/two_hop/validAt: Warming up for 200.00 ms
+Benchmarking sparql_latency_10000/two_hop/validAt: Collecting 20 samples in estimated 522.68 ms (4200 iterations)
+Benchmarking sparql_latency_10000/two_hop/validAt: Analyzing
+sparql_latency_10000/two_hop/validAt
+                        time:   [123.31 µs 124.87 µs 126.71 µs]
+                        change: [−17.230% −11.773% −6.7769%] (p = 0.00 < 0.05)
+                        Performance has improved.
+Found 1 outliers among 20 measurements (5.00%)
+  1 (5.00%) high mild
+

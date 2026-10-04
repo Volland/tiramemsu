@@ -198,6 +198,8 @@ CREATE TRIGGER tx_no_update BEFORE UPDATE ON tx
 BEGIN SELECT RAISE(ABORT, 'tiramemsu: transactions are immutable'); END;
 ```
 
+Format 3 also rejects backdated assertions/retractions and dates without an active transaction. The engine inserts the transaction record before graph writes and advances `meta.last_t` on commit. Raw writers must follow that protocol. Guards assume schema and engine metadata are intact; they do not protect against deliberate trigger or metadata tampering.
+
 `ROLLBACK TO` a savepoint is not a DELETE, so speculative transactions still work. See [[time-model#Speculative Transactions]].
 
 ## Volatile Table
@@ -216,9 +218,10 @@ High-churn state (`lastSeen`, counters, per-turn scores) lives in `volatile(s, k
 
 Migrations must respect [[time-model#Never Forget]]. They may add columns, indexes and tables, but never drop or rewrite triples.
 
-- **Current:** format 3. The migrations are [[crates/tm-core/src/storage/migrate.rs#MIGRATIONS]], applied in order by `run_migrations` inside the open transaction; a file newer than the build fails with `FormatVersion`.
+- **Current:** format 4. The migrations are [[crates/tm-core/src/storage/migrate.rs#MIGRATIONS]], applied in order by `run_migrations` inside the open transaction; a file newer than the build fails with `FormatVersion`.
 - **Format 2** inserts the `meta` rows `text_index = 0` and `text_stale = 0` of [[storage#Text Index]]. It runs on every host, creates no FTS5 table and touches no `triple`, `term` or `tx` row.
 - **Format 3** creates the empty derived tables of [[storage#Saved Answers]] and reads or writes no graph row.
+- **Format 4** adds the triggers `triple_add_date` and `triple_ret_date` ([[crates/tm-core/src/storage/mod.rs#DDL_DATE_GUARDS]]). A statement's dates must name the latest transaction in `tx`, strictly above the committed `meta.last_t` watermark; insertion and retraction in the same transaction are allowed. Historical rows are preserved, including references that were already non-conformant, and older engines refuse the newer format.
 - A new file is created as format 1 and migrated forward like an old file, so fresh and migrated files have the same schema.
 - The bump is what keeps the derived index honest: a format-1 build, which would write strings without indexing them, refuses a format-2 file with `FormatVersion` instead of letting `term_fts` drift.
 

@@ -129,29 +129,19 @@ host_test! {
 }
 
 host_test! {
-    /// Statement references are not checked for liveness.
-    fn references_not_checked_for_liveness(db) {
+    /// Ordinary statement endpoints must be live, including within a transaction.
+    fn references_checked_for_liveness(db) {
         let e1 = works(db, Valid::ALWAYS).eid();
         db.tx(|tx| tx.retract(e1).map(|_| ()));
-        let mut note = None;
+        let before = db.snapshot();
+        let result = db.try_tx(|tx| tx.assert(e1, iri("note"), lit("was wrong"), Valid::ALWAYS).map(|_| ()));
+        assert_err!(result, Error::NotLive(e) if e == e1);
+        assert_eq!(db.snapshot(), before);
         db.tx(|tx| {
-            note = Some(tx.assert(e1, iri("note"), lit("was wrong"), Valid::ALWAYS)?.eid());
+            let root = tx.create(iri("b1"), iri("about"), iri("b2"), Valid::ALWAYS)?;
+            tx.create(root, iri("note"), lit("same transaction"), Valid::ALWAYS)?;
             Ok(())
         });
-        assert!(db.is_live(note.unwrap()));
-        // forward reference closes a cycle
-        let next = db.meta("next_stmt") as u64;
-        let (mut e7, mut e8) = (None, None);
-        db.tx(|tx| {
-            let x = Eid::new(next + 1);
-            e7 = Some(tx.create(iri("b1"), iri("about"), x, Valid::ALWAYS)?);
-            e8 = Some(tx.create(e7.unwrap(), iri("about"), iri("b2"), Valid::ALWAYS)?);
-            Ok(())
-        });
-        let (e7, e8) = (e7.unwrap(), e8.unwrap());
-        assert_eq!(e8, Eid::new(next + 1));
-        assert_eq!(db.row(e7).o, e8.oid());
-        assert_eq!(db.row(e8).s, e7.oid());
     }
 }
 
@@ -271,18 +261,11 @@ host_test! {
         let r = db.try_tx(|tx| tx.assert(iri("a"), iri("about"), next, Valid::ALWAYS).map(|_| ()));
         assert_err!(r, Error::SelfReference(e) if e == next);
         assert_eq!(db.snapshot(), before);
-        // longer cycles are allowed
-        let n = db.meta("next_stmt") as u64;
-        let (mut p, mut q) = (None, None);
-        db.tx(|tx| {
-            let p1 = tx.create(iri("m"), iri("r"), Eid::new(n + 1), Valid::ALWAYS)?;
-            let q1 = tx.create(p1, iri("r"), iri("z"), Valid::ALWAYS)?;
-            p = Some(p1);
-            q = Some(q1);
-            Ok(())
-        });
-        assert_eq!(db.row(p.unwrap()).o, q.unwrap().oid());
-        assert_eq!(db.row(q.unwrap()).s, p.unwrap().oid());
+        // A distinct future endpoint is also rejected, without allocating a row.
+        let future = Eid::new(db.meta("next_stmt") as u64 + 1);
+        let r = db.try_tx(|tx| tx.create(iri("m"), iri("r"), future, Valid::ALWAYS).map(|_| ()));
+        assert_err!(r, Error::NotLive(e) if e == future);
+        assert_eq!(db.snapshot(), before);
     }
 }
 

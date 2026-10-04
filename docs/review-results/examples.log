@@ -1,0 +1,74 @@
+   Compiling zerocopy-derive v0.8.59
+   Compiling serde_derive v1.0.229
+   Compiling logos-codegen v0.16.1
+   Compiling tempfile v3.27.0
+   Compiling tm-exec v0.1.0 (/Users/volodymyrpavlyshyn/Documents/work/tiramemsu/crates/tm-exec)
+   Compiling rusty-fork v0.3.1
+   Compiling logos-derive v0.16.1
+   Compiling zerocopy v0.8.59
+   Compiling logos v0.16.1
+   Compiling serde v1.0.229
+   Compiling open-cypher v0.2.1
+   Compiling serde_spanned v0.6.9
+   Compiling toml_datetime v0.6.11
+   Compiling tinytemplate v1.2.1
+   Compiling toml_edit v0.22.27
+   Compiling ppv-lite86 v0.2.21
+   Compiling half v2.7.1
+   Compiling toml v0.8.23
+   Compiling rand_chacha v0.9.0
+   Compiling ciborium-ll v0.2.2
+   Compiling rand v0.9.5
+   Compiling ciborium v0.2.2
+   Compiling oxrdf v0.3.4
+   Compiling proptest v1.11.0
+   Compiling criterion v0.8.2
+   Compiling spargebra v0.4.7
+   Compiling oxttl v0.2.4
+   Compiling sparesults v0.3.4
+   Compiling tm-sparql v0.1.0 (/Users/volodymyrpavlyshyn/Documents/work/tiramemsu/crates/tm-sparql)
+   Compiling tm-cypher v0.1.0 (/Users/volodymyrpavlyshyn/Documents/work/tiramemsu/crates/tm-cypher)
+   Compiling tiramemsu v0.1.0 (/Users/volodymyrpavlyshyn/Documents/work/tiramemsu/crates/tiramemsu)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 9.85s
+     Running `target/debug/examples/quickstart`
+before the correction: Solutions(Solutions { vars: ["who", "org"], rows: [[Some(Iri("urn:tiramemsu:v:alice")), Some(Iri("urn:tiramemsu:v:acme"))]], provenance: None })
+after:                 Solutions(Solutions { vars: ["who", "org"], rows: [[Some(Iri("urn:tiramemsu:v:alice")), Some(Iri("urn:tiramemsu:v:globex"))]], provenance: None })
+cypher: CypherResult { columns: ["p", "o", "r.confidence"], rows: [[Node(NodeValue { term: Iri("urn:tiramemsu:v:alice"), element_id: "urn:tiramemsu:v:alice", labels: [], properties: {} }), Node(NodeValue { term: Iri("urn:tiramemsu:v:globex"), element_id: "urn:tiramemsu:v:globex", labels: [], properties: {} }), Float(0.8)]], report: None }
+   Compiling tiramemsu v0.1.0 (/Users/volodymyrpavlyshyn/Documents/work/tiramemsu/crates/tiramemsu)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1.12s
+     Running `target/debug/examples/time_travel`
+committed tx 1 then tx 2
+
+as_of(tx 1) valid_at(250): []
+now         valid_at(250): ["<urn:tiramemsu:v:acme>"]
+now         valid_at(300): []  (half open: 300 is outside)
+as_of(instant of tx 1):      ["<urn:tiramemsu:v:acme>"]
+
+history (predicate, valid, believed from tx, retracted in tx, why):
+  <urn:tiramemsu:v:worksAt>        valid [Some(100), Some(200))  t_add=1  t_ret=Some(2)  Some(Supersede)
+  <urn:tiramemsu:v:worksAt>        valid [Some(100), Some(300))  t_add=2  t_ret=None  None
+  <urn:tiramemsu:sys:supersedes>   valid [None, None)  t_add=2  t_ret=None  None
+   Compiling tiramemsu v0.1.0 (/Users/volodymyrpavlyshyn/Documents/work/tiramemsu/crates/tiramemsu)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.75s
+     Running `target/debug/examples/named_graphs`
+all statements:  ["<urn:tiramemsu:v:alice>", "<urn:tiramemsu:v:bob>"]
+in session1:     ["<urn:tiramemsu:v:alice>"]
+in session2:     ["<urn:tiramemsu:v:alice>", "<urn:tiramemsu:v:bob>"]
+graph "<urn:tiramemsu:v:session1>": 1 member(s)
+graph "<urn:tiramemsu:v:session2>": 2 member(s)
+
+removed from session1: true
+memberships retracted: 1, statements retracted: 0
+in session1:     []
+in session2:     ["<urn:tiramemsu:v:alice>", "<urn:tiramemsu:v:bob>"]
+all statements:  ["<urn:tiramemsu:v:alice>", "<urn:tiramemsu:v:bob>"]
+session1 as of tx 1: 1 row(s)
+   Compiling tiramemsu v0.1.0 (/Users/volodymyrpavlyshyn/Documents/work/tiramemsu/crates/tiramemsu)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.59s
+     Running `target/debug/examples/layers_and_paths`
+annotation query:
+  confidence="8.0E-1"^^<http://www.w3.org/2001/XMLSchema#double> source="chat-2026-09-29"
+beliefs and the confidence of their support:
+  <urn:tiramemsu:v:belief9> <- "8.0E-1"^^<http://www.w3.org/2001/XMLSchema#double>
+cypher columns ["p", "o", "confidence"], 1 row(s)
+path belief9 -> supportedBy -> (subject|object): ["<urn:tiramemsu:v:acme>", "<urn:tiramemsu:v:alice>"]

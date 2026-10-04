@@ -56,17 +56,17 @@ host_test! {
 // @lat: [[tests#Dependents#Dependents Terminate On Cycles]]
 host_test! {
     fn cycles_terminate(db) {
-        let n = db.meta("next_stmt") as u64;
-        let mut ids = None;
+                let mut ids = None;
         db.tx(|tx| {
             // e7 names the eid e8 will get, and e8 is about e7
-            let e7 = tx.create(iri("b1"), iri("about"), Eid::new(n + 1), Valid::ALWAYS)?;
+            let e7 = tx.create(iri("b1"), iri("about"), iri("b2"), Valid::ALWAYS)?;
             let e8 = tx.create(e7, iri("about"), iri("b2"), Valid::ALWAYS)?;
             let d = tx.create(e7, iri("links"), e8, Valid::ALWAYS)?;
             ids = Some((e7, e8, d));
             Ok(())
         });
         let (e7, e8, d) = ids.unwrap();
+        db.legacy_object_reference(e7, e8);
         assert_eq!(deps(db, ViewSpec::NOW, e7), vec![e7, e8, d]);
         assert_eq!(deps(db, ViewSpec::NOW, e8), vec![e8, e7, d]);
         assert_eq!(deps(db, ViewSpec::history(), e8), vec![e8, e7, d]);

@@ -95,14 +95,15 @@ host_test! {
             Ok(())
         });
         // retract e2 (b) alone first: its annotation e3 (c) cascades with it,
-        // so re-create a live annotation on the dead b
+        // seed an old non-conformant layer to test traversal of legacy history
         db.tx(|tx| tx.retract(b.unwrap()).map(|_| ()));
         let old = db.row(b.unwrap());
         let mut e3 = None;
         db.tx(|tx| {
-            e3 = Some(tx.assert(b.unwrap(), iri("note"), lit("late"), Valid::ALWAYS)?.eid());
+            e3 = Some(tx.assert(iri("legacy"), iri("note"), lit("late"), Valid::ALWAYS)?.eid());
             Ok(())
         });
+        db.legacy_object_reference(e3.unwrap(), b.unwrap());
         let _ = c;
         db.tx(|tx| tx.retract(a.unwrap()).map(|_| ()));
         assert_eq!(db.row(b.unwrap()), old);
@@ -121,15 +122,16 @@ host_test! {
 }
 
 fn cycle(db: &mut TestDb) -> (Eid, Eid) {
-    let n = db.meta("next_stmt") as u64;
     let mut out = None;
     db.tx(|tx| {
-        let e7 = tx.create(iri("b1"), iri("about"), Eid::new(n + 1), Valid::ALWAYS)?;
+        let e7 = tx.create(iri("b1"), iri("about"), iri("b2"), Valid::ALWAYS)?;
         let e8 = tx.create(e7, iri("about"), iri("b2"), Valid::ALWAYS)?;
         out = Some((e7, e8));
         Ok(())
     });
-    out.unwrap()
+    let (e7, e8) = out.unwrap();
+    db.legacy_object_reference(e7, e8);
+    (e7, e8)
 }
 
 // @lat: [[tests#Cascade#Cascade Terminates On Cycles]]

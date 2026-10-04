@@ -62,6 +62,8 @@ section { padding: 40px 0; border-top: 1px solid var(--line); }
 section h2 { font-size: 28px; margin: 0 0 8px; letter-spacing: -.01em; }
 section > .wrap > p.sub { color: var(--muted); margin: 0 0 24px; max-width: 42em; }
 .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; }
+.grid.four { grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); }
+.grid + .btns { margin-top: 20px; }
 .card { background: var(--bg-soft); border: 1px solid var(--line); border-radius: 14px; padding: 18px 18px 14px; }
 .card h3 { margin: 0 0 6px; font-size: 18px; }
 .card p { margin: 0; color: var(--muted); font-size: 15.5px; }
@@ -132,4 +134,3 @@ section > .wrap > p.sub.more { margin: 20px 0 0; }
 /* Diagrams drawn on white: keep them on a light card in both themes. */
 .diagram { background: #fff; border: 1px solid var(--line); border-radius: 14px; padding: 14px; }
 .diagram img { display: block; margin: 0 auto; }
-.grid.four { grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); }

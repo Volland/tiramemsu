@@ -5,6 +5,7 @@ A long read (about 5,200 words, 10 illustrations) introducing Tiramemsu: layered
 | File | What it is |
 |---|---|
 | `tiramemsu-long-read.md` | The article, the source of truth |
+| `tiramemsu-metagraph.md` | Follow-up **draft**: the full metagraph (edges as containers, nesting, n-ary edges, fold/unfold). Describes proposed lifts as well as what works today; its `images/mg-*.png` figures are placeholders not yet drawn |
 | `preview.html` | A self-contained preview with the images embedded. Open it in a browser, select everything and paste it into the Substack editor |
 | `images/*.png` | The illustrations at 1456 px wide, Substack's recommended width |
 | `images/src/*.svg` | Their editable sources, in the site's tiramisu palette |

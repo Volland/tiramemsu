@@ -1290,3 +1290,35 @@ Through wasm-bindgen in WebAssembly: `runtimeInfo`, `Database.open`, `call`, `ca
 ### JavaScript journal errors
 
 `Database.open` rejects a `wal` journal on memory storage with `MissingCapability`, and OPFS outside a dedicated worker with `MissingCapability` naming OPFS.
+
+## Conformance Repairs
+
+Regression checks cover the four integrity gaps identified by the paper review on both SQLite hosts, plus correction substitution and migration boundaries.
+
+### Statement Endpoints Must Be Live
+
+Ordinary assertion and creation reject retracted and unknown statement endpoints in either position, without leaving transactional changes.
+
+### Dropped Membership Layers Are Not Replayed
+
+Correction excludes foreign memberships and their recursively dependent annotations. Every retained statement reference names an allocated occurrence.
+
+### Direct SQL Cannot Backdate Statements
+
+Raw insertions and retractions cannot use committed or unknown transaction dates. Engine insertion followed by retraction in the same transaction remains valid.
+
+### Correction Remaps Patched References
+
+A patched object naming a retained cascade member is substituted to its fresh copy. The resulting cycle is complete and live.
+
+### Invalid Correction Endpoints Roll Back
+
+Correction rejects self-reference, missing targets, dropped endpoints and dropped roots, preserving the pre-operation database snapshot.
+
+### Format Three Migrates Date Guards
+
+Opening a format-3 file adds both date guards, advances the format, preserves original rows and rejects subsequent backdated graph writes.
+
+### Cardinality Cannot Retract A New Endpoint
+
+A cardinality-one replacement whose cascade removes the proposed new endpoint is rejected; transaction rollback restores the original root and dependent layer.

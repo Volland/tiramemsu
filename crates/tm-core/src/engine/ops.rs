@@ -32,7 +32,8 @@ impl Tx<'_> {
     /// predicate a user may not write, [`Error::ValueTypeMismatch`],
     /// [`Error::SubjectTypeMismatch`] and [`Error::UniqueViolation`] from the
     /// predicate's schema, and [`Error::SchemaConflict`] for a schema flag that
-    /// live data violates.
+    /// live data violates. Statement endpoints must be live; unknown or retracted
+    /// endpoints return [`Error::NotLive`].
     pub fn assert(
         &mut self,
         s: impl IntoObject,
@@ -201,6 +202,26 @@ impl Tx<'_> {
             .map(|r| r[0].is_null()))
     }
 
+    /// Structural endpoints must be live; engine lineage may name allocated history.
+    pub(crate) fn check_statement_references(
+        &mut self,
+        s: ObjectId,
+        p: ObjectId,
+        o: ObjectId,
+    ) -> Result<()> {
+        let lineage = self.iri_of(p)?.as_deref() == Some(vocab::SYS_SUPERSEDES);
+        for id in [s, o] {
+            if let Some(eid) = Eid::from_oid(id) {
+                match self.live(eid)? {
+                    Some(true) => {}
+                    Some(false) if lineage => {}
+                    _ => return Err(Error::NotLive(eid)),
+                }
+            }
+        }
+        Ok(())
+    }
+
     /// The pre-insert pipeline shared by assert, create, confirm and metadata
     /// (design D-8): positions, reserved namespace, interval, value and subject type
     /// or flag validation, schema-change validation, idempotency, unique,
@@ -231,12 +252,19 @@ impl Tx<'_> {
                 self.check_subject_type(p, s)?;
             }
         }
+        let next = Eid::new(self.c.next_stmt as u64);
+        if s == next.oid() || o == next.oid() {
+            return Err(Error::SelfReference(next));
+        }
+        self.check_statement_references(s, p, o)?;
         if idempotent {
             if let Some(e) = self.find_overlapping(s, p, o, valid)? {
                 return Ok(Asserted::Existing(e));
             }
         }
         self.unique_and_cardinality(s, p, o, valid, flag.is_some_and(Flag::single_valued))?;
+        // Cardinality replacement can retract an endpoint through its cascade.
+        self.check_statement_references(s, p, o)?;
         let eid = self.alloc_eid()?;
         if s == eid.oid() || o == eid.oid() {
             return Err(Error::SelfReference(eid));

@@ -1,0 +1,4 @@
+SQLite version: 3.53.0
+layered n=25                             edges=   1,325 triangles=     5,625 sqlite(nested loop+index)=      3.6 ms  intersection join (python)=     0.5 ms  ratio=   7.4x same=True
+layered n=50                             edges=   5,150 triangles=    22,500 sqlite(nested loop+index)=     23.3 ms  intersection join (python)=     1.7 ms  ratio=  13.6x same=True
+layered n=100                            edges=  20,300 triangles=    90,000 sqlite(nested loop+index)=    162.2 ms  intersection join (python)=     7.6 ms  ratio=  21.3x same=True

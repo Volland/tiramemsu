@@ -1,6 +1,6 @@
 //! Supersede: correct a statement by cascade-and-replay (design D-12).
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet, VecDeque};
 
 use super::schema::Flag;
 use super::{reserved, IntoObject, Tx};
@@ -45,7 +45,7 @@ impl Tx<'_> {
     }
 
     /// Corrects live statement `root`: retracts its cascade set with kind
-    /// `supersede` and replays it under new eids with references rewired through
+    /// `supersede` and replays its structurally retained rows under new eids with references rewired through
     /// the substitution map σ, applying `patch` to the root. Links the new root to
     /// the old one with `sys:supersedes` and returns the new root eid.
     ///
@@ -55,7 +55,8 @@ impl Tx<'_> {
     /// # Errors
     ///
     /// [`Error::NotLive`] when `root` is retracted or unknown, and
-    /// [`Error::InvalidPatch`] for an empty interval or a patch that changes nothing.
+    /// [`Error::InvalidPatch`] for an empty interval, no change, or a dropped root
+    /// or endpoint. Missing/retracted structural endpoints return [`Error::NotLive`].
     ///
     /// # Example
     ///
@@ -114,49 +115,108 @@ impl Tx<'_> {
             }
             None => self.check_value_type(row.p, new_o)?,
         }
+        self.check_statement_references(row.s, row.p, new_o)?;
         let set = self.cascade_set(root)?;
-        let sigma: HashMap<Eid, Eid> = set
-            .iter()
-            .map(|m| Ok((*m, self.alloc_eid()?)))
-            .collect::<Result<_>>()?;
-        let new_root = sigma[&root];
-        if new_o == new_root.oid() {
-            return Err(Error::SelfReference(new_root));
-        }
+        let cascade: HashSet<Eid> = set.iter().copied().collect();
+        let in_graph = self.sys_lookup(vocab::SYS_IN_GRAPH)?;
+        let lineage = self.sys_lookup(vocab::SYS_SUPERSEDES)?;
         let mut rows = Vec::with_capacity(set.len());
         for m in &set {
             let (r, _) = self.load_row(*m)?.expect("cascade member exists");
             rows.push(r);
+        }
+        // Drop foreign memberships and propagate exclusion through structural
+        // dependents. Only retained rows receive fresh identifiers.
+        let mut dropped = HashSet::new();
+        let mut queue = VecDeque::new();
+        let mut dependents: HashMap<Eid, Vec<Eid>> = HashMap::new();
+        for r in &rows {
+            if Some(r.p) == in_graph && !Eid::from_oid(r.o).is_some_and(|g| cascade.contains(&g)) {
+                dropped.insert(r.eid);
+                queue.push_back(r.eid);
+            }
+            if Some(r.p) != lineage {
+                for id in [r.s, r.o] {
+                    if let Some(target) = Eid::from_oid(id).filter(|e| cascade.contains(e)) {
+                        dependents.entry(target).or_default().push(r.eid);
+                    }
+                }
+            }
+        }
+        while let Some(e) = queue.pop_front() {
+            if let Some(ds) = dependents.get(&e) {
+                for d in ds {
+                    if dropped.insert(*d) {
+                        queue.push_back(*d);
+                    }
+                }
+            }
+        }
+        if dropped.contains(&root) {
+            return Err(Error::InvalidPatch(
+                "correction would drop its root".to_string(),
+            ));
+        }
+        let sigma: HashMap<Eid, Eid> = set
+            .iter()
+            .filter(|m| !dropped.contains(m))
+            .map(|m| Ok((*m, self.alloc_eid()?)))
+            .collect::<Result<_>>()?;
+        let new_root = sigma[&root];
+        let map = |id: ObjectId| {
+            Eid::from_oid(id)
+                .and_then(|e| sigma.get(&e))
+                .map_or(id, |e| e.oid())
+        };
+        let mapped_s = map(row.s);
+        let mapped_o = map(new_o);
+        if mapped_s == new_root.oid() || mapped_o == new_root.oid() {
+            return Err(Error::SelfReference(new_root));
+        }
+        if Some(row.p) != lineage {
+            for id in [row.s, new_o] {
+                if Eid::from_oid(id).is_some_and(|e| dropped.contains(&e)) {
+                    return Err(Error::InvalidPatch(
+                        "patched endpoint is dropped".to_string(),
+                    ));
+                }
+            }
         }
         for m in &set {
             self.retract_row(*m, RetKind::Supersede)?;
         }
         // schema pipeline for the new root: unique, then cardinality-one
         self.unique_and_cardinality(
-            row.s,
+            mapped_s,
             row.p,
-            new_o,
+            mapped_o,
             new_valid,
             flag.is_some_and(Flag::single_valued),
         )?;
-        let map = |id: ObjectId| {
-            Eid::from_oid(id)
-                .and_then(|e| sigma.get(&e))
-                .map_or(id, |e| e.oid())
-        };
-        // a member's memberships are retracted with it and never copied: adding the
-        // replacement to graphs is an explicit act of the writer. A membership in a
-        // graph that is itself in the set (an edge's contents) follows the edge.
-        let in_graph = self.sys_lookup(vocab::SYS_IN_GRAPH)?;
+        let copies: HashSet<Eid> = sigma.values().copied().collect();
+        for r in &rows {
+            if dropped.contains(&r.eid) {
+                continue;
+            }
+            for id in [map(r.s), if r.eid == root { mapped_o } else { map(r.o) }] {
+                if let Some(e) = Eid::from_oid(id) {
+                    if !copies.contains(&e) {
+                        let state = self.live(e)?;
+                        if state.is_none() || (Some(r.p) != lineage && state != Some(true)) {
+                            return Err(Error::NotLive(e));
+                        }
+                    }
+                }
+            }
+        }
         for r in rows {
-            if Some(r.p) == in_graph && !Eid::from_oid(r.o).is_some_and(|g| sigma.contains_key(&g))
-            {
+            if dropped.contains(&r.eid) {
                 continue;
             }
             let new = sigma[&r.eid];
             let s = map(r.s);
             let (o, valid) = if r.eid == root {
-                (new_o, new_valid)
+                (mapped_o, new_valid)
             } else {
                 (map(r.o), r.valid)
             };

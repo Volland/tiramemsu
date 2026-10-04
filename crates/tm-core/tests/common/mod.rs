@@ -280,6 +280,29 @@ impl TestDb {
         rusqlite::Connection::open(&self.path).expect("raw open")
     }
 
+    /// Seed a complete cyclic legacy history for read/replay tests. Ordinary
+    /// writes now reject forward references, but migrations preserve old cycles.
+    /// This fixture deliberately bypasses immutability, then restores its trigger.
+    pub fn legacy_object_reference(&self, source: Eid, target: Eid) {
+        let raw = self.raw();
+        let trigger: String = raw
+            .query_row(
+                "SELECT sql FROM sqlite_schema WHERE name='triple_retract_once'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        raw.execute_batch("BEGIN IMMEDIATE; DROP TRIGGER triple_retract_once;")
+            .unwrap();
+        raw.execute(
+            "UPDATE triple SET o=?1 WHERE eid=?2",
+            rusqlite::params![target.oid().raw(), source.oid().raw()],
+        )
+        .unwrap();
+        raw.execute_batch(&trigger).unwrap();
+        raw.execute_batch("COMMIT").unwrap();
+    }
+
     pub fn last_t(&mut self) -> u64 {
         self.meta("last_t") as u64
     }

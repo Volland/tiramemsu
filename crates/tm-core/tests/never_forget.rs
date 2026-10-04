@@ -76,6 +76,8 @@ host_test! {
         let (e1, e2, _) = seed(db);
         let raw = db.raw();
         let id1 = e1.oid().raw();
+        // A legitimate direct writer must first open a fresh transaction date.
+        raw.execute("INSERT INTO tx(t, instant) VALUES (9, 9000000)", []).unwrap();
         assert_eq!(raw.execute("UPDATE triple SET t_ret = 9, ret_kind = 0 WHERE eid = ?1", [id1]).unwrap(), 1);
         let m = err_msg(raw.execute("UPDATE triple SET t_ret = 12 WHERE eid = ?1", [id1]));
         assert!(m.contains("tiramemsu: only a single retraction is allowed"), "{m}");

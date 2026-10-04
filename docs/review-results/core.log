@@ -1,0 +1,131 @@
+    Finished `bench` profile [optimized] target(s) in 0.21s
+     Running benches/core.rs (target/release/deps/core-ca89c4fd2e122d15)
+Benchmarking churn/now/1
+Benchmarking churn/now/1: Warming up for 200.00 ms
+Benchmarking churn/now/1: Collecting 10 samples in estimated 500.08 ms (184k iterations)
+Benchmarking churn/now/1: Analyzing
+churn/now/1             time:   [2.7182 µs 2.7844 µs 2.8457 µs]
+                        change: [−3.7876% −2.4315% −0.9072%] (p = 0.01 < 0.05)
+                        Change within noise threshold.
+Benchmarking churn/as_of/1
+Benchmarking churn/as_of/1: Warming up for 200.00 ms
+Benchmarking churn/as_of/1: Collecting 10 samples in estimated 500.09 ms (180k iterations)
+Benchmarking churn/as_of/1: Analyzing
+churn/as_of/1           time:   [2.7279 µs 2.7496 µs 2.7633 µs]
+                        change: [−20.181% −14.397% −8.9588%] (p = 0.00 < 0.05)
+                        Performance has improved.
+Benchmarking churn/now/10
+Benchmarking churn/now/10: Warming up for 200.00 ms
+Benchmarking churn/now/10: Collecting 10 samples in estimated 500.01 ms (178k iterations)
+Benchmarking churn/now/10: Analyzing
+churn/now/10            time:   [2.6838 µs 2.7193 µs 2.7526 µs]
+                        change: [−7.1530% −6.0287% −4.7901%] (p = 0.00 < 0.05)
+                        Performance has improved.
+Found 2 outliers among 10 measurements (20.00%)
+  1 (10.00%) low mild
+  1 (10.00%) high mild
+Benchmarking churn/as_of/10
+Benchmarking churn/as_of/10: Warming up for 200.00 ms
+Benchmarking churn/as_of/10: Collecting 10 samples in estimated 500.13 ms (150k iterations)
+Benchmarking churn/as_of/10: Analyzing
+churn/as_of/10          time:   [3.2190 µs 3.2297 µs 3.2527 µs]
+                        change: [−6.9236% −5.6094% −4.2437%] (p = 0.00 < 0.05)
+                        Performance has improved.
+Benchmarking churn/now/100
+Benchmarking churn/now/100: Warming up for 200.00 ms
+Benchmarking churn/now/100: Collecting 10 samples in estimated 500.01 ms (176k iterations)
+Benchmarking churn/now/100: Analyzing
+churn/now/100           time:   [2.7045 µs 2.7368 µs 2.7887 µs]
+                        change: [−6.1937% −5.1914% −4.0431%] (p = 0.00 < 0.05)
+                        Performance has improved.
+Found 1 outliers among 10 measurements (10.00%)
+  1 (10.00%) high mild
+Benchmarking churn/as_of/100
+Benchmarking churn/as_of/100: Warming up for 200.00 ms
+Benchmarking churn/as_of/100: Collecting 10 samples in estimated 500.29 ms (69k iterations)
+Benchmarking churn/as_of/100: Analyzing
+churn/as_of/100         time:   [7.6053 µs 7.7640 µs 7.8917 µs]
+                        change: [+1.0001% +2.7845% +4.9319%] (p = 0.01 < 0.05)
+                        Performance has regressed.
+Benchmarking churn/now/1000
+Benchmarking churn/now/1000: Warming up for 200.00 ms
+Benchmarking churn/now/1000: Collecting 10 samples in estimated 500.74 ms (28k iterations)
+Benchmarking churn/now/1000: Analyzing
+churn/now/1000          time:   [17.717 µs 17.869 µs 18.148 µs]
+                        change: [−11.891% −5.8688% +0.0241%] (p = 0.09 > 0.05)
+                        No change in performance detected.
+Found 2 outliers among 10 measurements (20.00%)
+  1 (10.00%) low mild
+  1 (10.00%) high severe
+Benchmarking churn/as_of/1000
+Benchmarking churn/as_of/1000: Warming up for 200.00 ms
+Benchmarking churn/as_of/1000: Collecting 10 samples in estimated 503.32 ms (6270 iterations)
+Benchmarking churn/as_of/1000: Analyzing
+churn/as_of/1000        time:   [79.610 µs 81.480 µs 82.577 µs]
+                        change: [+0.4539% +1.9775% +3.5889%] (p = 0.03 < 0.05)
+                        Change within noise threshold.
+
+Benchmarking supersede/cascade_set/1
+Benchmarking supersede/cascade_set/1: Warming up for 200.00 ms
+Benchmarking supersede/cascade_set/1: Collecting 10 samples in estimated 511.18 ms (825 iterations)
+Benchmarking supersede/cascade_set/1: Analyzing
+supersede/cascade_set/1 time:   [500.77 µs 512.27 µs 522.38 µs]
+                        change: [−55.883% −49.417% −42.278%] (p = 0.00 < 0.05)
+                        Performance has improved.
+Benchmarking supersede/cascade_set/10
+Benchmarking supersede/cascade_set/10: Warming up for 200.00 ms
+Benchmarking supersede/cascade_set/10: Collecting 10 samples in estimated 534.40 ms (550 iterations)
+Benchmarking supersede/cascade_set/10: Analyzing
+supersede/cascade_set/10
+                        time:   [918.51 µs 958.50 µs 981.62 µs]
+                        change: [−51.787% −43.699% −33.546%] (p = 0.00 < 0.05)
+                        Performance has improved.
+Benchmarking supersede/cascade_set/100
+Benchmarking supersede/cascade_set/100: Warming up for 200.00 ms
+Benchmarking supersede/cascade_set/100: Collecting 10 samples in estimated 551.08 ms (110 iterations)
+Benchmarking supersede/cascade_set/100: Analyzing
+supersede/cascade_set/100
+                        time:   [4.7325 ms 4.7748 ms 4.8264 ms]
+                        change: [−51.124% −37.044% −21.994%] (p = 0.00 < 0.05)
+                        Performance has improved.
+Found 1 outliers among 10 measurements (10.00%)
+  1 (10.00%) high mild
+Benchmarking supersede/cascade_set/1000
+Benchmarking supersede/cascade_set/1000: Warming up for 200.00 ms
+
+Warning: Unable to complete 10 samples in 500.0ms. You may wish to increase target time to 543.4ms.
+Benchmarking supersede/cascade_set/1000: Collecting 10 samples in estimated 543.37 ms (10 iterations)
+Benchmarking supersede/cascade_set/1000: Analyzing
+supersede/cascade_set/1000
+                        time:   [52.590 ms 53.743 ms 55.078 ms]
+                        change: [−40.573% −33.138% −24.191%] (p = 0.00 < 0.05)
+                        Performance has improved.
+
+Benchmarking executor_overhead/trait_query
+Benchmarking executor_overhead/trait_query: Warming up for 200.00 ms
+Benchmarking executor_overhead/trait_query: Collecting 20 samples in estimated 500.23 ms (318k iterations)
+Benchmarking executor_overhead/trait_query: Analyzing
+executor_overhead/trait_query
+                        time:   [1.7332 µs 1.7823 µs 1.8273 µs]
+                        change: [+0.0566% +3.5053% +6.8338%] (p = 0.05 > 0.05)
+                        No change in performance detected.
+Benchmarking executor_overhead/trait_point_lookups
+Benchmarking executor_overhead/trait_point_lookups: Warming up for 200.00 ms
+Benchmarking executor_overhead/trait_point_lookups: Collecting 20 samples in estimated 522.98 ms (840 iterations)
+Benchmarking executor_overhead/trait_point_lookups: Analyzing
+executor_overhead/trait_point_lookups
+                        time:   [610.07 µs 619.04 µs 628.01 µs]
+                        change: [−0.5892% +1.4208% +3.2420%] (p = 0.17 > 0.05)
+                        No change in performance detected.
+Benchmarking executor_overhead/direct_point_lookups
+Benchmarking executor_overhead/direct_point_lookups: Warming up for 200.00 ms
+Benchmarking executor_overhead/direct_point_lookups: Collecting 20 samples in estimated 505.09 ms (1470 iterations)
+Benchmarking executor_overhead/direct_point_lookups: Analyzing
+executor_overhead/direct_point_lookups
+                        time:   [301.59 µs 303.31 µs 305.45 µs]
+                        change: [−8.2932% −4.6715% −2.2182%] (p = 0.00 < 0.05)
+                        Performance has improved.
+Found 4 outliers among 20 measurements (20.00%)
+  2 (10.00%) low mild
+  2 (10.00%) high mild
+

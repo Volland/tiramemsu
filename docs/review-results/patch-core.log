@@ -1,0 +1,71 @@
+   Compiling ppv-lite86 v0.2.21
+   Compiling rand v0.9.5
+   Compiling rand_chacha v0.9.0
+   Compiling proptest v1.11.0
+   Compiling tm-core v0.1.0 (/Users/volodymyrpavlyshyn/Documents/work/tiramemsu/crates/tm-core)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 3.41s
+     Running tests/speculative_transactions.rs (target/debug/deps/speculative_transactions-6028d5b7e2dc9a55)
+
+running 8 tests
+test tables_unchanged_after_speculation::minimal ... ok
+test failures_leave_no_trace::minimal ... ok
+test failures_leave_no_trace::rusqlite ... ok
+test speculation_exposes_uncommitted_state::minimal ... ok
+test speculation_exposes_uncommitted_state::rusqlite ... ok
+test tables_unchanged_after_speculation::rusqlite ... ok
+test ids_are_burned::rusqlite ... ok
+test ids_are_burned::minimal ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.07s
+
+     Running tests/temporal_views.rs (target/debug/deps/temporal_views-0bd63bb6dc52c7e2)
+
+running 18 tests
+test as_of_by_transaction::minimal ... ok
+test as_of_by_instant::minimal ... ok
+test as_of_by_instant::rusqlite ... ok
+test history_view::rusqlite ... ok
+test event_log::rusqlite ... ok
+test triple_pattern_lookup::minimal ... ok
+test as_of_by_transaction::rusqlite ... ok
+test triple_pattern_lookup::rusqlite ... ok
+test event_log::minimal ... ok
+test history_view::minimal ... ok
+test now_view::minimal ... ok
+test now_view::rusqlite ... ok
+test view_selectors::rusqlite ... ok
+test valid_at_filter::minimal ... ok
+test view_selectors::minimal ... ok
+test valid_at_filter::rusqlite ... ok
+test view_scans_use_covering_indexes::rusqlite ... ok
+test view_scans_use_covering_indexes::minimal ... ok
+
+test result: ok. 18 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.15s
+
+     Running tests/transactions.rs (target/debug/deps/transactions-e09ea657ac020f5e)
+
+running 21 tests
+test caller_abort_and_reissued_ids::rusqlite ... ok
+test clock_stands_still_and_normal::minimal ... ok
+test error_after_successful_operations::minimal ... ok
+test clock_stands_still_and_normal::rusqlite ... ok
+test caller_abort_and_reissued_ids::minimal ... ok
+test every_commit_is_recorded::minimal ... ok
+test clock_moves_backwards::rusqlite ... ok
+test clock_moves_backwards::minimal ... ok
+test dry_run_returns_would_be_report::rusqlite ... ok
+test error_after_successful_operations::rusqlite ... ok
+test dry_run_returns_would_be_report::minimal ... ok
+test first_transaction::rusqlite ... ok
+test first_transaction::minimal ... ok
+test every_commit_is_recorded::rusqlite ... ok
+test metadata_triples::rusqlite ... ok
+test numbers_stay_gap_free::rusqlite ... ok
+test numbers_stay_gap_free::minimal ... ok
+test report_rules::minimal ... ok
+test report_rules::rusqlite ... ok
+test metadata_triples::minimal ... ok
+test default_options ... ok
+
+test result: ok. 21 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.51s
+

@@ -96,3 +96,16 @@ One fact is still unknown, and one has been settled by building every option. Th
 
 - **Scale ceiling:** triples per database and writes per second. This sets benchmark targets and how far LFTJ routing is tuned; LFTJ itself is built and opt-in, justified by the skewed triangle benchmark. See [[roadmap#Benchmarks]].
 - **First consumer:** no longer a choice. The MCP server, Python, Node.js and WASM bindings all ship over one JSON bridge ([[api#Bindings]], [[bindings]]).
+
+## Formal Model
+
+The paper `paper/layered-bitemporal-graphs.tex` formalises this design and proves what its operations guarantee. It also shows how metagraphs inherit both clocks.
+
+Its central operator is the ground core γ(X), the largest subset of X whose statements' referents all lie in X. Each result is stated against a section of this knowledge graph:
+
+- The cascade retracts exactly X ∖ γ(X∖{e}), the least retraction that keeps memory grounded ([[time-model#Cascade]]).
+- Every `asOf` view is grounded iff transaction lifetimes nest along references ([[time-model#Transaction Time]]). Valid time does not nest by design. Its largest grounded slice is the intersection of intervals over a statement's support ([[time-model#Valid Time]]).
+- Supersede is an isomorphism on the ground core of its cascade set ([[time-model#Operations#Supersede]]).
+- Metagraphs embed through membership statements that may be named by statements ([[data-model#Named Graphs#Statement Graphs]]). Snapshots commute with the encoding for well-formed temporal metagraphs ([[recipes#Metagraphs]]).
+
+The paper review found four conformance gaps: `assert` accepted statements that were not live in subject or object position, and eids that were never allocated; supersede replayed layers of dropped memberships onto eids never inserted; and raw writes could backdate statement dates. All four are repaired on `main` (live endpoints, closed retention on correction, and the transaction-date guards of storage format 4), with regression tests in [[tests#Conformance Repairs]]. The repairs are not in the 0.3.0 release; see `paper/README.md`.

@@ -89,19 +89,18 @@ host_test! {
     /// Supersede retracts and replays — non-root content unchanged; cycles.
     fn non_root_content_and_cycles(db) {
         let mut ids = None;
-        let n = db.meta("next_stmt") as u64;
         db.tx(|tx| {
             let root = tx.assert(iri("alice"), iri("age"), Value::Int(30), Valid::ALWAYS)?.eid();
             let ann = tx.assert(root, iri("source"), lit("form"),
                 Valid::between(day("2024-01-01"), day("2025-01-01")))?.eid();
-            // a cycle hanging off the root: c1 -> c2 (forward) and c2 -> c1
-            let c1 = tx.create(root, iri("rel"), Eid::new(n + 3), Valid::ALWAYS)?;
+            // A legacy cycle hanging off the root, preserved through migration.
+            let c1 = tx.create(root, iri("rel"), iri("z"), Valid::ALWAYS)?;
             let c2 = tx.create(c1, iri("rel"), iri("z"), Valid::ALWAYS)?;
-            assert_eq!(c2, Eid::new(n + 3));
             ids = Some((root, ann, c1, c2));
             Ok(())
         });
         let (root, ann, c1, c2) = ids.unwrap();
+        db.legacy_object_reference(c1, c2);
         let (_, rep) = supersede(db, root, Patch::object(Value::Int(31)));
         let sigma: std::collections::HashMap<Eid, Eid> = rep.superseded.iter().copied().collect();
         let a = db.row(sigma[&ann]);

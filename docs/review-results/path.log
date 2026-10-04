@@ -1,0 +1,139 @@
+    Finished `bench` profile [optimized] target(s) in 0.22s
+     Running benches/path.rs (target/release/deps/path-c7b9abe76c7af562)
+Benchmarking shortest/any_shortest_pairs/now
+Benchmarking shortest/any_shortest_pairs/now: Warming up for 200.00 ms
+Benchmarking shortest/any_shortest_pairs/now: Collecting 10 samples in estimated 564.20 ms (275 iterations)
+Benchmarking shortest/any_shortest_pairs/now: Analyzing
+shortest/any_shortest_pairs/now
+                        time:   [2.0776 ms 2.0884 ms 2.0946 ms]
+                        change: [−7.8007% −5.2960% −2.4702%] (p = 0.00 < 0.05)
+                        Performance has improved.
+Found 2 outliers among 10 measurements (20.00%)
+  1 (10.00%) low mild
+  1 (10.00%) high severe
+Benchmarking shortest/any_shortest_pairs/asof
+Benchmarking shortest/any_shortest_pairs/asof: Warming up for 200.00 ms
+Benchmarking shortest/any_shortest_pairs/asof: Collecting 10 samples in estimated 603.51 ms (275 iterations)
+Benchmarking shortest/any_shortest_pairs/asof: Analyzing
+shortest/any_shortest_pairs/asof
+                        time:   [2.2061 ms 2.2332 ms 2.2608 ms]
+                        change: [−19.054% −9.3921% −2.3851%] (p = 0.07 > 0.05)
+                        No change in performance detected.
+Found 1 outliers among 10 measurements (10.00%)
+  1 (10.00%) high mild
+
+Benchmarking trail3/link{1,3}/now
+Benchmarking trail3/link{1,3}/now: Warming up for 200.00 ms
+Benchmarking trail3/link{1,3}/now: Collecting 10 samples in estimated 502.75 ms (4070 iterations)
+Benchmarking trail3/link{1,3}/now: Analyzing
+trail3/link{1,3}/now    time:   [122.97 µs 123.65 µs 124.16 µs]
+                        change: [−12.214% −9.0684% −6.0945%] (p = 0.00 < 0.05)
+                        Performance has improved.
+Found 1 outliers among 10 measurements (10.00%)
+  1 (10.00%) high mild
+Benchmarking trail3/sys:anyRelationship{1,3}/now
+Benchmarking trail3/sys:anyRelationship{1,3}/now: Warming up for 200.00 ms
+Benchmarking trail3/sys:anyRelationship{1,3}/now: Collecting 10 samples in estimated 502.14 ms (5390 iterations)
+Benchmarking trail3/sys:anyRelationship{1,3}/now: Analyzing
+trail3/sys:anyRelationship{1,3}/now
+                        time:   [90.920 µs 92.208 µs 93.889 µs]
+                        change: [−6.5334% −4.1412% −2.3037%] (p = 0.00 < 0.05)
+                        Performance has improved.
+Found 2 outliers among 10 measurements (20.00%)
+  1 (10.00%) low mild
+  1 (10.00%) high mild
+Benchmarking trail3/link{1,3}/asof
+Benchmarking trail3/link{1,3}/asof: Warming up for 200.00 ms
+Benchmarking trail3/link{1,3}/asof: Collecting 10 samples in estimated 502.44 ms (3465 iterations)
+Benchmarking trail3/link{1,3}/asof: Analyzing
+trail3/link{1,3}/asof   time:   [141.55 µs 142.91 µs 145.11 µs]
+                        change: [−2.7053% −0.9010% +0.8885%] (p = 0.36 > 0.05)
+                        No change in performance detected.
+Benchmarking trail3/sys:anyRelationship{1,3}/asof
+Benchmarking trail3/sys:anyRelationship{1,3}/asof: Warming up for 200.00 ms
+Benchmarking trail3/sys:anyRelationship{1,3}/asof: Collecting 10 samples in estimated 501.09 ms (3740 iterations)
+Benchmarking trail3/sys:anyRelationship{1,3}/asof: Analyzing
+trail3/sys:anyRelationship{1,3}/asof
+                        time:   [134.18 µs 134.79 µs 135.38 µs]
+                        change: [−4.4634% −3.0556% −1.8639%] (p = 0.00 < 0.05)
+                        Performance has improved.
+Found 2 outliers among 10 measurements (20.00%)
+  2 (20.00%) high mild
+Benchmarking trail3/link{1,3}/valid
+Benchmarking trail3/link{1,3}/valid: Warming up for 200.00 ms
+Benchmarking trail3/link{1,3}/valid: Collecting 10 samples in estimated 504.21 ms (3300 iterations)
+Benchmarking trail3/link{1,3}/valid: Analyzing
+trail3/link{1,3}/valid  time:   [149.59 µs 150.90 µs 152.48 µs]
+                        change: [−4.1319% −2.4408% −0.9289%] (p = 0.01 < 0.05)
+                        Change within noise threshold.
+Found 1 outliers among 10 measurements (10.00%)
+  1 (10.00%) low mild
+Benchmarking trail3/sys:anyRelationship{1,3}/valid
+Benchmarking trail3/sys:anyRelationship{1,3}/valid: Warming up for 200.00 ms
+Benchmarking trail3/sys:anyRelationship{1,3}/valid: Collecting 10 samples in estimated 500.43 ms (5115 iterations)
+Benchmarking trail3/sys:anyRelationship{1,3}/valid: Analyzing
+trail3/sys:anyRelationship{1,3}/valid
+                        time:   [96.769 µs 102.34 µs 108.66 µs]
+                        change: [−15.903% −5.0783% +3.2652%] (p = 0.52 > 0.05)
+                        No change in performance detected.
+Found 2 outliers among 10 measurements (20.00%)
+  1 (10.00%) high mild
+  1 (10.00%) high severe
+
+Benchmarking reach/chain_plus
+Benchmarking reach/chain_plus: Warming up for 200.00 ms
+
+Warning: Unable to complete 10 samples in 500.0ms. You may wish to increase target time to 1.4s.
+Benchmarking reach/chain_plus: Collecting 10 samples in estimated 1.3792 s (10 iterations)
+Benchmarking reach/chain_plus: Analyzing
+reach/chain_plus        time:   [138.38 ms 139.36 ms 140.47 ms]
+                        change: [−10.112% −5.1673% −2.0228%] (p = 0.03 < 0.05)
+                        Performance has improved.
+Benchmarking reach/small_world_plus
+Benchmarking reach/small_world_plus: Warming up for 200.00 ms
+Benchmarking reach/small_world_plus: Collecting 10 samples in estimated 526.02 ms (110 iterations)
+Benchmarking reach/small_world_plus: Analyzing
+reach/small_world_plus  time:   [4.8375 ms 4.8803 ms 4.9212 ms]
+                        change: [−2.8630% −1.9276% −0.9376%] (p = 0.00 < 0.05)
+                        Change within noise threshold.
+Benchmarking reach/grid_all_shortest
+Benchmarking reach/grid_all_shortest: Warming up for 200.00 ms
+
+Warning: Unable to complete 10 samples in 500.0ms. You may wish to increase target time to 546.4ms or enable flat sampling.
+Benchmarking reach/grid_all_shortest: Collecting 10 samples in estimated 546.39 ms (55 iterations)
+Benchmarking reach/grid_all_shortest: Analyzing
+reach/grid_all_shortest time:   [9.9295 ms 10.019 ms 10.150 ms]
+                        change: [−7.4732% −6.5454% −5.5700%] (p = 0.00 < 0.05)
+                        Performance has improved.
+Found 3 outliers among 10 measurements (30.00%)
+  1 (10.00%) low severe
+  1 (10.00%) high mild
+  1 (10.00%) high severe
+
+Benchmarking rarray_chunk/reach/64
+Benchmarking rarray_chunk/reach/64: Warming up for 200.00 ms
+Benchmarking rarray_chunk/reach/64: Collecting 10 samples in estimated 518.53 ms (1485 iterations)
+Benchmarking rarray_chunk/reach/64: Analyzing
+rarray_chunk/reach/64   time:   [340.96 µs 342.91 µs 344.47 µs]
+                        change: [−8.1552% −6.5488% −4.9576%] (p = 0.00 < 0.05)
+                        Performance has improved.
+Found 1 outliers among 10 measurements (10.00%)
+  1 (10.00%) low mild
+Benchmarking rarray_chunk/reach/256
+Benchmarking rarray_chunk/reach/256: Warming up for 200.00 ms
+Benchmarking rarray_chunk/reach/256: Collecting 10 samples in estimated 505.83 ms (1540 iterations)
+Benchmarking rarray_chunk/reach/256: Analyzing
+rarray_chunk/reach/256  time:   [328.71 µs 330.35 µs 332.02 µs]
+                        change: [−3.6073% −2.3293% −1.2174%] (p = 0.00 < 0.05)
+                        Performance has improved.
+Found 2 outliers among 10 measurements (20.00%)
+  1 (10.00%) low mild
+  1 (10.00%) high mild
+Benchmarking rarray_chunk/reach/1024
+Benchmarking rarray_chunk/reach/1024: Warming up for 200.00 ms
+Benchmarking rarray_chunk/reach/1024: Collecting 10 samples in estimated 507.15 ms (1540 iterations)
+Benchmarking rarray_chunk/reach/1024: Analyzing
+rarray_chunk/reach/1024 time:   [334.23 µs 348.89 µs 356.21 µs]
+                        change: [−2.4824% −0.1878% +2.3965%] (p = 0.90 > 0.05)
+                        No change in performance detected.
+

@@ -600,8 +600,11 @@ fn migrating_a_format_2_file_adds_the_tables_and_keeps_every_row() {
     .is_empty());
     let before = graph(&p);
     let db = open(&p);
-    assert_eq!(storage::FORMAT_VERSION, 3);
-    assert_eq!(raw(&p, version), ["Integer(3)"]);
+    // migrates through format 3 (saved answers) to the current format
+    assert_eq!(
+        raw(&p, version),
+        [format!("Integer({})", storage::FORMAT_VERSION)]
+    );
     assert_eq!(graph(&p), before);
     assert!(db.saved_answers().unwrap().is_empty());
     let a = db

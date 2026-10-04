@@ -1,0 +1,42 @@
+   Compiling tm-core v0.1.0 (/Users/volodymyrpavlyshyn/Documents/work/tiramemsu/crates/tm-core)
+   Compiling tm-ir v0.1.0 (/Users/volodymyrpavlyshyn/Documents/work/tiramemsu/crates/tm-ir)
+   Compiling tm-rusqlite v0.1.0 (/Users/volodymyrpavlyshyn/Documents/work/tiramemsu/crates/tm-rusqlite)
+   Compiling tm-sparql v0.1.0 (/Users/volodymyrpavlyshyn/Documents/work/tiramemsu/crates/tm-sparql)
+   Compiling tm-cypher v0.1.0 (/Users/volodymyrpavlyshyn/Documents/work/tiramemsu/crates/tm-cypher)
+   Compiling tm-exec v0.1.0 (/Users/volodymyrpavlyshyn/Documents/work/tiramemsu/crates/tm-exec)
+   Compiling tiramemsu v0.1.0 (/Users/volodymyrpavlyshyn/Documents/work/tiramemsu/crates/tiramemsu)
+    Finished `bench` profile [optimized] target(s) in 14.71s
+     Running benches/core.rs (target/release/deps/core-ca89c4fd2e122d15)
+Testing churn/now/1
+Success
+Testing churn/as_of/1
+Success
+Testing churn/now/10
+Success
+Testing churn/as_of/10
+Success
+Testing churn/now/100
+Success
+Testing churn/as_of/100
+Success
+Testing churn/now/1000
+Success
+Testing churn/as_of/1000
+Success
+
+Testing supersede/cascade_set/1
+Success
+Testing supersede/cascade_set/10
+Success
+Testing supersede/cascade_set/100
+Success
+Testing supersede/cascade_set/1000
+Success
+
+Testing facade_overhead/facade_query
+Success
+Testing facade_overhead/facade_point_lookups
+Success
+Testing facade_overhead/direct_point_lookups
+Success
+

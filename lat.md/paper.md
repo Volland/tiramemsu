@@ -16,7 +16,7 @@ The revision-4 submission folder is kept to four files: upload ZIP, metadata tex
 
 ## Manuscript
 
-`paper/layered-bitemporal-graphs.tex` and `references.bib` are the source; `REVISION-*.md` record what each revision changed.
+`paper/layered-bitemporal-graphs.tex` and `references.bib` are the source; the README summarises the current revision.
 
 The original `layered-bitemporal-graphs.pdf` is the revision-1 build. The revision-4 build is the arXiv preview PDF, which the website serves. Review reports and earlier revision folders are kept outside the repository, so the paper's notes name them without linking.
 

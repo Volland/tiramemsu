@@ -26,7 +26,7 @@ impl std::fmt::Debug for Migration {
 }
 
 /// The migrations of this build: format 1 to 2 adds the text-index bookkeeping,
-/// format 2 to 3 the saved-answer tables.
+/// format 2 to 3 the saved-answer tables, format 3 to 4 the transaction-date guards.
 pub const MIGRATIONS: &[Migration] = &[
     Migration {
         from: 1,
@@ -36,7 +36,19 @@ pub const MIGRATIONS: &[Migration] = &[
         from: 2,
         apply: v2_to_v3,
     },
+    Migration {
+        from: 3,
+        apply: v3_to_v4,
+    },
 ];
+
+/// Format 3 to 4 adds clock validation without rewriting historical rows.
+fn v3_to_v4(exec: &mut dyn Executor) -> Result<()> {
+    for stmt in super::split_statements(super::DDL_DATE_GUARDS) {
+        exec.execute_batch(&stmt)?;
+    }
+    Ok(())
+}
 
 /// Format 1 to 2: the `meta` rows of the derived text index (OpenSpec change
 /// `add-text-retrieval`). `text_index` is the index version (0: not built) and

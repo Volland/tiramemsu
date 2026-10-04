@@ -1,0 +1,35 @@
+   Compiling tiramemsu v0.1.0 (/Users/volodymyrpavlyshyn/Documents/work/tiramemsu/crates/tiramemsu)
+    Finished `bench` profile [optimized] target(s) in 1.61s
+     Running benches/path.rs (target/release/deps/path-c7b9abe76c7af562)
+Testing shortest/any_shortest_all_endpoints/now
+Success
+Testing shortest/any_shortest_all_endpoints/asof
+Success
+
+Testing trail3/link{1,3}/now
+Success
+Testing trail3/sys:anyRelationship{1,3}/now
+Success
+Testing trail3/link{1,3}/asof
+Success
+Testing trail3/sys:anyRelationship{1,3}/asof
+Success
+Testing trail3/link{1,3}/valid
+Success
+Testing trail3/sys:anyRelationship{1,3}/valid
+Success
+
+Testing reach/chain_plus
+Success
+Testing reach/small_world_plus
+Success
+Testing reach/grid_all_shortest
+Success
+
+Testing rarray_chunk/reach/64
+Success
+Testing rarray_chunk/reach/256
+Success
+Testing rarray_chunk/reach/1024
+Success
+

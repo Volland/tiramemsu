@@ -1,0 +1,1765 @@
+   Compiling tm-cypher v0.1.0 (/Users/volodymyrpavlyshyn/Documents/work/tiramemsu/crates/tm-cypher)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 5.90s
+     Running unittests src/lib.rs (target/debug/deps/tiramemsu-7ccbcf012fdfc00c)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/cypher_differential.rs (target/debug/deps/cypher_differential-b2ae4375cbb0dfbe)
+
+running 7 tests
+test numeric_and_datetime_normalisation ... ok
+test corpus_is_complete ... ok
+test mismatch_report_names_the_pair_and_the_extra_row ... ok
+test null_and_unbound_compare_equal ... ok
+test fixtures_are_reproducible ... ok
+test cypher_side_runs_without_the_sparql_side ... ok
+test corpus_pairs_return_identical_results ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.50s
+
+     Running tests/cypher_dual.rs (target/debug/deps/cypher_dual-a344e24cf0b33b8d)
+
+running 9 tests
+test standard_queries_keep_their_meaning ... ok
+test same_eid_two_forms ... ok
+test two_level_layer ... ok
+test unbound_node_variable_binds_to_a_statement ... ok
+test belief_supporting_a_relationship_in_the_same_match ... ok
+test statement_label ... ok
+test relationship_variable_in_later_clauses ... ok
+test writing_layers_through_the_dual_view ... ok
+test start_end_type_on_either_form ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.09s
+
+     Running tests/cypher_paths.rs (target/debug/deps/cypher_paths-eb4848427476be40)
+
+running 10 tests
+test unsupported_forms ... ok
+test virtual_hop_in_a_cypher_path ... ok
+test endpoint_binding ... ok
+test relationship_isomorphism_with_paths ... ok
+test quantifier_forms ... ok
+test path_and_list_bindings ... ok
+test unbounded_pattern_stops_at_the_cap ... ok
+test temporal_scope ... ok
+test shortest_paths ... ok
+test types_and_directions ... ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.16s
+
+     Running tests/cypher_read.rs (target/debug/deps/cypher_read-ba411e46d9124e08)
+
+running 15 tests
+test duplicate_label_statements_do_not_duplicate_rows ... ok
+test relationship_property_map ... ok
+test read_query_on_the_current_view ... ok
+test parallel_edges_and_type_disjunction ... ok
+test rdf_type_is_never_a_relationship ... ok
+test is_edge_true_forces_relationship_on_literal ... ok
+test is_edge_false_forces_property_on_node_object ... ok
+test node_scan_excludes_statements_transactions_and_classes ... ok
+test inline_property_maps ... ok
+test literal_object_is_a_property_and_node_object_a_relationship ... ok
+test labels ... ok
+test relationship_patterns ... ok
+test write_clause_on_a_read_only_view_is_rejected ... ok
+test untyped_pattern_hides_sys_predicates ... ok
+test view_time_selection_is_the_default ... ok
+
+test result: ok. 15 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.13s
+
+     Running tests/cypher_read_more.rs (target/debug/deps/cypher_read_more-25643dd79c875b9c)
+
+running 17 tests
+test function_library ... ok
+test runtime_errors ... ok
+test parse_errors_carry_spans ... ok
+test procedures ... ok
+test parameters ... ok
+test scalar_round_trip_of_types ... ok
+test fixed_length_named_path ... ok
+test node_and_relationship_values ... ok
+test correlated_subquery ... ok
+test existential_subqueries ... ok
+test expressions ... ok
+test datetime_equality_and_local ... ok
+test subquery_shadowing_is_rejected ... ok
+test unsupported_features ... ok
+test uncorrelated_subquery_is_a_cross_product ... ok
+test union ... ok
+test volatile_properties ... ok
+
+test result: ok. 17 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.13s
+
+     Running tests/cypher_read_props.rs (target/debug/deps/cypher_read_props-8022ee130c4fb8de)
+
+running 10 tests
+test connectives_and_in ... ok
+test with_projection ... ok
+test unwind ... ok
+test property_access ... ok
+test optional_match ... ok
+test where_three_valued ... ok
+test relationship_isomorphism ... ok
+test aggregation ... ok
+test return_projection ... ok
+test ordering_skip_limit ... ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.12s
+
+     Running tests/cypher_temporal.rs (target/debug/deps/cypher_temporal-dcd36fa72d5523f5)
+
+running 15 tests
+test past_episodes_visible_by_default ... ok
+test combined_selectors_and_placement ... ok
+test set_valid_time_on_a_statement ... ok
+test retract_kind_in_history ... ok
+test learned_late_and_recorded_after_the_fact ... ok
+test statement_time_properties ... ok
+test use_as_of_an_instant ... ok
+test shadowed_and_ordinary_names ... ok
+test use_as_of_a_transaction ... ok
+test statement_instants ... ok
+test in_query_clauses_override_the_handle_view ... ok
+test use_graph_is_unsupported ... ok
+test use_valid_at ... ok
+test use_history ... ok
+test per_pattern_scopes ... ok
+
+test result: ok. 15 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.14s
+
+     Running tests/cypher_vocab.rs (target/debug/deps/cypher_vocab-b172ebf3e77116c6)
+
+running 9 tests
+test case_is_preserved ... ok
+test backticked_name_with_a_space ... ok
+test shared_addressing_with_sparql ... ok
+test node_identity ... ok
+test rendering_and_round_trip ... ok
+test curies_full_iris_and_unknown_names ... ok
+test sys_namespace_is_hidden ... ok
+test reserved_implicit_labels ... ok
+test vocabulary_configuration ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.11s
+
+     Running tests/cypher_write.rs (target/debug/deps/cypher_write-dc3d977818b9745d)
+
+running 15 tests
+test node_with_an_explicit_iri ... ok
+test datetime_write_encoding ... ok
+test empty_node_leaves_no_statement ... ok
+test later_clauses_see_earlier_writes ... ok
+test anonymous_node_with_label_and_properties ... ok
+test concurrent_merges_do_not_duplicate ... ok
+test create_and_return_in_one_transaction ... ok
+test failure_leaves_no_trace ... ok
+test list_and_map_values ... ok
+test merge_with_unique_key ... ok
+test merge_by_pattern ... ok
+test same_instant_other_offset_is_a_supersede ... ok
+test transaction_handle_composes_with_api_operations ... ok
+test valid_time_on_creation ... ok
+test create_relationships ... ok
+
+test result: ok. 15 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.14s
+
+     Running tests/cypher_write_set.rs (target/debug/deps/cypher_write_set-dc6f143377a3fea5)
+
+running 15 tests
+test foreach_is_unsupported ... ok
+test delete_relationship_and_null ... ok
+test set_multi_valued_and_null ... ok
+test set_on_a_relationship ... ok
+test set_first_value_is_asserted ... ok
+test set_cardinality_one_replaces_without_replay ... ok
+test set_change_supersedes_and_keeps_annotations ... ok
+test remove_cascades_annotations ... ok
+test detach_delete ... ok
+test delete_nodes ... ok
+test set_maps_and_labels ... ok
+test set_same_value_is_a_noop ... ok
+test typed_layer_rejects_a_node_subject ... ok
+test writes_and_time_clauses ... ok
+test schema_and_namespace_rules ... ok
+
+test result: ok. 15 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.14s
+
+     Running tests/facade.rs (target/debug/deps/facade-0a4aa493e766781d)
+
+running 12 tests
+test host_without_reader_pool ... ok
+test nested_transaction_is_rejected ... ok
+test rusqlite_host_declares_every_capability ... ok
+test reads_do_not_block_on_a_running_write ... ok
+test patch_from_fields ... ok
+test concurrent_upsert_of_a_unique_value ... ok
+test views_values_and_optimize ... ok
+test reopen_continues_numbering_and_keeps_history ... ok
+test two_handles_on_one_file ... ok
+test read_snapshot_is_consistent ... ok
+test speculation_through_the_facade ... ok
+test concurrent_transactions_from_many_threads ... ok
+
+test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.34s
+
+     Running tests/fact_bundles.rs (target/debug/deps/fact_bundles-24ac63c9b53e440a)
+
+running 3 tests
+test json_round_trip_is_exact_and_stable ... ok
+test ntriples_parse_as_rdf12 ... ok
+test a_belief_travels_between_databases_as_json ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+     Running tests/paths_cross_surface.rs (target/debug/deps/paths_cross_surface-76d872f6ac8f8558)
+
+running 1 test
+test surfaces_agree ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.55s
+
+     Running tests/recipes.rs (target/debug/deps/recipes-de9be74407453f75)
+
+running 5 tests
+test lineage_of_a_corrected_fact ... ok
+test facts_by_author_and_reasons_for_retraction ... ok
+test contradictions_between_authors_with_overlapping_valid_time ... ok
+test evidence_chain_as_of_an_earlier_transaction ... ok
+test metagraph_containers_nesting_and_fold ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.11s
+
+     Running tests/sparql_annotations.rs (target/debug/deps/sparql_annotations-b97b6bd17c94490e)
+
+running 18 tests
+test annotation_value_is_read ... ok
+test rdf_reifies_with_variable_object ... ok
+test explicit_rdf_reifies_form_is_equivalent ... ok
+test cascaded_annotation_visible_as_of_before_retraction ... ok
+test one_row_per_episode ... ok
+test annotation_on_an_annotation ... ok
+test missing_annotation_removes_the_solution ... ok
+test belief_referencing_a_fact ... ok
+test optional_annotation ... ok
+test api_eid_equals_sparql_reifier ... ok
+test nested_triple_term ... ok
+test history_shows_a_superseded_fact_and_its_replacement ... ok
+test variable_predicate_does_not_see_rdf_reifies ... ok
+test triple_term_in_object_position ... ok
+test reified_triple_as_subject ... ok
+test reifier_constant_that_is_not_a_statement ... ok
+test triple_function_unsupported ... ok
+test reifier_binds_the_eid ... ok
+
+test result: ok. 18 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.18s
+
+     Running tests/sparql_differential.rs (target/debug/deps/sparql_differential-98536c92f4405e54)
+
+running 1 test
+test sparql_corpus_returns_the_expected_rows ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+     Running tests/sparql_graph_update.rs (target/debug/deps/sparql_graph_update-1e4f47ac619b3371)
+
+running 7 tests
+test cardinality_one_drops_old_memberships ... ok
+test graph_updates_fail_atomically ... ok
+test membership_predicate_is_engine_owned ... ok
+test delete_from_a_graph ... ok
+test graph_management ... ok
+test with_and_using ... ok
+test insert_into_a_graph ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.29s
+
+     Running tests/sparql_graphs.rs (target/debug/deps/sparql_graphs-3b12c2ee8f67599f)
+
+running 14 tests
+test membership_carries_layers ... ok
+test graphs_combine_with_service_scopes ... ok
+test graph_metadata_is_ordinary_triples ... ok
+test paths_cross_layers_inside_graphs ... ok
+test graph_selects_by_membership ... ok
+test invalid_graph_names_are_rejected ... ok
+test property_paths_run_inside_graphs ... ok
+test duplicates_follow_memberships ... ok
+test graph_paths_under_as_of ... ok
+test sparql_statement_graphs ... ok
+test default_graph_is_the_union ... ok
+test zero_length_paths_per_graph ... ok
+test dataset_clauses ... ok
+test membership_is_bitemporal_in_sparql ... ok
+
+test result: ok. 14 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.36s
+
+     Running tests/sparql_mcp.rs (target/debug/deps/sparql_mcp-3b540fbebdfc49f4)
+
+running 1 test
+test sparql_json_is_valid_on_the_current_and_as_of_views ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.06s
+
+     Running tests/sparql_paths.rs (target/debug/deps/sparql_paths-020300b4076bed67)
+
+running 12 tests
+test closures_from_a_bound_subject ... ok
+test negated_property_sets_are_unsupported ... ok
+test paths_across_layers ... ok
+test endpoint_binding ... ok
+test no_duplicates_over_a_diamond ... ok
+test zero_or_more_from_an_unknown_term ... ok
+test inverse_path ... ok
+test complex_expression ... ok
+test non_recursive_paths_need_no_bound_endpoint ... ok
+test sparql_paths_have_no_hop_cap ... ok
+test bound_object_and_both_ends ... ok
+test paths_honour_temporal_scope ... ok
+
+test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.25s
+
+     Running tests/sparql_provenance.rs (target/debug/deps/sparql_provenance-bc7801e56332bfc0)
+
+running 11 tests
+test distinct_merges_and_slices_stay_exact ... ok
+test tested_statements_are_not_cited ... ok
+test matched_statements_are_listed ... ok
+test graphs_cite_memberships ... ok
+test time_scopes_cite_past_statements ... ok
+test stale_answers_are_detectable ... ok
+test one_triple_lists_all_its_eids ... ok
+test groups_and_subqueries_union_provenance ... ok
+test provenance_is_off_by_default ... ok
+test corpus_solutions_do_not_change ... ok
+test provenance_is_sound ... ok
+
+test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.37s
+
+     Running tests/sparql_query_core.rs (target/debug/deps/sparql_query_core-a16aeb2c6b982da2)
+
+running 25 tests
+test minus_without_shared_variables_removes_nothing ... ok
+test minus_removes_matching_subjects ... ok
+test missing_optional_value_is_unbound ... ok
+test bind_computes_a_value ... ok
+test bind_error_leaves_the_variable_unbound ... ok
+test ask_true_and_false ... ok
+test current_view_sees_live_statements_only ... ok
+test filter_inside_optional_is_a_join_condition ... ok
+test binding_the_eid_exposes_every_occurrence ... ok
+test parallel_edges_show_as_one_triple ... ok
+test not_exists_is_correlated ... ok
+test historical_view_sees_the_past ... ok
+test bind_over_an_in_scope_variable_is_rejected ... ok
+test select_star_hides_internal_variables ... ok
+test undef_in_values ... ok
+test projection_keeps_bag_semantics ... ok
+test two_episodes_show_as_one_triple ... ok
+test unknown_constant_yields_empty_result ... ok
+test union_of_two_predicates ... ok
+test select_with_projected_expression ... ok
+test variable_in_predicate_position ... ok
+test values_restricts_solutions ... ok
+test same_statement_matched_by_two_patterns ... ok
+test speculative_view_sees_uncommitted_state ... ok
+test two_pattern_join ... ok
+
+test result: ok. 25 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.33s
+
+     Running tests/sparql_query_filters.rs (target/debug/deps/sparql_query_filters-56fde5bfb70d37ee)
+
+running 17 tests
+test descending_string_order_with_limit_and_offset ... ok
+test negating_an_error_still_removes_the_row ... ok
+test distinct_with_non_projected_key_is_unsupported ... ok
+test count_per_group ... ok
+test numeric_order_is_by_value ... ok
+test numeric_equality_across_datatypes ... ok
+test distinct_order_limit_slices_after_distinct ... ok
+test error_rescued_by_or ... ok
+test inner_variables_are_hidden ... ok
+test having_filters_groups ... ok
+test count_over_no_solutions ... ok
+test group_concat_with_separator ... ok
+test other_aggregates ... ok
+test unbound_variable_in_filter ... ok
+test unbound_sorts_first ... ok
+test type_error_removes_the_row ... ok
+test top_n_per_subquery ... ok
+
+test result: ok. 17 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.74s
+
+     Running tests/sparql_query_terms.rs (target/debug/deps/sparql_query_terms-9d1c935ba0093a16)
+
+running 25 tests
+test blank_node_label_is_not_projected ... ok
+test integer_lexical_forms_are_equal ... ok
+test configured_vocab_is_the_v_prefix ... ok
+test arithmetic_chains_are_left_associative ... ok
+test inverse_single_predicate ... ok
+test custom_function_is_unsupported ... ok
+test default_vocabulary_prefix ... ok
+test datetime_keeps_its_offset_in_results ... ok
+test datetime_offsets_are_distinct_terms ... ok
+test database_prefix_table ... ok
+test date_functions_and_casts ... ok
+test anonymous_node_round_trip ... ok
+test query_prefix_overrides ... ok
+test syntax_error_location ... ok
+test ordering_compares_instants_across_offsets ... ok
+test language_tag_case ... ok
+test timezone_and_tz_read_the_stored_offset ... ok
+test string_functions ... ok
+test pattern_constant_matches_by_term_filter_by_instant ... ok
+test undeclared_prefix ... ok
+test term_constructors_and_tests ... ok
+test numeric_functions_and_casts ... ok
+test same_term_follows_canonical_encoding ... ok
+test now_is_fixed_per_query ... ok
+test unsupported_function_is_named ... ok
+
+test result: ok. 25 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.23s
+
+     Running tests/sparql_results.rs (target/debug/deps/sparql_results-017e7f3343078cd0)
+
+running 12 tests
+test export_an_annotated_fact ... ok
+test eid_rendered_as_statement_iri ... ok
+test datetime_rendering_keeps_the_offset ... ok
+test construct_maps_predicates ... ok
+test select_json_document ... ok
+test datetime_rendering ... ok
+test typed_literal_json ... ok
+test row_order_is_preserved ... ok
+test unbound_template_variable_skipped ... ok
+test ask_json_document ... ok
+test fresh_blank_node_per_solution ... ok
+test duplicates_and_invalid_positions ... ok
+
+test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.10s
+
+     Running tests/sparql_temporal.rs (target/debug/deps/sparql_temporal-cfd83eb77d94b9e8)
+
+running 15 tests
+test conflicting_selectors_rejected ... ok
+test malformed_time_iri_is_a_parse_error ... ok
+test as_of_wall_clock_instant ... ok
+test combining_as_of_and_valid_at ... ok
+test from_applies_inside_exists_and_subqueries ... ok
+test offset_resolves_to_the_same_transaction ... ok
+test ordinary_graph_iri_names_a_graph ... ok
+test half_open_interval_end ... ok
+test instant_before_the_first_transaction ... ok
+test learned_late_and_recorded_after_the_fact ... ok
+test as_of_transaction_number ... ok
+test from_overrides_only_the_transaction_part ... ok
+test past_episodes_are_visible_by_default ... ok
+test time_iri_as_data ... ok
+test unbounded_statements_are_always_valid ... ok
+
+test result: ok. 15 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.13s
+
+     Running tests/sparql_temporal_service.rs (target/debug/deps/sparql_temporal_service-0c41ecd27419fee5)
+
+running 16 tests
+test graph_variable_is_evaluated ... ok
+test federated_service_rejected ... ok
+test live_statement_has_no_retraction ... ok
+test nested_scopes_combine_parts ... ok
+test graph_inside_a_time_scope_names_a_graph ... ok
+test malformed_time_iri_in_service ... ok
+test service_silent_is_the_same_scope ... ok
+test inner_scope_overrides_outer_for_the_same_part ... ok
+test before_and_after_values_of_a_changed_fact ... ok
+test inner_scope_overrides_from ... ok
+test history_scope_for_one_pattern ... ok
+test retraction_time_under_history ... ok
+test valid_from_value ... ok
+test service_variable_rejected ... ok
+test time_iri_in_graph_is_rejected ... ok
+test when_was_a_fact_added_and_by_whom ... ok
+
+test result: ok. 16 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.13s
+
+     Running tests/sparql_update_data.rs (target/debug/deps/sparql_update_data-f2782b4a94d4315c)
+
+running 7 tests
+test inserted_statements_have_unbounded_valid_time ... ok
+test canonical_literal_stored ... ok
+test repeated_insert_is_idempotent ... ok
+test other_triples_about_the_same_nodes_survive ... ok
+test blank_nodes_are_fresh_per_request ... ok
+test all_episodes_retracted ... ok
+test cascade_retracts_annotations ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.06s
+
+     Running tests/sparql_update_reifiers.rs (target/debug/deps/sparql_update_reifiers-a3b7ba2c7d38febc)
+
+running 11 tests
+test iri_reifier_rejected ... ok
+test one_reifier_for_two_triples_rejected ... ok
+test reference_to_a_reified_triple_asserts_it ... ok
+test insert_data_with_annotation ... ok
+test statement_iri_reifier_accepted ... ok
+test retract_one_episode_only ... ok
+test annotation_insert_is_idempotent ... ok
+test delete_data_with_a_statement_iri_reifier_is_eid_precise ... ok
+test template_attaches_to_a_bound_eid ... ok
+test annotating_an_existing_statement ... ok
+test retract_an_annotation_only ... ok
+
+test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.10s
+
+     Running tests/sparql_update_tx.rs (target/debug/deps/sparql_update_tx-c2d5e1a8173bfcb0)
+
+running 14 tests
+test time_iri_as_insert_data_graph_is_rejected ... ok
+test add_move_copy_are_rejected ... ok
+test drop_silent_all_is_still_rejected ... ok
+test report_lists_new_and_existing_eids ... ok
+test blank_node_in_delete_data ... ok
+test no_op_request_still_commits ... ok
+test clear_default_is_rejected ... ok
+test multi_operation_request_is_one_transaction ... ok
+test later_operation_sees_earlier_one ... ok
+test rejected_operation_aborts_the_whole_request ... ok
+test failure_leaves_no_trace ... ok
+test typed_layer_rejects_a_node_subject ... ok
+test variable_in_insert_data ... ok
+test update_on_a_historical_view_is_rejected ... ok
+
+test result: ok. 14 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.11s
+
+     Running tests/sparql_update_where.rs (target/debug/deps/sparql_update_where-ebabb12cf2adcb1c)
+
+running 13 tests
+test time_iri_in_graph_of_a_where_pattern_is_rejected ... ok
+test unbound_template_variable_is_skipped ... ok
+test reserved_namespace_rejected ... ok
+test schema_flag_insertable ... ok
+test unique_violation_aborts ... ok
+test cardinality_one_replaces_the_old_value ... ok
+test fresh_blank_node_per_solution ... ok
+test valid_time_cannot_be_inserted_as_a_triple ... ok
+test restore_a_past_value ... ok
+test delete_where_short_form ... ok
+test replace_a_value ... ok
+test using_sets_the_where_default_view ... ok
+test where_is_evaluated_before_changes ... ok
+
+test result: ok. 13 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.12s
+
+     Running tests/statement_dependents.rs (target/debug/deps/statement_dependents-943862af0137e115)
+
+running 2 tests
+test as_of_reproduces_a_retracted_structure ... ok
+test prop_dependents_match_cascade_and_path ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.25s
+
+     Running unittests src/lib.rs (target/debug/deps/tiramemsu_json-332a396704f06276)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/bridge.rs (target/debug/deps/bridge-82980c50d9d48fe8)
+
+running 20 tests
+test open_options_are_checked ... ok
+test a_transaction_reports_and_resolves_named_refs ... ok
+test paths_reach_through_a_chain ... ok
+test cypher_reads_layers_and_a_write_returns_its_report ... ok
+test reserved_origins_and_exhausted_counters_have_codes ... ok
+test paths_stay_inside_the_listed_graphs ... ok
+test a_failed_transaction_commits_nothing ... ok
+test errors_carry_a_code_and_bad_arguments_are_told_apart ... ok
+test named_graphs_hold_statements_as_tags ... ok
+test a_dry_run_reports_without_committing ... ok
+test dependents_preview_a_retraction_on_any_view ... ok
+test retract_cascades_and_the_event_log_records_it ... ok
+test sparql_rows_can_carry_provenance ... ok
+test terms_round_trip_including_what_json_cannot_hold ... ok
+test speculation_answers_what_if_and_keeps_nothing ... ok
+test subject_type_mismatch_has_its_own_code ... ok
+test a_bundle_moves_between_bridge_databases ... ok
+test triples_carry_their_lifetime_and_the_history_keeps_retracted_rows ... ok
+test time_respecting_paths_report_arrival ... ok
+test time_travel_across_both_clocks ... ok
+
+test result: ok. 20 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.20s
+
+     Running unittests src/lib.rs (target/debug/deps/tiramemsu_node-7fd5797ab6f6f9d0)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/lib.rs (target/debug/deps/tm_core-bfddb5715a0c29fb)
+
+running 16 tests
+test id::tests::signed_and_unsigned_payloads ... ok
+test id::tests::sealed_tag_is_unsupported ... ok
+test codec::tests::booleans_and_dates ... ok
+test codec::tests::integers ... ok
+test codec::tests::short_strings ... ok
+test id::tests::statement_and_transaction_ids_are_inline ... ok
+test id::tests::origin_and_counter_split ... ok
+test codec::tests::skolems ... ok
+test id::tests::tag_and_payload_extraction ... ok
+test engine::reserved::tests::allow_list ... ok
+test id::tests::tags_map_to_numbers ... ok
+test value::tests::civil_round_trip ... ok
+test value::tests::datetime_parse_and_format ... ok
+test value::tests::numbers ... ok
+test view::tests::shapes ... ok
+test storage::tests::ddl_splits_into_statements ... ok
+
+test result: ok. 16 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/fact_bundles.rs (target/debug/deps/fact_bundles-e409913869ba8ae7)
+
+running 19 tests
+test exclusions::rusqlite ... ok
+test members_order_and_stability::rusqlite ... ok
+test exclusions::minimal ... ok
+test members_order_and_stability::minimal ... ok
+test cycles_and_malformed::minimal ... ok
+test cycles_and_malformed::rusqlite ... ok
+test as_of_bundle_of_a_retracted_structure::rusqlite ... ok
+test existing_root_fact::rusqlite ... ok
+test anonymous_nodes::rusqlite ... ok
+test anonymous_nodes::minimal ... ok
+test as_of_bundle_of_a_retracted_structure::minimal ... ok
+test existing_root_fact::minimal ... ok
+test schema_violation_is_atomic::minimal ... ok
+test round_trip::rusqlite ... ok
+test round_trip::minimal ... ok
+test second_import_changes_nothing::rusqlite ... ok
+test second_import_changes_nothing::minimal ... ok
+test schema_violation_is_atomic::rusqlite ... ok
+test random::prop_bundles_round_trip ... ok
+
+test result: ok. 19 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.27s
+
+     Running tests/graph_props.rs (target/debug/deps/graph_props-432b2fab79c56bd4)
+
+running 1 test
+test graph_members_match_a_model ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.47s
+
+     Running tests/named_graphs.rs (target/debug/deps/named_graphs-0bc9c33719e4558a)
+
+running 23 tests
+test error_messages_name_the_term ... ok
+test graph_names_are_validated::rusqlite ... ok
+test membership_is_engine_owned::minimal ... ok
+test a_statement_holds_a_subgraph::rusqlite ... ok
+test graphs_are_listed_once::minimal ... ok
+test graph_names_are_validated::minimal ... ok
+test membership_is_engine_owned::rusqlite ... ok
+test graphs_are_listed_once::rusqlite ... ok
+test a_statement_holds_a_subgraph::minimal ... ok
+test cascade_and_supersede_drop_memberships::rusqlite ... ok
+test cascade_and_supersede_drop_memberships::minimal ... ok
+test tags_not_containers::minimal ... ok
+test retracting_a_statement_graph_keeps_its_members::minimal ... ok
+test supersede_carries_the_contents_of_a_statement_graph::minimal ... ok
+test tags_not_containers::rusqlite ... ok
+test remove_and_clear_keep_statements::minimal ... ok
+test retracting_a_statement_graph_keeps_its_members::rusqlite ... ok
+test remove_and_clear_keep_statements::rusqlite ... ok
+test views_apply_to_membership::minimal ... ok
+test supersede_carries_the_contents_of_a_statement_graph::rusqlite ... ok
+test views_apply_to_membership::rusqlite ... ok
+test membership_lookups_use_live_indexes::rusqlite ... ok
+test membership_lookups_use_live_indexes::minimal ... ok
+
+test result: ok. 23 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.39s
+
+     Running tests/never_forget.rs (target/debug/deps/never_forget-d5ca9515db4c6ed5)
+
+running 15 tests
+test savepoint_rollback_is_not_blocked::minimal ... ok
+test retracted_values_stay_in_history::minimal ... ok
+test terms_and_transactions::minimal ... ok
+test savepoint_rollback_is_not_blocked::rusqlite ... ok
+test retracted_values_stay_in_history::rusqlite ... ok
+test raw_delete_of_one_statement::rusqlite ... ok
+test rows_are_never_replaced::rusqlite ... ok
+test retracted_at_most_once::minimal ... ok
+test raw_delete_of_one_statement::minimal ... ok
+test rows_are_never_replaced::minimal ... ok
+test retracted_at_most_once::rusqlite ... ok
+test terms_and_transactions::rusqlite ... ok
+test volatile_and_meta_are_outside::rusqlite ... ok
+test volatile_and_meta_are_outside::minimal ... ok
+test source_audit ... ok
+
+test result: ok. 15 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.12s
+
+     Running tests/object_encoding.rs (target/debug/deps/object_encoding-e8c0a3d19e5af580)
+
+running 32 tests
+test booleans_and_dates::minimal ... ok
+test fail_after_interning_then_intern_again::rusqlite ... ok
+test datetime_offsets_are_two_terms::minimal ... ok
+test doubles_decimals_and_other_datatypes::minimal ... ok
+test datetime_offsets_are_two_terms::rusqlite ... ok
+test doubles_decimals_and_other_datatypes::rusqlite ... ok
+test dictionary_dedupes::minimal ... ok
+test fail_after_interning_then_intern_again::minimal ... ok
+test booleans_and_dates::rusqlite ... ok
+test dictionary_dedupes::rusqlite ... ok
+test datetime_without_timezone_and_out_of_range::rusqlite ... ok
+test datetime_without_timezone_and_out_of_range::minimal ... ok
+test prop_order_within_tag ... ok
+test foreign_origin_is_rejected::rusqlite ... ok
+test foreign_origin_is_rejected::minimal ... ok
+test integers::rusqlite ... ok
+test local_ids_have_origin_0::minimal ... ok
+test local_ids_have_origin_0::rusqlite ... ok
+test integers::minimal ... ok
+test read_lookup_never_inserts::minimal ... ok
+test reserved_tag_and_sensitive_flag_are_rejected::rusqlite ... ok
+test reserved_tag_and_sensitive_flag_are_rejected::minimal ... ok
+test read_lookup_never_inserts::rusqlite ... ok
+test round_trip_every_tag::minimal ... ok
+test skolem_iris::minimal ... ok
+test skolem_iris::rusqlite ... ok
+test stmt_and_tx_ids_are_inline::minimal ... ok
+test stmt_and_tx_ids_are_inline::rusqlite ... ok
+test round_trip_every_tag::rusqlite ... ok
+test strings::rusqlite ... ok
+test strings::minimal ... ok
+test prop_canonical_round_trip ... ok
+
+test result: ok. 32 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.16s
+
+     Running tests/predicate_schema.rs (target/debug/deps/predicate_schema-556543437ae2178e)
+
+running 30 tests
+test edge_flag_is_stored::rusqlite ... ok
+test edge_flag_is_stored::minimal ... ok
+test cardinality_one_replaces_without_carrying_annotations::minimal ... ok
+test order_of_schema_checks::rusqlite ... ok
+test cardinality_one_replaces_without_carrying_annotations::rusqlite ... ok
+test order_of_schema_checks::minimal ... ok
+test flag_values_are_validated::rusqlite ... ok
+test flags_are_versioned_statements::rusqlite ... ok
+test flags_are_versioned_statements::minimal ... ok
+test flag_values_are_validated::minimal ... ok
+test cardinality_one_scenarios::minimal ... ok
+test cardinality_one_scenarios::rusqlite ... ok
+test subject_type_values_are_validated::minimal ... ok
+test unique_rejects_second_subject::rusqlite ... ok
+test unique_scenarios::rusqlite ... ok
+test subject_type_values_are_validated::rusqlite ... ok
+test subject_type_constrains_subjects::rusqlite ... ok
+test schema_changes_violated_by_live_data::minimal ... ok
+test unique_rejects_second_subject::minimal ... ok
+test schema_changes_violated_by_live_data::rusqlite ... ok
+test subject_type_schema_changes::rusqlite ... ok
+test subject_type_constrains_subjects::minimal ... ok
+test unique_scenarios::minimal ... ok
+test subject_type_schema_changes::minimal ... ok
+test upsert_twice_and_not_unique::rusqlite ... ok
+test value_type_constrains_objects::rusqlite ... ok
+test upsert_twice_and_not_unique::minimal ... ok
+test upsert_returns_existing_or_new_node::rusqlite ... ok
+test upsert_returns_existing_or_new_node::minimal ... ok
+test value_type_constrains_objects::minimal ... ok
+
+test result: ok. 30 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.22s
+
+     Running tests/props.rs (target/debug/deps/props-b3e7af7983dd982c)
+
+running 3 tests
+test prop_as_of_equals_replay ... ok
+test prop_no_trigger_fires_and_terms_stay_unique ... ok
+test prop_historical_reads_are_stable ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.94s
+
+     Running tests/retraction_cascade.rs (target/debug/deps/retraction_cascade-d32531d8138dbd29)
+
+running 20 tests
+test diamond::minimal ... ok
+test cascade_limit_exceeded::rusqlite ... ok
+test cascade_limit_exceeded::minimal ... ok
+test metadata_survives_and_dead_rows_are_not_walked::minimal ... ok
+test cascade_limit_at_limit_and_per_root::rusqlite ... ok
+test diamond::rusqlite ... ok
+test cascade_limit_at_limit_and_per_root::minimal ... ok
+test dry_run_previews_a_cascade::rusqlite ... ok
+test annotation_and_reference_are_retracted::minimal ... ok
+test annotation_and_reference_are_retracted::rusqlite ... ok
+test dry_run_previews_a_cascade::minimal ... ok
+test metadata_survives_and_dead_rows_are_not_walked::rusqlite ... ok
+test recursive_layers::minimal ... ok
+test recursive_layers::rusqlite ... ok
+test two_statements_referencing_each_other::rusqlite ... ok
+test two_statements_referencing_each_other::minimal ... ok
+test retraction_kinds::minimal ... ok
+test retraction_kinds::rusqlite ... ok
+test what_a_belief_relied_on::minimal ... ok
+test what_a_belief_relied_on::rusqlite ... ok
+
+test result: ok. 20 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.12s
+
+     Running tests/speculative_transactions.rs (target/debug/deps/speculative_transactions-4a548ce49dce81b8)
+
+running 8 tests
+test tables_unchanged_after_speculation::rusqlite ... ok
+test tables_unchanged_after_speculation::minimal ... ok
+test failures_leave_no_trace::rusqlite ... ok
+test failures_leave_no_trace::minimal ... ok
+test speculation_exposes_uncommitted_state::minimal ... ok
+test speculation_exposes_uncommitted_state::rusqlite ... ok
+test ids_are_burned::rusqlite ... ok
+test ids_are_burned::minimal ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.06s
+
+     Running tests/sql_executor.rs (target/debug/deps/sql_executor-3d98ba33610a4abe)
+
+running 15 tests
+test core_has_no_sqlite_binding ... ok
+test rusqlite_host_declares_every_capability ... ok
+test no_rusqlite_type_in_core ... ok
+test savepoint_rollback_keeps_outer::minimal ... ok
+test savepoint_rollback_keeps_outer::rusqlite ... ok
+test host_busy_error_leaves_no_trace ... ok
+test failed_body_leaves_no_trace::rusqlite ... ok
+test reads_within_write_see_earlier_writes::minimal ... ok
+test reads_within_write_see_earlier_writes::rusqlite ... ok
+test failed_body_leaves_no_trace::minimal ... ok
+test stable_read_snapshot::minimal ... ok
+test core_sql_uses_no_optional_feature ... ok
+test host_without_stat4_opens_and_keeps_stat1 ... ok
+test stable_read_snapshot::rusqlite ... ok
+test declaration_is_visible ... ok
+
+test result: ok. 15 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.07s
+
+     Running tests/statement_dependents.rs (target/debug/deps/statement_dependents-6e5bd6465a91da8b)
+
+running 9 tests
+test layers_and_references::minimal ... ok
+test larger_than_the_cascade_limit::rusqlite ... ok
+test cycles_terminate::rusqlite ... ok
+test cycles_terminate::minimal ... ok
+test layers_and_references::rusqlite ... ok
+test views_apply::rusqlite ... ok
+test larger_than_the_cascade_limit::minimal ... ok
+test views_apply::minimal ... ok
+test prop_dependents_match_the_dry_run ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.44s
+
+     Running tests/statement_lifecycle.rs (target/debug/deps/statement_lifecycle-f3191ca892b80bf5)
+
+running 34 tests
+test create_makes_parallel_edges::rusqlite ... ok
+test create_makes_parallel_edges::minimal ... ok
+test overlap_boundaries::minimal ... ok
+test references_not_checked_for_liveness::rusqlite ... ok
+test non_overlapping_episodes_coexist::rusqlite ... ok
+test new_nodes::rusqlite ... ok
+test references_not_checked_for_liveness::minimal ... ok
+test overlap_boundaries::rusqlite ... ok
+test new_nodes::minimal ... ok
+test non_overlapping_episodes_coexist::minimal ... ok
+test confirmations::rusqlite ... ok
+test confirmations::minimal ... ok
+test reserved_namespace::minimal ... ok
+test retract_matching_through_cascade::rusqlite ... ok
+test retract_by_pattern::rusqlite ... ok
+test retract_then_reassert::rusqlite ... ok
+test retract_by_pattern::minimal ... ok
+test retract_matching_through_cascade::minimal ... ok
+test retract_then_reassert::minimal ... ok
+test retract_edge_cases::minimal ... ok
+test same_fact_twice::minimal ... ok
+test same_fact_twice::rusqlite ... ok
+test reserved_namespace::rusqlite ... ok
+test retract_edge_cases::rusqlite ... ok
+test second_retraction_is_a_no_op::minimal ... ok
+test second_retraction_is_a_no_op::rusqlite ... ok
+test unbounded_half_open_and_retracted::minimal ... ok
+test unbounded_half_open_and_retracted::rusqlite ... ok
+test self_reference::rusqlite ... ok
+test self_reference::minimal ... ok
+test valid_time_intervals::minimal ... ok
+test statement_positions::rusqlite ... ok
+test valid_time_intervals::rusqlite ... ok
+test statement_positions::minimal ... ok
+
+test result: ok. 34 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.18s
+
+     Running tests/storage_format.rs (target/debug/deps/storage_format-12905256e17c6de1)
+
+running 33 tests
+test fresh_counters::minimal ... ok
+test fresh_counters::rusqlite ... ok
+test counters_advance::rusqlite ... ok
+test fresh_database_is_empty::minimal ... ok
+test fresh_database_is_empty::rusqlite ... ok
+test fresh_file_gets_full_schema::rusqlite ... ok
+test counters_advance::minimal ... ok
+test fresh_file_gets_full_schema::minimal ... ok
+test full_analysis_on_request::minimal ... ok
+test ids_are_not_derived_from_rows::rusqlite ... ok
+test ids_are_not_derived_from_rows::minimal ... ok
+test live_indexes_keep_t_ret::minimal ... ok
+test live_indexes_keep_t_ret::rusqlite ... ok
+test multi_eid_predicates_are_recorded::minimal ... ok
+test interrupted_creation_leaves_no_half_initialised_file ... ok
+test multi_eid_predicates_are_recorded::rusqlite ... ok
+test counter_bound::rusqlite ... ok
+test counter_bound::minimal ... ok
+test foreign_and_empty_files ... ok
+test full_analysis_on_request::rusqlite ... ok
+test schema_matches_format_1::minimal ... ok
+test schema_matches_format_1::rusqlite ... ok
+test reserved_names_are_absent::minimal ... ok
+test reserved_names_are_absent::rusqlite ... ok
+test newer_format_version_is_refused ... ok
+test strict_tables_and_wal::minimal ... ok
+test strict_tables_and_wal::rusqlite ... ok
+test stale_statistics_never_change_results::rusqlite ... ok
+test older_versions_migrate_forward_atomically ... ok
+test stale_statistics_never_change_results::minimal ... ok
+test statistics_exist_without_optimize::rusqlite ... ok
+test periodic_optimize ... ok
+test statistics_exist_without_optimize::minimal ... ok
+
+test result: ok. 33 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.28s
+
+     Running tests/supersede.rs (target/debug/deps/supersede-1e62401a9b39c5c7)
+
+running 16 tests
+test invalid_patches::rusqlite ... ok
+test patch_rules::minimal ... ok
+test non_root_content_and_cycles::minimal ... ok
+test non_root_content_and_cycles::rusqlite ... ok
+test patch_rules::rusqlite ... ok
+test invalid_patches::minimal ... ok
+test only_live_statements::rusqlite ... ok
+test only_live_statements::minimal ... ok
+test chain_of_corrections::minimal ... ok
+test chain_of_corrections::rusqlite ... ok
+test bounded_and_schema_checked::rusqlite ... ok
+test bounded_and_schema_checked::minimal ... ok
+test report_and_event_log::minimal ... ok
+test report_and_event_log::rusqlite ... ok
+test supersede_replays_layers::rusqlite ... ok
+test supersede_replays_layers::minimal ... ok
+
+test result: ok. 16 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.10s
+
+     Running tests/temporal_views.rs (target/debug/deps/temporal_views-e73040bda0734dd3)
+
+running 18 tests
+test as_of_by_instant::rusqlite ... ok
+test as_of_by_instant::minimal ... ok
+test as_of_by_transaction::minimal ... ok
+test triple_pattern_lookup::minimal ... ok
+test now_view::minimal ... ok
+test now_view::rusqlite ... ok
+test as_of_by_transaction::rusqlite ... ok
+test triple_pattern_lookup::rusqlite ... ok
+test history_view::rusqlite ... ok
+test event_log::rusqlite ... ok
+test history_view::minimal ... ok
+test event_log::minimal ... ok
+test valid_at_filter::rusqlite ... ok
+test valid_at_filter::minimal ... ok
+test view_selectors::rusqlite ... ok
+test view_selectors::minimal ... ok
+test view_scans_use_covering_indexes::rusqlite ... ok
+test view_scans_use_covering_indexes::minimal ... ok
+
+test result: ok. 18 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.11s
+
+     Running tests/transactions.rs (target/debug/deps/transactions-a94d5f6b29ed1ea2)
+
+running 21 tests
+test clock_moves_backwards::minimal ... ok
+test caller_abort_and_reissued_ids::minimal ... ok
+test clock_stands_still_and_normal::rusqlite ... ok
+test clock_moves_backwards::rusqlite ... ok
+test clock_stands_still_and_normal::minimal ... ok
+test error_after_successful_operations::minimal ... ok
+test caller_abort_and_reissued_ids::rusqlite ... ok
+test dry_run_returns_would_be_report::minimal ... ok
+test error_after_successful_operations::rusqlite ... ok
+test every_commit_is_recorded::minimal ... ok
+test dry_run_returns_would_be_report::rusqlite ... ok
+test first_transaction::minimal ... ok
+test first_transaction::rusqlite ... ok
+test every_commit_is_recorded::rusqlite ... ok
+test metadata_triples::minimal ... ok
+test numbers_stay_gap_free::rusqlite ... ok
+test metadata_triples::rusqlite ... ok
+test numbers_stay_gap_free::minimal ... ok
+test report_rules::minimal ... ok
+test report_rules::rusqlite ... ok
+test default_options ... ok
+
+test result: ok. 21 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.11s
+
+     Running tests/volatile_state.rs (target/debug/deps/volatile_state-ba5dd9c928161173)
+
+running 6 tests
+test not_statements::rusqlite ... ok
+test upserts_and_clears::minimal ... ok
+test not_statements::minimal ... ok
+test visible_only_now::rusqlite ... ok
+test upserts_and_clears::rusqlite ... ok
+test visible_only_now::minimal ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
+
+     Running unittests src/lib.rs (target/debug/deps/tm_cypher-47bdf4e163272309)
+
+running 8 tests
+test vocab::tests::backticked_space_is_percent_encoded ... ok
+test vocab::tests::bare_names_use_the_vocab_verbatim ... ok
+test vocab::tests::ids ... ok
+test vocab::tests::full_iris_and_invalid_names ... ok
+test vocab::tests::curies_resolve_through_the_table ... ok
+test vocab::tests::longest_prefix_and_tie_break ... ok
+test vocab::tests::rendering ... ok
+test vocab::tests::names_round_trip ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/golden_ir.rs (target/debug/deps/golden_ir-2443dca046f76761)
+
+running 9 tests
+test bare_node_scan ... ok
+test property_map_is_an_existence_test ... ok
+test label_generator ... ok
+test dual_view_variable_is_shared ... ok
+test untyped_relationship_hides_sys_and_rdf_type ... ok
+test use_clause_sets_the_pattern_view ... ok
+test extra_labels_and_disjunction ... ok
+test isomorphism_filters ... ok
+test relationship_patterns ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+
+     Running tests/parse.rs (target/debug/deps/parse-aa9e1d10c060ca0f)
+
+running 16 tests
+test call_subqueries_and_exists ... ok
+test spans_point_into_the_original_text ... ok
+test extension_inside_a_string_or_comment_is_left_alone ... ok
+test read_clause_shapes ... ok
+test unclosed_parenthesis_span ... ok
+test scope_starts ... ok
+test float_keywords_are_literals ... ok
+test span_refers_to_original_text_after_extensions ... ok
+test match_modes ... ok
+test expression_forms ... ok
+test path_constructs_parse ... ok
+test use_selector_errors ... ok
+test unsupported_constructs ... ok
+test use_selectors ... ok
+test write_clause_shapes ... ok
+test blanking_preserves_offsets ... ok
+
+test result: ok. 16 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+
+     Running tests/sema.rs (target/debug/deps/sema-f8129d77fd4cca87)
+
+running 13 tests
+test undefined_variable ... ok
+test skip_limit_literals ... ok
+test relationship_variable_in_node_position_is_accepted ... ok
+test unknown_function_and_procedure ... ok
+test variable_dropped_by_with ... ok
+test union_columns ... ok
+test write_inside_exists_is_unsupported ... ok
+test write_on_read_only_view ... ok
+test node_variable_in_relationship_position ... ok
+test aggregate_placement ... ok
+test missing_parameter ... ok
+test call_shadowing ... ok
+test write_under_time_clause ... ok
+
+test result: ok. 13 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests/tck.rs (target/debug/deps/tck-6cebff4178828a7e)
+
+running 1 test
+test opencypher_tck ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 57.11s
+
+     Running tests/values.rs (target/debug/deps/values-ca228a2ca87dedbb)
+
+running 6 tests
+test statement_forms_are_equal ... ok
+test group_keys ... ok
+test list_equality_with_null ... ok
+test numeric_and_temporal_comparison ... ok
+test cross_type_order ... ok
+test json_encoding ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+
+     Running unittests src/lib.rs (target/debug/deps/tm_exec-afe6f58ef6a78181)
+
+running 40 tests
+test path::ast::tests::nullable_every_operator ... ok
+test path::row::tests::virtual_ids_round_trip ... ok
+test path::automaton::tests::nfa_state_counts ... ok
+test path::row::tests::json_shape ... ok
+test decode::tests::capacity_is_respected ... ok
+test path::syntax::tests::errors_carry_offsets ... ok
+test decode::tests::json_lists ... ok
+test path::syntax::tests::atoms ... ok
+test path::view::tests::time_respecting_view_parts ... ok
+test path::syntax::tests::operators_and_precedence ... ok
+test path::view::tests::view_forms ... ok
+test scan::tests::path_view_text ... ok
+test plan::route::tests::routes ... ok
+test plan::analyze::tests::chain_and_star_are_acyclic ... ok
+test plan::bind::tests::substitutes_and_names_missing ... ok
+test plan::analyze::tests::triangle_is_cyclic ... ok
+test scan::tests::six_combinations ... ok
+test udf::tests::cross_kind_rank ... ok
+test udf::tests::computed_keys_match_term_keys ... ok
+test udf::tests::datetimes_order_by_instant ... ok
+test path::automaton::tests::wildcard_refines_the_alphabet ... ok
+test path::automaton::tests::dfa_is_deterministic_for_ambiguous_expressions ... ok
+test udf::tests::min_by_aggregate ... ok
+test path::automaton::tests::inverse_reverses_sequences_and_flips_direction ... ok
+test udf::tests::numbers_order_across_kinds ... ok
+test udf_fn::tests::boxed_literals_round_trip ... ok
+test udf::tests::strings_code_point_and_lang_after_plain ... ok
+test udf_fn::tests::lang_matches_basic_filtering ... ok
+test udf_fn::tests::casts ... ok
+test udf_fn::tests::substring_follows_xpath ... ok
+test udf_fn::tests::uri_encoding ... ok
+test virtual_pred::tests::mapping_table ... ok
+test virtual_pred::tests::valid_time_object_is_a_utc_datetime ... ok
+test udf_fn::tests::timezone_forms ... ok
+test virtual_pred::tests::wrong_kind_constants_are_impossible ... ok
+test udf::tests::regex_flags ... ok
+test path::row::tests::json_round_trip_and_reversal ... ok
+test path::automaton::tests::nfa_and_dfa_agree ... ok
+test path::syntax::tests::print_parse_is_identity ... ok
+test path::automaton::tests::complexity_guard ... ok
+
+test result: ok. 40 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.20s
+
+     Running tests/connections.rs (target/debug/deps/connections-0cde515a86313433)
+
+running 3 tests
+test error_returns_the_connection ... ok
+test reader_runs_while_writer_holds_a_transaction ... ok
+test speculative_view ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+     Running tests/cypher_primitives.rs (target/debug/deps/cypher_primitives-580db1fb62715b74)
+
+running 5 tests
+test unwind_constant_list_keeps_order ... ok
+test null_safe_join_keys ... ok
+test property_lookup ... ok
+test row_number_top_one_per_group ... ok
+test unwind_computed_list_per_row ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
+
+     Running tests/decoding.rs (target/debug/deps/decoding-f9bc35b2ce3a70ea)
+
+running 3 tests
+test computed_values_and_lists ... ok
+test triangle_is_cyclic_and_correct ... ok
+test every_kind_round_trips ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.05s
+
+     Running tests/fixture.rs (target/debug/deps/fixture-9c5bd320e4c07eae)
+
+running 1 test
+test layer_fixture_exposes_eids ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests/golden_sql.rs (target/debug/deps/golden_sql-87d82c1cd3cf941f)
+
+running 4 tests
+test text_is_stable_across_constants_and_times ... ok
+test verbatim_live_predicate_and_optional_on ... ok
+test single_pattern_per_view ... ok
+test shapes ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.06s
+
+     Running tests/graph_selector.rs (target/debug/deps/graph_selector-4feae4b9ea5ed5ec)
+
+running 3 tests
+test selector_lowers_to_membership_join ... ok
+test selector_sql_snapshots ... ok
+test small_graph_seeks_first ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.20s
+
+     Running tests/host_caps.rs (target/debug/deps/host_caps-ee34f36648d709c5)
+
+running 3 tests
+test host_without_vtab ... ok
+test host_without_functions ... ok
+test rusqlite_host_registers_everywhere ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests/join_order.rs (target/debug/deps/join_order-b090f2875861d20b)
+
+running 1 test
+test skewed_joins_start_selective ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.96s
+
+     Running tests/layer_hops.rs (target/debug/deps/layer_hops-84fb0dab931c19c5)
+
+running 6 tests
+test virtual_predicates_cannot_be_asserted ... ok
+test paths_cross_layers ... ok
+test inverse_virtual_hops ... ok
+test forward_virtual_hops ... ok
+test virtual_hops_in_path_values_and_trails ... ok
+test virtual_hops_respect_the_view ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.20s
+
+     Running tests/path_fetch.rs (target/debug/deps/path_fetch-457faf0746883014)
+
+running 2 tests
+test now_sql_uses_the_verbatim_live_predicate ... ok
+test every_shape_uses_an_index_or_rowid ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.07s
+
+     Running tests/path_graphs.rs (target/debug/deps/path_graphs-ccf25a75c73d4b7a)
+
+running 5 tests
+test tm_path_graphs_argument ... ok
+test graph_scoped_paths_follow_membership ... ok
+test virtual_hops_need_the_stepped_statement_in_the_graph ... ok
+test path_graph_selector_sql_snapshots ... ok
+test graph_filter_uses_an_index_seek ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.08s
+
+     Running tests/path_limits.rs (target/debug/deps/path_limits-5c34819e73964d2d)
+
+running 7 tests
+test option_defaults ... ok
+test zero_length_row_in_every_mode ... ok
+test reach_order ... ok
+test max_hops_is_a_hard_bound ... ok
+test cycles_terminate ... ok
+test trail_order_and_repeatability ... ok
+test guard_trips_on_explosive_trails ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.08s
+
+     Running tests/path_ops.rs (target/debug/deps/path_ops-d63cacb9d812f8fb)
+
+running 19 tests
+test alternation ... ok
+test precedence_of_inverse_and_sequence ... ok
+test inverse_step ... ok
+test grouped_repetition ... ok
+test any_shortest_is_deterministic_among_ties ... ok
+test bounded_repetition ... ok
+test end_restricted_search ... ok
+test closures_on_a_chain ... ok
+test sequence ... ok
+test any_shortest ... ok
+test single_forward_predicate ... ok
+test trail_nodes_repeat ... ok
+test unknown_predicate_matches_nothing ... ok
+test unsupported_mode_is_rejected ... ok
+test zero_length_matches ... ok
+test wildcard_step ... ok
+test all_shortest ... ok
+test trail_relationship_identity ... ok
+test reach_set_semantics ... ok
+
+test result: ok. 19 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.21s
+
+     Running tests/path_props.rs (target/debug/deps/path_props-dd318b4549d47db8)
+
+running 4 tests
+test trail_equals_brute_force ... ok
+test all_shortest_equals_brute_force ... ok
+test reach_equals_naive_product_walk ... ok
+test batch_size_does_not_change_results ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.52s
+
+     Running tests/path_region.rs (target/debug/deps/path_region-d0641fb3c99ca1b6)
+
+running 9 tests
+test no_operator_is_unsupported_without_sql ... ok
+test end_bound_path_is_inverted ... ok
+test default_database_routes_paths_to_tm_path ... ok
+test plan_per_region ... ok
+test zero_length_match_of_an_unknown_constant ... ok
+test path_composes_as_tvf ... ok
+test explain_normal_and_short_circuit ... ok
+test end_bound_pattern_binds_the_path_forwards ... ok
+test anchor_shapes_golden ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.10s
+
+     Running tests/path_sql.rs (target/debug/deps/path_sql-d6d2f08b1e8594cc)
+
+running 8 tests
+test api_matches_sql_and_reports_parse_errors ... ok
+test callable_everywhere_and_read_only ... ok
+test arguments_and_defaults ... ok
+test a_running_path_query_keeps_its_snapshot ... ok
+test path_values_and_json ... ok
+test argument_errors ... ok
+test path_text_atoms ... ok
+test composes_with_sql ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.09s
+
+     Running tests/path_time.rs (target/debug/deps/path_time-195616869c22ab50)
+
+running 6 tests
+test valid_time_filters_hops ... ok
+test paths_see_speculative_statements ... ok
+test now_versus_as_of ... ok
+test historical_path_results_are_stable ... ok
+test retracted_paths ... ok
+test superseded_edge_under_as_of ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.06s
+
+     Running tests/path_time_respecting.rs (target/debug/deps/path_time_respecting-8e09ce4a42b6a330)
+
+running 4 tests
+test time_respecting_combines_with_graphs_and_layers ... ok
+test tm_path_arrival_column ... ok
+test time_respecting_scenarios ... ok
+test time_respecting_paths_match_brute_force ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.80s
+
+     Running tests/plans.rs (target/debug/deps/plans-1b5155c8405b8854)
+
+running 3 tests
+test views_use_covering_indexes ... ok
+test stale_statistics_keep_results ... ok
+test plan_family_in_joins ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 9.45s
+
+     Running tests/query_ir.rs (target/debug/deps/query_ir-20efbb55187608dd)
+
+running 27 tests
+test handle_descriptor ... ok
+test exists_anti_join ... ok
+test empty_join_is_unit ... ok
+test dictionary_constant_is_found ... ok
+test basic_graph_pattern ... ok
+test aggregates_over_empty_input ... ok
+test exists_semi_join ... ok
+test eid_binding_reaches_layers ... ok
+test exists_with_unknown_constant ... ok
+test eid_variable_shared_and_constant ... ok
+test exists_uncorrelated ... ok
+test column_order ... ok
+test inline_constant_needs_no_dictionary ... ok
+test planning_does_not_write ... ok
+test instants_resolve_at_plan_time ... ok
+test impossible_patterns_are_empty ... ok
+test nested_composition ... ok
+test optional_side_unknown ... ok
+test same_tree_different_graph_set ... ok
+test union_with_empty_branch ... ok
+test parameters ... ok
+test unknown_iri_short_circuits ... ok
+test values_inline_bindings ... ok
+test handle_view_does_not_override ... ok
+test structural_validation ... ok
+test values_undefined_cell ... ok
+test per_pattern_time_scopes ... ok
+
+test result: ok. 27 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.25s
+
+     Running tests/single_mapping.rs (target/debug/deps/single_mapping-87ac39963baf17a9)
+
+running 1 test
+test time_columns_only_in_scan_and_virtual_pred ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests/snapshot.rs (target/debug/deps/snapshot-0d91b86fd2f921df)
+
+running 1 test
+test concurrent_commit_is_invisible_to_a_running_query ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests/sql_exec.rs (target/debug/deps/sql_exec-f642c604fe940e05)
+
+running 24 tests
+test join_after_optional ... ok
+test optional_condition_inside_join ... ok
+test filter_truth_values ... ok
+test incompatible_ordering_is_unknown ... ok
+test no_data_in_sql_text ... ok
+test absent_cell_under_both_settings ... ok
+test missing_values_placement ... ok
+test duplicate_removal_only_for_multi_eid_predicates ... ok
+test aggregates ... ok
+test expressions ... ok
+test filter_push_down ... ok
+test datetime_constant_matches_any_offset ... ok
+test relationship_isomorphism ... ok
+test set_semantics_episodes ... ok
+test provenance_eid_keeps_set_semantics ... ok
+test same_instant_different_offsets ... ok
+test set_semantics_history ... ok
+test skip_and_limit ... ok
+test union_and_distinct ... ok
+test triple_pattern_compilation ... ok
+test set_versus_bag_parallel_edges ... ok
+test range_comparisons ... ok
+test value_equality ... ok
+test ordering_by_decoded_value ... ok
+
+test result: ok. 24 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.25s
+
+     Running tests/stable_reads.rs (target/debug/deps/stable_reads-69e1ac35d900d77c)
+
+running 1 test
+test historical_ir_reads_are_stable ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.83s
+
+     Running tests/term_cache.rs (target/debug/deps/term_cache-ed0564c0592a7c8a)
+
+running 4 tests
+test speculation_does_not_pollute_cache ... ok
+test capacity_is_respected ... ok
+test warm_cache_reads_no_dictionary ... ok
+test cold_and_warm_agree ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.05s
+
+     Running tests/virtual_preds.rs (target/debug/deps/virtual_preds-cb93577441c550f8)
+
+running 9 tests
+test virtual_wins_over_stored ... ok
+test statement_instants_in_filters ... ok
+test visibility_follows_the_view ... ok
+test alias_reuse_and_lookup ... ok
+test statement_parts ... ok
+test volatile_keys ... ok
+test absent_values_produce_no_triple ... ok
+test statement_instants ... ok
+test constant_objects ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.08s
+
+     Running tests/visibility.rs (target/debug/deps/visibility-394ecd96b6893751)
+
+running 4 tests
+test valid_time_boundaries ... ok
+test episodes_under_valid_at ... ok
+test transaction_time_boundaries ... ok
+test cascaded_annotations ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+
+     Running unittests src/lib.rs (target/debug/deps/tm_ir-ca1802c3ab8332f5)
+
+running 20 tests
+test semantics::tests::presets ... ok
+test path::tests::mode_names_round_trip ... ok
+test validate::tests::extend_rebinding ... ok
+test validate::tests::nested_exists_is_validated ... ok
+test validate::tests::negative_skip_and_limit ... ok
+test validate::tests::project_order ... ok
+test builder::tests::builder_uses_the_default_view ... ok
+test validate::tests::ragged_values ... ok
+test validate::tests::aggregate_collision ... ok
+test validate::tests::graph_selector_text_and_validation ... ok
+test validate::tests::implicit_first_binding_order ... ok
+test validate::tests::virtual_pattern_with_eid ... ok
+test validate::tests::union_and_join_missing_sets ... ok
+test validate::tests::path_graph_selector_text_and_validation ... ok
+test display::tests::path_text_round_trips ... ok
+test var::tests::names_strip_sigils ... ok
+test view::tests::overlay_replaces_only_the_given_part ... ok
+test view::tests::spec_round_trip ... ok
+test vocab::tests::recognises_only_the_table ... ok
+test display::tests::sexpr_snapshot_corpus ... ok
+
+test result: ok. 20 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+
+     Running unittests src/lib.rs (target/debug/deps/tm_rusqlite-3917bae4fe6fd2da)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/lib.rs (target/debug/deps/tm_sparql-0a04d1ccdad1673b)
+
+running 35 tests
+test dataset::tests::conflicting_selectors_and_repeats ... ok
+test dataset::tests::nested_scopes_combine_and_innermost_wins ... ok
+test dataset::tests::from_combines_parts_and_overrides_the_base_view ... ok
+test dataset::tests::grammar_rows ... ok
+test lower::vars::tests::fresh_names_are_unique_and_internal ... ok
+test dataset::tests::graph_iris_are_not_time_and_time_iris_are_not_graphs ... ok
+test dataset::tests::invalid_and_foreign_iris ... ok
+test parse::tests::display_fallback_parses ... ok
+test parse::tests::v_prefix_resolves_without_declaration ... ok
+test parse::tests::query_prefix_overrides ... ok
+test parse::tests::undeclared_prefix ... ok
+test results::json::tests::ask_document ... ok
+test provenance::tests::unsupported_forms ... ok
+test parse::tests::database_prefix_table ... ok
+test results::json::tests::select_document_shape ... ok
+test results::json::tests::typed_literal_json ... ok
+test parse::tests::dispatch_reports_the_right_parser_error ... ok
+test provenance::tests::graph_patterns_bind_the_membership ... ok
+test results::nt::tests::plain_triples_use_plain_ntriples ... ok
+test provenance::tests::hidden_columns_per_pattern ... ok
+test results::term::tests::datetime_rendering ... ok
+test parse::tests::syntax_error_location_with_trailing_whitespace ... ok
+test provenance::tests::assemble_rows ... ok
+test results::json::tests::provenance_member ... ok
+test results::term::tests::datetime_rendering_keeps_the_offset ... ok
+test results::term::tests::term_table ... ok
+test terms::tests::integer_lexical_forms_are_equal ... ok
+test results::json::tests::output_parses_back ... ok
+test terms::tests::language_tags_are_lower_cased ... ok
+test terms::tests::skolem_iris_name_their_ids ... ok
+test terms::tests::datetime_offsets_are_distinct_terms_with_one_instant ... ok
+test parse::tests::syntax_error_location ... ok
+test results::nt::tests::output_parses_back_as_rdf12_ntriples ... ok
+test provenance::tests::modifiers_and_groups ... ok
+test terms::tests::skolem_round_trips ... ok
+
+test result: ok. 35 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests/common.rs (target/debug/deps/common-5a18745b64b414c7)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/golden.rs (target/debug/deps/golden-479fa71806661463)
+
+running 1 test
+test golden_cases ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.03s
+
+     Running tests/lower_exprs.rs (target/debug/deps/lower_exprs-2fb52aeb4cf31359)
+
+running 3 tests
+test rejected_functions_are_named ... ok
+test whitelisted_functions_lower ... ok
+test operators_in_bound_if_coalesce_same_term ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+
+     Running tests/lower_modifiers.rs (target/debug/deps/lower_modifiers-06c9f926ffa065c2)
+
+running 6 tests
+test custom_aggregate_is_unsupported ... ok
+test distinct_with_non_projected_key_is_unsupported ... ok
+test interim_property_paths ... ok
+test subqueries ... ok
+test aggregates_and_having ... ok
+test solution_modifiers ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
+
+     Running tests/lower_patterns.rs (target/debug/deps/lower_patterns-bc713d0e04bbb83c)
+
+running 8 tests
+test describe_is_unsupported ... ok
+test bind_over_in_scope_variable_is_a_parse_error ... ok
+test select_carries_the_sparql_flags ... ok
+test join_and_left_join_with_condition ... ok
+test ask_and_construct_forms ... ok
+test service_and_graph_lowering ... ok
+test filter_union_extend_values ... ok
+test minus_and_exists ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+
+     Running tests/lower_reifiers.rs (target/debug/deps/lower_reifiers-e439be84e7c3496e)
+
+running 6 tests
+test rejections ... ok
+test joined_bgps_are_flattened_before_redundancy_elimination ... ok
+test reifier_that_is_no_statement_is_empty ... ok
+test triple_terms_in_object_position ... ok
+test annotation_forms ... ok
+test reifier_forms ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
+
+     Running tests/w3c.rs (target/debug/deps/w3c-92515047aec1741c)
+
+running 1 test
+test w3c_subset ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 9.95s
+
+   Doc-tests tiramemsu
+
+running 32 tests
+test crates/tiramemsu/src/db.rs - db::Db::with (line 430) ... ok
+test crates/tiramemsu/src/db.rs - db::Db::transact (line 383) ... ok
+test crates/tiramemsu/src/lib.rs - (line 175) ... ok
+test crates/tiramemsu/src/lib.rs - (line 146) ... ok
+test crates/tiramemsu/src/cypher.rs - cypher::View<'_>::cypher (line 166) ... ok
+test crates/tiramemsu/src/bundle.rs - bundle::BundleFormat (line 28) ... ok
+test crates/tiramemsu/src/lib.rs - (line 212) ... ok
+test crates/tiramemsu/src/db.rs - db::Db::open (line 175) ... ok
+test crates/tiramemsu/src/lib.rs - (line 121) ... ok
+test crates/tiramemsu/src/db.rs - db::OpenOptions (line 28) ... ok
+test crates/tiramemsu/src/cypher.rs - cypher::Db::cypher_write (line 233) ... ok
+test crates/tiramemsu/src/lib.rs - (line 252) ... ok
+test crates/tiramemsu/src/lib.rs - (line 282) ... ok
+test crates/tiramemsu/src/lib.rs - (line 29) ... ok
+test crates/tiramemsu/src/lib.rs - (line 311) ... ok
+test crates/tiramemsu/src/lib.rs - (line 347) ... ok
+test crates/tiramemsu/src/lib.rs - (line 382) ... ok
+test crates/tiramemsu/src/lib.rs - (line 417) ... ok
+test crates/tiramemsu/src/lib.rs - (line 42) ... ok
+test crates/tiramemsu/src/lib.rs - (line 468) ... ok
+test crates/tiramemsu/src/lib.rs - (line 539) ... ok
+test crates/tiramemsu/src/lib.rs - (line 71) ... ok
+test crates/tiramemsu/src/lib.rs - (line 92) ... ok
+test crates/tiramemsu/src/sparql.rs - sparql::SparqlOptions (line 83) ... ok
+test crates/tiramemsu/src/sparql.rs - sparql::View<'_>::sparql (line 132) ... ok
+test crates/tiramemsu/src/sparql.rs - sparql::View<'_>::sparql_with (line 167) ... ok
+test crates/tiramemsu/src/view.rs - view::View<'_>::bundle (line 439) ... ok
+test crates/tiramemsu/src/view.rs - view::View<'_>::dependents (line 402) ... ok
+test crates/tiramemsu/src/view.rs - view::View<'a>::graphs (line 155) ... ok
+test crates/tiramemsu/src/view.rs - view::View<'a>::path (line 262) ... ok
+test crates/tiramemsu/src/view.rs - view::View<'a>::path_with (line 315) ... ok
+test crates/tiramemsu/src/view.rs - view::View<'a>::triples (line 126) ... ok
+
+test result: ok. 32 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 14.42s
+
+   Doc-tests tiramemsu_json
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests tm_core
+
+running 17 tests
+test crates/tm-core/src/clock.rs - clock::ManualClock (line 30) ... ok
+test crates/tm-core/src/id.rs - id::ObjectId::origin (line 226) ... ok
+test crates/tm-core/src/id.rs - id::Eid (line 287) ... ok
+test crates/tm-core/src/id.rs - id::ObjectId (line 169) ... ok
+test crates/tm-core/src/error.rs - error::Error (line 56) ... ok
+test crates/tm-core/src/bundle.rs - bundle::Bundle (line 62) ... ok
+test crates/tm-core/src/engine/bundle.rs - engine::bundle::Tx<'_>::import_bundle (line 36) ... ok
+test crates/tm-core/src/engine/supersede.rs - engine::supersede::Tx<'_>::supersede (line 62) ... ok
+test crates/tm-core/src/read.rs - read::bundle (line 289) ... ok
+test crates/tm-core/src/engine/schema.rs - engine::schema::PredicateSchema (line 16) ... ok
+test crates/tm-core/src/lib.rs - (line 23) ... ok
+test crates/tm-core/src/engine/mod.rs - engine::Store::transact (line 179) ... ok
+test crates/tm-core/src/read.rs - read::dependents (line 200) ... ok
+test crates/tm-core/src/read.rs - read::triples (line 46) ... ok
+test crates/tm-core/src/report.rs - report::Valid (line 14) ... ok
+test crates/tm-core/src/value.rs - value::Value (line 34) ... ok
+test crates/tm-core/src/view.rs - view::ViewSpec (line 42) ... ok
+
+test result: ok. 17 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 5.13s
+
+   Doc-tests tm_cypher
+
+running 4 tests
+test crates/tm-cypher/src/value.rs - value::CypherResult (line 531) ... ok
+test crates/tm-cypher/src/lib.rs - (line 29) ... ok
+test crates/tm-cypher/src/program.rs - program::compile (line 63) ... ok
+test crates/tm-cypher/src/lib.rs - (line 53) ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.65s
+
+   Doc-tests tm_exec
+
+running 8 tests
+test crates/tm-exec/src/native.rs - native::LftjConfig (line 96) ... ok
+test crates/tm-exec/src/native.rs - native::OperatorRegistry (line 41) ... ok
+test crates/tm-exec/src/decode.rs - decode::TermCache (line 22) ... ok
+test crates/tm-exec/src/virtual_pred.rs - virtual_pred::VirtualPred (line 28) ... ok
+test crates/tm-exec/src/path/engine.rs - path::engine::TimeRespecting (line 72) ... ok
+test crates/tm-exec/src/host.rs - host::check_capabilities (line 16) ... ok
+test crates/tm-exec/src/lib.rs - QueryEngine (line 47) ... ok
+test crates/tm-exec/src/lib.rs - (line 27) ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.53s
+
+   Doc-tests tm_ir
+
+running 7 tests
+test crates/tm-ir/src/builder.rs - builder::IrBuilder (line 97) ... ok
+test crates/tm-ir/src/var.rs - var::is_provenance (line 62) ... ok
+test crates/tm-ir/src/op.rs - op::IrQuery (line 410) ... ok
+test crates/tm-ir/src/view.rs - view::View (line 14) ... ok
+test crates/tm-ir/src/path.rs - path::PathExpr (line 9) ... ok
+test crates/tm-ir/src/lib.rs - (line 24) ... ok
+test crates/tm-ir/src/semantics.rs - semantics::Semantics (line 41) ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.15s
+
+   Doc-tests tm_rusqlite
+
+running 6 tests
+test crates/tm-rusqlite/src/lib.rs - compile_options (line 64) ... ok
+test crates/tm-rusqlite/src/error.rs - error::map_err (line 11) ... ok
+test crates/tm-rusqlite/src/lib.rs - RusqliteHost (line 32) ... ok
+test crates/tm-rusqlite/src/lib.rs - (line 42) ... ok
+test crates/tm-rusqlite/src/lib.rs - RusqliteExec (line 150) ... ok
+test crates/tm-rusqlite/src/lib.rs - (line 23) ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.84s
+
+   Doc-tests tm_sparql
+
+running 10 tests
+test crates/tm-sparql/src/env.rs - env::Env (line 14) ... ok
+test crates/tm-sparql/src/results/mod.rs - results::Solutions (line 21) ... ok
+test crates/tm-sparql/src/results/mod.rs - results::Solutions::provenance (line 61) ... ok
+test crates/tm-sparql/src/error.rs - error::unsupported (line 63) ... ok
+test crates/tm-sparql/src/dataset.rs - dataset::parse_time_iri (line 47) ... ok
+test crates/tm-sparql/src/lib.rs - prepare (line 54) ... ok
+test crates/tm-sparql/src/provenance.rs - provenance::instrument (line 82) ... ok
+test crates/tm-sparql/src/lib.rs - (line 45) ... ok
+test crates/tm-sparql/src/lib.rs - (line 29) ... ok
+test crates/tm-sparql/src/lib.rs - (line 59) ... ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.42s
+

@@ -1,0 +1,88 @@
+    Checking memchr v2.8.3
+    Checking zerocopy v0.8.59
+    Checking thiserror v2.0.21
+    Checking serde_core v1.0.229
+   Compiling logos-codegen v0.16.1
+    Checking equivalent v1.0.2
+    Checking toml_write v0.1.2
+    Checking winnow v0.7.15
+    Checking json-event-parser v0.2.3
+    Checking ciborium-io v0.2.2
+    Checking anstyle v1.0.14
+    Checking clap_lex v1.1.1
+    Checking indexmap v2.14.2
+    Checking either v1.18.0
+    Checking tm-core v0.1.0 (/Users/volodymyrpavlyshyn/Documents/work/tiramemsu/crates/tm-core)
+    Checking cast v0.3.0
+    Checking clap_builder v4.6.7
+    Checking same-file v1.0.6
+    Checking alloca v0.4.0
+    Checking itertools v0.13.0
+    Checking walkdir v2.5.0
+    Checking page_size v0.6.0
+    Checking anes v0.1.6
+    Checking oorandom v11.1.5
+    Checking aho-corasick v1.1.5
+    Checking quick-xml v0.37.5
+   Compiling target-lexicon v0.13.5
+    Checking futures-sink v0.3.34
+    Checking futures-core v0.3.34
+    Checking slab v0.4.12
+    Checking futures-channel v0.3.34
+    Checking futures-io v0.3.34
+    Checking pin-project-lite v0.2.17
+    Checking futures-task v0.3.34
+   Compiling heck v0.5.0
+    Checking regex-automata v0.4.18
+    Checking libloading v0.9.0
+   Compiling tiramemsu-node v0.1.0 (/Users/volodymyrpavlyshyn/Documents/work/tiramemsu/bindings/node)
+    Checking futures-util v0.3.34
+    Checking tm-rusqlite v0.1.0 (/Users/volodymyrpavlyshyn/Documents/work/tiramemsu/crates/tm-rusqlite)
+    Checking tm-ir v0.1.0 (/Users/volodymyrpavlyshyn/Documents/work/tiramemsu/crates/tm-ir)
+   Compiling pyo3-macros-backend v0.29.2
+    Checking criterion-plot v0.8.2
+    Checking napi-sys v3.3.2
+    Checking serde_json v1.0.151
+    Checking serde v1.0.229
+    Checking clap v4.6.7
+    Checking nohash-hasher v0.2.0
+   Compiling logos-derive v0.16.1
+    Checking ctor v1.0.13
+    Checking rustc-hash v2.1.3
+   Compiling pyo3-build-config v0.29.2
+    Checking serde_spanned v0.6.9
+    Checking toml_datetime v0.6.11
+    Checking insta v1.48.0
+   Compiling napi-derive v3.6.9
+    Checking tinytemplate v1.2.1
+    Checking toml_edit v0.22.27
+    Checking logos v0.16.1
+    Checking regex v1.13.1
+    Checking lalrpop-util v0.23.1
+   Compiling pyo3-ffi v0.29.2
+   Compiling pyo3 v0.29.2
+   Compiling tiramemsu-python v0.1.0 (/Users/volodymyrpavlyshyn/Documents/work/tiramemsu/bindings/python)
+    Checking tm-exec v0.1.0 (/Users/volodymyrpavlyshyn/Documents/work/tiramemsu/crates/tm-exec)
+    Checking ppv-lite86 v0.2.21
+    Checking half v2.7.1
+    Checking open-cypher v0.2.1
+    Checking rand_chacha v0.9.0
+    Checking ciborium-ll v0.2.2
+    Checking rand v0.9.5
+    Checking ciborium v0.2.2
+    Checking toml v0.8.23
+    Checking futures-executor v0.3.34
+    Checking proptest v1.11.0
+    Checking oxrdf v0.3.4
+    Checking criterion v0.8.2
+   Compiling pyo3-macros v0.29.2
+    Checking futures v0.3.34
+    Checking napi v3.13.0
+    Checking spargebra v0.4.7
+    Checking oxttl v0.2.4
+    Checking sparesults v0.3.4
+    Checking tm-sparql v0.1.0 (/Users/volodymyrpavlyshyn/Documents/work/tiramemsu/crates/tm-sparql)
+    Checking tm-cypher v0.1.0 (/Users/volodymyrpavlyshyn/Documents/work/tiramemsu/crates/tm-cypher)
+    Checking tiramemsu v0.1.0 (/Users/volodymyrpavlyshyn/Documents/work/tiramemsu/crates/tiramemsu)
+    Checking tiramemsu-json v0.1.0 (/Users/volodymyrpavlyshyn/Documents/work/tiramemsu/bindings/json)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 12.28s

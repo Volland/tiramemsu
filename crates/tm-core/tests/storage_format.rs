@@ -53,7 +53,7 @@ host_test! {
         ] {
             assert!(triggers.contains(t), "{t}");
         }
-        assert_eq!(triggers.len(), 9);
+        assert_eq!(triggers.len(), 11);
     }
 }
 
@@ -129,10 +129,11 @@ host_test! {
             .unwrap()
             .map(Result::unwrap)
             .collect();
-        // format 1, plus the tables format 3 adds (format 2 adds only meta rows)
+        // format 1, plus the tables format 3 adds and the triggers of format 4 (format 2 adds only meta rows)
         let expected: BTreeSet<String> = storage::split_statements(storage::DDL_V1)
             .into_iter()
             .chain(storage::split_statements(storage::DDL_SAVED_ANSWERS))
+            .chain(storage::split_statements(storage::DDL_DATE_GUARDS))
             .map(|s| s.trim_end_matches(';').trim().to_string())
             .collect();
         assert_eq!(stored, expected);

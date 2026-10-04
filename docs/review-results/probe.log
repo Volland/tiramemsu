@@ -1,0 +1,35 @@
+   Compiling architecture-probe v0.0.0 (/tmp/tiramemsu-architecture-probe)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1.24s
+     Running `target/debug/architecture-probe`
+readers=0 workers=8 queries=4000 elapsed_ms=284.64
+readers=1 workers=8 queries=4000 elapsed_ms=258.66
+readers=4 workers=8 queries=4000 elapsed_ms=134.09
+readers=8 workers=8 queries=4000 elapsed_ms=82.63
+churn_now_plan=[[Integer(4), Integer(0), Integer(33), Text("SEARCH a USING INDEX live_spo (s=? AND p=?)")], [Integer(22), Integer(0), Integer(0), Text("USE TEMP B-TREE FOR ORDER BY")]]
+states=10 hops=3 elapsed_us=385 result=Ok(3)
+states=10 hops=15 elapsed_us=139 result=Err(PathLimitExceeded { limit: 10 })
+states=10 hops=100 elapsed_us=128 result=Err(PathLimitExceeded { limit: 10 })
+valid_at=999 result=Ok(0)
+valid_at=1000 result=Err(PathLimitExceeded { limit: 10 })
+states=10000 hops=3 elapsed_us=158 result=Ok(3)
+states=10000 hops=15 elapsed_us=183 result=Ok(15)
+states=10000 hops=100 elapsed_us=1183 result=Ok(100)
+valid_at=999 result=Ok(0)
+valid_at=1000 result=Ok(100)
+term_cache_capacity=0 queries=1000 elapsed_ms=82.76
+term_cache_capacity=16 queries=1000 elapsed_ms=79.17
+term_cache_capacity=16384 queries=1000 elapsed_ms=83.99
+query_engine=false triple_rows=1 sparql=Err(Unsupported { feature: "queries on a database opened without the query engine" })
+
+thread 'main' (4702946) panicked at src/main.rs:47:173:
+intentional transaction callback panic
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+panic_caught=true subsequent_write=Err(Sqlite(SqlError { code: 1, extended_code: 1, message: "cannot start a transaction within a transaction" }))
+post_panic_committed_rows=0
+
+thread 'main' (4702946) panicked at src/main.rs:52:47:
+intentional reader callback panic
+reader_panic_caught=true reader_count=1 (follow-up read checked with a timeout)
+reader_after_panic_completed_within_250ms=false
+bulk rows=20000 chunk=1000 optimize_every=1000 analyze_runs=20 elapsed_ms=2997.81
+bulk rows=20000 chunk=1000 optimize_every=1000000 analyze_runs=0 elapsed_ms=1769.13

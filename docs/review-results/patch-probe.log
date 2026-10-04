@@ -1,0 +1,43 @@
+    Blocking waiting for file lock on build directory
+   Compiling tm-core v0.1.0 (/Users/volodymyrpavlyshyn/Documents/work/tiramemsu/crates/tm-core)
+   Compiling tm-ir v0.1.0 (/Users/volodymyrpavlyshyn/Documents/work/tiramemsu/crates/tm-ir)
+   Compiling tm-rusqlite v0.1.0 (/Users/volodymyrpavlyshyn/Documents/work/tiramemsu/crates/tm-rusqlite)
+   Compiling tm-sparql v0.1.0 (/Users/volodymyrpavlyshyn/Documents/work/tiramemsu/crates/tm-sparql)
+   Compiling tm-cypher v0.1.0 (/Users/volodymyrpavlyshyn/Documents/work/tiramemsu/crates/tm-cypher)
+   Compiling tm-exec v0.1.0 (/Users/volodymyrpavlyshyn/Documents/work/tiramemsu/crates/tm-exec)
+   Compiling tiramemsu v0.1.0 (/Users/volodymyrpavlyshyn/Documents/work/tiramemsu/crates/tiramemsu)
+   Compiling architecture-probe v0.0.0 (/tmp/tiramemsu-architecture-probe)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 7.90s
+     Running `target/debug/architecture-probe`
+readers=0 workers=8 queries=4000 elapsed_ms=229.74
+readers=1 workers=8 queries=4000 elapsed_ms=219.14
+readers=4 workers=8 queries=4000 elapsed_ms=98.39
+readers=8 workers=8 queries=4000 elapsed_ms=80.48
+churn_now_plan=[[Integer(4), Integer(0), Integer(33), Text("SEARCH a USING INDEX live_spo (s=? AND p=?)")], [Integer(22), Integer(0), Integer(0), Text("USE TEMP B-TREE FOR ORDER BY")]]
+states=10 hops=3 elapsed_us=494 result=Ok(3)
+states=10 hops=15 elapsed_us=155 result=Err(PathLimitExceeded { limit: 10 })
+states=10 hops=100 elapsed_us=132 result=Err(PathLimitExceeded { limit: 10 })
+valid_at=999 result=Ok(0)
+valid_at=1000 result=Err(PathLimitExceeded { limit: 10 })
+states=10000 hops=3 elapsed_us=190 result=Ok(3)
+states=10000 hops=15 elapsed_us=193 result=Ok(15)
+states=10000 hops=100 elapsed_us=1213 result=Ok(100)
+valid_at=999 result=Ok(0)
+valid_at=1000 result=Ok(100)
+term_cache_capacity=0 queries=1000 elapsed_ms=77.70
+term_cache_capacity=16 queries=1000 elapsed_ms=77.19
+term_cache_capacity=16384 queries=1000 elapsed_ms=77.87
+query_engine=false triple_rows=1 sparql=Err(Unsupported { feature: "queries on a database opened without the query engine" })
+
+thread 'main' (5033529) panicked at src/main.rs:47:173:
+intentional transaction callback panic
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+panic_caught=true subsequent_write=Ok(TxReport { t: TxId(1), instant: 1791018316070, asserted: [e1], existing: [], retracted: [], superseded: [], memberships: [], memberships_retracted: [] })
+post_panic_committed_rows=1
+
+thread 'main' (5033529) panicked at src/main.rs:52:47:
+intentional reader callback panic
+reader_panic_caught=true reader_count=1 (follow-up read checked with a timeout)
+reader_after_panic_completed_within_250ms=true
+bulk rows=20000 chunk=1000 optimize_every=1000 analyze_runs=20 elapsed_ms=3168.28
+bulk rows=20000 chunk=1000 optimize_every=1000000 analyze_runs=0 elapsed_ms=2065.48

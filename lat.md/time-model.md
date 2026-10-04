@@ -104,6 +104,7 @@ Tx ..> TxOptions
 - Overlap test: `(a.v_from IS NULL OR b.v_to IS NULL OR a.v_from < b.v_to) AND (b.v_from IS NULL OR a.v_to IS NULL OR b.v_from < a.v_to)`.
 - An overlapping but different interval is **not** merged or widened. Use supersede to change it.
 - `Asserted` says `New(eid)` or `Existing(eid)`. With `on_existing = Confirm`, an existing match also gets a `sys:confirmedBy` triple. See [[time-model#Operations#Confirm]].
+- Statement-valued subjects and objects must already exist and be live; ordinary assertions and creates reject unknown, forward and retracted endpoints with `NotLive`. Engine-owned `sys:supersedes` lineage may point to allocated historical statements. Checks run again after cardinality replacement.
 - Schema checks run before insert: `sys:valueType` on the object, `sys:subjectType` on the subject, `sys:unique`, then `sys:cardinality`. The two type checks run before the idempotency lookup. See [[data-model#Predicate Schema]].
 - SPARQL `INSERT` and Cypher `MERGE` / `SET` map to assert.
 
@@ -153,9 +154,9 @@ Supersede is the general **update** verb. It covers changing the object, correct
 
 Algorithm:
 1. Compute the cascade set C of `eid`. See [[time-model#Cascade]].
-2. Allocate a new eid for every member of C, forming the substitution map `σ = {old → new}`.
+2. Select foreign memberships for dropping and propagate exclusion through their structural dependents inside C. The retained root must survive. Allocate fresh eids only for the structurally closed retained set R, forming `σ = {old → new}`.
 3. Retract every member of C with `ret_kind = supersede`.
-4. Insert every member again with `s` and `o` rewritten through σ, content and valid time unchanged, except the root, which gets the patch. A graph membership is replayed only when its graph is in C (the contents of a statement graph, [[data-model#Named Graphs#Statement Graphs]]); other memberships are dropped.
+4. Insert every retained member again with `s` and `o` rewritten through σ, content and valid time unchanged, except the root, which gets the patch. A graph membership is replayed only when its graph is in C (the contents of a statement graph, [[data-model#Named Graphs#Statement Graphs]]); other memberships and their structural annotations are dropped. Root object patches are substituted through σ as well; an endpoint selected for dropping or a direct self-reference is rejected. External structural endpoints must remain live after schema replacement.
 5. Assert `(σ(eid) sys:supersedes eid)`.
 
 ```plantuml
@@ -177,7 +178,7 @@ Tx --> Caller : e10
 @enduml
 ```
 
-The replay is bounded by `max_cascade`. Every annotation and reference therefore survives a correction, and the history shows exactly one correction event.
+The replay is bounded by `max_cascade`. Retained annotations move to the new root; layers on dropped memberships remain only in history. Lineage references may keep allocated historical targets. Existing cyclic histories remain readable and replayable, while ordinary writes reject forward references.
 
 ### Cardinality One
 

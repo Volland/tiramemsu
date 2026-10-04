@@ -14,3 +14,5 @@ This directory defines the high-level concepts, business logic, and architecture
 - [[roadmap]] — Milestones mapped to OpenSpec changes, and benchmarks
 - [[paper]] — The Layered Bitemporal Graphs preprint: source, verification artifact, arXiv package and its page on the site
 - [[project-review]] — Measured architecture review, resource-safety findings, and proposed feature priorities
+
+- [[paper]] — Research manuscript artifacts and the isolated arXiv source-package workflow.

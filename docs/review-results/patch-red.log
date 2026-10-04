@@ -1,0 +1,68 @@
+   Compiling tiramemsu v0.1.0 (/Users/volodymyrpavlyshyn/Documents/work/tiramemsu/crates/tiramemsu)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 3.43s
+     Running tests/facade.rs (target/debug/deps/facade-5495a037aeb27f2f)
+
+running 3 tests
+test caught_read_panics_preserve_reader_and_writer_reads ... FAILED
+test caught_speculative_panics_leave_no_trace_and_burn_ids ... FAILED
+test caught_transaction_panic_restores_writer_and_dictionary ... FAILED
+
+failures:
+
+---- caught_read_panics_preserve_reader_and_writer_reads stdout ----
+
+thread 'caught_read_panics_preserve_reader_and_writer_reads' (4829109) panicked at crates/tiramemsu/tests/facade.rs:589:48:
+read panic payload
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+thread 'caught_read_panics_preserve_reader_and_writer_reads' (4829109) panicked at crates/tiramemsu/tests/facade.rs:600:117:
+called `Result::unwrap()` on an `Err` value: Sqlite(SqlError { code: 1, extended_code: 1, message: "cannot start a transaction within a transaction" })
+
+---- caught_speculative_panics_leave_no_trace_and_burn_ids stdout ----
+
+thread 'caught_speculative_panics_leave_no_trace_and_burn_ids' (4829112) panicked at crates/tiramemsu/tests/facade.rs:553:39:
+speculative panic payload
+
+thread 'caught_speculative_panics_leave_no_trace_and_burn_ids' (4829112) panicked at crates/tiramemsu/tests/facade.rs:576:12:
+called `Result::unwrap()` on an `Err` value: Sqlite(SqlError { code: 1, extended_code: 1, message: "cannot start a transaction within a transaction" })
+
+---- caught_transaction_panic_restores_writer_and_dictionary stdout ----
+
+thread 'caught_transaction_panic_restores_writer_and_dictionary' (4829113) panicked at crates/tiramemsu/tests/facade.rs:526:13:
+transaction panic payload
+
+thread 'caught_transaction_panic_restores_writer_and_dictionary' (4829113) panicked at crates/tiramemsu/tests/facade.rs:535:8:
+called `Result::unwrap()` on an `Err` value: Sqlite(SqlError { code: 1, extended_code: 1, message: "cannot start a transaction within a transaction" })
+
+
+failures:
+    caught_read_panics_preserve_reader_and_writer_reads
+    caught_speculative_panics_leave_no_trace_and_burn_ids
+    caught_transaction_panic_restores_writer_and_dictionary
+
+test result: FAILED. 0 passed; 3 failed; 0 ignored; 0 measured; 13 filtered out; finished in 0.03s
+
+error: test failed, to rerun pass `-p tiramemsu --test facade`
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.26s
+     Running tests/facade.rs (target/debug/deps/facade-5495a037aeb27f2f)
+
+running 1 test
+test failed_read_commit_rolls_back_before_reuse ... FAILED
+
+failures:
+
+---- failed_read_commit_rolls_back_before_reuse stdout ----
+
+thread 'failed_read_commit_rolls_back_before_reuse' (4829181) panicked at crates/tiramemsu/tests/facade.rs:617:5:
+assertion `left == right` failed
+  left: 0
+ right: 1
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    failed_read_commit_rolls_back_before_reuse
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 15 filtered out; finished in 0.01s
+
+error: test failed, to rerun pass `-p tiramemsu --test facade`

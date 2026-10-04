@@ -53,9 +53,9 @@ host_test! {
         assert!(!db.is_live(e1.unwrap()));
         // another connection writes without committing
         let raw = db.raw();
-        raw.execute_batch("BEGIN IMMEDIATE").unwrap();
+        raw.execute_batch("BEGIN IMMEDIATE; INSERT INTO tx(t,instant) VALUES (3,3000000);").unwrap();
         raw.execute(
-            "INSERT INTO triple(eid, s, p, o, t_add) VALUES (?1, 1, 2, 3, 1)",
+            "INSERT INTO triple(eid, s, p, o, t_add) VALUES (?1, 1, 2, 3, 3)",
             [Eid::new(500).oid().raw()],
         )
         .unwrap();

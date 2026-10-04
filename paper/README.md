@@ -4,7 +4,6 @@
 
 - [Revision 4 PDF](arxiv/revision-4/layered-bitemporal-graphs-arxiv-preview-v4.pdf)
 - [LaTeX source](layered-bitemporal-graphs.tex) and [bibliography](references.bib)
-- [Revision notes](REVISION-4.md)
 - Post-revision review and reference audit
 - [Retained verification artifact](artifact/README.md)
 - Original review and preserved revision 1

@@ -1,0 +1,30 @@
+   Compiling tm-core v0.1.0 (/Users/volodymyrpavlyshyn/Documents/work/tiramemsu/crates/tm-core)
+   Compiling tm-ir v0.1.0 (/Users/volodymyrpavlyshyn/Documents/work/tiramemsu/crates/tm-ir)
+   Compiling tm-rusqlite v0.1.0 (/Users/volodymyrpavlyshyn/Documents/work/tiramemsu/crates/tm-rusqlite)
+   Compiling tm-sparql v0.1.0 (/Users/volodymyrpavlyshyn/Documents/work/tiramemsu/crates/tm-sparql)
+   Compiling tm-cypher v0.1.0 (/Users/volodymyrpavlyshyn/Documents/work/tiramemsu/crates/tm-cypher)
+   Compiling tm-exec v0.1.0 (/Users/volodymyrpavlyshyn/Documents/work/tiramemsu/crates/tm-exec)
+   Compiling tiramemsu v0.1.0 (/Users/volodymyrpavlyshyn/Documents/work/tiramemsu/crates/tiramemsu)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 5.33s
+     Running tests/facade.rs (target/debug/deps/facade-5495a037aeb27f2f)
+
+running 16 tests
+test host_without_reader_pool ... ok
+test reads_do_not_block_on_a_running_write ... ok
+test failed_read_commit_rolls_back_before_reuse ... ok
+test caught_transaction_panic_restores_writer_and_dictionary ... ok
+test nested_transaction_is_rejected ... ok
+test patch_from_fields ... ok
+test concurrent_upsert_of_a_unique_value ... ok
+test caught_read_panics_preserve_reader_and_writer_reads ... ok
+test rusqlite_host_declares_every_capability ... ok
+test reopen_continues_numbering_and_keeps_history ... ok
+test views_values_and_optimize ... ok
+test caught_speculative_panics_leave_no_trace_and_burn_ids ... ok
+test read_snapshot_is_consistent ... ok
+test two_handles_on_one_file ... ok
+test speculation_through_the_facade ... ok
+test concurrent_transactions_from_many_threads ... ok
+
+test result: ok. 16 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.28s
+

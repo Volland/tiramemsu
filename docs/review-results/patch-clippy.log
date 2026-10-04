@@ -1,0 +1,11 @@
+    Checking tm-core v0.1.0 (/Users/volodymyrpavlyshyn/Documents/work/tiramemsu/crates/tm-core)
+    Checking tm-rusqlite v0.1.0 (/Users/volodymyrpavlyshyn/Documents/work/tiramemsu/crates/tm-rusqlite)
+    Checking tm-ir v0.1.0 (/Users/volodymyrpavlyshyn/Documents/work/tiramemsu/crates/tm-ir)
+    Checking tm-exec v0.1.0 (/Users/volodymyrpavlyshyn/Documents/work/tiramemsu/crates/tm-exec)
+    Checking tm-sparql v0.1.0 (/Users/volodymyrpavlyshyn/Documents/work/tiramemsu/crates/tm-sparql)
+    Checking tm-cypher v0.1.0 (/Users/volodymyrpavlyshyn/Documents/work/tiramemsu/crates/tm-cypher)
+    Checking tiramemsu v0.1.0 (/Users/volodymyrpavlyshyn/Documents/work/tiramemsu/crates/tiramemsu)
+    Checking tiramemsu-json v0.1.0 (/Users/volodymyrpavlyshyn/Documents/work/tiramemsu/bindings/json)
+    Checking tiramemsu-node v0.1.0 (/Users/volodymyrpavlyshyn/Documents/work/tiramemsu/bindings/node)
+    Checking tiramemsu-python v0.1.0 (/Users/volodymyrpavlyshyn/Documents/work/tiramemsu/bindings/python)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 6.14s

@@ -158,12 +158,13 @@ host_test! {
         db.tx(|tx| tx.retract(dead).map(|_| ()));
         db.tx(|tx| {
             let r = tx.assert(iri("c"), iri("p"), iri("d"), Valid::ALWAYS)?.eid();
-            let x = tx.create(r, iri("links"), dead, Valid::ALWAYS)?;
+            let x = tx.create(r, iri("links"), iri("temporary"), Valid::ALWAYS)?;
             let y = tx.create(x, iri("note"), lit("on x"), Valid::ALWAYS)?;
             ids = Some((r, x, y));
             Ok(())
         });
         let (r, x, _) = ids.unwrap();
+        db.legacy_object_reference(x, dead);
         let b = assert_ok(bundle(db, ViewSpec::NOW, r));
         assert_eq!(b.statements.len(), 1);
         assert_err!(
@@ -288,15 +289,15 @@ host_test! {
 // @lat: [[tests#Fact Bundles#Import Rejects Cycles And Malformed Bundles]]
 host_test! {
     fn cycles_and_malformed(db) {
-        let n = db.meta("next_stmt") as u64;
         let e7 = db
             .tx(|tx| {
-                let e7 = tx.create(iri("b1"), iri("about"), Eid::new(n + 1), Valid::ALWAYS)?;
+                let e7 = tx.create(iri("b1"), iri("about"), iri("b2"), Valid::ALWAYS)?;
                 tx.create(e7, iri("about"), iri("b2"), Valid::ALWAYS)?;
                 Ok(())
             })
             .asserted[0];
-        // export keeps the cycle; import refuses it before writing
+        db.legacy_object_reference(e7, Eid::new(e7.oid().unsigned_payload() + 1));
+        // export keeps the legacy cycle; import refuses it before writing
         let b = assert_ok(bundle(db, ViewSpec::NOW, e7));
         assert_eq!(b.statements.len(), 2);
         let mut target = TestDb::new(db.kind);
