@@ -1,0 +1,38 @@
+{
+  "metadata": {
+    "upload_type": "publication",
+    "publication_type": "preprint",
+    "title": "Layered Bitemporal Graphs: Statement Identity, Two Clocks, and Metagraphs as Tags",
+    "creators": [
+      {
+        "name": "Pavlyshyn, Volodymyr",
+        "affiliation": "Independent researcher"
+      }
+    ],
+    "description": "<p>Agent memory needs durable statement identity, provenance, and a distinction between when a claim held and when the system recorded it. We study layered bitemporal graphs, in which statement occurrences can reference other occurrences and carry both transaction-time lifetimes and valid-time intervals. On a referentially complete history, reference-closed sets form an Alexandrov topology. Its interior operator, the ground core, characterises minimal retraction cascades, grounded snapshots, and effective valid-time intervals. We give a correction contract that preserves structural closure under explicit patch and lineage conditions; preservation of references excludes changes made to the corrected root. A typed anchor-and-role encoding of metagraphs commutes with well-formed bitemporal snapshots. Compact binary encodings require additional acyclicity for insertion under a live-reference discipline. The calculus is realised in Tiramemsu, an embedded SQLite graph database. Retained checks identified four implementation gaps; endpoint validation, closed retention and transaction-date guards now prevent those counterexamples. These checks support selected contracts rather than certifying the entire implementation. Our contribution is an operational account of recursive temporal reference integrity, rather than a new theory of temporal databases or finite topologies.</p>",
+    "publication_date": "2026-10-03",
+    "version": "4",
+    "access_right": "open",
+    "license": "cc-by-4.0",
+    "keywords": [
+      "agent memory",
+      "bitemporal data",
+      "temporal graphs",
+      "metagraphs",
+      "knowledge graphs",
+      "provenance",
+      "truth maintenance",
+      "Alexandrov topology",
+      "RDF-star",
+      "SQLite"
+    ],
+    "related_identifiers": [
+      {
+        "identifier": "https://github.com/Volland/tiramemsu",
+        "relation": "isSupplementedBy",
+        "resource_type": "software"
+      }
+    ],
+    "language": "eng"
+  }
+}

@@ -23,6 +23,7 @@
 <div class="btns">
   <a class="btn primary" href="layered-bitemporal-graphs-v4.pdf">Download the PDF (revision 4, 22 pages)</a>
   <a class="btn" href="../articles/grounded-memory.html">Read the companion article</a>
+  <a class="btn" href="https://doi.org/10.5281/zenodo.23139228">Zenodo · DOI 10.5281/zenodo.23139228</a>
   <a class="btn" href="https://github.com/Volland/tiramemsu/tree/main/paper">LaTeX source</a>
 </div>
 
@@ -41,7 +42,7 @@
 <p>Readers who want to know why tiramemsu behaves as it does: why a retraction takes a fact's layers with it, why the past never changes once written, why a valid-time slice can hold a layer whose fact was not valid then, and why a correction keeps everything that was said about the fact. If you want the ideas without the proofs, start with the <a href="../articles/grounded-memory.html">companion article</a>.</p>
 
 <h2>Status</h2>
-<p>This is a draft preprint, prepared for arXiv (primary category cs.DB) but not yet submitted. It has not been peer reviewed. The source, the bibliography, a retained verification artifact and the arXiv upload package are in the <a href="https://github.com/Volland/tiramemsu/tree/main/paper">repository</a>.</p>
+<p>This is a draft preprint, archived on <a href="https://doi.org/10.5281/zenodo.23139228">Zenodo</a> (DOI 10.5281/zenodo.23139228) and prepared for arXiv (primary category cs.DB), not yet submitted there. It has not been peer reviewed. The source, the bibliography, a retained verification artifact and the arXiv upload package are in the <a href="https://github.com/Volland/tiramemsu/tree/main/paper">repository</a>.</p>
 <div class="note"><strong>Paper and engine.</strong> Checking the engine against the paper found gaps where it did not meet the paper's assumptions. Revision 4 describes repairs for them: writes that require live statement endpoints, corrections that drop the layers of dropped memberships, and transaction-date guards. Those repairs shipped in tiramemsu 0.4.0, with the date guards as storage format 4. A file opened by 0.4.0 migrates to format 4 and no longer opens in 0.3.0. On 0.3.0 and earlier, the companion article lists what the engine does not guarantee, and the ground core of a view is always a grounded reading.</div>
 
 <h2>Cite</h2>
@@ -51,7 +52,8 @@
             and Metagraphs as Tags},
   year   = {2026},
   note   = {Draft preprint, revision 4. CC BY 4.0},
-  url    = {https://github.com/Volland/tiramemsu/tree/main/paper}
+  doi    = {10.5281/zenodo.23139228},
+  url    = {https://doi.org/10.5281/zenodo.23139228}
 }</code></pre>
 
 <p><a href="../articles/architecture.html">How tiramemsu is built →</a></p>

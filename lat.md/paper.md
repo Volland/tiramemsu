@@ -14,6 +14,10 @@ Submission through the author's arXiv account and server-side compilation are se
 
 The revision-4 submission folder is kept to four files: upload ZIP, metadata text, instructions and preview PDF. Duplicate metadata, a separate abstract and the original verification report are retained in `paper/review-v4/arxiv-package-details/`.
 
+## Zenodo Deposit
+
+`paper/zenodo/` holds Zenodo-ready metadata (`metadata.json`) and upload steps for the revision-4 PDF. Nothing is uploaded from the repository; publishing and the resulting DOI are manual steps by the author.
+
 ## Manuscript
 
 `paper/layered-bitemporal-graphs.tex` and `references.bib` are the source; the README summarises the current revision.
@@ -24,4 +28,4 @@ Revision 4 describes conformance repairs (live statement endpoints, closed reten
 
 ## Website Page
 
-`site/paper/index.html` gives the title, abstract, the four main results, status, the engine caveat and a BibTeX entry, and links the PDF, the LaTeX source and the companion article. See [[architecture#Project Website]].
+`site/paper/index.html` gives the title, abstract, the four main results, status, the engine caveat and a BibTeX entry, and links the PDF, the Zenodo DOI (10.5281/zenodo.23139228), the LaTeX source and the companion article. See [[architecture#Project Website]].
