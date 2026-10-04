@@ -10,6 +10,37 @@ One `Database` object takes an operation name and a JSON object and returns JSON
 
 The bridge is [[bindings/json/src/lib.rs#Database]]. `call_text(op, args)` returns the result as JSON text, or an error as `{"code", "message"}` text. The native crates prefix that error text with `tiramemsu:` so a wrapper can parse it back into an exception with a code.
 
+Four consumers share the bridge. Node.js, Python and WebAssembly call `call_text` with JSON text; the MCP server calls `call` with `serde_json` values in Rust. The WASM binding refuses budgets and bulk import before the bridge sees the call ([[bindings#WebAssembly]]).
+
+```plantuml
+@startuml json-bridge
+skinparam componentStyle rectangle
+skinparam shadowing false
+[Node.js wrapper\n(@tiramemsu/node)] as NODE
+[Python wrapper\n(tiramemsu)] as PY
+[Web Worker JS\n(tiramemsu-wasm)] as WJS
+[MCP tools\n(tiramemsu-mcp)] as MCP
+[napi-rs class Native] as NAPI
+[PyO3 module _native\n(GIL released)] as PYO3
+[wasm-bindgen Database\n(refuses budget, import)] as WB
+[tiramemsu-json Database\ncall(op, args) / call_text\nviews · terms · budgets · errors] as BRIDGE
+[tiramemsu facade\nDb · View · Tx] as FACADE
+[tm-rusqlite] as RUSQ
+[tm-wasm] as WASM
+
+NODE --> NAPI
+PY --> PYO3
+WJS --> WB
+NAPI --> BRIDGE : call_text
+PYO3 --> BRIDGE : call_text
+WB --> BRIDGE : call_text
+MCP --> BRIDGE : call (JSON values)
+BRIDGE --> FACADE
+FACADE --> RUSQ : Db::open
+WB ..> WASM : open on own host\n(Database::from_db)
+@enduml
+```
+
 ### Operations
 
 Reads take a view and return rows; writes are one transaction each; anything that would surprise a caller is an error, never a silent default.

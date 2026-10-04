@@ -14,6 +14,22 @@ The database targets agent and personal memory: facts with provenance, beliefs a
 - SPARQL and Cypher both query the same store with the same results. See [[query#Front Ends]].
 - It runs in-process on SQLite, with a Rust core that reaches SQLite through a small executor trait. See [[architecture]] and [[architecture#Executor]].
 
+## Capabilities in 0.3
+
+Release 0.3.0 turns the store into an agent memory: bounded, searchable, reviewable, and reachable from Rust, Node, Python, a browser and any MCP client. The map with entry points is [[architecture#Agent Memory Features]].
+
+- **Bounded calls:** deadlines, cancellation, reader timeouts and row or byte limits per operation, with typed errors and no partial results ([[query#Query Budgets]]).
+- **Large loads:** bulk import sessions commit chunks under a write lease and analyse statistics once ([[query#Bulk Import]]).
+- **Recall by words:** FTS5 over stored strings, ranked by lexical score and then by the evidence layers the graph already holds ([[query#Text Recall]]).
+- **Trust over time:** saved answers record what they cited and turn later events into `recheck` and `stale` marks ([[query#Saved Answers]]).
+- **Disagreement made visible:** conflict inspection and dry-run bundle previews, never an automatic winner ([[query#Conflict Inspection]]).
+- **Journeys in queries:** time-respecting paths in SPARQL and Cypher, and every path search says whether it was complete ([[query#Temporal Path Syntax]]).
+- **Cyclic joins:** an opt-in leapfrog triejoin for skewed cyclic patterns, with explained routing ([[query#Physical Planning#LFTJ]]).
+- **Small embeds and new hosts:** the query engine and front ends are cargo features, and the engine runs on SQLite compiled to WebAssembly ([[architecture#Crates#Cargo Features]], [[architecture#WebAssembly Host]]).
+- **Agent tools:** the `tiramemsu-mcp` stdio server exposes typed, auditable memory tools ([[api#MCP Tools]]).
+
+The file format is 3 ([[storage#Format Versioning]]); older files migrate on open without rewriting history.
+
 ## Non-Goals
 
 These are explicitly out of scope, so the design can stay small and exact.
@@ -61,7 +77,7 @@ D35 was added on 2026-10-01: it reserves origin bits so that agent files can lat
 | D22 | The core reaches SQLite through a synchronous executor trait with declared capabilities | [[architecture#Executor]] |
 | D23 | Reuse from oxilite: its Cypher parser as the fallback, its allow-list test harnesses, and its write-cost and as-of benchmarks | [[prior-art#oxilite]] |
 | D24 | Crypto-shredding is scheduled (M6); format 1 reserves tag 15 and `sys:sensitive` for it | [[time-model#Erasure]] |
-| D25 | Retrieval (FTS5 over the term dictionary, vectors on hosts that have them) is a planned milestone | [[roadmap#Milestones]] |
+| D25 | Retrieval (FTS5 over the term dictionary, vectors on hosts that have them) is a planned milestone; the FTS5 part shipped in 0.3.0 | [[roadmap#Milestones]], [[query#Text Recall]] |
 | D27 | SPARQL removes duplicate `(s, p, o)` only for predicates recorded in `pred_multi`; the eid stays as the statement identity | [[storage#Multi-Eid Predicates]] |
 | D28 | Named graphs are tags: a graph is a node and membership is a layer statement `(e sys:inGraph g)`, so there is no quad column; the default graph is the union | [[data-model#Named Graphs]] |
 | D26 | SQLite stays the engine. DuckDB was benchmarked on the workload and is only an optional read-only analytics tool over the SQLite file | [[prior-art#DuckDB]] |
@@ -76,7 +92,7 @@ D35 was added on 2026-10-01: it reserves origin bits so that agent files can lat
 
 ## Open Inputs
 
-Two facts are still unknown. They affect priorities, not the design.
+One fact is still unknown, and one has been settled by building every option. They affect priorities, not the design.
 
-- **Scale ceiling:** triples per database and writes per second. This sets benchmark targets and decides whether LFTJ is ever built. See [[roadmap#Benchmarks]].
-- **First consumer:** MCP server, Python (PyO3), TS/Node, or WASM. This decides which binding ships first. See [[api#Bindings]].
+- **Scale ceiling:** triples per database and writes per second. This sets benchmark targets and how far LFTJ routing is tuned; LFTJ itself is built and opt-in, justified by the skewed triangle benchmark. See [[roadmap#Benchmarks]].
+- **First consumer:** no longer a choice. The MCP server, Python, Node.js and WASM bindings all ship over one JSON bridge ([[api#Bindings]], [[bindings]]).

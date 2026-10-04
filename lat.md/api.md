@@ -181,3 +181,34 @@ Register it with `claude mcp add tiramemsu -- tiramemsu-mcp --db ./memory.db`, o
 - **Auditable results:** every read echoes its `view` (default `{"kind": "now"}`). A SPARQL `SELECT` runs with provenance unless `provenance: false`, and `provenance.coverage` is `complete`, `incomplete` with `gaps` from `Solutions::provenance_gaps` (a recursive path), or `unavailable` (Cypher, `ASK`, `CONSTRUCT`, or not requested). An unsupported combination is an error, never retried another way.
 - **Errors** are tool results with `isError` and `{"code", "message"}`: the bridge codes plus `ReadOnly` and `PathNotAllowed`; a malformed bundle is `InvalidArgument` and commits nothing. Protocol faults are JSON-RPC errors (`-32700`, `-32600`, `-32601`, `-32602` for an unknown tool), and the server keeps serving after any of them.
 - **Not included:** HTTP or remote transport, multi-user authorization, `retract`, `history` and `schema` tools (SPARQL on a history view covers history), and automatic extraction or embeddings.
+
+One `tools/call` of `query`, from the client's line on stdin to the result on stdout. The two refusals happen before any argument is used or any transaction opens; the server is single-threaded and answers each line in order.
+
+```plantuml
+@startuml mcp-tool-call
+skinparam shadowing false
+participant "MCP client\n(LLM app)" as C
+participant "Server\n(JSON-RPC over stdio)" as S
+participant "tools::run" as T
+participant "tiramemsu-json\nDatabase::call" as B
+participant "Db / View\n(facade)" as D
+
+C -> S : {"method": "tools/call",\n"params": {"name": "query", "arguments": {…}}}
+S -> T : call(name, args)
+alt write tool and --read-only
+  T --> S : ReadOnly (arguments not parsed)
+else argument names a file (path, db, file, …)
+  T --> S : PathNotAllowed
+else undeclared argument
+  T --> S : InvalidArgument
+else allowed
+  T -> B : call("sparql", { text, view, queryOnly,\nprovenance, budget from server flags })
+  B -> D : QueryBudget::run { view.sparql_with(…) }
+  D --> B : rows, provenance, provenance gaps
+  B --> T : JSON result
+  T -> T : coverage: complete | incomplete (gaps)\n| unavailable
+  T --> S : { language, view, result, provenance }
+end
+S --> C : result: text content\n(+ structuredContent from 2025-06-18),\nor isError with {code, message}
+@enduml
+```

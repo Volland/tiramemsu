@@ -22,18 +22,20 @@ Six smaller changes built on M0–M3 add the layer features of [[recipes]]: `add
 
 M7 exists because recall by text or embedding, not by graph pattern, is how agents usually query their memory. Ranking by support is part of it: a hit can be ordered by its confidence layers, its `sys:confirmedBy` count, the number of distinct transaction authors behind it and its `tm:addedAt`, all of which the store already holds ([[recipes]]). oxilite's design (index definitions stored as data, tables kept current by triggers, one k-NN statement per query) is the template ([[prior-art#oxilite]]).
 
+Status as of 0.3.0: M0–M5 are done, M4 as an opt-in operator; M7 has its text half done; M6 and the vector half of M7 are future work.
+
 ```plantuml
 @startuml milestones
 skinparam shadowing false
-rectangle "M0 add-core-store" as M0
-rectangle "M1 add-query-ir-and-sql-planner" as M1
-rectangle "M2a add-sparql-frontend" as M2a
-rectangle "M2b add-cypher-frontend" as M2b
-rectangle "M3 add-path-engine" as M3
-rectangle "M4 add-lftj-operator\n(conditional)" as M4
-rectangle "M5 bindings" as M5
-rectangle "M6 add-crypto-shredding" as M6
-rectangle "M7 add-retrieval" as M7
+rectangle "M0 add-core-store\n(done)" as M0
+rectangle "M1 add-query-ir-and-sql-planner\n(done)" as M1
+rectangle "M2a add-sparql-frontend\n(done)" as M2a
+rectangle "M2b add-cypher-frontend\n(done)" as M2b
+rectangle "M3 add-path-engine\n(done)" as M3
+rectangle "M4 add-lftj-operator\n(done, opt-in)" as M4
+rectangle "M5 bindings: Python, Node,\nMCP, WASM host (done)" as M5
+rectangle "M6 add-crypto-shredding\n(future)" as M6
+rectangle "M7 retrieval\ntext: add-text-retrieval (done)\nvectors (future)" as M7
 M0 --> M6
 M1 --> M7
 M2a --> M7
@@ -44,7 +46,7 @@ M1 --> M2b
 M1 --> M3
 M2a ..> M3 : path lowering
 M2b ..> M3 : path lowering
-M1 ..> M4 : if benchmarks demand
+M1 --> M4 : triangle benchmark
 M3 --> M5
 M2a --> M5
 M2b --> M5
@@ -59,7 +61,7 @@ The ten follow-up changes from the 2026-10-03 review (budgets, bulk import, text
 
 - **Churn:** N updates per key (N = 1, 10, 100, 1000). As-of throughput should stay at ≥ 70 % of the no-history baseline, the bar set by CozoDB's measurements. See [[prior-art#CozoDB]].
 - **Point and 2-hop latency** at 10⁶ and 10⁷ statements, for the now, asOf and validAt views. The SPARQL variant (`crates/tiramemsu/benches/sparql.rs`) runs the same shapes through `View::sparql`; `SPARQL_BENCH_STATEMENTS` sets the size (default 10⁵).
-- **Triangles:** SQL nested loops versus the M4 threshold. This decides whether LFTJ is built. See [[query#Physical Planning#LFTJ]]. First result (`bench/triangles/`): SQLite's plan matches an intersection join on a uniform graph (1.0×) but is 41× slower on a hub-and-spoke graph and 36–104× slower on layered graphs, growing with size. The threshold is met for skewed cyclic patterns, so M4 is justified for them. With M4 built, `cargo run --release -p tiramemsu --example triangles` compares both routes through tiramemsu on one file after checking equal counts; at the small scale the native route is 1.3× faster on a uniform graph, 12× on hub-and-spoke and 2–4× on layered graphs (results in `bench/triangles/README.md`).
+- **Triangles:** SQL nested loops versus the M4 threshold. This decided that LFTJ is built. See [[query#Physical Planning#LFTJ]]. First result (`bench/triangles/`): SQLite's plan matches an intersection join on a uniform graph (1.0×) but is 41× slower on a hub-and-spoke graph and 36–104× slower on layered graphs, growing with size. The threshold is met for skewed cyclic patterns, so M4 is justified for them. With M4 built, `cargo run --release -p tiramemsu --example triangles` compares both routes through tiramemsu on one file after checking equal counts; at the small scale the native route is 1.3× faster on a uniform graph, 12× on hub-and-spoke and 2–4× on layered graphs (results in `bench/triangles/README.md`).
 - **Paths:** all-endpoints shortest path and 3-hop trail latency, reachability over a chain and a small world, all-shortest paths on a grid, and the `rarray` chunk size (`crates/tiramemsu/benches/path.rs`; `PATH_BENCH_STATEMENTS` sets the size, default 10⁵). Trail errors fail the benchmark. Recorded results are in `crates/tiramemsu/benches/README.md`.
 - **Size:** bytes per statement, and index overhead against raw data. Baseline: about 153 bytes per statement, with indexes at 5.3× the table ([[storage#Measured Footprint]]). This benchmark also decides whether `hist_*` becomes partial.
 - **Supersede:** cost as a function of the cascade set size.

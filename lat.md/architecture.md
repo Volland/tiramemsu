@@ -1,12 +1,14 @@
 # Architecture
 
-Tiramemsu is a stack of layers: two query front ends over one logical IR, a planner that routes to SQL or native operators, a temporal view layer, and one SQLite file.
+Tiramemsu is a stack of layers: two query front ends over one logical IR, a planner that routes to SQL or native operators, a temporal view layer, executor hosts, and one SQLite file.
 
 It follows MillenniumDB's logical design (edge ids, tagged ObjectIds, permutation indexes, automaton paths) on top of SQLite's B-trees instead of custom storage. See [[prior-art#MillenniumDB]].
 
 ## Layers
 
 Each layer depends only on the layer below it. Time is resolved in exactly one place, the view-aware scan in [[query#Views and Scans]].
+
+The agent memory services of 0.3 sit beside the Rust API in the facade and reuse the lower layers instead of adding new storage paths: budgets meter every layer, saved answers re-run queries, review and preview run dry transactions, and text recall is one more native operator over the same views. The derived tables can always be rebuilt from the graph ([[storage#Format Versioning]]).
 
 ```plantuml
 @startuml layers
@@ -19,49 +21,93 @@ package "Front ends" {
   [Rust API\n(Db / View / Tx)] as API
 }
 
-package "Logical layer" {
-  [IR algebra\nBGP · Join · LeftJoin · Filter\nUnion · Aggregate · Path\n+ semantic flags + per-pattern View] as IR
+package "Agent memory services (facade)" {
+  [Budget meter\n(QueryBudget, per thread)] as BUDGET
+  [Saved answers\n(check / refresh)] as SAVED
+  [Conflict review +\nbundle preview] as REVIEW
+  [Bulk import\n(write lease)] as IMPORT
 }
 
-package "Physical layer" {
+package "Logical layer" {
+  [IR algebra\nBGP · Join · LeftJoin · Filter · Union\nAggregate · Path · Text\n+ semantic flags + per-pattern View] as IR
+}
+
+package "Physical layer (tm-exec)" {
   [Planner / router] as PLAN
   [SQL codegen] as SQLGEN
-  [Path operator\n(automaton BFS/DFS)] as PATH
-  [LFTJ operator\n(opt-in, tm_lftj)] as LFTJ
+  [Path operator\n(tm_path)] as PATH
+  [LFTJ operator\n(tm_lftj, opt-in)] as LFTJ
+  [Text recall\n(tm_text)] as TEXT
 }
 
-package "Core" {
+package "Core (tm-core)" {
   [Temporal view\nnow · asOf · validAt · history] as VIEW
   [Tx engine\nassert · create · retract · supersede\ncascade · cardinality · unique] as TX
+  [Text search + FTS5 upkeep] as TCORE
   [ObjectId codec +\nterm dictionary] as OID
+  interface "Executor trait" as EXEC
 }
 
-database "SQLite file (WAL, STRICT)" as DB {
-  [term] as T_TERM
-  [tx] as T_TX
-  [triple + indexes] as T_TRIPLE
-  [volatile] as T_VOL
+package "Hosts" {
+  [tm-rusqlite\n(bundled SQLite)] as RUSQ
+  [tm-wasm\n(SQLite in WebAssembly)] as WASM
+}
+
+database "SQLite file (STRICT)" as DB {
+  [term · tx · triple + indexes\nvolatile · meta] as T_GRAPH
+  [term_fts · saved_answer\n(derived)] as T_DERIVED
 }
 
 SPARQL --> IR
 CYPHER --> IR
 API --> IR
 API --> TX
+API --> SAVED
+API --> REVIEW
+API --> IMPORT
+BUDGET ..> PLAN : interrupt, row charges
+SAVED --> IR : re-run with provenance
+REVIEW --> TX : dry run
+IMPORT --> TX : chunks
 IR --> PLAN
 PLAN --> SQLGEN
 PLAN --> PATH
-PLAN ..> LFTJ
+PLAN --> LFTJ
+PLAN --> TEXT
 SQLGEN --> VIEW
 PATH --> VIEW
-LFTJ ..> VIEW
-VIEW --> T_TRIPLE
-TX --> T_TRIPLE
-TX --> T_TX
+LFTJ --> VIEW
+TEXT --> TCORE
+TCORE --> VIEW
 TX --> OID
-OID --> T_TERM
-TX --> T_VOL
+TX --> TCORE
+VIEW ..> EXEC
+TX ..> EXEC
+EXEC <|.. RUSQ
+EXEC <|.. WASM
+RUSQ --> DB
+WASM --> DB
 @enduml
 ```
+
+## Agent Memory Features
+
+The ten features of 0.3.0 answer concrete agent needs. Each reuses the views, the tx engine and the executor; the table maps it to its entry points and to the section that explains how it works.
+
+| Feature | Agent need | Entry points | How it works |
+|---|---|---|---|
+| Query budgets | A tool call must not hang the agent loop | `View::with_budget`, `Db::transact_budgeted`, `QueryBudget::run`; bridge `budget` and `cancel`; MCP server flags | [[query#Query Budgets]] |
+| Bulk import | Load a large memory without re-analysing after every chunk | `Db::bulk_import`; bridge `importBegin` … `importFinish`; Node and Python `BulkImport` | [[query#Bulk Import]] |
+| Text recall | Find memories by words, ranked by their evidence | `View::text_search`; SPARQL `tm:textMatch`; Cypher `CALL tiramemsu.text.search`; bridge `textSearch`; MCP `text_search` | [[query#Text Recall]], [[storage#Text Index]] |
+| MCP adapter | Give an LLM app typed, auditable memory tools | `tiramemsu-mcp --db file` over stdio | [[api#MCP Tools]] |
+| Saved answers | Know when a remembered answer can no longer be trusted | `Db::save_answer`, `check_saved_answers`, `refresh_answer`; bridge `saveAnswer` …; MCP `save_answer`, `check_answers` | [[query#Saved Answers]], [[storage#Saved Answers]] |
+| Temporal paths | Ask "could this have spread in time order" in a query | SPARQL `SERVICE <urn:tiramemsu:tm:timeRespecting…>` and `tm:arrival`; Cypher `MATCH TIME RESPECTING`; `PathArgs::time_respecting` | [[query#Temporal Path Syntax]], [[query#Physical Planning#Path Engine#Path Completeness]] |
+| LFTJ operator | Cyclic patterns over skewed graphs without blow-up | `OpenOptions.planner.lftj`; `View::explain_sparql`, bridge `explainSparql` | [[query#Physical Planning#LFTJ]] |
+| Conflict review and preview | See disagreement and the effect of an import before writing | `View::conflicts`, `Db::preview_bundle`; bridge `conflicts`, `previewBundle`; MCP `conflicts`, `preview_bundle` | [[query#Conflict Inspection]], [[data-model#Fact Bundles#Import Preview]] |
+| Optional query frontends | Embed the store without parsers | facade cargo features `exec`, `sparql`, `cypher` | [[architecture#Crates#Cargo Features]] |
+| WASM SQLite host | Run the same memory in a browser | `tm-wasm` `WasmHost`; `tiramemsu-wasm` `Database` in a Web Worker | [[architecture#WebAssembly Host]], [[bindings#WebAssembly]] |
+
+Shared rules hold across them: every read runs in one snapshot and can be bounded by one budget; reviews and previews never write graph rows; derived state (`term_fts`, `saved_answer`) is never history and can be rebuilt or discarded; and an unsupported request fails with a typed error rather than degrading silently ([[api#Errors]]).
 
 ## Crates
 
@@ -69,16 +115,65 @@ The Rust workspace is split by layer so each front end compiles against the IR o
 
 | Crate | Responsibility | Depends on |
 |---|---|---|
-| `tm-core` | ObjectId codec, term dictionary, SQLite schema and migrations, tx engine, views, event log, volatile table, predicate schema, the `Executor` trait | nothing SQLite-specific ([[architecture#Executor]]) |
+| `tm-core` | ObjectId codec, term dictionary, SQLite schema and migrations, tx engine, views, event log, volatile table, predicate schema, the `Executor` trait, the budget meter, text search and its FTS5 upkeep, conflict inspection, bundles | nothing SQLite-specific ([[architecture#Executor]]) |
 | `tm-rusqlite` | The first executor host: `rusqlite` with bundled SQLite, UDF and virtual-table registration | `rusqlite` (bundled), `tm-core` |
 | `tm-wasm` | The WebAssembly host: SQLite compiled to `wasm32-unknown-unknown`, memory or OPFS storage, verified journal mode, probed capabilities ([[architecture#WebAssembly Host]]) | `tm-rusqlite`, `rusqlite` → `sqlite-wasm-rs`, `sqlite-wasm-vfs` |
 | `tm-ir` | Logical algebra, semantic flags, view descriptors | `tm-core` (ids, views) |
-| `tm-exec` | Planner/router, SQL codegen, path operator, `tm_path` table function, opt-in LFTJ operator (`tm_lftj`) | `tm-ir`, `tm-core` |
+| `tm-exec` | Planner/router, SQL codegen, path operator, the table functions `tm_path`, `tm_text` and the opt-in `tm_lftj` | `tm-ir`, `tm-core` |
 | `tm-sparql` | SPARQL 1.1 (+1.2 annotations) → IR, results as SPARQL JSON/terms | `spargebra`, `tm-ir` |
 | `tm-cypher` | openCypher subset + extensions → IR, results as Cypher values | a Cypher parser, `tm-ir` |
-| `tiramemsu` | Facade: `Db`, `View`, `Tx`, `QueryResult`; the only crate bindings use | `tm-core`, `tm-rusqlite`; the others behind cargo features ([[architecture#Crates#Cargo Features]]) |
+| `tiramemsu` | Facade: `Db`, `View`, `Tx`, results, reader pool, budgets, bulk import, saved answers, conflict review and previews; the only crate bindings use | `tm-core`, `tm-rusqlite`; the others behind cargo features ([[architecture#Crates#Cargo Features]]) |
+| `tiramemsu-json` (`bindings/json`) | The JSON bridge: one `Database` with `call(op, args)`, shared by every binding ([[bindings#JSON Bridge]]) | `tiramemsu` with `sparql` and `cypher` |
+| `tiramemsu-mcp` | Local stdio MCP server with typed memory tools ([[api#MCP Tools]]) | `tiramemsu-json`, `tiramemsu` |
 
 Bindings (PyO3, napi-rs, WASM in `bindings/wasm`, MCP server) are separate crates on top of `tiramemsu`. The MCP server `tiramemsu-mcp` is a workspace crate under `crates/` built on the JSON bridge, so protocol code stays out of `tm-core` and the facade. See [[api#Bindings]].
+
+`tm-core` has no normal dependency on any SQLite crate: `tm-rusqlite` appears only among its dev-dependencies, for tests. Front ends depend on `tm-ir` and `tm-core`, never on each other or on `tm-exec`; the facade wires them together.
+
+```plantuml
+@startuml crates
+skinparam componentStyle rectangle
+skinparam shadowing false
+
+[tm-core] as CORE
+[tm-rusqlite] as RUSQ
+[tm-wasm] as WASM
+[tm-ir] as IR
+[tm-exec] as EXEC
+[tm-sparql] as SPARQL
+[tm-cypher] as CYPHER
+[tiramemsu] as FACADE
+[tiramemsu-json] as JSON
+[tiramemsu-mcp] as MCP
+[tiramemsu-node] as NODE
+[tiramemsu-python] as PY
+[tiramemsu-wasm] as BWASM
+[rusqlite\n(bundled SQLite)] as RUSQLITE
+[sqlite-wasm-rs +\nsqlite-wasm-vfs] as SWASM
+
+RUSQ --> CORE
+RUSQ --> RUSQLITE
+WASM --> RUSQ
+WASM --> SWASM
+IR --> CORE
+EXEC --> IR
+SPARQL --> IR
+CYPHER --> IR
+FACADE --> CORE
+FACADE --> RUSQ
+FACADE ..> EXEC : exec
+FACADE ..> SPARQL : sparql
+FACADE ..> CYPHER : cypher
+JSON --> FACADE : sparql + cypher
+MCP --> JSON
+NODE --> JSON
+PY --> JSON
+BWASM --> JSON
+BWASM --> WASM
+@enduml
+```
+
+Dotted edges are optional facade features; `sparql` and `cypher` each imply `exec`. `tm-exec`, `tm-sparql`, `tm-cypher` and `tm-wasm` also depend on `tm-core` directly; those edges are left out for clarity.
 
 ### Cargo Features
 
@@ -102,7 +197,7 @@ The facade's query engine and front ends are optional dependencies (`add-optiona
 
 `tm-core` reaches SQLite through a small synchronous `Executor` trait, so the engine can run on any host with interactive transactions. Hosts: `rusqlite` with bundled SQLite, and `tm-wasm` on SQLite compiled to WebAssembly ([[architecture#WebAssembly Host]]).
 
-The boundary is drawn now, before code exists, because it costs little today and a lot later. oxilite, which started from an abstract executor, runs on five SQLite hosts ([[prior-art#oxilite]]).
+The boundary was drawn before any code existed, because it cost little then and would have cost a lot later. oxilite, which started from an abstract executor, runs on five SQLite hosts ([[prior-art#oxilite]]).
 
 - **Required of every host:** prepared statements with bound parameters, interactive transactions (`BEGIN IMMEDIATE` … `COMMIT`/`ROLLBACK`), savepoints, and a stable snapshot within a read transaction. The tx engine reads before it writes (idempotent assert, cascade, schema checks, dictionary lookup), so it needs all of them.
 - **Capabilities** (declared by the host): `reader_pool` (otherwise the reader is the writer, as on WASM), `functions` (scalar UDFs), `vtab` (virtual tables: `tm_path`, `tm_text` and `rarray`), `stat4`, `fts5` (text recall and its derived index, [[storage#Text Index]]; without it only recall fails, with `MissingCapability`).
@@ -161,25 +256,59 @@ R --> B : rows
 
 ## Deployment
 
-The engine is a library linked into the host process. The same core builds for native targets and for WASM with an in-browser SQLite VFS, each through its own executor host ([[architecture#Executor]], [[architecture#WebAssembly Host]]).
+The engine is a library linked into the host process; there is no server. Four ways in, one executor contract and one file format, so the same file moves between native and browser hosts ([[architecture#Executor]]).
+
+- **Rust:** an application links `tiramemsu` and calls `Db`, `View` and `Tx` directly; cargo features choose how much of the query engine is linked ([[architecture#Crates#Cargo Features]]).
+- **Node.js and Python:** the native addons call the JSON bridge in-process; values cross as JSON text ([[bindings]]).
+- **Agents over MCP:** an MCP client starts `tiramemsu-mcp` as a child process and talks JSON-RPC over stdio; the server owns the file ([[api#MCP Tools]]).
+- **Browser:** a page posts messages to a Web Worker that runs `tiramemsu-wasm` on `tm-wasm`, with the database in memory or OPFS and a rollback journal ([[architecture#WebAssembly Host]]).
 
 ```plantuml
 @startuml deployment
 skinparam shadowing false
-node "Agent process" {
-  component "Host app\n(Python / Node / Rust / Swift)" as HOST
-  component "tiramemsu binding" as BIND
-  component "tiramemsu core (Rust)" as CORE
-  file "memory.db (+ -wal, -shm)" as FILE
-}
-node "MCP client (LLM app)" as MCPC
-component "tiramemsu-mcp server" as MCP
 
-HOST --> BIND
-BIND --> CORE
-CORE --> FILE
-MCPC --> MCP : stdio / JSON-RPC
-MCP --> CORE
+node "Native process" {
+  component "Rust app" as RUST
+  component "Node.js / Python app" as SCRIPT
+  component "napi-rs / PyO3 addon" as ADDON
+  component "tiramemsu-json\n(JSON bridge)" as JSON
+  component "tiramemsu facade" as FACADE
+  component "tm-rusqlite\n(bundled SQLite, WAL)" as RUSQ
+}
+
+node "Agent host" {
+  component "LLM app\n(MCP client)" as CLIENT
+}
+
+node "tiramemsu-mcp process" {
+  component "MCP server\n(stdio JSON-RPC)" as MCP
+  component "JSON bridge + facade" as MCPCORE
+}
+
+node "Browser" {
+  component "Web page" as PAGE
+  node "Web Worker" {
+    component "tiramemsu-wasm\n(Database.call)" as BWASM
+    component "tm-wasm\n(SQLite in WASM)" as WASM
+  }
+  database "OPFS or memory" as OPFS
+}
+
+file "memory.db\n(one file format)" as FILE
+
+RUST --> FACADE
+SCRIPT --> ADDON
+ADDON --> JSON
+JSON --> FACADE
+FACADE --> RUSQ
+RUSQ --> FILE
+CLIENT --> MCP : stdin / stdout
+MCP --> MCPCORE
+MCPCORE --> FILE
+PAGE --> BWASM : postMessage
+BWASM --> WASM
+WASM --> OPFS : rollback journal
+OPFS ..> FILE : exportFile / importFile
 @enduml
 ```
 

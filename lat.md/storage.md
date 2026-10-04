@@ -216,11 +216,30 @@ High-churn state (`lastSeen`, counters, per-turn scores) lives in `volatile(s, k
 
 Migrations must respect [[time-model#Never Forget]]. They may add columns, indexes and tables, but never drop or rewrite triples.
 
-- **Format 3** is the current version. The migrations are [[crates/tm-core/src/storage/migrate.rs#MIGRATIONS]].
+- **Current:** format 3. The migrations are [[crates/tm-core/src/storage/migrate.rs#MIGRATIONS]], applied in order by `run_migrations` inside the open transaction; a file newer than the build fails with `FormatVersion`.
 - **Format 2** inserts the `meta` rows `text_index = 0` and `text_stale = 0` of [[storage#Text Index]]. It runs on every host, creates no FTS5 table and touches no `triple`, `term` or `tx` row.
 - **Format 3** creates the empty derived tables of [[storage#Saved Answers]] and reads or writes no graph row.
 - A new file is created as format 1 and migrated forward like an old file, so fresh and migrated files have the same schema.
 - The bump is what keeps the derived index honest: a format-1 build, which would write strings without indexing them, refuses a format-2 file with `FormatVersion` instead of letting `term_fts` drift.
+
+Each step adds bookkeeping or derived tables beside the graph and leaves `triple`, `term` and `tx` exactly as they were. Derived state can be rebuilt (`term_fts`) or discarded (`saved_answer`) without losing any fact.
+
+```plantuml
+@startuml format-versions
+skinparam shadowing false
+state "Format 1" as F1 : graph tables: term, tx, triple + indexes\nvolatile, pred_multi, meta\ninvariant triggers (never forget)
+state "Format 2" as F2 : + meta rows text_index = 0, text_stale = 0\nterm_fts created only when the index is built\n(derived, rebuildable, FTS5 hosts only)
+state "Format 3" as F3 : + saved_answer, saved_answer_dep\n(derived records, written by derived_write,\nno tx row, no event)
+[*] --> F1 : new file
+F1 --> F2 : v1_to_v2\n(no graph row read or written)
+F2 --> F3 : v2_to_v3\n(no graph row read or written)
+F3 --> [*] : current
+note bottom of F3
+  An older build opening a newer file fails with FormatVersion.
+  Graph history is never rewritten by a migration.
+end note
+@enduml
+```
 
 ## Text Index
 

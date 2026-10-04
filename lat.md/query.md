@@ -59,8 +59,25 @@ class PathPattern {
   end : TermOrVar
   path : PathExpr
   mode : PathMode
+  max_hops : u32?
   bind_path : Var?
   view : View
+  graph : GraphSel
+  time_respecting : TemporalPath?
+  hop_cap : bool
+}
+class TextPattern {
+  query : TermOrVar
+  mode : All or Any or Phrase
+  eid : Var
+  score, rank, confidence : Var?
+  limit : u32?
+  view : View
+  graph : GraphSel
+}
+class TemporalPath {
+  after : TermOrVar?
+  arrival : Var?
 }
 class Unnest {
   input : Op
@@ -98,12 +115,15 @@ Op <|-- PathPattern
 Op <|-- Values
 Op <|-- Unnest
 Op <|-- RowNumber
+Op <|-- TextPattern
 TriplePattern --> View
 PathPattern --> View
+PathPattern --> TemporalPath
+TextPattern --> View
 @enduml
 ```
 
-- Every `TriplePattern` and `PathPattern` has its own `View`. A query-level time clause sets the default, and a per-pattern clause overrides it. See [[query#Temporal Syntax]].
+- Every `TriplePattern`, `PathPattern` and `TextPattern` has its own `View`. A query-level time clause sets the default, and a per-pattern clause overrides it. See [[query#Temporal Syntax]].
 - `eid` binds the statement id. SPARQL binds it with `~ ?r` or `<<( )>>` reifier syntax, Cypher with a relationship variable. See [[query#Front Ends#Cypher Dual View]].
 - Expressions include `Exists`/`NotExists` (SPARQL `EXISTS`/`MINUS`, Cypher pattern predicates) and `Lookup` (Cypher `x.k`: a per-row property lookup that never multiplies rows). Joins can mark variables null-safe.
 - The Rust types are [[crates/tm-ir/src/op.rs#Op]] and [[crates/tm-ir/src/op.rs#IrQuery]]. The IR also has `Unnest`, `RowNumber`, `Lookup` and null-safe join variables for Cypher.
@@ -157,7 +177,7 @@ while (region left?) is (yes)
   elseif (pure cyclic BGP AND LFTJ enabled AND\noperator installed AND estimate agrees?) then (yes)
     :native LFTJ operator\n(exposed as tm_lftj TVF);
   else (no)
-    :SQL codegen\n(joins over triple aliases);
+    :SQL codegen\n(joins over triple aliases;\nTextPattern → tm_text FROM item);
   endif
 endwhile (no)
 :compose regions into one SQL statement\n(TVFs as FROM items);
@@ -237,6 +257,33 @@ A path search reports whether it was exhaustive or a hop limit stopped it, and w
 - **Reporting:** `PathEngine::run` returns the verdict and records it in a thread-local scope ([[crates/tm-exec/src/path/report.rs#collect]]) merged over every `tm_path` call of a query (the least complete wins). `View::path_report` returns it with the rows, `Solutions::path_completeness` and `CypherResult::path_completeness` carry it for queries (`None` when no path ran), and the bridge adds it only when asked ([[bindings#JSON Bridge#Operations]]).
 - **State guard:** exhaustion of `path_max_states` is never a verdict: the search fails with `PathLimitExceeded`.
 
+```plantuml
+@startuml path-completeness
+skinparam shadowing false
+start
+:expand layer by layer;
+if (search states > path_max_states?) then (yes)
+  #pink:fail with PathLimitExceeded\n(no rows returned);
+  stop
+endif
+if (states left when the search ended?) then (no)
+  :Exhaustive;
+  stop
+endif
+:probe one more fetch round\n(Ctx::more);
+if (some entry has a neighbour\nalong a DFA move?) then (no)
+  :Exhaustive;
+  stop
+endif
+if (hop limit is the cap\n(hop_cap, TRAIL default, hopCap)?) then (yes)
+  :StoppedAtCap { max_hops }\nis_complete() = false;
+else (no)
+  :StoppedAtBound { max_hops }\ncomplete within the bound;
+endif
+stop
+@enduml
+```
+
 
 #### Path Lowering
 
@@ -280,16 +327,54 @@ The operator is [[crates/tm-exec/src/lftj/mod.rs#LftjOperator]], registered as t
 
 A cyclic BGP goes native only when every condition holds; otherwise it stays SQL and explain names the first condition that failed as the region's `RouteNote`.
 
+A BGP is a candidate when at least three of its triple patterns form a cycle over shared variables; an acyclic one gets `RouteNote::None` and is never counted.
+
 1. **Enabled:** `OpenOptions::planner.lftj.enabled` (default false), else `CyclicLftjDisabled`.
 2. **Installed:** an LFTJ operator is registered, else `LftjUnavailable`. The facade registers it only when LFTJ is enabled, so default databases do not even have `tm_lftj`.
 3. **Applicable:** every input of the join is a stored-triple pattern and at most 32 variables are returned, else `LftjUnsupportedShape`. Virtual predicates, volatile values, paths, a cycle closed only through `OPTIONAL` and a cycle among non-pattern inputs keep SQL with this note.
 4. **Estimate:** some pattern matches at least `min_rows_estimate` statements (default 100 000) in its own view, counted with a capped `count(*)` in the planning snapshot, else `LftjBelowEstimate`. `0` routes without counting.
+
+```plantuml
+@startuml lftj-routing
+skinparam shadowing false
+start
+:BGP region (triple patterns as variable sets);
+if (≥ 3 patterns forming a cycle?) then (no)
+  :SQL — note None;
+  stop
+endif
+if (planner.lftj.enabled?) then (no)
+  :SQL — CyclicLftjDisabled;
+  stop
+endif
+if (tm_lftj operator registered?) then (no)
+  :SQL — LftjUnavailable;
+  stop
+endif
+if (only stored-triple patterns\nand ≤ 32 output variables?) then (no)
+  :SQL — LftjUnsupportedShape;
+  stop
+endif
+if (min_rows_estimate = 0?) then (yes)
+else (no)
+  :capped count(*) per pattern\nin its own view (planning snapshot);
+  if (largest count ≥ min_rows_estimate?) then (no)
+    :SQL — LftjBelowEstimate;
+    stop
+  endif
+endif
+:native — LftjNative\ntm_lftj(spec) in a derived table;
+stop
+@enduml
+```
 
 A routed region is `RegionKind::NativeLftj` with `RouteNote::LftjNative`; `View::explain_ir` and `View::explain_sparql` show it with the call's `EXPLAIN QUERY PLAN` rows. Routing is [[crates/tm-exec/src/plan/route.rs#route_bgp]] then [[crates/tm-exec/src/plan/route.rs#lftj_route]].
 
 #### Access Paths
 
 Each pattern becomes one sorted access path read through the calling statement's connection, so the operator sees that statement's snapshot, or the speculative state inside `with`.
+
+The access paths are loaded into memory as sorted arrays (`Relation` in [[crates/tm-exec/src/lftj/join.rs]]) before the join starts; if any one is empty the call returns no rows at once. Memory therefore holds every pattern's matches as well as the output.
 
 The scan is the pattern compiled by the same generator as a SQL pattern: its constants, its own view predicates ([[query#Views and Scans]]) and, under set semantics, the canonical-eid predicate, ordered by its variables in join order. A `GRAPH` selector is already a membership pattern `(e sys:inGraph g)` with its own view, so graph constraints are access paths too. Two patterns of one query may use different transaction and valid times.
 
@@ -301,6 +386,38 @@ The scan is the pattern compiled by the same generator as a SQL pattern: its con
 - **Multiplicity:** every pattern has an eid variable, a hidden one when the query binds none, so parallel statements keep their rows under Cypher's bag of eids, while SPARQL's canonical-eid predicate leaves one row per `(s, p, o)`.
 - **Isomorphism:** Cypher patterns of one match group need distinct eids unless their constant predicates differ, as `tI.eid <> tJ.eid` requires on the SQL route; grouped eids are output columns so patterns outside the region stay distinct from them too.
 - **Provenance:** provenance eid variables are ordinary eid variables, so `SparqlOptions::provenance` reports the same eids on both routes.
+
+A triangle `(a)-[:knows]->(b)-[:knows]->(c)-[:knows]->(a)` as the operator runs it: three sorted in-memory access paths, one per pattern, and a leapfrog intersection per variable.
+
+```plantuml
+@startuml lftj-join
+skinparam shadowing false
+participant "tm_lftj(spec)" as OP
+participant "P1 (a, b)" as P1
+participant "P2 (b, c)" as P2
+participant "P3 (a, c)" as P3
+database "triple" as T
+
+OP -> T : per pattern: scan SQL (constants, own view,\ncanonical eid) ORDER BY join order
+T --> OP : rows
+OP -> OP : load P1, P2, P3 as sorted arrays\n(any empty → no rows)
+loop leapfrog on a over P1, P3
+  OP -> P1 : gallop seek(a ≥ max)
+  OP -> P3 : gallop seek(a ≥ max)
+  loop leapfrog on b over P1, P2 (a fixed)
+    OP -> P1 : seek(b)
+    OP -> P2 : seek(b)
+    loop leapfrog on c over P2, P3 (a, b fixed)
+      OP -> P2 : seek(c)
+      OP -> P3 : seek(c)
+      OP -> OP : drop if isomorphism pair equal,\nelse emit (a, b, c, eids)
+    end
+  end
+  OP -> OP : budget::poll() on every step
+end
+OP --> OP : materialised rows c0 … c31 to SQLite
+@enduml
+```
 
 #### Budgets And Limits
 
@@ -435,6 +552,32 @@ The option is [[crates/tm-ir/src/path.rs#TemporalPath]] on a `PathPattern`: a st
 - **Row shapes:** without `tm:arrival` or `ARRIVAL AS` the rows have exactly the columns of the same query without the modifier; only the matches change.
 - **Errors:** grammar mistakes are `Parse` before anything runs; the state guard still fails with `PathLimitExceeded` rather than return a prefix ([[query#Physical Planning#Path Engine#Path Completeness]]).
 
+Both syntaxes end in the same IR field and the same native search; only the mode differs (`REACH` for SPARQL, `TRAIL` or shortest for Cypher).
+
+```plantuml
+@startuml temporal-path-lowering
+skinparam componentStyle rectangle
+skinparam shadowing false
+[SPARQL\nSERVICE <urn:tiramemsu:tm:timeRespecting/start>\n{ path . ?end tm:arrival ?t }] as SQ
+[Cypher\nMATCH TIME RESPECTING AFTER x\nARRIVAL AS t] as CY
+[tm-sparql lowering\n(temporal_scope)] as SL
+[tm-cypher pre-pass + check\n(span-preserving)] as CL
+[PathPattern\n+ TemporalPath { after, arrival }] as PP
+[planner (orient):\nstart must be bound] as OR
+[tm_path(start, path, mode, max_hops,\n"view;timeRespecting/ms", graphs)] as TP
+[PathEngine time-respecting search\n(REACH: earliest arrival,\nTRAIL / shortest: per row)] as PE
+[rows + arrival column\n+ PathCompleteness] as OUT
+SQ --> SL
+CY --> CL
+SL --> PP : REACH
+CL --> PP : TRAIL / shortest
+PP --> OR
+OR --> TP
+TP --> PE
+PE --> OUT
+@enduml
+```
+
 ### SPARQL Temporal Paths
 
 A `SERVICE` IRI under `urn:tiramemsu:tm:` names the modifier; every path in its group is time-respecting, and `?end tm:arrival ?t` binds an arrival. The grammar of the IRI and the pattern is below.
@@ -497,6 +640,27 @@ An opt-in session for large loads: chunks commit as ordinary transactions under 
 - **Progress:** `ImportProgress` counts committed chunks, rejected chunks, asserted, existing and retracted rows, every chunk's `TxId`, chunk time and maintenance time.
 - **Failure and interruption:** `finish` never fails. A failed analysis is `ImportSummary::maintenance_error` beside the committed chunks. `cancel` or drop only releases the lease, never analyses, and leaves `Db::statistics_due` true. The next ordinary commit then runs the upkeep, and stale statistics only slow plans.
 
+A session moves through these states; ordinary transactions see only the lease.
+
+```plantuml
+@startuml bulk-import
+skinparam shadowing false
+[*] --> Leased : Db::bulk_import\n(lease taken, else ImportInProgress)
+state Leased {
+  [*] --> Idle
+  Idle --> Chunk : chunk(f)
+  Chunk --> Idle : commit\n(statistics marked due, no ANALYZE)
+  Chunk --> Idle : error\n(chunk rolled back, rejected += 1)
+}
+Leased : other writes and sessions → ImportInProgress
+Leased : readers see the last committed chunk
+Leased --> Finished : finish()\none full ANALYZE + reader refresh
+Leased --> Released : cancel() or drop\nno ANALYZE
+Finished --> [*] : ImportSummary\n(maintenance_error if ANALYZE failed)
+Released --> [*] : statistics_due stays true;\nnext ordinary commit analyses
+@enduml
+```
+
 ## Query Budgets
 
 An opt-in budget bounds one operation: how long it waits for a reader, how long it runs, and how much it decodes. Without one every call behaves as before.
@@ -510,6 +674,43 @@ A [[crates/tiramemsu/src/budget.rs#QueryBudget]] has five independent fields: `t
 - **Writes:** the stop conditions cover waiting for the writer and every statement of the body; the facade checks them once more when the body returns, then removes the interrupt so bookkeeping and `COMMIT` run uninterrupted. A stopped write rolls back like any failed transaction: no statement, term, event or `tx` row.
 - **Result budgets:** the engine charges each SQL row as it streams and each decoded row's bytes (8 per cell plus the UTF-8 length of every string) in [[crates/tm-exec/src/exec.rs#run]]; `View::path`, `triples`, `events_since` and the other list reads charge their rows. Past `max_rows` or `max_bytes` the operation fails with `ResultLimitExceeded { limit }`; no prefix is ever returned as a result.
 
+One budgeted read, from the facade call to the typed error. A write follows the same path on the writer, and any stop before `COMMIT` rolls it back.
+
+```plantuml
+@startuml budget-operation
+skinparam shadowing false
+actor Caller
+participant "View\n(with_budget)" as V
+participant "budget::Meter\n(thread-local)" as M
+participant "Reader pool" as P
+participant "Executor\n(tm-rusqlite)" as E
+participant "tm-exec\n(SQL, tm_path, tm_lftj)" as X
+database SQLite as S
+
+Caller -> V : sparql(q)
+V -> M : scope(meter): deadline starts
+V -> P : acquire()
+alt no reader before reader_timeout / deadline / cancel
+  P --> V : PoolTimeout | DeadlineExceeded | Cancelled
+else reader free
+  P -> E : set_interrupt(Some(interrupt))
+  E -> S : progress handler every 1000 VM steps
+  V -> X : execute plan in one read snapshot
+  loop rows and native work
+    X -> M : charge_rows / charge_bytes
+    X -> M : poll() in path frontier and LFTJ joins
+    S -> E : handler: interrupt.tripped()?
+  end
+  alt limit, deadline or cancel
+    X --> V : ResultLimitExceeded | DeadlineExceeded | Cancelled\n(no partial rows)
+  else complete
+    X --> V : rows
+  end
+  P -> E : set_interrupt(None), end snapshot, return reader
+end
+V --> Caller : result or typed error
+@enduml
+```
 
 ## Text Recall
 
@@ -522,6 +723,35 @@ One logical operation, [[crates/tm-core/src/text.rs#search]], serves every surfa
 - **Evidence** is read in the same view: the largest numeric object of the confidence predicate (`v:confidence` unless the query names another) or `None`, the count of `sys:confirmedBy`, the distinct `sys:author`s of the asserting and confirming transactions, and `t_add` with its instant. An absent layer is reported as absent, never estimated.
 - **Ranking policy** `tiramemsu-text-rank/1`: lexical score (negated bm25) descending, confidence descending with absent last, confirmations, authors, `added_at` (newer first), and statement eid ascending as the final tie-break. Each hit carries its 1-based `rank`; `limit` cuts after ranking.
 - **Errors:** `MissingCapability("fts5")` on a host without FTS5, while every other read and write still works; `TextIndexUnavailable` when the index was never built or is behind.
+
+The three surfaces meet in one function. The FTS5 match runs first as a materialised candidate set; the view, graph and predicate filters are joins on `triple`; evidence and ranking happen in Rust after the SQL.
+
+```plantuml
+@startuml text-recall
+skinparam shadowing false
+participant "View::text_search\n(Rust, bridge, MCP)" as RUST
+participant "SPARQL\n?e tm:textMatch '…'" as SPARQL
+participant "Cypher\nCALL tiramemsu.text.search" as CYPHER
+participant "IR TextPattern\n→ tm_text(query, mode,\nview, graphs, limit)" as TVF
+participant "tm_core::text::search" as SEARCH
+database "term_fts (FTS5)" as FTS
+database "triple · tx" as TRIPLE
+
+SPARQL -> TVF : lower tm:text* group
+CYPHER -> TVF : lower procedure\njoined with its statement
+TVF -> SEARCH : same snapshot\n(calling connection)
+RUST -> SEARCH : one snapshot, budgeted
+SEARCH -> SEARCH : check_available\n(fts5, index built and current)
+SEARCH -> SEARCH : match_expression\n(quoted words, mode, prefix *)
+SEARCH -> FTS : candidates: rowid = value ObjectId,\nbm25 score
+SEARCH -> TRIPLE : join t.o = value\n+ scan_predicates(view)\n+ predicates + graph EXISTS
+TRIPLE --> SEARCH : visible statements
+SEARCH -> TRIPLE : evidence in the same view:\nconfidence, confirmedBy, authors, t_add
+SEARCH -> SEARCH : sort by tiramemsu-text-rank/1,\nassign rank, apply limit, charge budget
+SEARCH --> RUST : TextHit list
+SEARCH --> TVF : rows (eid, score, rank, confidence)
+@enduml
+```
 
 ```sparql
 SELECT ?e ?score ?c ?s ?o WHERE {
@@ -551,6 +781,43 @@ A read that shows disagreement instead of hiding it: subject/predicate pairs of 
 - **Views:** now, as-of (a disagreement memory held then) and valid-time views; the history view is `Unsupported`, because it mixes statements that were never believed together. Filters are `subject`, `predicate` and `limit`.
 - **Read-only:** inspection never retracts, supersedes or confirms; resolving is an explicit write chosen by the caller (`supersede`, `retract`, `confirm` or a new assertion). Inside `Db::with` it sees the speculative statements.
 
+A typical review: inspect conflicts on a reader, preview the bundle that would settle them as a dry run on the writer, then apply it in a later, ordinary transaction that validates again ([[data-model#Fact Bundles#Import Preview]]).
+
+```plantuml
+@startuml conflict-review
+skinparam shadowing false
+actor Agent
+participant "View / Db\n(facade)" as F
+participant "tm_core::conflict::inspect" as C
+participant "Writer\n(dry_run tx)" as W
+database "SQLite" as S
+
+Agent -> F : conflicts(ConflictQuery) on a view
+F -> C : one snapshot, budgeted
+C -> S : self-join: same s, p; other o;\noverlapping valid intervals
+C -> S : evidence per statement:\nconfidence, confirmedBy, authors, sources
+C --> Agent : Conflict list (overlaps, values, evidence)\nnothing ranked or chosen
+
+Agent -> F : preview_bundle(bundle)
+F -> F : bundle.check()\n(malformed → InvalidTerm, writer not taken)
+F -> W : transact(dry_run) { import_bundle }
+W -> S : BEGIN IMMEDIATE, full import semantics
+W -> S : ROLLBACK; re-apply advanced id counters
+W --> F : ImportReport or schema failure,\nIdUsage (burned ids), t, instant
+F --> Agent : BundlePreview { import, report, failure,\nburned, scope { basis = t − 1, t, instant } }
+
+... later, after the agent decides ...
+Agent -> F : transact { import_bundle(bundle) }
+F -> W : ordinary transaction
+W -> S : revalidate against the current state
+alt valid now
+  W --> Agent : TxReport (committed)
+else violates a rule now
+  W --> Agent : typed error (e.g. UniqueViolation), nothing written
+end
+@enduml
+```
+
 ## Saved Answers
 
 A saved answer stores a query with its parameters, view and last result, and turns later events into conservative `recheck` and `stale` marks, so an agent knows when a remembered answer can no longer be trusted.
@@ -563,4 +830,27 @@ The facade API is in [[crates/tiramemsu/src/saved.rs]]: `Db::save_answer(name, &
 - **Checkpoint and cursor:** both start at the `last_t` read before the evaluation, so a commit racing the evaluation is re-processed, never skipped. The checkpoint is the state the result reflects; the cursor is how far the log was processed.
 - **Invalidation** (`check_saved_answers`, one derived write): for each answer with `mutableView`, the first retraction in `(cursor, head]` of a cited statement makes it `Stale` with that event (explicit, cascade, supersede or cardinality); otherwise the first event of any kind, or a transaction without events (volatile values), makes a fresh answer `Recheck`. Relevance is never analysed: any insertion may add a row, satisfy a `NOT EXISTS` or fill an `OPTIONAL`. Without `mutableView` events are ignored; `clock` still makes a fresh answer `Recheck` once the clock has moved.
 - **Replayable:** marks only move towards `Stale`, the cursor and the marks commit together, and the result is a function of status, cursor and log. A crash before commit replays the same range to the same marks, and a processed range is never seen again, so every `Invalidation` is reported once.
-- **Refresh:** only a successful re-run sets `Fresh`, replaces result, dependencies and coverage, advances checkpoint and cursor and increments `revision`. A failed one (an error, cancellation, a deadline) processes pending events, records `error`, and keeps the old result, status and checkpoint.
+- **Refresh:** only a successful re-run sets `Fresh`, replaces result, dependencies and coverage, advances checkpoint and cursor and increments `revision`. A failed one (an error, cancellation, a deadline) processes pending events, records `error`, and keeps the old result, status and checkpoint. If the name was saved anew while the refresh ran, the new record wins and the refresh result is dropped.
+- **Causes:** an `Invalidation` names its `InvalidationCause`: `supportRetracted` (to `Stale`), or `insertion`, `retraction`, `transaction` and `clock` (to `Recheck`), with the event's `t` and eid.
+
+The status is a small state machine. Marks are set only by `check_saved_answers` (or the event processing inside a failed refresh), and only a successful refresh clears them.
+
+```plantuml
+@startuml saved-answer-status
+skinparam shadowing false
+[*] --> Fresh : save_answer\n(run with provenance,\ncheckpoint = cursor = last_t)
+Fresh --> Recheck : check: any event or tx\n(mutableView), or clock moved (clock)
+Fresh --> Stale : check: cited statement retracted\n(mutableView)
+Recheck --> Stale : check: cited statement retracted\n(mutableView)
+Fresh --> Fresh : check: fixed historical view,\nno clock reason (events ignored)
+Recheck --> Fresh : refresh succeeds
+Stale --> Fresh : refresh succeeds
+Recheck --> Recheck : refresh fails\n(error recorded, old result kept)
+Stale --> Stale : refresh fails
+Fresh --> [*] : delete_saved_answer
+Recheck --> [*] : delete_saved_answer
+Stale --> [*] : delete_saved_answer
+@enduml
+```
+
+A fixed historical view is an as-of point already in the past with no other coverage reason: its result depends only on immutable history, so no event can change it ([[time-model#Never Forget]]).
