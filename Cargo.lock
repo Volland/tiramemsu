@@ -1549,7 +1549,7 @@ dependencies = [
 
 [[package]]
 name = "tiramemsu"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "criterion",
  "lru",
@@ -1571,7 +1571,7 @@ dependencies = [
 
 [[package]]
 name = "tiramemsu-json"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "serde_json",
  "tempfile",
@@ -1580,7 +1580,7 @@ dependencies = [
 
 [[package]]
 name = "tiramemsu-mcp"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "serde_json",
  "tempfile",
@@ -1590,7 +1590,7 @@ dependencies = [
 
 [[package]]
 name = "tiramemsu-node"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "napi",
  "napi-build",
@@ -1601,7 +1601,7 @@ dependencies = [
 
 [[package]]
 name = "tiramemsu-python"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "pyo3",
  "pyo3-build-config",
@@ -1611,7 +1611,7 @@ dependencies = [
 
 [[package]]
 name = "tiramemsu-wasm"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "getrandom 0.3.4",
  "js-sys",
@@ -1627,7 +1627,7 @@ dependencies = [
 
 [[package]]
 name = "tm-core"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "lru",
  "proptest",
@@ -1639,7 +1639,7 @@ dependencies = [
 
 [[package]]
 name = "tm-cypher"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "chrono",
  "chrono-tz",
@@ -1656,7 +1656,7 @@ dependencies = [
 
 [[package]]
 name = "tm-exec"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "insta",
  "lru",
@@ -1672,7 +1672,7 @@ dependencies = [
 
 [[package]]
 name = "tm-ir"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "insta",
  "tm-core",
@@ -1680,7 +1680,7 @@ dependencies = [
 
 [[package]]
 name = "tm-rusqlite"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "rusqlite",
  "tempfile",
@@ -1689,7 +1689,7 @@ dependencies = [
 
 [[package]]
 name = "tm-sparql"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "insta",
  "oxttl",
@@ -1706,7 +1706,7 @@ dependencies = [
 
 [[package]]
 name = "tm-wasm"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "getrandom 0.3.4",
  "js-sys",

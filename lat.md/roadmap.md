@@ -22,7 +22,7 @@ Six smaller changes built on M0–M3 add the layer features of [[recipes]]: `add
 
 M7 exists because recall by text or embedding, not by graph pattern, is how agents usually query their memory. Ranking by support is part of it: a hit can be ordered by its confidence layers, its `sys:confirmedBy` count, the number of distinct transaction authors behind it and its `tm:addedAt`, all of which the store already holds ([[recipes]]). oxilite's design (index definitions stored as data, tables kept current by triggers, one k-NN statement per query) is the template ([[prior-art#oxilite]]).
 
-Status as of 0.3.0: M0–M5 are done, M4 as an opt-in operator; M7 has its text half done; M6 and the vector half of M7 are future work.
+Status as of 0.4.0: M0–M5 are done, M4 as an opt-in operator; M7 has its text half done; M6 and the vector half of M7 are future work. 0.4.0 adds the conformance repairs of [[overview#Formal Model]] and storage format 4.
 
 ```plantuml
 @startuml milestones

@@ -384,10 +384,10 @@ claude mcp add tiramemsu-ro -- tiramemsu-mcp --db ./memory.db --read-only --time
 <p><strong>What it is.</strong> The Rust crate <code>tiramemsu</code> now has Cargo features. <code>exec</code> is the shared query engine: the IR, the planner, the path engine and the cyclic-join operator. <code>sparql</code> and <code>cypher</code> are the two front ends, and each one brings in <code>exec</code>. The default build has both, as before. With <code>default-features = false</code> you get the core tier: transactions, speculation, the <code>now</code>, <code>as_of</code> and <code>history</code> views, <code>triples</code>, dependents, fact bundles, bundle previews, conflict review, text recall, bulk import and query budgets, with no parser at all.</p>
 <p><strong>Why an agent wants it.</strong> An agent that only writes facts and reads them back by pattern or by words does not need two query parsers in its binary. A smaller build compiles faster and has less code to audit.</p>
 <pre><code><span class="c"># Cargo.toml: core only, no query engine and no parser</span>
-tiramemsu = { version = "0.3", default-features = false }
+tiramemsu = { version = "0.4", default-features = false }
 
 <span class="c"># SPARQL and paths, no Cypher parser</span>
-tiramemsu = { version = "0.3", default-features = false, features = ["sparql"] }</code></pre>
+tiramemsu = { version = "0.4", default-features = false, features = ["sparql"] }</code></pre>
 <p><strong>Limits.</strong> A disabled API is missing at compile time, not an error at run time. Saved answers need both front ends. Build <code>OpenOptions</code> with <code>..OpenOptions::default()</code>, because its query-engine fields exist only with <code>exec</code>. The file format does not depend on the features: a file written by a core-only build opens in a full build, and the other way round. The JSON bridge, the MCP server and the Node and Python packages always use the full build.</p>
 <div class="note"><strong>Migrating from 0.2.</strong> <code>default-features = false</code> used to build both front ends anyway, and the <code>sparql</code> feature only switched on a test suite. Now it means the core tier. If you declared the dependency with <code>default-features = false</code> and use SPARQL, Cypher or paths, add <code>features = ["sparql", "cypher"]</code> (or the one you use). If you kept the defaults, nothing changes.</div>
 
@@ -404,6 +404,9 @@ db.call(<span class="s">"sparql"</span>, JSON.stringify({ view: { kind: <span cl
 <span class="k">const</span> bytes = db.exportFile();   <span class="c">// opens natively with tiramemsu</span></code></pre>
 <p>The calls are the JSON bridge that the Node.js and Python packages use, so the operations and error codes are the same. The <a href="https://github.com/Volland/tiramemsu/tree/main/bindings/wasm">binding README</a> has the full worker and page code and the build steps.</p>
 <p><strong>Limits.</strong> The browser package is built from the repository; it is not on npm yet. The runtime has no WAL and no shared memory, so the host uses a rollback journal and one connection, and asking for WAL fails at open instead of quietly falling back. STAT4 is not compiled in, so opening a non-empty file runs a full <code>ANALYZE</code>. Query budgets and bulk import sessions are refused in the browser. The <code>.wasm</code> file is about 11 MB before <code>wasm-opt</code>.</p>
+
+<h2>Since 0.3: version 0.4.0</h2>
+<p>0.4.0 adds the integrity repairs described in <a href="../paper/">the paper</a>. Writes that point at a retracted or never-allocated statement are refused. A correction no longer replays the layers of memberships it drops. Triggers in the file check that every statement date names the transaction that is writing it. Those triggers are storage format 4. A file opened by 0.4.0 migrates to format 4 without rewriting any history, and 0.3.0 cannot open it afterwards. Nothing else in this page changes.</p>
 
 <h2>Still to come</h2>
 <p>The crates are on crates.io and the Python package is on PyPI. The Node.js package and the browser package are built and tested but not on npm yet. Vector search, crypto-shredding and a network server are on the <a href="https://github.com/Volland/tiramemsu/blob/main/lat.md/roadmap.md">roadmap</a>.</p>

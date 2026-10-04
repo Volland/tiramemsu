@@ -42,7 +42,7 @@
 
 <h2>Status</h2>
 <p>This is a draft preprint, prepared for arXiv (primary category cs.DB) but not yet submitted. It has not been peer reviewed. The source, the bibliography, a retained verification artifact and the arXiv upload package are in the <a href="https://github.com/Volland/tiramemsu/tree/main/paper">repository</a>.</p>
-<div class="note"><strong>Paper and engine.</strong> Checking the engine against the paper found gaps where it did not meet the paper's assumptions. Revision 4 describes repairs for them: writes that require live statement endpoints, corrections that drop the layers of dropped memberships, and transaction-date guards. Those repairs are <em>not</em> in the released tiramemsu 0.3.0. They will ship in a later release. Until then, the companion article lists what the released engine does not yet guarantee, and the ground core of a view is always a grounded reading.</div>
+<div class="note"><strong>Paper and engine.</strong> Checking the engine against the paper found gaps where it did not meet the paper's assumptions. Revision 4 describes repairs for them: writes that require live statement endpoints, corrections that drop the layers of dropped memberships, and transaction-date guards. Those repairs shipped in tiramemsu 0.4.0, with the date guards as storage format 4. A file opened by 0.4.0 migrates to format 4 and no longer opens in 0.3.0. On 0.3.0 and earlier, the companion article lists what the engine does not guarantee, and the ground core of a view is always a grounded reading.</div>
 
 <h2>Cite</h2>
 <pre><code>@misc{pavlyshyn2026layered,

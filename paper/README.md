@@ -12,7 +12,7 @@ The original `layered-bitemporal-graphs.pdf` remains the revision-1 build. The r
 
 Revision 2 remains available in revisions/v2, with its review.
 
-**Engine status.** Revision 4 describes conformance repairs (live statement endpoints, closed retention on correction, transaction-date guards in a storage format) that are not in the released engine: tiramemsu 0.3.0 uses format 3 for saved answers and still has the gaps that revision 3 reported. The repairs will ship in a later release, with their own format number.
+**Engine status.** Revision 4 describes conformance repairs (live statement endpoints, closed retention on correction, transaction-date guards in a storage format) that shipped in tiramemsu 0.4.0. The date guards are storage format 4 (format 3 holds the saved-answer tables), and a file migrated to format 4 no longer opens in 0.3.0. Version 0.3.0 and earlier still have the gaps that revision 3 reported.
 
 ## Build and verification
 

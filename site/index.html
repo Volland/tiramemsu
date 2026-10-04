@@ -205,7 +205,7 @@ claude mcp add tiramemsu -- tiramemsu-mcp --db ./memory.db --text-index</code></
   <h2>Where it stands</h2>
   <p class="sub">Tiramemsu is new: designed in September 2026 and implemented in one pass. Here is what is measured, and what is not.</p>
   <div class="grid">
-    <div class="card"><h3>88 000 lines of Rust</h3><p>Nine crates plus four bindings, 1 297 tests, 48 capability specs written before the code (OpenSpec) and a design graph kept in sync (lat.md).</p></div>
+    <div class="card"><h3>88 000 lines of Rust</h3><p>Nine crates plus four bindings, 1 311 tests, 48 capability specs written before the code (OpenSpec) and a design graph kept in sync (lat.md).</p></div>
     <div class="card"><h3>SPARQL</h3><p>634 of 781 in-scope W3C tests pass (66 more are skipped: named-graph data, unsupported formats). Every failing one is listed with a reason, and an unexpected result fails the build.</p></div>
     <div class="card"><h3>Cypher</h3><p>2 615 of 3 880 openCypher TCK scenarios (67 %). Temporal types, <code>CALL</code> and a few dual-view cases are deferred and listed.</p></div>
     <div class="card"><h3>Speed</h3><p>Raw SQLite lookups on its schema take about 4 µs at 11 million statements. Statements cost about 150 bytes each with all indexes. <a href="articles/tiramemsu-vs-oxilite.html#numbers">Details and caveats</a>.</p></div>

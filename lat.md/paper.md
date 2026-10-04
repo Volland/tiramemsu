@@ -20,7 +20,7 @@ The revision-4 submission folder is kept to four files: upload ZIP, metadata tex
 
 The original `layered-bitemporal-graphs.pdf` is the revision-1 build. The revision-4 build is the arXiv preview PDF, which the website serves. Review reports and earlier revision folders are kept outside the repository, so the paper's notes name them without linking.
 
-Revision 4 describes conformance repairs (live statement endpoints, closed retention on correction, transaction-date guards) that the released engine 0.3.0 does not contain. The paper README, the paper page and the companion article state this, and must be updated when the repairs ship.
+Revision 4 describes conformance repairs (live statement endpoints, closed retention on correction, transaction-date guards) that shipped in 0.4.0, with the date guards as storage format 4. The paper README, the paper page and the companion article say which release has them.
 
 ## Website Page
 

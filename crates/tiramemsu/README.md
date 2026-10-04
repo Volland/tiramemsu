@@ -32,9 +32,9 @@ The default build is the full facade. The query engine and each query front end 
 
 ```toml
 # core only: transactions, views, bundles, text recall; no query engine, no parser
-tiramemsu = { version = "0.3", default-features = false }
+tiramemsu = { version = "0.4", default-features = false }
 # SPARQL and paths, no Cypher parser
-tiramemsu = { version = "0.3", default-features = false, features = ["sparql"] }
+tiramemsu = { version = "0.4", default-features = false, features = ["sparql"] }
 ```
 
 A disabled API is absent, not a runtime error. The file format does not depend on the features: a file written by a core-only build opens in a default build and the reverse, with the same statements and temporal semantics. Build `OpenOptions` with `..OpenOptions::default()`, because its query-engine fields exist only with `exec`. The JSON bridge, the MCP server and the Node and Python bindings always enable the full facade.
