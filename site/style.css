@@ -118,3 +118,17 @@ article.legal p { margin: 0 0 12px; }
 .tabs > input:nth-of-type(1):checked ~ .panel:nth-of-type(1), .tabs > input:nth-of-type(2):checked ~ .panel:nth-of-type(2),
 .tabs > input:nth-of-type(3):checked ~ .panel:nth-of-type(3), .tabs > input:nth-of-type(4):checked ~ .panel:nth-of-type(4) { display: block; }
 .toc { columns: 2 240px; padding-left: 20px; }
+/* Home: "New in 0.3" strip and feature groups. */
+section.new { background: var(--bg-soft); }
+.hl { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 10px; }
+.hl a { display: block; height: 100%; padding: 10px 14px; border: 1px solid var(--line); border-left: 4px solid var(--pink);
+  border-radius: 0 10px 10px 0; background: var(--bg); color: var(--ink); text-decoration: none; }
+.hl a:hover { border-color: var(--pink); }
+.hl strong { display: block; font-size: 15.5px; }
+.hl span { display: block; color: var(--muted); font-size: 14px; line-height: 1.45; }
+h3.group { font-size: 19px; margin: 28px 0 12px; }
+h3.group:first-of-type { margin-top: 8px; }
+section > .wrap > p.sub.more { margin: 20px 0 0; }
+/* Diagrams drawn on white: keep them on a light card in both themes. */
+.diagram { background: #fff; border: 1px solid var(--line); border-radius: 14px; padding: 14px; }
+.diagram img { display: block; margin: 0 auto; }

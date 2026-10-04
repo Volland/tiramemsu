@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>How tiramemsu is built: tiramemsu</title>
+<meta name="description" content="One diagram of tiramemsu's layers, from the SPARQL, Cypher and Rust front ends down to one SQLite file, and the four ways to use it: Rust, Node.js and Python, MCP and the browser.">
+<link rel="icon" href="../assets/logo.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+<header class="top"><div class="wrap">
+  <a class="brand" href="../"><img src="../assets/logo.svg" alt="">Tiramemsu</a>
+  <nav class="menu"><a href="../#features">Features</a><a href="../#start">Quick start</a><a href="./" aria-current="page">Articles</a><a href="https://github.com/Volland/tiramemsu">GitHub</a></nav>
+</div></header>
+
+<article class="post">
+<h1>How tiramemsu is built</h1>
+<p class="meta">Tiramemsu guide · 4 October 2026</p>
+
+<p>Tiramemsu is a library, not a server. It is a stack of layers over one SQLite file. Each layer uses only the layer below it, and time is resolved in exactly one place. This page shows the whole stack in one picture and says what each layer does.</p>
+
+<figure>
+  <div class="diagram"><a href="../assets/architecture-layers.svg"><img src="../assets/architecture-layers.svg" alt="Layer diagram. Front ends (SPARQL, Cypher, Rust API) feed one IR algebra. Agent memory services (budget meter, saved answers, conflict review and bundle preview, bulk import) sit beside the Rust API. The planner routes the IR to SQL codegen, the path operator tm_path, the LFTJ operator tm_lftj and text recall tm_text. These read through the temporal view in the core, next to the tx engine, text upkeep and the term dictionary. The core talks to an executor trait, implemented by tm-rusqlite and tm-wasm, which both use one SQLite file with graph tables and derived tables." width="1069" height="1397"></a></div>
+  <figcaption>The layers, top to bottom. Solid arrows are calls; dashed arrows are the budget meter and the executor trait. Open the image for full size. Drawn from the <code>layers</code> diagram in <a href="https://github.com/Volland/tiramemsu/blob/main/lat.md/architecture.md#layers">lat.md/architecture.md</a>.</figcaption>
+</figure>
+
+<h2>The layers</h2>
+
+<p><strong>Front ends.</strong> SPARQL and Cypher are parsed into one logical IR, so both languages mean the same thing over the same store. The Rust API (<code>Db</code>, <code>View</code>, <code>Tx</code>) can build IR too, and it is also the way in for writes.</p>
+
+<p><strong>Agent memory services.</strong> The 0.3 features live in the facade, beside the Rust API. They add no new storage path. The budget meter can stop any layer below it. Saved answers re-run their query and compare what it cited. Conflict review and import previews run a transaction that is never committed. Bulk import feeds the tx engine in chunks while it holds the write lease.</p>
+
+<p><strong>Logical IR.</strong> One small algebra: basic graph patterns, joins, optional joins, filters, unions, aggregates, paths and text matches. Each pattern can carry its own view, so one query can mix “now” and “as of last week”.</p>
+
+<p><strong>Physical operators.</strong> The planner turns most of the IR into SQL. Some work SQL does badly, so it goes to native operators instead: <code>tm_path</code> for reachability and shortest paths, <code>tm_lftj</code> (opt-in) for cyclic patterns such as triangles, and <code>tm_text</code> for text recall. All three are SQLite table functions, so SQL can call them too.</p>
+
+<p><strong>Core.</strong> The tx engine asserts, retracts and supersedes statements, and checks cardinality and uniqueness. It never deletes. The temporal view is the one place that turns “now”, “as of”, “valid at” or “history” into conditions on the rows; every operator reads through it. The core also keeps the full-text index up to date and maps terms to compact ids.</p>
+
+<p><strong>Executor and hosts.</strong> The core reaches SQLite through a small trait: prepared statements, transactions, savepoints and a stable snapshot. <code>tm-rusqlite</code> implements it with bundled SQLite and WAL. <code>tm-wasm</code> implements it on SQLite compiled to WebAssembly. A host says what else it can do, and the engine refuses to start rather than quietly do less.</p>
+
+<p><strong>One SQLite file.</strong> The graph is a term dictionary, a transaction log and one triple table with its indexes. Next to it sit derived tables: the text index and the saved answers. They are not history, and they can always be rebuilt from the graph.</p>
+
+<h2>Four ways in</h2>
+
+<figure>
+  <div class="diagram"><a href="../assets/architecture-deployment.svg"><img src="../assets/architecture-deployment.svg" alt="Deployment diagram. In a native process, a Rust app calls the tiramemsu facade directly, and a Node.js or Python app goes through its addon and the JSON bridge; the facade uses tm-rusqlite on the memory file. An LLM app talks to a separate tiramemsu-mcp process over stdin and stdout. In a browser, a web page posts messages to a Web Worker running tiramemsu-wasm on tm-wasm, stored in OPFS or memory, which can export and import the same file." width="890" height="840"></a></div>
+  <figcaption>The same engine and the same file format in every host. Drawn from the <code>deployment</code> diagram in <a href="https://github.com/Volland/tiramemsu/blob/main/lat.md/architecture.md#deployment">lat.md/architecture.md</a>.</figcaption>
+</figure>
+
+<ul>
+  <li><strong>Rust.</strong> Link the <code>tiramemsu</code> crate and call <code>Db</code>, <code>View</code> and <code>Tx</code>. Cargo features choose how much of the query engine you link.</li>
+  <li><strong>Node.js and Python.</strong> Native addons call the JSON bridge in the same process. See the <a href="../#start">quick start</a>.</li>
+  <li><strong>Agents over MCP.</strong> An MCP client starts <code>tiramemsu-mcp</code> as a child process and talks to it over stdio. The server owns the file. See <a href="mcp-memory.html">Give your agent a memory over MCP</a>.</li>
+  <li><strong>Browser.</strong> A page talks to a Web Worker that runs the engine on SQLite in WebAssembly, in memory or in OPFS. The file can be exported and opened natively. See <a href="whats-new-0-3.html#wasm">the engine in the browser</a>.</li>
+</ul>
+
+<h2>More detail</h2>
+<p>The design graph in <a href="https://github.com/Volland/tiramemsu/tree/main/lat.md">lat.md</a> has the rest: <a href="https://github.com/Volland/tiramemsu/blob/main/lat.md/architecture.md">architecture</a> (crates, cargo features, the executor, concurrency), <a href="https://github.com/Volland/tiramemsu/blob/main/lat.md/query.md">query</a> (planning, paths, text recall, budgets) and <a href="https://github.com/Volland/tiramemsu/blob/main/lat.md/storage.md">storage</a>. For what each 0.3 feature does, read <a href="whats-new-0-3.html">what’s new in 0.3</a>. For why every fact has an id, read <a href="layered-graphs.html">layered graphs, explained</a>, and for the two clocks, <a href="time-travel.html">time travel and bitemporality</a>.</p>
+
+<p><a href="./">All articles →</a></p>
+</article>
+
+<footer><div class="wrap">
+  <span>Tiramemsu · MIT OR Apache-2.0 · <a href="https://github.com/Volland/tiramemsu">github.com/Volland/tiramemsu</a></span>
+  <span><a href="../">Home</a> · <a href="./">All articles</a></span>
+  <span><a href="../impressum.html">Impressum</a> · <a href="../datenschutz.html">Datenschutz</a> · <a href="../agb.html">AGB</a></span>
+</div></footer>
+</body>
+</html>

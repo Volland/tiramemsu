@@ -25,9 +25,27 @@
   <img src="assets/logo.svg" alt="A brain taking a bite out of a tiramisu whose layers are a graph">
 </div>
 
+<section id="new" class="new"><div class="wrap">
+  <h2>New in 0.3: memory for agents</h2>
+  <p class="sub">Ten features for what an agent does with its memory every day. Most are opt-in, so a store that does not ask for them behaves as before. <a href="articles/whats-new-0-3.html">All of them, with examples →</a></p>
+  <ul class="hl">
+    <li><a href="articles/whats-new-0-3.html#text"><strong>Text recall</strong><span>Find facts by words, each hit with its evidence.</span></a></li>
+    <li><a href="articles/whats-new-0-3.html#mcp"><strong>MCP server</strong><span>Typed memory tools for Claude Code and Claude Desktop.</span></a></li>
+    <li><a href="articles/whats-new-0-3.html#saved"><strong>Saved answers</strong><span>They know when later writes made them stale.</span></a></li>
+    <li><a href="articles/whats-new-0-3.html#conflicts"><strong>Conflict review</strong><span>See where sources disagree, and preview an import.</span></a></li>
+    <li><a href="articles/whats-new-0-3.html#journeys"><strong>Paths in time order</strong><span>Who could have heard it, and when, at the earliest.</span></a></li>
+    <li><a href="articles/whats-new-0-3.html#budgets"><strong>Budgets</strong><span>Deadlines, row limits and cancellation for every call.</span></a></li>
+    <li><a href="articles/whats-new-0-3.html#bulk"><strong>Bulk import</strong><span>Large loads in chunks, statistics once at the end.</span></a></li>
+    <li><a href="articles/whats-new-0-3.html#lftj"><strong>Cyclic joins</strong><span>An opt-in leapfrog triejoin for triangle patterns.</span></a></li>
+    <li><a href="articles/whats-new-0-3.html#wasm"><strong>In the browser</strong><span>The same engine and file format in a Web Worker.</span></a></li>
+    <li><a href="articles/whats-new-0-3.html#cargo-features"><strong>Optional front ends</strong><span>Embed the store without the query parsers.</span></a></li>
+  </ul>
+</div></section>
+
 <section id="features"><div class="wrap">
   <h2>What it does</h2>
   <p class="sub">A small Rust core over one SQLite file. Two query languages, one store, exact answers to “what did we know, and when?”.</p>
+  <h3 class="group">The core: layers, time and two query languages</h3>
   <div class="grid">
     <div class="card"><span class="tag">Layers</span><h3>Every fact has an id</h3><p>A statement is a row with its own id, so it can be the subject or object of other statements. Provenance, confidence and beliefs stack to any depth.</p></div>
     <div class="card"><span class="tag">Time</span><h3>Bitemporal, forever</h3><p>Transaction time records when the database learned or dropped a fact. Valid time records when it held in the world. <code>as_of</code>, <code>history</code> and <code>valid_at</code> views, per query or per pattern.</p></div>
@@ -38,6 +56,9 @@
     <div class="card"><span class="tag">Graphs</span><h3>Named graphs as tags</h3><p>A graph is a node, or a statement, and membership is one more layer statement. <code>GRAPH</code>, <code>FROM</code> and <code>WITH</code> work with no new column or table.</p></div>
     <div class="card"><span class="tag">Metagraphs</span><h3>Edges that hold graphs</h3><p>An edge is a node, and a node or an edge can hold a subgraph. Nest them, fold and unfold them, and ask how the structure looked last week. <a href="articles/metagraphs.html">Read more</a>.</p></div>
     <div class="card"><span class="tag">Embedded</span><h3>One file, one crate</h3><p>Rust library over bundled SQLite (WAL, STRICT). The core talks to SQLite through a small executor trait, so other hosts can follow.</p></div>
+  </div>
+  <h3 class="group">For agents: new in 0.3</h3>
+  <div class="grid">
     <div class="card"><span class="tag">Recall</span><h3>Find it by words</h3><p>Text recall over string values, in any view. Each hit comes with its evidence: confidence, confirmations, authors and age, ranked in a fixed, named order. From Rust, SPARQL and Cypher.</p></div>
     <div class="card"><span class="tag">Agents</span><h3>An MCP server</h3><p><code>tiramemsu-mcp</code> serves one memory file to Claude Code or Claude Desktop as typed tools. Queries only read, every call has a budget, and answers say which statements back them.</p></div>
     <div class="card"><span class="tag">Recheck</span><h3>Answers that know they are stale</h3><p>Save a query with the statements it cited. Later writes mark it <code>stale</code> or <code>recheck</code>, each mark once, and only a successful refresh makes it fresh again.</p></div>
@@ -46,8 +67,10 @@
     <div class="card"><span class="tag">Budgets</span><h3>Deadlines and cancellation</h3><p>Bound a call by time, rows, bytes or the wait for a reader, or cancel it. Over a limit is a typed error, never a silent prefix, and a stopped write leaves no trace.</p></div>
     <div class="card"><span class="tag">Bulk</span><h3>Large loads in chunks</h3><p>A bulk import session commits in chunks, holds the write lease, and refreshes planner statistics once at the end instead of after every big commit.</p></div>
     <div class="card"><span class="tag">Joins</span><h3>Leapfrog triejoin for cycles</h3><p>An opt-in native operator for triangle-shaped patterns, with <code>explain</code> saying which route ran and why. Up to 12× faster on a small hub-and-spoke benchmark, same counts.</p></div>
+    <div class="card"><span class="tag">Browser</span><h3>The engine in a Web Worker</h3><p>The same engine runs on SQLite compiled to WebAssembly, in memory or in OPFS, and reads and writes the same file format. Built from the repository, not on npm yet.</p></div>
+    <div class="card"><span class="tag">Lean</span><h3>Optional query front ends</h3><p>Turn off default features and the Rust crate links no parser or planner. Transactions, views, text recall and budgets still work.</p></div>
   </div>
-  <p class="sub">New in 0.3: <a href="articles/whats-new-0-3.html">what’s new, with examples in every language →</a></p>
+  <p class="sub more">Every 0.3 feature with examples in every language: <a href="articles/whats-new-0-3.html">what’s new in 0.3 →</a></p>
 </div></section>
 
 <section id="feedback"><div class="wrap">
@@ -75,6 +98,7 @@
   <h2>How it is built</h2>
   <p class="sub">Two front ends compile to one logical IR. Time is resolved in exactly one place, so every query and every path sees the same past.</p>
   <figure><img src="assets/architecture.svg" alt="Architecture: SPARQL, Cypher and the Rust API compile to one IR; a planner and a path engine read through a view-aware scan over one SQLite file" width="760" height="500"></figure>
+  <p><a href="articles/architecture.html">How tiramemsu is built: the full layer diagram, explained →</a></p>
 </div></section>
 
 <section id="start"><div class="wrap">
@@ -197,11 +221,12 @@ claude mcp add tiramemsu -- tiramemsu-mcp --db ./memory.db --text-index</code></
     <li class="card"><h3><a href="articles/layered-graphs.html">Layered graphs, explained</a></h3><p>Why giving every fact an id turns provenance, confidence and beliefs into ordinary queries.</p></li>
     <li class="card"><h3><a href="articles/tiramemsu-vs-oxilite.html">How tiramemsu differs from oxilite</a></h3><p>Same author, same SQLite base, different answers to “what is a statement?”. With a benchmark.</p></li>
     <li class="card"><h3><a href="articles/time-travel.html">Time travel and bitemporality, explained</a></h3><p>Two clocks, when we knew and when it was true, how to query the past in Rust, SPARQL and Cypher, and why an agent wants both.</p></li>
-    <li class="card"><h3><a href="articles/whats-new-0-3.html">What’s new in 0.3</a></h3><p>Nine new features, each with what it is, why an agent wants it, examples in Python, Node.js and Rust, and its limits.</p></li>
+    <li class="card"><h3><a href="articles/whats-new-0-3.html">What’s new in 0.3</a></h3><p>Ten new features, each with what it is, why an agent wants it, examples in Python, Node.js and Rust, and its limits.</p></li>
     <li class="card"><h3><a href="articles/recall-review-recheck.html">Recall, review, recheck</a></h3><p>How an agent’s memory finds things by words, sees where sources disagree, and knows when a saved answer has gone stale.</p></li>
     <li class="card"><h3><a href="articles/mcp-memory.html">Give your agent a memory over MCP</a></h3><p>Setting up tiramemsu-mcp in Claude Code and Claude Desktop: the tools, read-only mode, budgets, provenance coverage and a sample session.</p></li>
     <li class="card"><h3><a href="articles/journeys-in-time.html">Journeys that respect time</a></h3><p>Time-respecting paths in SPARQL and Cypher, earliest arrival, and how a query says whether its paths were complete.</p></li>
     <li class="card"><h3><a href="articles/bounded-queries-bulk-loads.html">Bounded queries and bulk loads</a></h3><p>Budgets, cancellation and result limits, bulk import sessions, and a join operator for cyclic patterns with a small triangle benchmark.</p></li>
+    <li class="card"><h3><a href="articles/architecture.html">How tiramemsu is built</a></h3><p>One diagram of the layers, from the query front ends down to the one SQLite file, and the four ways to use it.</p></li>
   </ul>
 </div></section>
 </main>
