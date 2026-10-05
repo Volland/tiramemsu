@@ -1,0 +1,3 @@
+# Family U: the member relation must be acyclic (a self-member is the length-1 cycle).
+PREFIX mg: <urn:mg:>
+SELECT DISTINCT ?store WHERE { ?e mg:inStore ?store ; mg:member+ ?e . }

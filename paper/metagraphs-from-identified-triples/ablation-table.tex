@@ -1,0 +1,24 @@
+\begin{tabular}{llL{4.6cm}L{5.2cm}}
+\toprule
+Constraint & Image & Requirement & Witness violating only it \\
+\midrule
+(D1) & $\Img{D}$ & role subject is an Edge anchor & a role row whose subject is a Vertex anchor \\
+(D2) & $\Img{D}$ & role object is a Vertex anchor & an in-role whose object is an Edge anchor \\
+(D3) & $\Img{D}$ & each edge has an in role & an edge with only an out role \\
+(D4) & $\Img{D}$ & each edge has an out role & an edge with only an in role \\
+(D5) & $\Img{D}$ & no extra annotation, direction or attribute rows & an attribute row on a Vertex \\
+(H2) & $\Img{HO}$ & no edge is an end of itself & $e$ with an in-role to $e$ itself \\
+(B1) & $\Img{BB}$ & no two edges have equal in/out sets & two edges with equal in and out sets \\
+(U1) & $\Img{U}$ & only member roles & an in-role in a member structure \\
+(U2) & $\Img{U}$ & member sets are nonempty & an edge with no member \\
+(U3) & $\Img{U}$ & member relation is acyclic & $e_0$ a member of $e_1$ and $e_1$ of $e_0$ \\
+(U4) & $\Img{U}$ & member sets are distinct (extensional) & two edges with the same single member \\
+(A1) & $\Img{A}$ & exactly one src per (meta)edge & a metaedge with no src row \\
+(A2) & $\Img{A}$ & exactly one tgt per (meta)edge & an edge with two tgt rows \\
+(A3) & $\Img{A}$ & exactly one direction flag & a metaedge with no direction row \\
+(A4) & $\Img{A}$ & src/tgt objects are Vertex or MetaVertex & a src role to a MetaEdge \\
+(A5) & $\Img{A}$ & membership objects are containers & a membership into a Vertex \\
+(A6) & $\Img{A}$ & membership subject differs from object & a MetaVertex member of itself \\
+(A7) & $\Img{A}$ & attribute keys are not reserved & attribute key \texttt{mg:in} \\
+\bottomrule
+\end{tabular}

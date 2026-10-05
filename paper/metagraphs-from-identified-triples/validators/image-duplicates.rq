@@ -1,0 +1,12 @@
+# All families: two distinct rows with identical (subject, predicate, object) content, or two
+# anchors on one fresh node. Runs on the per-row records, where duplicates stay distinct.
+PREFIX mg: <urn:mg:>
+SELECT DISTINCT ?store WHERE {
+  { ?r1 mg:rowSubject ?s ; mg:rowPredicate ?p ; mg:rowObject ?o ; mg:inStore ?store .
+    ?r2 mg:rowSubject ?s ; mg:rowPredicate ?p ; mg:rowObject ?o ; mg:inStore ?store .
+    FILTER (?r1 != ?r2) }
+  UNION
+  { ?r1 mg:class ?c1 ; mg:rowSubject ?n ; mg:inStore ?store .
+    ?r2 mg:class ?c2 ; mg:rowSubject ?n .
+    FILTER (?r1 != ?r2) }
+}

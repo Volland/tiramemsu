@@ -1,0 +1,9 @@
+# Family U: two distinct Edge anchors of one store with equal member sets.
+PREFIX mg: <urn:mg:>
+SELECT DISTINCT ?store WHERE {
+  ?e1 mg:class mg:Edge ; mg:inStore ?store .
+  ?e2 mg:class mg:Edge ; mg:inStore ?store .
+  FILTER (STR(?e1) < STR(?e2))
+  FILTER NOT EXISTS { ?e1 mg:member ?x . FILTER NOT EXISTS { ?e2 mg:member ?x } }
+  FILTER NOT EXISTS { ?e2 mg:member ?x . FILTER NOT EXISTS { ?e1 mg:member ?x } }
+}

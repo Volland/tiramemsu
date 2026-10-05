@@ -1,0 +1,6 @@
+# Families HO and A: no self-end (e in e / e out e) and no self-membership (x inGraph x).
+PREFIX mg: <urn:mg:>
+SELECT DISTINCT ?store WHERE {
+  VALUES ?p { mg:in mg:out mg:inGraph }
+  ?x ?p ?x ; mg:inStore ?store .
+}

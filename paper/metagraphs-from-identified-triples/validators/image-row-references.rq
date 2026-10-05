@@ -1,0 +1,9 @@
+# All families: reference cycles, self references and dangling row references among rows.
+PREFIX mg: <urn:mg:>
+SELECT DISTINCT ?store WHERE {
+  { ?r mg:inStore ?store ; (mg:rowSubject|mg:rowObject)+ ?r . }
+  UNION
+  { ?r mg:inStore ?store ; (mg:rowSubject|mg:rowObject) ?x .
+    FILTER (STRSTARTS(STR(?x), "urn:row:"))
+    FILTER NOT EXISTS { ?x mg:rowPredicate ?p } }
+}

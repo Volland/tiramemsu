@@ -1,0 +1,85 @@
+@prefix mg:  <urn:mg:> .
+@prefix sh:  <http://www.w3.org/ns/shacl#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+# SHACL core constraints (class, cardinality, role typing) for the five image families
+# over the projected row view. Each row IRI carries rdf:type mg:Row<Family> and the
+# records mg:rowSubject / mg:rowPredicate / mg:rowObject. Anchor rows carry mg:class.
+# Acyclicity, extensionality, duplicates, irreflexivity and row-reference checks are the
+# standalone SPARQL files (*.rq), see README.md.
+
+# ---------- reusable kind tests (used via sh:node on rowSubject / rowObject) ----------
+mg:IsVertex a sh:NodeShape ; sh:property [ sh:path mg:class ; sh:minCount 1 ; sh:hasValue mg:Vertex ] .
+mg:IsEdge   a sh:NodeShape ; sh:property [ sh:path mg:class ; sh:minCount 1 ; sh:hasValue mg:Edge ] .
+mg:IsVertexOrEdge a sh:NodeShape ; sh:property [ sh:path mg:class ; sh:minCount 1 ; sh:in ( mg:Vertex mg:Edge ) ] .
+mg:IsAnchor   a sh:NodeShape ; sh:property [ sh:path mg:class ; sh:minCount 1 ; sh:maxCount 1 ] .
+mg:IsEdgeLike a sh:NodeShape ; sh:property [ sh:path mg:class ; sh:minCount 1 ; sh:in ( mg:Edge mg:MetaEdge ) ] .
+mg:IsVertexLike a sh:NodeShape ; sh:property [ sh:path mg:class ; sh:minCount 1 ; sh:in ( mg:Vertex mg:MetaVertex ) ] .
+mg:IsContainer a sh:NodeShape ; sh:property [ sh:path mg:class ; sh:minCount 1 ; sh:in ( mg:MetaVertex mg:MetaEdge ) ] .
+
+# ---------- premises (which kind of row is this) ----------
+mg:TypePremise    a sh:NodeShape ; sh:property [ sh:path mg:rowPredicate ; sh:hasValue mg:type ] .
+mg:InOutPremise   a sh:NodeShape ; sh:property [ sh:path mg:rowPredicate ; sh:minCount 1 ; sh:in ( mg:in mg:out ) ] .
+mg:MemberPremise  a sh:NodeShape ; sh:property [ sh:path mg:rowPredicate ; sh:hasValue mg:member ] .
+mg:SrcTgtPremise  a sh:NodeShape ; sh:property [ sh:path mg:rowPredicate ; sh:minCount 1 ; sh:in ( mg:src mg:tgt ) ] .
+mg:InGraphPremise a sh:NodeShape ; sh:property [ sh:path mg:rowPredicate ; sh:hasValue mg:inGraph ] .
+mg:DirectedPremise a sh:NodeShape ; sh:property [ sh:path mg:rowPredicate ; sh:hasValue mg:directed ] .
+# attribute row: predicate is not one of the reserved keys
+mg:AttrPremise a sh:NodeShape ; sh:not [ sh:property [ sh:path mg:rowPredicate ; sh:minCount 1 ;
+  sh:in ( mg:type mg:in mg:out mg:member mg:src mg:tgt mg:directed mg:container mg:inGraph ) ] ] .
+
+# ---------- families D, BB, HO, U : classes Vertex/Edge only ----------
+mg:VE_AnchorClass a sh:NodeShape ; sh:or ( [ sh:not mg:TypePremise ]
+  [ sh:property [ sh:path mg:class ; sh:minCount 1 ; sh:maxCount 1 ; sh:in ( mg:Vertex mg:Edge ) ] ] ) .
+mg:D_Role a sh:NodeShape ; sh:or ( [ sh:not mg:InOutPremise ]
+  [ sh:property [ sh:path mg:rowSubject ; sh:minCount 1 ; sh:maxCount 1 ; sh:node mg:IsEdge ] ;
+    sh:property [ sh:path mg:rowObject ; sh:minCount 1 ; sh:maxCount 1 ; sh:node mg:IsVertex ] ] ) .
+mg:HO_Role a sh:NodeShape ; sh:or ( [ sh:not mg:InOutPremise ]
+  [ sh:property [ sh:path mg:rowSubject ; sh:minCount 1 ; sh:maxCount 1 ; sh:node mg:IsEdge ] ;
+    sh:property [ sh:path mg:rowObject ; sh:minCount 1 ; sh:maxCount 1 ; sh:node mg:IsVertexOrEdge ] ] ) .
+mg:U_Role a sh:NodeShape ; sh:or ( [ sh:not mg:MemberPremise ]
+  [ sh:property [ sh:path mg:rowSubject ; sh:minCount 1 ; sh:maxCount 1 ; sh:node mg:IsEdge ] ;
+    sh:property [ sh:path mg:rowObject ; sh:minCount 1 ; sh:maxCount 1 ; sh:node mg:IsVertexOrEdge ] ] ) .
+mg:D_EdgeCard a sh:NodeShape ; sh:or ( [ sh:not mg:IsEdge ]
+  [ sh:property [ sh:path mg:in ; sh:minCount 1 ] ; sh:property [ sh:path mg:out ; sh:minCount 1 ] ] ) .
+mg:U_EdgeCard a sh:NodeShape ; sh:or ( [ sh:not mg:IsEdge ]
+  [ sh:property [ sh:path mg:member ; sh:minCount 1 ] ] ) .
+
+mg:DRowShape a sh:NodeShape ; sh:targetClass mg:RowD , mg:RowBB ;
+  sh:property [ sh:path mg:rowPredicate ; sh:minCount 1 ; sh:maxCount 1 ; sh:in ( mg:type mg:in mg:out ) ] ;
+  sh:node mg:VE_AnchorClass , mg:D_Role , mg:D_EdgeCard .
+mg:HORowShape a sh:NodeShape ; sh:targetClass mg:RowHO ;
+  sh:property [ sh:path mg:rowPredicate ; sh:minCount 1 ; sh:maxCount 1 ; sh:in ( mg:type mg:in mg:out ) ] ;
+  sh:node mg:VE_AnchorClass , mg:HO_Role , mg:D_EdgeCard .
+mg:URowShape a sh:NodeShape ; sh:targetClass mg:RowU ;
+  sh:property [ sh:path mg:rowPredicate ; sh:minCount 1 ; sh:maxCount 1 ; sh:in ( mg:type mg:member ) ] ;
+  sh:node mg:VE_AnchorClass , mg:U_Role , mg:U_EdgeCard .
+
+# ---------- family A : four-class attributed ----------
+mg:A_AnchorClass a sh:NodeShape ; sh:or ( [ sh:not mg:TypePremise ]
+  [ sh:property [ sh:path mg:class ; sh:minCount 1 ; sh:maxCount 1 ;
+                  sh:in ( mg:Vertex mg:MetaVertex mg:Edge mg:MetaEdge ) ] ] ) .
+# a row is either a structural row with a permitted predicate or a non-reserved attribute row
+mg:A_Predicate a sh:NodeShape ; sh:or (
+  [ sh:property [ sh:path mg:rowPredicate ; sh:minCount 1 ; sh:in ( mg:type mg:src mg:tgt mg:inGraph mg:directed ) ] ]
+  [ sh:and ( mg:AttrPremise
+      [ sh:property [ sh:path mg:rowSubject ; sh:minCount 1 ; sh:maxCount 1 ; sh:node mg:IsAnchor ] ;
+        sh:property [ sh:path mg:rowObject ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:Literal ;
+                      sh:not [ sh:datatype xsd:boolean ] ] ] ) ] ) .
+mg:A_SrcTgt a sh:NodeShape ; sh:or ( [ sh:not mg:SrcTgtPremise ]
+  [ sh:property [ sh:path mg:rowSubject ; sh:minCount 1 ; sh:maxCount 1 ; sh:node mg:IsEdgeLike ] ;
+    sh:property [ sh:path mg:rowObject ; sh:minCount 1 ; sh:maxCount 1 ; sh:node mg:IsVertexLike ] ] ) .
+mg:A_InGraph a sh:NodeShape ; sh:or ( [ sh:not mg:InGraphPremise ]
+  [ sh:property [ sh:path mg:rowSubject ; sh:minCount 1 ; sh:maxCount 1 ; sh:node mg:IsAnchor ] ;
+    sh:property [ sh:path mg:rowObject ; sh:minCount 1 ; sh:maxCount 1 ; sh:node mg:IsContainer ] ] ) .
+mg:A_Directed a sh:NodeShape ; sh:or ( [ sh:not mg:DirectedPremise ]
+  [ sh:property [ sh:path mg:rowSubject ; sh:minCount 1 ; sh:maxCount 1 ; sh:node mg:IsEdgeLike ] ;
+    sh:property [ sh:path mg:rowObject ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:boolean ] ] ) .
+mg:A_EdgeCard a sh:NodeShape ; sh:or ( [ sh:not mg:IsEdgeLike ]
+  [ sh:property [ sh:path mg:src ; sh:minCount 1 ; sh:maxCount 1 ] ;
+    sh:property [ sh:path mg:tgt ; sh:minCount 1 ; sh:maxCount 1 ] ;
+    sh:property [ sh:path mg:directed ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:boolean ] ] ) .
+
+mg:ARowShape a sh:NodeShape ; sh:targetClass mg:RowA ;
+  sh:property [ sh:path mg:rowPredicate ; sh:minCount 1 ; sh:maxCount 1 ] ;
+  sh:node mg:A_AnchorClass , mg:A_Predicate , mg:A_SrcTgt , mg:A_InGraph , mg:A_Directed , mg:A_EdgeCard .
