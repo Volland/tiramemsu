@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Statement graphs and tiramemsu: tiramemsu</title>
+<meta name="description" content="Statement Graphs, the model that formalizes Amazon Neptune's OneGraph, and tiramemsu share one idea: every statement has an id. Tiramemsu stores each statement as a single record, and that buys time, cascades, bag semantics and one store for two languages.">
+<link rel="icon" href="../assets/logo.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+<header class="top"><div class="wrap">
+  <a class="brand" href="../"><img src="../assets/logo.svg" alt="">Tiramemsu</a>
+  <nav class="menu"><a href="../#features">Features</a><a href="../#start">Quick start</a><a href="./" aria-current="page">Articles</a><a href="../paper/">Paper</a><a href="https://github.com/Volland/tiramemsu">GitHub</a></nav>
+</div></header>
+
+<article class="post">
+<h1>Statement graphs and tiramemsu: one idea, one row deep</h1>
+<p class="meta">Tiramemsu articles · 6 October 2026</p>
+
+<p>In 2023 Ewout Gelling, George Fletcher (Eindhoven University of Technology) and Michael Schmidt (Amazon Web Services) published <a href="https://arxiv.org/abs/2304.13097"><em>Bridging graph data models: RDF, RDF-star, and property graphs as directed acyclic graphs</em></a>. It defines <strong>Statement Graphs</strong>: one data model under RDF, RDF-star and labeled property graphs, so that one graph can be queried in SPARQL or Gremlin. The full version appeared at DASFAA 2024 as <a href="https://doi.org/10.1007/978-981-97-5575-2_27"><em>Statement Graphs: Unifying the Graph Data Model Landscape</em></a>.</p>
+<p>The paper matters beyond academia. Statement Graphs formalize Amazon's <a href="https://doi.org/10.3233/SW-223273">OneGraph (1G)</a> vision, and the paper calls its combined image the “OneGraph-Image”. OneGraph is the metamodel at the core of <strong>Amazon Neptune Analytics</strong>: when Neptune Analytics <a href="https://aws.amazon.com/about-aws/whats-new/2024/08/amazon-neptune-analytics-opencypher-queries-graphs">added openCypher over RDF</a> in August 2024, the Neptune team described the design at ISWC 2024 (<a href="https://ceur-ws.org/Vol-3828/paper29.pdf"><em>openCypher over RDF: Connecting Two Worlds</em></a>). In that paper, RDF and property-graph data are both loaded into OneGraph's internal model as “relationship statements” and “property statements”, and statement graphs are named as directly inspired by OneGraph. The statement is the unit that one of the largest managed graph databases uses to unify two graph worlds.</p>
+<p>Tiramemsu starts from the same idea: everything is a statement with its own id. This article compares the two and argues one point. Tiramemsu stores each statement as <strong>a single record</strong>, and that physical choice gives it things a logical model leaves open.</p>
+<p class="note">A naming clash first. In tiramemsu's own docs, a “statement graph” is something narrower: a named graph whose name is a statement id, so an edge can hold a subgraph (see <a href="metagraphs.html">metagraphs</a>). In this article, <em>Statement Graphs</em> always means the Gelling, Fletcher and Schmidt model.</p>
+
+<h2>What the paper defines</h2>
+<p>A Statement Graph is a directed acyclic graph with two kinds of vertices:</p>
+<ul>
+  <li><strong>Leaves</strong> hold concrete values: IRIs, blank nodes, literals, property-graph labels, property names and values. Each value appears once.</li>
+  <li><strong>Internal vertices</strong> hold <em>statement identifiers</em>. Each has exactly three outgoing edges, labeled <code>subject</code>, <code>predicate</code> and <code>object</code>. The subject and object may point at another statement; the predicate may not. No path may lead back to where it started.</li>
+</ul>
+<p>An internal vertex and its three targets are “a piece of identifiable information”: a statement. The model gives no meaning to statements by itself. Meaning comes from <em>images</em>, the subsets of statement graphs that encode each surface model:</p>
+<ul>
+  <li><strong>RDF-star image:</strong> <em>triple statements</em>, which may point at other statements, and <em>membership statements</em> <code>(t, in, g)</code> that put each triple in a named graph or the default graph. Two statements with the same three targets are not allowed, which is how RDF's set semantics is kept.</li>
+  <li><strong>RDF image:</strong> the same, but statements may be referenced only by membership statements.</li>
+  <li><strong>LPG image:</strong> <em>edge statements</em> between nodes, <em>label statements</em> with the reserved predicate <code>lp</code>, and <em>property statements</em> whose subject is a node or an edge. Label and property statements cannot be referenced by anything.</li>
+  <li><strong>OneGraph image:</strong> a mix of RDF-star and LPG images in one graph, with duplicate statements allowed.</li>
+</ul>
+<p>Mappings from the OneGraph image back to RDF and to property graphs define how SPARQL and Gremlin <em>read</em> the shared graph. The authors' prototype, the <a href="https://github.com/aws-samples/amazon-neptune-samples/tree/master/1g-playground">1G Playground</a>, keeps one statement graph in memory and two derived stores beside it, TinkerPop for Gremlin and RDF4J for SPARQL, which it reloads from the statement graph after each write. The paper says Statement Graphs are “a purely logical and conceptual model” and imply no physical layout.</p>
+
+<h2>The same core</h2>
+<p>Take the paper's own example: a flight route from Frankfurt to London Heathrow with a distance of 655. In RDF 1.0 the distance needs four extra triples of reification. In a statement graph it is one statement for the route and one property statement whose subject is that route. In tiramemsu it is two rows:</p>
+<pre><code><span class="c">-- eid  s     p         o</span>
+   e1   :FRA  :route    :LHR
+   e2   e1    :distance 655</code></pre>
+<p>Both front ends see those two rows. SPARQL uses RDF 1.2 annotation syntax, and Cypher reads <code>e2</code> as a relationship property:</p>
+<pre><code>SELECT ?d WHERE { v:FRA v:route v:LHR {| v:distance ?d |} }
+
+MATCH ()-[r:route]-&gt;() RETURN r.distance</code></pre>
+<p>The vocabulary lines up almost one to one:</p>
+<table>
+<tr><th>Statement Graphs</th><th>tiramemsu</th></tr>
+<tr><td>Internal vertex with a statement identifier</td><td>A row's <code>eid</code></td></tr>
+<tr><td>Its <code>subject</code>, <code>predicate</code>, <code>object</code> edges</td><td>The row's <code>s</code>, <code>p</code>, <code>o</code> columns</td></tr>
+<tr><td>Subject or object may be a statement; the predicate may not</td><td>Same: <code>s</code> and <code>o</code> may hold an eid, <code>p</code> is always an IRI</td></tr>
+<tr><td>Membership statement <code>(t, in, g)</code></td><td>Membership layer <code>(e, sys:inGraph, g)</code>, a row like any other</td></tr>
+<tr><td>Label statement <code>(n, lp, label)</code></td><td>A label is an <code>rdf:type</code> statement</td></tr>
+<tr><td>IRIs and property-graph node ids side by side</td><td>IRIs plus skolem IRIs (<code>urn:tiramemsu:node:&lt;n&gt;</code>) that round-trip to the same id</td></tr>
+<tr><td>Relationship and property statements</td><td>A row with a node or statement object is a relationship; a row with a literal object is a property</td></tr>
+</table>
+<p>Statement graphs and tiramemsu also give the same answer to Neptune's hardest identity problem, global IRIs versus local property-graph ids: keep both, and give local ids a reversible IRI form. This is no coincidence. OneGraph is listed in tiramemsu's prior art, and the uniform statement model and the RDF/LPG mapping were taken from it. Tiramemsu's <a href="https://github.com/Volland/tiramemsu/tree/main/paper/metagraphs-from-identified-triples">metagraph paper</a> states the formal relationship plainly: replacing each row by a statement vertex with three role edges gives the corresponding statement-graph view. That is a correspondence of representations, not a claim that either model can express more.</p>
+
+<figure>
+<svg viewBox="0 0 760 250" width="760" height="250" role="img" aria-label="Left: a statement vertex e1 with three labeled edges to FRA, route and LHR, and a second vertex e2 pointing at e1. Right: the same two statements as two rows of one table, each with lifetime columns.">
+  <g font-family="ui-monospace, Menlo, monospace" font-size="14" style="fill:var(--ink)">
+    <text x="20" y="24" style="fill:var(--muted)" font-family="-apple-system, Segoe UI, sans-serif" font-size="14">Statement graph (logical)</text>
+    <circle cx="150" cy="80" r="22" style="fill:var(--pink-soft);stroke:var(--pink)" stroke-width="2"/><text x="150" y="85" text-anchor="middle">e1</text>
+    <circle cx="300" cy="80" r="22" style="fill:var(--pink-soft);stroke:var(--pink)" stroke-width="2"/><text x="300" y="85" text-anchor="middle">e2</text>
+    <rect x="40" y="170" width="70" height="30" rx="6" style="fill:var(--bg-soft);stroke:var(--line)"/><text x="75" y="190" text-anchor="middle">:FRA</text>
+    <rect x="120" y="170" width="70" height="30" rx="6" style="fill:var(--bg-soft);stroke:var(--line)"/><text x="155" y="190" text-anchor="middle">:route</text>
+    <rect x="200" y="170" width="70" height="30" rx="6" style="fill:var(--bg-soft);stroke:var(--line)"/><text x="235" y="190" text-anchor="middle">:LHR</text>
+    <rect x="270" y="130" width="90" height="30" rx="6" style="fill:var(--bg-soft);stroke:var(--line)"/><text x="315" y="150" text-anchor="middle">:distance</text>
+    <rect x="300" y="200" width="60" height="30" rx="6" style="fill:var(--bg-soft);stroke:var(--line)"/><text x="330" y="220" text-anchor="middle">655</text>
+    <g style="stroke:var(--muted)" stroke-width="1.6" fill="none">
+      <line x1="140" y1="100" x2="80" y2="168"/><line x1="150" y1="102" x2="155" y2="168"/><line x1="160" y1="100" x2="228" y2="168"/>
+      <line x1="278" y1="80" x2="174" y2="80"/><line x1="303" y1="102" x2="313" y2="128"/><line x1="310" y1="100" x2="330" y2="198"/>
+    </g>
+    <g font-size="11" style="fill:var(--muted)"><text x="92" y="130">s</text><text x="156" y="140">p</text><text x="200" y="130">o</text><text x="220" y="74">s</text><text x="296" y="122">p</text><text x="330" y="180">o</text></g>
+    <text x="420" y="24" style="fill:var(--muted)" font-family="-apple-system, Segoe UI, sans-serif" font-size="14">tiramemsu (one record each)</text>
+    <rect x="420" y="40" width="320" height="34" rx="6" style="fill:var(--bg-soft);stroke:var(--line)"/>
+    <text x="432" y="62" style="fill:var(--muted)">eid  s     p          o     t_add t_ret v_from v_to</text>
+    <rect x="420" y="80" width="320" height="34" rx="6" style="fill:var(--pink-soft);stroke:var(--pink)"/>
+    <text x="432" y="102">e1   :FRA  :route     :LHR  7     –     …      …</text>
+    <rect x="420" y="120" width="320" height="34" rx="6" style="fill:var(--pink-soft);stroke:var(--pink)"/>
+    <text x="432" y="142">e2   e1    :distance  655   7     –     …      …</text>
+    <text x="420" y="190" font-family="-apple-system, Segoe UI, sans-serif" font-size="14" style="fill:var(--muted)">One vertex and its three edges = one row.</text>
+    <text x="420" y="212" font-family="-apple-system, Segoe UI, sans-serif" font-size="14" style="fill:var(--muted)">Identity, content and lifetime live together.</text>
+  </g>
+</svg>
+<figcaption>The paper's flight example both ways. On the left, each statement is a vertex with three labeled edges. On the right, each is one row whose columns are those edges, plus two clocks.</figcaption>
+</figure>
+
+<h2>The strong side: a statement is one record</h2>
+<p>A statement graph is a graph of vertices and edges, and a store that keeps it literally has to manage four things per statement: a vertex and three edges. Tiramemsu stores the same structure as one row <code>(eid, s, p, o)</code>, plus its lifetime and valid time. That choice shows up in six places.</p>
+
+<h3>1. The row shape enforces the definition</h3>
+<p>Definition 4.1 of the paper requires that every statement vertex have <em>exactly</em> three outgoing edges, one of each label, and that the predicate edge never point at a statement. In a graph these are constraints to check. In a row they are the schema: a row cannot have two subjects or no object, and <code>p</code> is typed to hold only an IRI. The identity and the content of a statement are written in one insert, so no reader can ever see a statement id whose edges are not there yet.</p>
+
+<h3>2. One store, no derived copies</h3>
+<p>The 1G Playground evaluates SPARQL and Gremlin by keeping a TinkerPop store and an RDF4J store as copies of the statement graph and rebuilding them after writes. That is a reasonable shortcut for a prototype, and the paper says so: it avoids writing a query engine from scratch. Tiramemsu has no copies. SPARQL and Cypher both compile to one logical IR over the same table, so a write in either language is the same row, read and write go through one transaction, and a differential test suite checks that equivalent queries in the two languages return equal results. (Neptune Analytics itself is a production engine whose internals are not public, so this point compares tiramemsu with the paper's prototype, not with Neptune.)</p>
+
+<h3>3. Time fits on the record</h3>
+<p>Statement graphs have no time. Adding it to the logical model means more statements per statement (a “valid from” statement, a “retracted at” statement) or a side structure outside the model. Because a tiramemsu statement is a record, its lifetime is four more columns on the same row: <code>t_add</code> and <code>t_ret</code> for when the database believed it, <code>v_from</code> and <code>v_to</code> for when it was true. Every statement is bitemporal at no extra row, and a query can read any past state with <code>asOf</code> (see <a href="time-travel.html">time travel</a>). Rows are never deleted or edited: SQLite triggers reject it inside the file.</p>
+
+<h3>4. Retraction follows the edges</h3>
+<p>In a statement graph, “everything that depends on <code>e1</code>” is the set of statements with an incoming path to <code>e1</code>. Tiramemsu turns this into a write: retracting a statement retracts, in the same transaction and recursively, every live statement whose subject or object is that eid. It is a walk over two indexes, <code>s = e</code> and <code>o = e</code>. Retracting the route takes its distance with it, and never touches other facts about Frankfurt. The cascaded rows get the same <code>t_ret</code>, so the whole structure is still readable as of the moment before. The paper's mappings define how queries <em>read</em> the unified graph; writes, and what they take with them, are left to future work.</p>
+
+<h3>5. Occurrences are kept; sets are recovered</h3>
+<p>The RDF image forbids two statement vertices with the same three targets, and the OneGraph image allows them. A store has to choose. Tiramemsu keeps every occurrence as its own row, because an agent's memory needs “Alice worked at Acme, left, and came back” as two episodes with two histories. SPARQL's set semantics is recovered per query, and a query can still list every eid behind one <code>(s, p, o)</code>. Duplicate removal is skipped for predicates that have never held two eids for the same triple, so the common case pays nothing.</p>
+
+<h3>6. Every record can be talked about</h3>
+<p>In the LPG image, label and property statements cannot have incoming edges: you cannot annotate a property, and an edge cannot point at another edge, so the mapping to property graphs drops such statements. In tiramemsu every row is addressable, properties included, and Cypher sees it: an eid is both a relationship and a node with the label <code>:Statement</code>, so a relationship variable may stand in node position.</p>
+<pre><code>MATCH (a)-[r:worksAt]-&gt;(c), (b:Belief)-[:supportedBy]-&gt;(r)
+RETURN a, c, r.confidence, r.txAdded, b</code></pre>
+<p>A confidence on a confidence, the source of that confidence, and a belief that rests on an edge are all one row each. This is what tiramemsu calls a <a href="layered-graphs.html">layered graph</a>. A predicate can also be declared to annotate only statements, so a query for <code>?e v:confidence ?c</code> never confuses a fact's confidence with a person's.</p>
+
+<h2>Where statement graphs are stronger</h2>
+<p>The single record is a physical choice, and it has costs. Statement graphs are better in several ways:</p>
+<ul>
+  <li><strong>Formal images.</strong> The paper defines an exact image for RDF, RDF-star and property graphs, with lossless mappings in both directions in its full version. Tiramemsu's mapping between SPARQL and Cypher is defined by its implementation and tests. Its metagraph paper does the image work for metagraph encodings, with a Lean proof of the directed roundtrip, but not for RDF and property graphs as a whole.</li>
+  <li><strong>Freedom of layout.</strong> Because the model is logical, an engine like Neptune Analytics can lay it out in memory however it likes. Tiramemsu has committed to one table on SQLite.</li>
+  <li><strong>Acyclicity.</strong> Statement graphs are acyclic by definition, which makes reasoning simpler. Tiramemsu forbids only a statement that points at itself; longer cycles are allowed, and the cascade walk keeps a visited set so it ends.</li>
+  <li><strong>Storage and set joins.</strong> An id per row is not free. In <a href="tiramemsu-vs-oxilite.html#numbers">tiramemsu's own benchmark</a>, the id layout was about half again larger than a quad-and-reifier layout, and a 2-hop SPARQL join with duplicate removal was about twice as slow. It won on reading and writing annotations.</li>
+  <li><strong>Scale and maturity.</strong> Neptune is a managed service. Tiramemsu is a young embedded library on SQLite, built for one agent's memory, not a cluster.</li>
+</ul>
+
+<h2>Side by side</h2>
+<table>
+<tr><th></th><th>Statement Graphs (OneGraph)</th><th>tiramemsu</th></tr>
+<tr><td>What it is</td><td>A logical model, with a prototype and a production engine (Neptune Analytics) built on its ideas</td><td>An embedded database on SQLite</td></tr>
+<tr><td>Unit</td><td>A statement vertex with three labeled edges</td><td>One row <code>(eid, s, p, o)</code></td></tr>
+<tr><td>Languages</td><td>SPARQL and Gremlin in the prototype; openCypher over RDF in Neptune Analytics</td><td>SPARQL and Cypher over one IR</td></tr>
+<tr><td>Time</td><td>Not in the model</td><td>Two clocks on every row</td></tr>
+<tr><td>Writes</td><td>Mappings define reads; writes are future work</td><td>Assert, create, supersede, confirm, retract with cascade</td></tr>
+<tr><td>Duplicates</td><td>Forbidden in RDF images, allowed in the OneGraph image</td><td>Kept as occurrences; set semantics per query</td></tr>
+<tr><td>Annotating properties and edges</td><td>Not in the LPG image</td><td>Any row, at any depth</td></tr>
+<tr><td>Cycles</td><td>Forbidden</td><td>Only self-reference is forbidden</td></tr>
+<tr><td>Formal mappings</td><td>Exact images for RDF, RDF-star and LPG</td><td>Exact images for metagraph encodings; RDF and Cypher by tests</td></tr>
+</table>
+
+<h2>The takeaway</h2>
+<p>Statement Graphs show that one statement-centric model can hold RDF, RDF-star and property graphs without loss, and Neptune shows that this idea holds up in production. Tiramemsu agrees with the model and makes one further decision: a statement is a record. That record is where its identity, content and two clocks live together, which is why retraction, history, episodes and annotations of annotations are ordinary operations on one table.</p>
+
+<h2>References</h2>
+<ul>
+  <li>E. Gelling, G. Fletcher, M. Schmidt. <a href="https://arxiv.org/abs/2304.13097">Bridging graph data models: RDF, RDF-star, and property graphs as directed acyclic graphs</a> [extended abstract]. arXiv:2304.13097, 2023.</li>
+  <li>E. Gelling, G. Fletcher, M. Schmidt. <a href="https://doi.org/10.1007/978-981-97-5575-2_27">Statement Graphs: Unifying the Graph Data Model Landscape</a>. DASFAA 2024, LNCS, pp. 364–376.</li>
+  <li>O. Lassila, M. Schmidt et al. <a href="https://doi.org/10.3233/SW-223273">The OneGraph Vision: Challenges of Breaking the Graph Model Lock-In</a>. Semantic Web Journal 14(1), 2023.</li>
+  <li>M. Schmidt et al. (Amazon Neptune team). <a href="https://ceur-ws.org/Vol-3828/paper29.pdf">openCypher over RDF: Connecting Two Worlds</a>. ISWC 2024 Posters, Demos and Industry Tracks, CEUR-WS Vol. 3828.</li>
+  <li>AWS. <a href="https://aws.amazon.com/about-aws/whats-new/2024/08/amazon-neptune-analytics-opencypher-queries-graphs">Amazon Neptune Analytics now supports openCypher queries over RDF graphs</a>. August 2024.</li>
+</ul>
+<p><a href="layered-graphs.html">← Layered graphs, explained</a></p>
+</article>
+
+<footer><div class="wrap">
+  <span>Tiramemsu · MIT OR Apache-2.0 · <a href="https://github.com/Volland/tiramemsu">github.com/Volland/tiramemsu</a></span>
+  <span><a href="../">Home</a> · <a href="./">All articles</a></span>
+  <span><a href="../impressum.html">Impressum</a> · <a href="../datenschutz.html">Datenschutz</a> · <a href="../agb.html">AGB</a></span>
+</div></footer>
+</body>
+</html>
