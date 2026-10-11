@@ -20,7 +20,8 @@ pub use agg::{Agg, AggFunc, Key};
 pub use expr::{ArithOp, CmpOp, Expr, Func, Lookup, LookupMode};
 pub use op::{
     Aggregate, Extend, Filter, GraphSel, IrQuery, Join, LeftJoin, Op, OrderLimit, PathPattern,
-    Project, RowNumber, TextPattern, TriplePattern, Union, Unnest, Values,
+    Project, RecallPattern, RowNumber, TextPattern, TriplePattern, Union, Unnest, Values,
+    VectorPattern,
 };
 pub use params::{params, Params};
 pub use path::{PathCompleteness, PathExpr, PathMode, TemporalPath};

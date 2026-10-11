@@ -54,6 +54,14 @@ impl SqlValue {
         }
     }
 
+    /// The bytes, if this is a blob.
+    pub fn as_blob(&self) -> Option<&[u8]> {
+        match self {
+            SqlValue::Blob(b) => Some(b),
+            _ => None,
+        }
+    }
+
     /// True for NULL.
     pub fn is_null(&self) -> bool {
         matches!(self, SqlValue::Null)
@@ -155,6 +163,13 @@ pub struct Capabilities {
 /// binding. A host must provide prepared statements with `?N` parameters,
 /// interactive transactions, savepoints and a stable snapshot inside a read
 /// transaction; anything optional is declared through [`Capabilities`].
+///
+/// Fixed-plan lookups: with STAT4 samples, SQLite re-prepares a statement on every
+/// bind when a bare `?N` compared to an indexed column could change its plan. That
+/// is what lets joins see a rare constant, but a single-table lookup whose index is
+/// fixed by which positions are bound pays about 14 µs per call for nothing.
+/// `tm-core` therefore writes those comparisons as `col = +?N`: the unary plus
+/// hides the value from the planner, keeps the index seek, and skips the re-prepare.
 // @lat: [[architecture#Executor]]
 pub trait Executor: Send {
     /// The capabilities of the host that opened this executor.

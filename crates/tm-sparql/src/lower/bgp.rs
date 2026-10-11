@@ -5,7 +5,10 @@
 use spargebra::term::{NamedNodePattern, TermPattern, TriplePattern as SpTriple};
 use tm_core::Error;
 use tm_core::Value;
-use tm_ir::{Expr, Op, TermOrVar, TextPattern, TriplePattern, Values, Var, View};
+use tm_ir::{
+    Expr, Op, RecallPattern, TermOrVar, TextPattern, TriplePattern, Values, Var, VectorPattern,
+    View,
+};
 
 use super::Lowerer;
 use crate::error::{unsupported, REIFIES_WITHOUT_TRIPLE, VARIABLE_PREDICATE_TRIPLE};
@@ -58,7 +61,9 @@ impl Lowerer<'_> {
             return Ok(empty_op());
         }
         let mut triples = std::mem::take(&mut items.triples);
-        let texts = self.text_patterns(&mut triples, view)?;
+        let mut texts = self.text_patterns(&mut triples, view)?;
+        texts.extend(self.vector_patterns(&mut triples, view)?);
+        texts.extend(self.recall_patterns(&mut triples, view)?);
         eliminate_redundant(&mut triples);
         let reifiers = std::mem::take(&mut items.reifiers);
         if triples.is_empty() && texts.is_empty() && items.filters.is_empty() {
@@ -304,6 +309,221 @@ impl Lowerer<'_> {
             };
         }
         Ok(groups.into_iter().map(Op::Text).collect())
+    }
+}
+
+impl Lowerer<'_> {
+    /// Takes the `tm:vector*` patterns out of `triples` and turns each group on one
+    /// subject variable into a vector recall under `view` and the active graph
+    /// selection (`lat.md/query#Vector Recall`).
+    // @lat: [[query#Vector Recall#Query Languages]]
+    fn vector_patterns(&mut self, triples: &mut Vec<TriplePattern>, view: View) -> Result<Vec<Op>> {
+        let is_vector = |t: &TriplePattern| matches!(&t.p, TermOrVar::Const(Value::Iri(p)) if tm_ir::vocab::VECTOR.contains(&p.as_str()));
+        if !triples.iter().any(is_vector) {
+            return Ok(Vec::new());
+        }
+        let (vec_pats, rest): (Vec<TriplePattern>, Vec<TriplePattern>) =
+            std::mem::take(triples).into_iter().partition(is_vector);
+        *triples = rest;
+        let bad = |msg: &str| Error::invalid_query(format!("vector recall: {msg}"));
+        let mut groups: Vec<VectorPattern> = Vec::new();
+        for t in &vec_pats {
+            let TermOrVar::Var(e) = &t.s else {
+                return Err(bad("the subject of a tm:vector pattern must be a variable"));
+            };
+            if !groups.iter().any(|g| &g.eid == e) {
+                groups.push(VectorPattern::new(
+                    TermOrVar::Const(Value::Iri(String::new())),
+                    TermOrVar::Const(Value::Str(String::new())),
+                    e.name(),
+                    view,
+                ));
+            }
+        }
+        for g in &mut groups {
+            let (mut matched, mut model) = (false, false);
+            for t in vec_pats.iter().filter(|t| t.s.as_var() == Some(&g.eid)) {
+                let TermOrVar::Const(Value::Iri(p)) = &t.p else {
+                    unreachable!("vector patterns have constant predicates")
+                };
+                let out_var = |o: &TermOrVar| match o {
+                    TermOrVar::Var(v) => Ok(Some(v.clone())),
+                    _ => Err(bad(&format!("<{p}> binds a variable"))),
+                };
+                match p.as_str() {
+                    tm_ir::vocab::TM_VECTOR_MATCH => {
+                        if matched {
+                            return Err(bad("one tm:vectorMatch per subject"));
+                        }
+                        matched = true;
+                        g.vector =
+                            match &t.o {
+                                TermOrVar::Const(Value::Str(s)) => {
+                                    tm_core::vector::parse_vector(s)
+                                        .map_err(|m| bad(&format!("tm:vectorMatch: {m}")))?;
+                                    TermOrVar::Const(Value::Str(s.clone()))
+                                }
+                                _ => return Err(bad(
+                                    "tm:vectorMatch needs a string literal holding a JSON array",
+                                )),
+                            };
+                    }
+                    tm_ir::vocab::TM_VECTOR_MODEL => {
+                        if model {
+                            return Err(bad("one tm:vectorModel per subject"));
+                        }
+                        model = true;
+                        g.model = match &t.o {
+                            TermOrVar::Const(Value::Iri(m)) => {
+                                TermOrVar::Const(Value::Iri(m.clone()))
+                            }
+                            _ => return Err(bad("tm:vectorModel needs an IRI")),
+                        };
+                    }
+                    tm_ir::vocab::TM_VECTOR_SIMILARITY => g.similarity = out_var(&t.o)?,
+                    tm_ir::vocab::TM_VECTOR_RANK => g.rank = out_var(&t.o)?,
+                    tm_ir::vocab::TM_VECTOR_CONFIDENCE => g.confidence = out_var(&t.o)?,
+                    tm_ir::vocab::TM_VECTOR_PREDICATE => match &t.o {
+                        TermOrVar::Const(Value::Iri(p)) => {
+                            g.predicates.push(TermOrVar::Const(Value::Iri(p.clone())))
+                        }
+                        _ => return Err(bad("tm:vectorPredicate needs an IRI")),
+                    },
+                    _ => {
+                        g.limit = match &t.o {
+                            TermOrVar::Const(Value::Int(n)) if *n >= 0 => {
+                                Some(u32::try_from(*n).unwrap_or(u32::MAX))
+                            }
+                            _ => return Err(bad("tm:vectorLimit needs a non-negative integer")),
+                        }
+                    }
+                }
+            }
+            if !matched || !model {
+                return Err(bad(&format!(
+                    "{} needs both tm:vectorMatch and tm:vectorModel",
+                    g.eid
+                )));
+            }
+            g.graph = match &self.active {
+                tm_ir::GraphSel::Var(_) => {
+                    return Err(bad("GRAPH ?g around tm:vectorMatch (name the graphs)"))
+                }
+                other => other.clone(),
+            };
+        }
+        Ok(groups.into_iter().map(Op::Vector).collect())
+    }
+}
+
+impl Lowerer<'_> {
+    /// Takes the `tm:recall*` patterns out of `triples` and turns each group on one
+    /// subject variable into a hybrid recall under `view` and the active graph
+    /// selection (`lat.md/query#Hybrid Recall`).
+    // @lat: [[query#Hybrid Recall#Query Languages]]
+    fn recall_patterns(&mut self, triples: &mut Vec<TriplePattern>, view: View) -> Result<Vec<Op>> {
+        use tm_ir::vocab as v;
+        let is_recall = |t: &TriplePattern| matches!(&t.p, TermOrVar::Const(Value::Iri(p)) if v::RECALL.contains(&p.as_str()));
+        if !triples.iter().any(is_recall) {
+            return Ok(Vec::new());
+        }
+        let (pats, rest): (Vec<TriplePattern>, Vec<TriplePattern>) =
+            std::mem::take(triples).into_iter().partition(is_recall);
+        *triples = rest;
+        let bad = |msg: &str| Error::invalid_query(format!("recall: {msg}"));
+        let mut groups: Vec<RecallPattern> = Vec::new();
+        for t in &pats {
+            let TermOrVar::Var(e) = &t.s else {
+                return Err(bad("the subject of a tm:recall pattern must be a variable"));
+            };
+            if !groups.iter().any(|g| &g.eid == e) {
+                groups.push(RecallPattern::new(e.name(), view));
+            }
+        }
+        for g in &mut groups {
+            for t in pats.iter().filter(|t| t.s.as_var() == Some(&g.eid)) {
+                let TermOrVar::Const(Value::Iri(p)) = &t.p else {
+                    unreachable!("recall patterns have constant predicates")
+                };
+                let out_var = |o: &TermOrVar| match o {
+                    TermOrVar::Var(x) => Ok(Some(x.clone())),
+                    _ => Err(bad(&format!("<{p}> binds a variable"))),
+                };
+                let count = |o: &TermOrVar, what: &str| match o {
+                    TermOrVar::Const(Value::Int(n)) if *n >= 0 => {
+                        Ok(u32::try_from(*n).unwrap_or(u32::MAX))
+                    }
+                    _ => Err(bad(&format!("{what} needs a non-negative integer"))),
+                };
+                match p.as_str() {
+                    v::TM_RECALL_TEXT => {
+                        g.text = Some(match &t.o {
+                            TermOrVar::Const(Value::Str(s)) => {
+                                TermOrVar::Const(Value::Str(s.clone()))
+                            }
+                            TermOrVar::Const(Value::LangStr { lex, .. }) => {
+                                TermOrVar::Const(Value::Str(lex.clone()))
+                            }
+                            _ => return Err(bad("tm:recallText needs a string literal")),
+                        })
+                    }
+                    v::TM_RECALL_MODE => {
+                        g.mode = match &t.o {
+                            TermOrVar::Const(Value::Str(s)) => tm_core::TextMode::from_name(s)
+                                .ok_or_else(|| {
+                                    bad("tm:recallMode is \"all\", \"any\" or \"phrase\"")
+                                })?,
+                            _ => return Err(bad("tm:recallMode needs a string literal")),
+                        }
+                    }
+                    v::TM_RECALL_VECTOR => {
+                        g.vector =
+                            Some(match &t.o {
+                                TermOrVar::Const(Value::Str(s)) => {
+                                    tm_core::vector::parse_vector(s)
+                                        .map_err(|m| bad(&format!("tm:recallVector: {m}")))?;
+                                    TermOrVar::Const(Value::Str(s.clone()))
+                                }
+                                _ => return Err(bad(
+                                    "tm:recallVector needs a string literal holding a JSON array",
+                                )),
+                            })
+                    }
+                    v::TM_RECALL_MODEL => {
+                        g.model = Some(match &t.o {
+                            TermOrVar::Const(Value::Iri(m)) => {
+                                TermOrVar::Const(Value::Iri(m.clone()))
+                            }
+                            _ => return Err(bad("tm:recallModel needs an IRI")),
+                        })
+                    }
+                    v::TM_RECALL_SCORE => g.score = out_var(&t.o)?,
+                    v::TM_RECALL_RANK => g.rank = out_var(&t.o)?,
+                    v::TM_RECALL_VIA => g.via = out_var(&t.o)?,
+                    v::TM_RECALL_LIMIT => g.limit = Some(count(&t.o, "tm:recallLimit")?),
+                    _ => g.expand = count(&t.o, "tm:recallExpand")?,
+                }
+            }
+            if g.text.is_none() && g.vector.is_none() {
+                return Err(bad(&format!(
+                    "{} needs tm:recallText, or tm:recallVector with tm:recallModel",
+                    g.eid
+                )));
+            }
+            if g.vector.is_some() != g.model.is_some() {
+                return Err(bad(&format!(
+                    "{} needs both tm:recallVector and tm:recallModel",
+                    g.eid
+                )));
+            }
+            g.graph = match &self.active {
+                tm_ir::GraphSel::Var(_) => {
+                    return Err(bad("GRAPH ?g around tm:recall patterns (name the graphs)"))
+                }
+                other => other.clone(),
+            };
+        }
+        Ok(groups.into_iter().map(Op::Recall).collect())
     }
 }
 

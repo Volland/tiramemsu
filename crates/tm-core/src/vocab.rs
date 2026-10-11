@@ -78,6 +78,12 @@ pub const SYS_VOCAB: &str = "urn:tiramemsu:sys:vocab";
 pub const SYS_IN_GRAPH: &str = "urn:tiramemsu:sys:inGraph";
 /// `sys:Graph`: the class of a declared named graph (`CREATE GRAPH`).
 pub const SYS_GRAPH: &str = "urn:tiramemsu:sys:Graph";
+/// Embedding model: the number of dimensions of its vectors (an integer).
+pub const SYS_DIMENSIONS: &str = "urn:tiramemsu:sys:dimensions";
+/// Embedding model: its similarity metric (`"cosine"`, `"dot"` or `"l2"`).
+pub const SYS_METRIC: &str = "urn:tiramemsu:sys:metric";
+/// Embedding model: how its vectors are stored (`"f32"` or `"f16"`).
+pub const SYS_VECTOR_ENCODING: &str = "urn:tiramemsu:sys:vectorEncoding";
 /// `rdf:type`.
 pub const RDF_TYPE: &str = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
 

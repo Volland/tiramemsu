@@ -1,0 +1,17 @@
+name = "tiramemsu"
+defaultTargets = ["TiramemsuStore"]
+
+# The pure store model: types, index-family order, the store interface and
+# `ModelStore`. Imports only `Init`; this is what CI builds.
+[[lean_lib]]
+name = "TiramemsuStore"
+roots = ["Tiramemsu.Store.Types", "Tiramemsu.Store.Order", "Tiramemsu.Store.Interface", "Tiramemsu.Store.Model"]
+
+# The SQLite connector (`Tiramemsu.Sqlite.Conn`) imports `SQLite.LowLevel` from
+# leansqlite and is not a default target. To build it, add the dependency:
+#
+# [[require]]
+# name = "leansqlite"
+# git = "<leansqlite repository>"
+#
+# and run `lake build Tiramemsu.Sqlite.Conn`.

@@ -49,6 +49,70 @@ pub const TM_TEXT_MODE: &str = "urn:tiramemsu:tm:textMode";
 /// Not a stored or virtual predicate.
 pub const TM_ARRIVAL: &str = "urn:tiramemsu:tm:arrival";
 
+/// `tm:vectorMatch`: in SPARQL, `?e tm:vectorMatch "[0.1, …]"` recalls the
+/// statements whose embedding is nearest to the vector (a JSON array of numbers in
+/// a string literal); `tm:vectorModel` names the model. The group of `tm:vector*`
+/// patterns on one subject turns into a vector recall (`lat.md/query#Vector Recall`).
+pub const TM_VECTOR_MATCH: &str = "urn:tiramemsu:tm:vectorMatch";
+/// `tm:vectorModel`: the embedding model IRI of a vector recall (required).
+pub const TM_VECTOR_MODEL: &str = "urn:tiramemsu:tm:vectorModel";
+/// `tm:vectorSimilarity`: binds a vector hit's similarity.
+pub const TM_VECTOR_SIMILARITY: &str = "urn:tiramemsu:tm:vectorSimilarity";
+/// `tm:vectorRank`: binds a vector hit's 1-based rank.
+pub const TM_VECTOR_RANK: &str = "urn:tiramemsu:tm:vectorRank";
+/// `tm:vectorConfidence`: binds a vector hit's confidence layer (unbound when absent).
+pub const TM_VECTOR_CONFIDENCE: &str = "urn:tiramemsu:tm:vectorConfidence";
+/// `tm:vectorLimit`: keeps the first N vector hits by rank (default 10).
+pub const TM_VECTOR_LIMIT: &str = "urn:tiramemsu:tm:vectorLimit";
+
+/// `tm:vectorPredicate`: keeps statements with this predicate (repeatable).
+pub const TM_VECTOR_PREDICATE: &str = "urn:tiramemsu:tm:vectorPredicate";
+
+/// The `tm:vector*` pattern predicates.
+pub const VECTOR: [&str; 7] = [
+    TM_VECTOR_MATCH,
+    TM_VECTOR_MODEL,
+    TM_VECTOR_SIMILARITY,
+    TM_VECTOR_RANK,
+    TM_VECTOR_CONFIDENCE,
+    TM_VECTOR_LIMIT,
+    TM_VECTOR_PREDICATE,
+];
+
+/// `tm:recallText`: in SPARQL, the words of a hybrid recall on the subject
+/// variable; the group of `tm:recall*` patterns on one subject turns into one
+/// recall (`lat.md/query#Hybrid Recall`).
+pub const TM_RECALL_TEXT: &str = "urn:tiramemsu:tm:recallText";
+/// `tm:recallMode`: how the words combine (`"all"`, `"any"`, `"phrase"`).
+pub const TM_RECALL_MODE: &str = "urn:tiramemsu:tm:recallMode";
+/// `tm:recallVector`: the query vector (a string holding a JSON array).
+pub const TM_RECALL_VECTOR: &str = "urn:tiramemsu:tm:recallVector";
+/// `tm:recallModel`: the embedding model IRI of the vector channel.
+pub const TM_RECALL_MODEL: &str = "urn:tiramemsu:tm:recallModel";
+/// `tm:recallScore`: binds the fused score.
+pub const TM_RECALL_SCORE: &str = "urn:tiramemsu:tm:recallScore";
+/// `tm:recallRank`: binds the 1-based rank.
+pub const TM_RECALL_RANK: &str = "urn:tiramemsu:tm:recallRank";
+/// `tm:recallVia`: binds the hit an expanded statement was reached from.
+pub const TM_RECALL_VIA: &str = "urn:tiramemsu:tm:recallVia";
+/// `tm:recallLimit`: at most N fused hits (default 10).
+pub const TM_RECALL_LIMIT: &str = "urn:tiramemsu:tm:recallLimit";
+/// `tm:recallExpand`: layers and subject facts added per fused hit.
+pub const TM_RECALL_EXPAND: &str = "urn:tiramemsu:tm:recallExpand";
+
+/// The `tm:recall*` pattern predicates.
+pub const RECALL: [&str; 9] = [
+    TM_RECALL_TEXT,
+    TM_RECALL_MODE,
+    TM_RECALL_VECTOR,
+    TM_RECALL_MODEL,
+    TM_RECALL_SCORE,
+    TM_RECALL_RANK,
+    TM_RECALL_VIA,
+    TM_RECALL_LIMIT,
+    TM_RECALL_EXPAND,
+];
+
 /// The `tm:text*` pattern predicates.
 pub const TEXT: [&str; 6] = [
     TM_TEXT_MATCH,

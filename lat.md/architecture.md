@@ -254,6 +254,34 @@ R --> B : rows
 - **Interchange.** `export_file` and `import_file` move committed bytes; a closed native `Db` leaves no `-wal` (the readers close before the writer), so its main file is complete.
 - **Limits.** `std::time::Instant` and `SystemTime` are missing on the target: `WasmClock` supplies `Date.now()`, and budgets and bulk import sessions are refused by the binding. SPARQL needs `--cfg getrandom_backend="wasm_js"` (in `.cargo/config.toml`). The OPFS tests snapshot storage during an open write; a worker killed mid-write on OPFS is not exercised.
 
+## Store Abstraction
+
+A Lean 4 model of the storage contract the engine relies on, in `lean/Tiramemsu/Store/`. It states, in one place, what a scan, a point read and a write must do, independent of SQLite.
+
+The model is a Lake project (`lean/lakefile.toml`); `lake build` in `lean/` builds the pure part, and CI runs it. It contains definitions, not yet theorems: it is the shared vocabulary future proofs and refinement tests will be stated in.
+
+### Interface
+
+Three classes: `ReadStore` (ordered range scans with early exit, point reads of triples and terms), `WriteStore` (inserts and the once-only retraction) and `SnapshotStore` (read snapshots).
+
+Writes check their violation first and return it in `Except`, leaving the state unchanged, as SQLite's statement-level abort does.
+
+### Model Store
+
+`ModelStore` is the pure implementation: one list of rows per table, scans that filter by the scan predicate and sort by the family key. Every later theorem is meant to be stated over it.
+
+### Index Families
+
+The nine scan families (`liveSpo`, `livePos`, `liveOsp`, the three `hist*`, `validP`, `logAdd`, `logRet`) with their key columns and order, mirroring the SQLite index definitions.
+
+Keys append the rowid (`eid`), values compare as signed 64-bit integers, an absent value sorts first (SQLite NULL order), and the descending `t_add` of the history indexes is stored negated. See [[storage#Query Shapes]].
+
+## SQLite Boundary
+
+`lean/Tiramemsu/Sqlite/Conn.lean` connects the store interface to SQLite through leansqlite: writer and reader connections configured like the Rust build, prepared statements, transactions, savepoints and snapshots.
+
+It imports `SQLite.LowLevel` from leansqlite, an external package, so it is not a default build target; `lean/lakefile.toml` shows how to add the dependency.
+
 ## Deployment
 
 The engine is a library linked into the host process; there is no server. Four ways in, one executor contract and one file format, so the same file moves between native and browser hosts ([[architecture#Executor]]).
@@ -337,7 +365,7 @@ The pages are plain HTML with one stylesheet (`site/style.css`), light and dark 
 Each crate's `README.md` is its crates.io page and, through `#![doc = include_str!("../README.md")]`, its crate-level rustdoc, so every Rust block in it is a doctest.
 
 - **Links** in READMEs are absolute `https://github.com/Volland/tiramemsu/...` URLs, because relative ones break on crates.io and docs.rs. Diagrams are ASCII, since crates.io does not render Mermaid; the repository README uses Mermaid.
-- **Metadata** is inherited from `[workspace.package]`: version, licence, repository, keywords, categories and `rust-version = "1.88"`, the minimum that `open-cypher` needs. Workspace path dependencies carry the workspace version (`version = "0.4.0"`) so the crates can be published. Each crate directory holds copies of both licence files.
+- **Metadata** is inherited from `[workspace.package]`: version, licence, repository, keywords, categories and `rust-version = "1.88"`, the minimum that `open-cypher` needs. Workspace path dependencies carry the workspace version (`version = "0.5.0"`) so the crates can be published. Each crate directory holds copies of both licence files.
 - **Package size:** `tm-sparql` and `tm-cypher` exclude their W3C and openCypher TCK test data from the published package.
 - **Publish order** follows the dependencies: `tm-core`, `tm-ir`, `tm-rusqlite`, `tm-exec`, `tm-sparql`, `tm-cypher`, `tiramemsu`, `tm-wasm`, then `tiramemsu-json` and `tiramemsu-mcp`. The Node, Python and WebAssembly binding crates are not published to crates.io.
 - **Core stays SQLite-free:** doctests inside `tm-core/src` may not spell `tm_rusqlite::`, because a test greps that source for `rusqlite::` (see [[architecture#Executor]]). They use an import alias, and the README, which is not scanned, uses the normal form.

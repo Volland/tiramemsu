@@ -4,7 +4,7 @@ use std::cell::RefCell;
 use std::panic::{catch_unwind, resume_unwind, AssertUnwindSafe};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Arc, Mutex, MutexGuard, TryLockError};
+use std::sync::{Arc, Condvar, Mutex, MutexGuard, TryLockError};
 use std::time::{Duration, Instant};
 
 use tm_core::{
@@ -206,6 +206,9 @@ pub struct Db {
     /// host imports without its `-wal`).
     pool: Option<ReaderPool>,
     writer: Mutex<Store>,
+    /// Release generation of `writer`, so a bounded wait sleeps until a release
+    /// instead of polling.
+    released: Released,
     terms: TermReader,
     engine: Option<Arc<Engine>>,
     caps: Capabilities,
@@ -218,6 +221,73 @@ pub struct Db {
     clock: Arc<dyn Clock>,
     /// The bulk import session holding the write lease (0: none).
     import_lease: AtomicU64,
+}
+
+/// How often a bounded writer wait polls cancellation.
+const POLL: Duration = Duration::from_millis(10);
+
+/// A counter bumped on every writer release, with a condition variable to wait
+/// for the next bump.
+#[derive(Default)]
+struct Released {
+    generation: Mutex<u64>,
+    signal: Condvar,
+}
+
+impl Released {
+    fn generation(&self) -> u64 {
+        *self.generation.lock().unwrap_or_else(|p| p.into_inner())
+    }
+
+    fn bump(&self) {
+        *self.generation.lock().unwrap_or_else(|p| p.into_inner()) += 1;
+        self.signal.notify_all();
+    }
+
+    /// Waits until the generation passes `seen` or `wait` elapses.
+    fn wait_past(&self, seen: u64, wait: Duration) {
+        let g = self.generation.lock().unwrap_or_else(|p| p.into_inner());
+        let _ = self
+            .signal
+            .wait_timeout_while(g, wait, |g| *g == seen)
+            .unwrap_or_else(|p| p.into_inner());
+    }
+}
+
+/// The locked writer; releasing it wakes bounded waiters.
+pub(crate) struct WriterGuard<'a> {
+    guard: Option<MutexGuard<'a, Store>>,
+    released: &'a Released,
+}
+
+impl<'a> WriterGuard<'a> {
+    fn new(guard: MutexGuard<'a, Store>, released: &'a Released) -> Self {
+        WriterGuard {
+            guard: Some(guard),
+            released,
+        }
+    }
+}
+
+impl std::ops::Deref for WriterGuard<'_> {
+    type Target = Store;
+    fn deref(&self) -> &Store {
+        self.guard.as_ref().expect("held until drop")
+    }
+}
+
+impl std::ops::DerefMut for WriterGuard<'_> {
+    fn deref_mut(&mut self) -> &mut Store {
+        self.guard.as_mut().expect("held until drop")
+    }
+}
+
+impl Drop for WriterGuard<'_> {
+    fn drop(&mut self) {
+        // unlock first, then wake, so a woken waiter finds the mutex free
+        drop(self.guard.take());
+        self.released.bump();
+    }
 }
 
 impl std::fmt::Debug for Db {
@@ -301,6 +371,7 @@ impl Db {
         Ok(Db {
             id: NEXT_DB_ID.fetch_add(1, Ordering::Relaxed),
             writer: Mutex::new(store),
+            released: Released::default(),
             pool,
             terms: TermReader::new(opts.term_cache_capacity),
             engine,
@@ -347,14 +418,17 @@ impl Db {
         Ok(self.lock()?.optimize_runs())
     }
 
-    fn lock(&self) -> Result<MutexGuard<'_, Store>> {
-        Ok(self.writer.lock().unwrap_or_else(|p| p.into_inner()))
+    fn lock(&self) -> Result<WriterGuard<'_>> {
+        let g = self.writer.lock().unwrap_or_else(|p| p.into_inner());
+        Ok(WriterGuard::new(g, &self.released))
     }
 
     /// Locks the writer. Under an operation budget the wait ends with the budget's
     /// stop conditions and, for a read served by the writer, with the reader
-    /// timeout (`PoolTimeout`); otherwise it is the plain blocking lock.
-    fn lock_bounded(&self, read: bool) -> Result<MutexGuard<'_, Store>> {
+    /// timeout (`PoolTimeout`); otherwise it is the plain blocking lock. The bounded
+    /// wait sleeps on the release signal and wakes at least every 10 ms to poll
+    /// cancellation, like the reader pool.
+    fn lock_bounded(&self, read: bool) -> Result<WriterGuard<'_>> {
         let interrupt = budget::interrupt();
         let timeout = if read {
             budget::reader_timeout().or(self.reader_timeout)
@@ -366,20 +440,26 @@ impl Db {
         }
         let start = Instant::now();
         loop {
+            let seen = self.released.generation();
             match self.writer.try_lock() {
-                Ok(g) => return Ok(g),
-                Err(TryLockError::Poisoned(p)) => return Ok(p.into_inner()),
+                Ok(g) => return Ok(WriterGuard::new(g, &self.released)),
+                Err(TryLockError::Poisoned(p)) => {
+                    return Ok(WriterGuard::new(p.into_inner(), &self.released))
+                }
                 Err(TryLockError::WouldBlock) => {}
             }
             if let Some(i) = &interrupt {
                 i.check()?;
             }
+            let mut wait = POLL;
             if let Some(timeout) = timeout {
-                if start.elapsed() >= timeout {
+                let elapsed = start.elapsed();
+                if elapsed >= timeout {
                     return Err(Error::PoolTimeout { timeout });
                 }
+                wait = wait.min(timeout - elapsed);
             }
-            std::thread::sleep(Duration::from_millis(1));
+            self.released.wait_past(seen, wait);
         }
     }
 

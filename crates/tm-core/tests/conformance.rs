@@ -201,7 +201,9 @@ host_test! {
         db.close();
         {
             let raw = db.raw();
-            raw.execute_batch("DROP TRIGGER triple_add_date; DROP TRIGGER triple_ret_date; UPDATE meta SET value=3 WHERE key='format_version';").unwrap();
+            raw.execute_batch("DROP TRIGGER triple_add_date; DROP TRIGGER triple_ret_date; \
+                DROP TRIGGER embedding_no_delete; DROP TRIGGER embedding_no_update; DROP TABLE embedding; \
+                UPDATE meta SET value=3 WHERE key='format_version';").unwrap();
         }
         db.reopen();
         assert_eq!(db.row(root), original);

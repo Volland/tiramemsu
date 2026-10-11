@@ -81,6 +81,26 @@ pub fn scope(op: &Op) -> Scope {
                 s.maybe_missing.insert(c.clone());
             }
         }
+        Op::Recall(t) => {
+            s.push(&t.eid);
+            for v in [&t.score, &t.rank].into_iter().flatten() {
+                s.push(v);
+            }
+            if let Some(v) = &t.via {
+                s.push(v);
+                s.maybe_missing.insert(v.clone());
+            }
+        }
+        Op::Vector(t) => {
+            s.push(&t.eid);
+            for v in [&t.similarity, &t.rank].into_iter().flatten() {
+                s.push(v);
+            }
+            if let Some(c) = &t.confidence {
+                s.push(c);
+                s.maybe_missing.insert(c.clone());
+            }
+        }
         Op::Values(v) => {
             for (i, var) in v.vars.iter().enumerate() {
                 s.push(var);
@@ -300,6 +320,73 @@ fn check_op(op: &Op) -> Result<()> {
             for (i, v) in outs.iter().enumerate() {
                 if outs[..i].contains(v) {
                     return Err(invalid(format!("text recall binds {v} twice")));
+                }
+            }
+        }
+        Op::Vector(t) => {
+            check_graph(&t.graph)?;
+            if matches!(t.graph, crate::op::GraphSel::Var(_)) {
+                return Err(invalid(
+                    "vector recall cannot bind a graph variable".to_string(),
+                ));
+            }
+            match &t.model {
+                TermOrVar::Const(Value::Iri(_)) | TermOrVar::Param(_) => {}
+                other => {
+                    return Err(invalid(format!(
+                        "vector recall needs a model IRI or a parameter, got {other:?}"
+                    )))
+                }
+            }
+            match &t.vector {
+                TermOrVar::Const(Value::Str(_)) | TermOrVar::Param(_) => {}
+                other => {
+                    return Err(invalid(format!(
+                        "vector recall needs a vector string or a parameter, got {other:?}"
+                    )))
+                }
+            }
+            for p in &t.predicates {
+                if !matches!(p, TermOrVar::Const(Value::Iri(_)) | TermOrVar::Param(_)) {
+                    return Err(invalid(format!(
+                        "vector recall predicates are IRIs or parameters, got {p:?}"
+                    )));
+                }
+            }
+            let outs: Vec<&Var> = std::iter::once(&t.eid)
+                .chain(
+                    [&t.similarity, &t.rank, &t.confidence]
+                        .into_iter()
+                        .flatten(),
+                )
+                .collect();
+            for (i, v) in outs.iter().enumerate() {
+                if outs[..i].contains(v) {
+                    return Err(invalid(format!("vector recall binds {v} twice")));
+                }
+            }
+        }
+        Op::Recall(t) => {
+            check_graph(&t.graph)?;
+            if matches!(t.graph, crate::op::GraphSel::Var(_)) {
+                return Err(invalid("recall cannot bind a graph variable".to_string()));
+            }
+            if t.text.is_none() && t.vector.is_none() {
+                return Err(invalid(
+                    "recall needs a text or a vector channel".to_string(),
+                ));
+            }
+            if t.vector.is_some() != t.model.is_some() {
+                return Err(invalid(
+                    "recall's vector channel needs both a model and a vector".to_string(),
+                ));
+            }
+            let outs: Vec<&Var> = std::iter::once(&t.eid)
+                .chain([&t.score, &t.rank, &t.via].into_iter().flatten())
+                .collect();
+            for (i, v) in outs.iter().enumerate() {
+                if outs[..i].contains(v) {
+                    return Err(invalid(format!("recall binds {v} twice")));
                 }
             }
         }

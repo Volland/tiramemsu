@@ -441,6 +441,101 @@ export interface TextHit {
   };
 }
 
+/** The evidence of a recall hit, read in the query's view. */
+export interface HitEvidence {
+  /** The largest numeric confidence layer, or `null` when the statement has none (never invented). */
+  confidence: number | null;
+  confirmations: number;
+  authors: number;
+  tAdd: number;
+  addedAt: number;
+}
+
+/** An embedding model: its IRI as a plain string, or an IRI term. */
+export type ModelInput = string | Term;
+
+/** Options for `Tx.defineEmbeddingModel`. */
+export interface EmbeddingModelOptions {
+  /** How vectors are compared (default `"cosine"`). */
+  metric?: "cosine" | "dot" | "l2";
+  /** How vectors are stored (default `"f32"`). */
+  encoding?: "f32" | "f16";
+}
+
+/** Options for `View.vectorSearch`. */
+export interface VectorSearchOptions {
+  /** At most this many hits (default 10). */
+  limit?: number;
+  /** Only statements in one of these graphs (membership visible in the view). */
+  graphs?: TermInput[];
+  /** Only statements with one of these predicates. */
+  predicates?: TermInput[];
+  /** Score only this many candidates chosen by sign-bit distance, then re-rank exactly. */
+  prefilter?: number;
+  /** The confidence predicate (default `v:confidence`). */
+  confidence?: TermInput;
+}
+
+/** One vector recall hit. */
+export interface VectorHit {
+  eid: number;
+  s: Term;
+  p: Term;
+  o: Term;
+  /** Larger is closer: cosine similarity, dot product or negated L2 distance. */
+  similarity: number;
+  /** 1-based rank under the policy `tiramemsu-vector-rank/1`. */
+  rank: number;
+  evidence: HitEvidence;
+}
+
+/** The result of `View.vectorSearch`. */
+export interface VectorResult {
+  hits: VectorHit[];
+  /** Visible embeddings considered. */
+  candidates: number;
+  /** False after a prefilter, whose cut may have dropped a closer statement. */
+  exact: boolean;
+}
+
+/** Options for `View.recall`: give `text`, a `model` with a `vector`, or both. */
+export interface RecallOptions {
+  text?: string;
+  mode?: "all" | "any" | "phrase";
+  model?: ModelInput;
+  vector?: number[];
+  /** At most this many fused hits (default 10). */
+  limit?: number;
+  /** Candidates per channel (default max(4 × limit, 50)). */
+  depth?: number;
+  /** Per hit, add up to this many layers and subject facts (default 0). */
+  expand?: number;
+  graphs?: TermInput[];
+  predicates?: TermInput[];
+}
+
+/** One hybrid recall hit. Expanded statements have `score` 0 and `via` set. */
+export interface RecallHit {
+  eid: number;
+  s: Term;
+  p: Term;
+  o: Term;
+  /** The reciprocal-rank fusion score. */
+  score: number;
+  rank: number;
+  lexical: number | null;
+  similarity: number | null;
+  textRank: number | null;
+  vectorRank: number | null;
+  evidence: HitEvidence;
+  /** For an expanded statement: the hit it was reached from. */
+  via: number | null;
+}
+
+function modelJson(m: ModelInput): unknown {
+  return typeof m === "string" ? m : toJson(m);
+}
+
 /** Options for `View.conflicts`. */
 export interface ConflictOptions {
   /** Only this subject (a term that is not stored matches nothing). */
@@ -770,6 +865,65 @@ export class View {
   }
 
   /**
+   * Vector recall: the statements of this view whose embedding under `model` is closest to
+   * `vector`, ranked by `tiramemsu-vector-rank/1`. Exact over the statements the view selects,
+   * so time travel never loses a hit; works on every SQLite build.
+   */
+  vectorSearch(model: ModelInput, vector: number[], opts?: VectorSearchOptions): VectorResult {
+    const args: Record<string, unknown> = { ...this._base(), model: modelJson(model), vector };
+    if (opts?.limit !== undefined) args.limit = opts.limit;
+    if (opts?.graphs) args.graphs = opts.graphs.map(toJson);
+    if (opts?.predicates) args.predicates = opts.predicates.map(toJson);
+    if (opts?.prefilter !== undefined) args.prefilter = opts.prefilter;
+    if (opts?.confidence !== undefined) args.confidence = toJson(opts.confidence);
+    const r = callNative(this._db, "vectorSearch", args) as {
+      hits: Array<Record<string, unknown>>;
+      candidates: number;
+      exact: boolean;
+    };
+    return {
+      hits: r.hits.map((h) => ({
+        ...(h as unknown as VectorHit),
+        s: fromJson(h.s),
+        p: fromJson(h.p),
+        o: fromJson(h.o),
+      })),
+      candidates: r.candidates,
+      exact: r.exact,
+    };
+  }
+
+  /**
+   * Hybrid recall: text and vector recall in this view fused by reciprocal rank
+   * (`tiramemsu-recall-rank/1`), optionally expanded to each hit's layers and subject facts.
+   */
+  recall(opts: RecallOptions): RecallHit[] {
+    const args: Record<string, unknown> = { ...this._base() };
+    if (opts.text !== undefined) args.text = opts.text;
+    if (opts.mode) args.mode = opts.mode;
+    if (opts.model !== undefined) args.model = modelJson(opts.model);
+    if (opts.vector !== undefined) args.vector = opts.vector;
+    if (opts.limit !== undefined) args.limit = opts.limit;
+    if (opts.depth !== undefined) args.depth = opts.depth;
+    if (opts.expand !== undefined) args.expand = opts.expand;
+    if (opts.graphs) args.graphs = opts.graphs.map(toJson);
+    if (opts.predicates) args.predicates = opts.predicates.map(toJson);
+    return (callNative(this._db, "recall", args) as Array<Record<string, unknown>>).map((h) => ({
+      ...(h as unknown as RecallHit),
+      s: fromJson(h.s),
+      p: fromJson(h.p),
+      o: fromJson(h.o),
+    }));
+  }
+
+  /** The eids of statements in this view with no embedding under `model`: an embedding backlog. */
+  unembedded(model: ModelInput, limit?: number): number[] {
+    const args: Record<string, unknown> = { ...this._base(), model: modelJson(model) };
+    if (limit !== undefined) args.limit = limit;
+    return callNative(this._db, "unembedded", args) as number[];
+  }
+
+  /**
    * Subject/predicate pairs of this view with distinct objects whose valid intervals
    * overlap, with the attributed evidence of every value. Statements with the same object
    * support one value; nothing is scored, resolved or written. Throws `Unsupported` on the
@@ -856,17 +1010,16 @@ export interface SpeculateResult {
   results: unknown[];
 }
 
-let _refSeq = 0;
-
 /**
  * Transaction op accumulator passed to `Database.transact`. Ops are recorded but not
  * sent to the database until the callback returns; `Ref` handles resolve at commit time.
  */
 export class Tx {
   /** @internal */ readonly _ops: unknown[] = [];
+  private _refSeq = 0;
 
   private _push(op: Record<string, unknown>, named: boolean): Ref {
-    const ref = new Ref(named ? `r${++_refSeq}` : "_");
+    const ref = new Ref(named ? `r${++this._refSeq}` : "_");
     if (named) op.as = ref._refName;
     this._ops.push(op);
     return ref;
@@ -922,6 +1075,33 @@ export class Tx {
   /** Records that another source confirms the statement without changing it. */
   confirm(eid: number | Ref): void {
     this._ops.push({ op: "confirm", eid: isRef(eid) ? { ref: (eid as Ref)._refName } : eid });
+  }
+
+  /**
+   * Defines embedding model `model`: its dimensions, metric and encoding. The identical
+   * definition again is a no-op; a different one for the same IRI throws `InvalidQuery`.
+   */
+  defineEmbeddingModel(model: ModelInput, dimensions: number, opts?: EmbeddingModelOptions): void {
+    this._ops.push({
+      op: "defineEmbeddingModel",
+      model: modelJson(model),
+      dimensions,
+      metric: opts?.metric ?? "cosine",
+      encoding: opts?.encoding ?? "f32",
+    });
+  }
+
+  /**
+   * Stores the embedding of live statement `eid` under `model`. The store never computes
+   * embeddings. The identical vector again is a no-op; a different one throws `EmbeddingConflict`.
+   */
+  setEmbedding(eid: number | Ref, model: ModelInput, vector: number[]): void {
+    this._ops.push({
+      op: "setEmbedding",
+      eid: isRef(eid) ? { ref: (eid as Ref)._refName } : eid,
+      model: modelJson(model),
+      vector,
+    });
   }
 
   /** Asserts metadata on the transaction itself (subject is the tx node). */

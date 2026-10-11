@@ -116,6 +116,7 @@ impl BindError {
                 Error::Reentrant => "Reentrant",
                 Error::ImportInProgress => "ImportInProgress",
                 Error::TextIndexUnavailable { .. } => "TextIndexUnavailable",
+                Error::EmbeddingConflict { .. } => "EmbeddingConflict",
                 Error::SavedAnswerNotFound { .. } => "SavedAnswerNotFound",
                 Error::Cancelled => "Cancelled",
                 Error::DeadlineExceeded { .. } => "DeadlineExceeded",
@@ -359,7 +360,10 @@ impl Database {
     /// (`s`, `key`), `dependents` (`eid`: what stands on a statement) and `bundle`
     /// (`eid`: the statement with its layers and evidence, as `tiramemsu-bundle/1`
     /// JSON), `textSearch` (`text`, `mode`, `graphs`, `predicates`, `limit`,
-    /// `confidence`: ranked text recall), `conflicts` (`s`, `p`, `limit`,
+    /// `confidence`: ranked text recall), `vectorSearch` (`model`, `vector`, `limit`,
+    /// `graphs`, `predicates`, `prefilter`, `confidence`: exact vector recall),
+    /// `recall` (`text`, `mode`, `model`, `vector`, `limit`, `depth`, `expand`,
+    /// `rrfK`: hybrid recall), `unembedded` (`model`, `limit`), `conflicts` (`s`, `p`, `limit`,
     /// `confidence`, `source`: distinct objects valid at the same time, with
     /// attributed evidence) and `explainSparql` (`text`: the routing
     /// of each region with its reason, the SQL and `EXPLAIN QUERY PLAN`, without
@@ -378,7 +382,8 @@ impl Database {
     pub fn call(&self, op: &str, args: &J) -> Res<J> {
         match op {
             "sparql" | "cypher" | "triples" | "path" | "events" | "graphs" | "graphMembers"
-            | "values" | "dependents" | "bundle" | "textSearch" | "explainSparql" | "conflicts" => {
+            | "values" | "dependents" | "bundle" | "textSearch" | "vectorSearch" | "recall"
+            | "unembedded" | "explainSparql" | "conflicts" => {
                 let view = read::view_from_json(&self.db, args.get("view").unwrap_or(&J::Null))?;
                 let (budget, _entry) = self.budget(args.get("budget"))?;
                 match &budget {

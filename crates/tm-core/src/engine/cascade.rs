@@ -1,7 +1,8 @@
 //! Recursive retraction over subject and object positions.
 
-use std::collections::HashSet;
+use std::collections::{BTreeSet, HashMap, HashSet};
 
+use super::supersede::{placeholders, IN_CHUNK};
 use super::Tx;
 use crate::error::{Error, Result};
 use crate::exec::SqlValue;
@@ -20,26 +21,43 @@ impl Tx<'_> {
         if order.len() > limit {
             return Err(Error::CascadeLimitExceeded { root, limit });
         }
-        let mut i = 0;
-        while i < order.len() {
-            let e = order[i];
-            i += 1;
-            let rows = self.exec.rows(
-                "SELECT eid FROM triple WHERE s = ?1 AND t_ret IS NULL \
-                 UNION SELECT eid FROM triple WHERE o = ?1 AND t_ret IS NULL ORDER BY eid",
-                &[SqlValue::Integer(e.oid().raw())],
-            )?;
-            for r in rows {
-                let Some(x) = r[0]
-                    .as_i64()
-                    .and_then(|r| Eid::from_oid(ObjectId::from_raw(r)))
-                else {
-                    continue;
-                };
-                if seen.insert(x) {
-                    order.push(x);
-                    if order.len() > limit {
-                        return Err(Error::CascadeLimitExceeded { root, limit });
+        // Breadth first, one query per frontier chunk. Parents are visited in queue
+        // order and each parent's dependents in eid order, so `order` is the same as
+        // a node-at-a-time walk.
+        let mut level = 0;
+        while level < order.len() {
+            let frontier: Vec<Eid> = order[level..].to_vec();
+            level = order.len();
+            for chunk in frontier.chunks(IN_CHUNK) {
+                let list = placeholders(chunk.len());
+                let sql = format!(
+                    "SELECT s, eid FROM triple WHERE s IN ({list}) AND t_ret IS NULL \
+                     UNION SELECT o, eid FROM triple WHERE o IN ({list}) AND t_ret IS NULL"
+                );
+                let params: Vec<SqlValue> = chunk
+                    .iter()
+                    .map(|e| SqlValue::Integer(e.oid().raw()))
+                    .collect();
+                let mut children: HashMap<i64, BTreeSet<i64>> = HashMap::new();
+                for r in self.exec.rows(&sql, &params)? {
+                    if let (Some(parent), Some(eid)) = (r[0].as_i64(), r[1].as_i64()) {
+                        children.entry(parent).or_default().insert(eid);
+                    }
+                }
+                for e in chunk {
+                    let Some(kids) = children.get(&e.oid().raw()) else {
+                        continue;
+                    };
+                    for &raw in kids {
+                        let Some(x) = Eid::from_oid(ObjectId::from_raw(raw)) else {
+                            continue;
+                        };
+                        if seen.insert(x) {
+                            order.push(x);
+                            if order.len() > limit {
+                                return Err(Error::CascadeLimitExceeded { root, limit });
+                            }
+                        }
                     }
                 }
             }

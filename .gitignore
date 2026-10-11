@@ -16,3 +16,6 @@ __pycache__/
 *.pyd
 bindings/node/test-results.json
 .DS_Store
+
+# Lean build output
+lean/.lake/

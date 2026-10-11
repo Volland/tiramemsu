@@ -59,7 +59,7 @@ db = Database(<span class="s">"memory.db"</span>, text_index=<span class="k">Tru
   ?s ?p ?o ~ ?e
 }</code></pre>
 <p>In Cypher it is a procedure: <code>CALL tiramemsu.text.search('lisbon', {limit: 10}) YIELD statement, score RETURN statement, score</code>.</p>
-<div class="note"><strong>What recall is not.</strong> It matches words, case and accent insensitive, with <code>all</code>, <code>any</code> or <code>phrase</code> modes and a trailing <code>*</code> for a prefix. It does not know that “Lisboa” is “Lisbon”. There are no embeddings. The index is derived: build it with <code>text_index=True</code>, and every write keeps it current. It needs SQLite with FTS5.</div>
+<div class="note"><strong>What recall is not.</strong> It matches words, case and accent insensitive, with <code>all</code>, <code>any</code> or <code>phrase</code> modes and a trailing <code>*</code> for a prefix. It does not know that “Lisboa” is “Lisbon”. Recall by meaning is a separate operation: <a href="vector-memory.html">vector recall</a> now exists, over embeddings you supply, and hybrid recall fuses it with this text search. The index is derived: build it with <code>text_index=True</code>, and every write keeps it current. It needs SQLite with FTS5.</div>
 
 <h2>Review: see where memory disagrees</h2>
 <p>Both agents wrote about Alice’s employer, and for five months of 2024 they cannot both be right, unless she had two jobs. <code>conflicts</code> finds such places: same subject, same predicate, different objects, overlapping valid time.</p>

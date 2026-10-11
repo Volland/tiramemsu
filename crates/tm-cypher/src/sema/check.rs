@@ -437,6 +437,8 @@ fn check_clause(c: &Clause, scope: &mut Scope, opts: &CheckOpts) -> CResult<Opti
                 "db.relationshiptypes",
                 "db.propertykeys",
                 crate::exec::text::NAME,
+                crate::exec::vector::NAME,
+                crate::exec::recall::NAME,
             ];
             if !known.contains(&name.to_ascii_lowercase().as_str()) {
                 return Err(CypherError::unsupported(

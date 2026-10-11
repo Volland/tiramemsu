@@ -35,6 +35,8 @@ host_test! {
                 "meta", "term", "tx", "triple", "volatile", "pred_multi",
                 // format 3: derived saved-answer records
                 "saved_answer", "saved_answer_dep",
+                // format 5: embeddings
+                "embedding",
             ])
         );
         assert_eq!(
@@ -42,7 +44,7 @@ host_test! {
             set(&[
                 "term_key", "term_num", "tx_instant", "live_spo", "live_pos", "live_osp",
                 "hist_spo", "hist_pos", "hist_osp", "valid_p", "log_add", "log_ret",
-                "saved_answer_dep_eid",
+                "saved_answer_dep_eid", "embedding_model_eid", "embedding_bits",
             ])
         );
         assert_eq!(names(&raw, "view"), set(&["event"]));
@@ -53,7 +55,10 @@ host_test! {
         ] {
             assert!(triggers.contains(t), "{t}");
         }
-        assert_eq!(triggers.len(), 11);
+        for t in ["embedding_no_delete", "embedding_no_update"] {
+            assert!(triggers.contains(t), "{t}");
+        }
+        assert_eq!(triggers.len(), 13);
     }
 }
 
@@ -96,7 +101,7 @@ fn interrupted_creation_leaves_no_half_initialised_file() {
             &[],
         )
         .unwrap();
-    assert_eq!(n, Some(8));
+    assert_eq!(n, Some(9));
 }
 
 host_test! {
@@ -129,11 +134,13 @@ host_test! {
             .unwrap()
             .map(Result::unwrap)
             .collect();
-        // format 1, plus the tables format 3 adds and the triggers of format 4 (format 2 adds only meta rows)
+        // format 1, plus the tables format 3 adds, the triggers of format 4 and the
+        // embedding table of format 5 (format 2 adds only meta rows)
         let expected: BTreeSet<String> = storage::split_statements(storage::DDL_V1)
             .into_iter()
             .chain(storage::split_statements(storage::DDL_SAVED_ANSWERS))
             .chain(storage::split_statements(storage::DDL_DATE_GUARDS))
+            .chain(storage::split_statements(storage::DDL_EMBEDDING))
             .map(|s| s.trim_end_matches(';').trim().to_string())
             .collect();
         assert_eq!(stored, expected);
@@ -508,7 +515,7 @@ fn foreign_and_empty_files() {
     let mut s = Store::open(&MinimalHost::new(), &no_tables, StoreOptions::default()).unwrap();
     assert_eq!(
         s.executor().query_i64("SELECT count(*) FROM sqlite_schema WHERE type = 'table' AND name NOT LIKE 'sqlite_%'", &[]).unwrap(),
-        Some(8)
+        Some(9)
     );
 }
 

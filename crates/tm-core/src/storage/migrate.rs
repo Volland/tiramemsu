@@ -26,7 +26,8 @@ impl std::fmt::Debug for Migration {
 }
 
 /// The migrations of this build: format 1 to 2 adds the text-index bookkeeping,
-/// format 2 to 3 the saved-answer tables, format 3 to 4 the transaction-date guards.
+/// format 2 to 3 the saved-answer tables, format 3 to 4 the transaction-date guards,
+/// format 4 to 5 the embedding table.
 pub const MIGRATIONS: &[Migration] = &[
     Migration {
         from: 1,
@@ -40,7 +41,22 @@ pub const MIGRATIONS: &[Migration] = &[
         from: 3,
         apply: v3_to_v4,
     },
+    Migration {
+        from: 4,
+        apply: v4_to_v5,
+    },
 ];
+
+/// Format 4 to 5: the empty `embedding` table of vector recall (OpenSpec change
+/// `add-vector-recall`) with its no-update and no-delete triggers. No graph row is
+/// read or written, and it needs no host capability.
+// @lat: [[storage#Embeddings]]
+fn v4_to_v5(exec: &mut dyn Executor) -> Result<()> {
+    for stmt in super::split_statements(super::DDL_EMBEDDING) {
+        exec.execute_batch(&stmt)?;
+    }
+    Ok(())
+}
 
 /// Format 3 to 4 adds clock validation without rewriting historical rows.
 fn v3_to_v4(exec: &mut dyn Executor) -> Result<()> {

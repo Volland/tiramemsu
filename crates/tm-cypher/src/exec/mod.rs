@@ -20,8 +20,10 @@ pub mod eval;
 pub mod funcs;
 pub mod pattern;
 pub mod project;
+pub mod recall;
 pub mod text;
 pub mod time;
+pub mod vector;
 pub mod write;
 pub mod write_set;
 
@@ -349,6 +351,12 @@ impl Exec<'_> {
         let lname = name.to_ascii_lowercase();
         if lname == text::NAME {
             return self.exec_text_search(rows, args, yields, standalone);
+        }
+        if lname == vector::NAME {
+            return self.exec_vector_search(rows, args, yields, standalone);
+        }
+        if lname == recall::NAME {
+            return self.exec_recall(rows, args, yields, standalone);
         }
         let (col, values) = self.builtin_procedure(&lname)?;
         let mut out = Vec::new();

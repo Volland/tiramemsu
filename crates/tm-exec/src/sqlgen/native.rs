@@ -9,7 +9,7 @@ use tm_ir::Var;
 use super::{Col, Gen, IsoPat, Item, Rel, Select};
 use crate::lftj::{self, RegionPlan};
 use crate::plan::analyze::{Dom, VClass};
-use crate::plan::{Node, PGraphs, PPath, PTerm, PText};
+use crate::plan::{Node, PGraphs, PPath, PRecall, PTerm, PText, PVector};
 use crate::result::{RegionKind, RouteNote};
 use crate::scan::view_predicates;
 
@@ -110,6 +110,119 @@ impl Gen<'_> {
                     eid_of: None,
                 },
             );
+        }
+        Ok(r)
+    }
+
+    /// Compiles a vector recall: one `tm_vector(…)` call whose rows bind the eid
+    /// and the optional similarity, rank and confidence.
+    pub fn vector(&mut self, t: &PVector) -> Result<Rel> {
+        let a = self.alias('x');
+        let model = self.params.push(SqlValue::Text(t.model.clone()));
+        let vector = self.params.push(SqlValue::Text(t.vector.clone()));
+        let view = self.params.push(SqlValue::Text(t.view_text.clone()));
+        let graphs = match &t.graphs {
+            None => self.params.push(SqlValue::Null),
+            Some(ids) => {
+                let list: Vec<String> = ids.iter().map(|g| g.raw().to_string()).collect();
+                self.params
+                    .push(SqlValue::Text(format!("[{}]", list.join(","))))
+            }
+        };
+        let limit = match t.limit {
+            None => self.params.push(SqlValue::Null),
+            Some(n) => self.params.push(SqlValue::Integer(i64::from(n))),
+        };
+        let predicates = match &t.predicates {
+            None => self.params.push(SqlValue::Null),
+            Some(ids) => {
+                let list: Vec<String> = ids.iter().map(|p| p.raw().to_string()).collect();
+                self.params
+                    .push(SqlValue::Text(format!("[{}]", list.join(","))))
+            }
+        };
+        let mut r = Rel {
+            items: vec![Item {
+                sql: format!(
+                    "tm_vector({model}, {vector}, {view}, {graphs}, {limit}, {predicates}) AS {a}"
+                ),
+                on: None,
+            }],
+            ..Rel::default()
+        };
+        r.set(&t.eid, Col::term(format!("{a}.eid"), false));
+        let computed = |sql: String, class: VClass, mm: bool| Col {
+            sql,
+            dom: Dom::Computed(class),
+            mm,
+            eid_of: None,
+        };
+        if let Some(v) = &t.similarity {
+            r.set(
+                v,
+                computed(format!("{a}.similarity"), VClass::Double, false),
+            );
+        }
+        if let Some(v) = &t.rank {
+            r.set(v, computed(format!("{a}.rank"), VClass::Int, false));
+        }
+        if let Some(v) = &t.confidence {
+            r.set(v, computed(format!("{a}.confidence"), VClass::Double, true));
+        }
+        Ok(r)
+    }
+
+    /// Compiles a hybrid recall: one `tm_recall(…)` call whose rows bind the eid and
+    /// the optional score, rank and via.
+    pub fn recall(&mut self, t: &PRecall) -> Result<Rel> {
+        let a = self.alias('x');
+        let mut opt = |v: &Option<String>| match v {
+            None => self.params.push(SqlValue::Null),
+            Some(s) => self.params.push(SqlValue::Text(s.clone())),
+        };
+        let text = opt(&t.text);
+        let model = opt(&t.model);
+        let vector = opt(&t.vector);
+        let mode = self.params.push(SqlValue::Text(t.mode.to_string()));
+        let view = self.params.push(SqlValue::Text(t.view_text.clone()));
+        let graphs = match &t.graphs {
+            None => self.params.push(SqlValue::Null),
+            Some(ids) => {
+                let list: Vec<String> = ids.iter().map(|g| g.raw().to_string()).collect();
+                self.params
+                    .push(SqlValue::Text(format!("[{}]", list.join(","))))
+            }
+        };
+        let limit = match t.limit {
+            None => self.params.push(SqlValue::Null),
+            Some(n) => self.params.push(SqlValue::Integer(i64::from(n))),
+        };
+        let expand = self.params.push(SqlValue::Integer(i64::from(t.expand)));
+        let mut r = Rel {
+            items: vec![Item {
+                sql: format!(
+                    "tm_recall({text}, {mode}, {model}, {vector}, {view}, {graphs}, {limit}, \
+                     {expand}) AS {a}"
+                ),
+                on: None,
+            }],
+            ..Rel::default()
+        };
+        r.set(&t.eid, Col::term(format!("{a}.eid"), false));
+        let computed = |sql: String, class: VClass| Col {
+            sql,
+            dom: Dom::Computed(class),
+            mm: false,
+            eid_of: None,
+        };
+        if let Some(v) = &t.score {
+            r.set(v, computed(format!("{a}.score"), VClass::Double));
+        }
+        if let Some(v) = &t.rank {
+            r.set(v, computed(format!("{a}.rank"), VClass::Int));
+        }
+        if let Some(v) = &t.via {
+            r.set(v, Col::term(format!("{a}.via"), true));
         }
         Ok(r)
     }

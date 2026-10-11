@@ -24,7 +24,7 @@ fn arg_err(arg: &str, msg: impl std::fmt::Display) -> Error {
 }
 
 /// The `graphs` argument: NULL (no filter), one graph id, or a JSON array of ids.
-fn parse_graphs(v: &SqlValue) -> Result<Option<Vec<ObjectId>>> {
+pub(crate) fn parse_graphs(v: &SqlValue) -> Result<Option<Vec<ObjectId>>> {
     let bad = || {
         arg_err(
             "graphs",

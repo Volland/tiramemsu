@@ -3,8 +3,9 @@
 use std::cell::RefCell;
 
 use tm_core::{
-    budget, read, text, Bundle, Eid, Error, Event, Executor, ObjectId, Result, TermReader, TextHit,
-    TextQuery, Triple, Value, ViewSpec,
+    budget, read, recall, text, vector, Bundle, Eid, Error, Event, Executor, ObjectId, RecallHit,
+    RecallQuery, Result, TermReader, TextHit, TextQuery, Triple, Value, VectorQuery, VectorResult,
+    ViewSpec,
 };
 #[cfg(feature = "exec")]
 use tm_exec::{CacheMode, Explain, PathRequest, PathRow, QueryResult, TimeRespecting};
@@ -646,6 +647,80 @@ impl View<'_> {
             self.exec(|e, cache| match cache {
                 Some(r) => text::search(e, &spec, query, r, true),
                 None => text::search(e, &spec, query, &TermReader::new(64), false),
+            })
+        })
+    }
+}
+
+impl View<'_> {
+    /// Vector recall: the statements of this view whose embedding under
+    /// `query.model` is closest to `query.vector`, with their similarity and the
+    /// evidence the store holds, ranked by `tiramemsu-vector-rank/1`.
+    ///
+    /// The search is exact: it scores every embedding of a statement this view
+    /// selects (as-of, history, valid time, graphs and predicates applied first),
+    /// so time travel never loses a hit to an index cut. With `prefilter` it keeps
+    /// the best candidates by sign-bit distance and re-ranks them exactly, and the
+    /// result says it is not exhaustive. It needs no SQLite extension.
+    ///
+    /// ```
+    /// # use tiramemsu::*;
+    /// # let dir = tempfile::tempdir().unwrap();
+    /// let db = Db::open(dir.path().join("m.db"), OpenOptions::default())?;
+    /// let v = |s: &str| Value::iri(format!("urn:tiramemsu:v:{s}"));
+    /// let model = v("toy-embedder");
+    /// db.transact(TxOptions::default(), |tx| {
+    ///     tx.define_embedding_model(model.clone(), &EmbeddingModel::new(3))?;
+    ///     let paris = tx.assert(v("alice"), v("livesIn"), v("paris"), Valid::ALWAYS)?.eid();
+    ///     let tea = tx.assert(v("alice"), v("likes"), v("tea"), Valid::ALWAYS)?.eid();
+    ///     tx.set_embedding(paris, model.clone(), &[0.9, 0.1, 0.0])?;
+    ///     tx.set_embedding(tea, model.clone(), &[0.0, 0.2, 0.9])?;
+    ///     Ok(())
+    /// })?;
+    /// let m = db.now().encode(&model)?.unwrap();
+    /// let found = db.now().vector_search(&VectorQuery::new(m, vec![1.0, 0.0, 0.0]))?;
+    /// assert!(found.exact);
+    /// assert_eq!(db.now().decode(found.hits[0].o)?, v("paris"));
+    /// # Ok::<(), Error>(())
+    /// ```
+    ///
+    /// # Errors
+    ///
+    /// `InvalidQuery` for a missing or undefined model or a query vector that does
+    /// not fit it.
+    // @lat: [[query#Vector Recall]]
+    pub fn vector_search(&self, query: &VectorQuery) -> Result<VectorResult> {
+        let spec = self.spec;
+        self.op(|| {
+            self.exec(|e, cache| match cache {
+                Some(r) => vector::search(e, &spec, query, r, true),
+                None => vector::search(e, &spec, query, &TermReader::new(64), false),
+            })
+        })
+    }
+
+    /// The statements of this view without an embedding under `model`, in eid
+    /// order, at most `limit`: the backlog of an embedding job.
+    pub fn unembedded(&self, model: ObjectId, limit: Option<usize>) -> Result<Vec<Eid>> {
+        let spec = self.spec;
+        self.op(|| self.exec(|e, _| vector::unembedded(e, &spec, model, limit)))
+    }
+
+    /// Hybrid recall: text and vector recall in this view, fused by reciprocal
+    /// rank, optionally expanded to each hit's layers and to facts about its
+    /// subject. Ranked by `tiramemsu-recall-rank/1`.
+    ///
+    /// # Errors
+    ///
+    /// `InvalidQuery` when neither channel is given, and the errors of
+    /// [`View::text_search`] and [`View::vector_search`].
+    // @lat: [[query#Hybrid Recall]]
+    pub fn recall(&self, query: &RecallQuery) -> Result<Vec<RecallHit>> {
+        let spec = self.spec;
+        self.op(|| {
+            self.exec(|e, cache| match cache {
+                Some(r) => recall::recall(e, &spec, query, r, true),
+                None => recall::recall(e, &spec, query, &TermReader::new(64), false),
             })
         })
     }

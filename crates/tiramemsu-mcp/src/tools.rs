@@ -95,6 +95,7 @@ enum Schema {
     Terms(&'static str),
     Count(&'static str),
     Flag(&'static str),
+    Vector(&'static str),
 }
 
 const TERM: &str = "A term: a string (a plain string literal), a number, a boolean, or an object \
@@ -139,6 +140,11 @@ impl Schema {
             }
             Schema::Count(d) => json!({ "type": "integer", "minimum": 0, "description": d }),
             Schema::Flag(d) => json!({ "type": "boolean", "description": d }),
+            Schema::Vector(d) => json!({
+                "type": "array",
+                "items": { "type": "number" },
+                "description": d,
+            }),
         }
     }
 }
@@ -312,6 +318,118 @@ index (start the server with --text-index).",
                 Schema::Term,
                 false,
             ),
+            ("view", Schema::View, false),
+        ],
+    },
+    Tool {
+        name: "define_embedding_model",
+        title: "Define an embedding model",
+        description: "Declare the embedding model an agent will store vectors for: its IRI, number of \
+dimensions, metric (cosine, dot or l2; default cosine) and storage encoding (f32 or f16; default f32). \
+Defining the same model again is a no-op (new: false); a different definition for the same IRI is \
+refused: use a new IRI. The store never computes embeddings itself.",
+        writes: true,
+        idempotent: true,
+        args: &[
+            ("model", Schema::Text("The model IRI, e.g. urn:example:models:minilm-l6."), true),
+            ("dimensions", Schema::Count("The number of components of every vector."), true),
+            (
+                "metric",
+                Schema::Enum("How vectors are compared (default cosine).", &["cosine", "dot", "l2"]),
+                false,
+            ),
+            (
+                "encoding",
+                Schema::Enum("How vectors are stored (default f32).", &["f32", "f16"]),
+                false,
+            ),
+        ],
+    },
+    Tool {
+        name: "set_embedding",
+        title: "Store an embedding",
+        description: "Store the embedding of a live statement under a defined model, computed by you \
+from the statement's text. Storing the identical vector again is a no-op (new: false); a different \
+vector for the same statement and model is refused (EmbeddingConflict). A corrected (superseded) fact \
+has a new eid and needs its own embedding.",
+        writes: true,
+        idempotent: true,
+        args: &[
+            ("eid", Schema::Eid, true),
+            ("model", Schema::Text("The model IRI."), true),
+            ("vector", Schema::Vector("The embedding, in the model's dimensions."), true),
+        ],
+    },
+    Tool {
+        name: "vector_search",
+        title: "Search memory by meaning",
+        description: "Find the statements whose embedding is closest to a query vector, in the chosen \
+view (now, as of a past transaction or instant, history, valid at a time). The search is exact over the \
+statements the view selects, so time travel never loses a hit; hits carry similarity and evidence \
+(confidence, confirmations, authors, when added).",
+        writes: false,
+        idempotent: true,
+        args: &[
+            ("model", Schema::Text("The model IRI."), true),
+            ("vector", Schema::Vector("The query embedding, computed with the same model."), true),
+            ("graphs", Schema::Terms("Keep statements in one of these graphs."), false),
+            ("predicates", Schema::Terms("Keep statements with one of these predicates."), false),
+            ("limit", Schema::Count("The most hits to return (default 10)."), false),
+            ("confidence", Schema::Term, false),
+            (
+                "prefilter",
+                Schema::Count(
+                    "Score only this many candidates chosen by sign-bit distance, then re-rank \
+them exactly (faster, not exhaustive).",
+                ),
+                false,
+            ),
+            ("view", Schema::View, false),
+        ],
+    },
+    Tool {
+        name: "recall",
+        title: "Recall memory by words and meaning",
+        description: "Hybrid recall: text search and vector search in the chosen view, fused by \
+reciprocal rank, optionally expanded to each hit's layers (source, confidence, ...) and to other facts \
+about its subject. Give text, a model with a vector, or both. Text needs the text index (--text-index).",
+        writes: false,
+        idempotent: true,
+        args: &[
+            ("text", Schema::Text("The words to find."), false),
+            (
+                "mode",
+                Schema::Enum("How the words combine (default all).", &["all", "any", "phrase"]),
+                false,
+            ),
+            ("model", Schema::Text("The model IRI of the vector."), false),
+            ("vector", Schema::Vector("The query embedding."), false),
+            ("graphs", Schema::Terms("Keep statements in one of these graphs."), false),
+            ("predicates", Schema::Terms("Keep statements with one of these predicates."), false),
+            ("limit", Schema::Count("The most fused hits (default 10)."), false),
+            (
+                "depth",
+                Schema::Count("Candidates taken from each channel (default max(4 × limit, 50))."),
+                false,
+            ),
+            (
+                "expand",
+                Schema::Count("Per hit, add up to this many layers and subject facts (default 0)."),
+                false,
+            ),
+            ("view", Schema::View, false),
+        ],
+    },
+    Tool {
+        name: "unembedded",
+        title: "List statements without an embedding",
+        description: "List the statement ids in the chosen view that have no embedding under a \
+model yet: the backlog to embed (compute each vector from the statement, then call set_embedding).",
+        writes: false,
+        idempotent: true,
+        args: &[
+            ("model", Schema::Text("The model IRI."), true),
+            ("limit", Schema::Count("The most ids to return."), false),
             ("view", Schema::View, false),
         ],
     },
@@ -583,6 +701,78 @@ fn run(db: &Database, config: &Config, t: &Tool, args: &J) -> Result<J, ToolErro
             let (r, v) = read("textSearch", c)?;
             Ok(json!({ "view": v, "hits": r }))
         }
+        "define_embedding_model" => {
+            let mut op = Map::new();
+            op.insert("op".into(), json!("defineEmbeddingModel"));
+            for k in ["model", "dimensions", "metric", "encoding"] {
+                if let Some(v) = get(k) {
+                    op.insert(k.into(), v);
+                }
+            }
+            let r = transact(json!([J::Object(op)]))?;
+            Ok(json!({ "model": get("model"), "new": r["results"][0]["new"], "t": r["t"] }))
+        }
+        "set_embedding" => {
+            let mut op = Map::new();
+            op.insert("op".into(), json!("setEmbedding"));
+            for k in ["eid", "model", "vector"] {
+                if let Some(v) = get(k) {
+                    op.insert(k.into(), v);
+                }
+            }
+            let r = transact(json!([J::Object(op)]))?;
+            Ok(json!({ "eid": get("eid"), "new": r["results"][0]["new"], "t": r["t"] }))
+        }
+        "vector_search" => {
+            let mut c = Map::new();
+            for k in [
+                "model",
+                "vector",
+                "graphs",
+                "predicates",
+                "limit",
+                "prefilter",
+                "confidence",
+            ] {
+                if let Some(v) = get(k) {
+                    c.insert(k.into(), v);
+                }
+            }
+            let (r, v) = read("vectorSearch", c)?;
+            Ok(
+                json!({ "view": v, "hits": r["hits"], "candidates": r["candidates"], "exact": r["exact"] }),
+            )
+        }
+        "recall" => {
+            let mut c = Map::new();
+            for k in [
+                "text",
+                "mode",
+                "model",
+                "vector",
+                "graphs",
+                "predicates",
+                "limit",
+                "depth",
+                "expand",
+            ] {
+                if let Some(v) = get(k) {
+                    c.insert(k.into(), v);
+                }
+            }
+            let (r, v) = read("recall", c)?;
+            Ok(json!({ "view": v, "hits": r }))
+        }
+        "unembedded" => {
+            let mut c = Map::new();
+            for k in ["model", "limit"] {
+                if let Some(v) = get(k) {
+                    c.insert(k.into(), v);
+                }
+            }
+            let (r, v) = read("unembedded", c)?;
+            Ok(json!({ "view": v, "eids": r }))
+        }
         "save_answer" => {
             let mut c = Map::new();
             for k in ["name", "language", "text", "params", "view"] {
@@ -765,6 +955,9 @@ mod tests {
                 "conflicts",
                 "preview_bundle",
                 "text_search",
+                "vector_search",
+                "recall",
+                "unembedded",
                 "saved_answers"
             ]
         );

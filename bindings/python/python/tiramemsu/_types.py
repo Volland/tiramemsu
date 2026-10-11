@@ -600,6 +600,114 @@ class TextHit:
     evidence: TextEvidence
 
 
+@dataclass(frozen=True)
+class VectorHit:
+    """One row from :meth:`View.vector_search`: a statement whose embedding is
+    close to the query, with its similarity (larger is closer), its 1-based rank
+    under ``tiramemsu-vector-rank/1`` and its evidence."""
+
+    eid: int
+    s: Any
+    p: Any
+    o: Any
+    similarity: float
+    rank: int
+    evidence: TextEvidence
+
+
+@dataclass(frozen=True)
+class VectorResult:
+    """The result of :meth:`View.vector_search`. ``exact`` is false after a
+    prefilter, whose cut may have dropped a closer statement; ``candidates`` counts
+    the visible embeddings considered."""
+
+    hits: List[VectorHit]
+    candidates: int
+    exact: bool
+
+    def __iter__(self) -> Iterator[VectorHit]:
+        return iter(self.hits)
+
+    def __len__(self) -> int:
+        return len(self.hits)
+
+
+@dataclass(frozen=True)
+class RecallHit:
+    """One row from :meth:`View.recall`. Fused hits carry their reciprocal-rank
+    ``score`` and the per-channel ranks and scores (``None`` for a channel that did
+    not find them); expanded statements have ``score == 0`` and ``via`` set to the
+    hit they were reached from."""
+
+    eid: int
+    s: Any
+    p: Any
+    o: Any
+    score: float
+    rank: int
+    lexical: Optional[float]
+    similarity: Optional[float]
+    text_rank: Optional[int]
+    vector_rank: Optional[int]
+    evidence: TextEvidence
+    via: Optional[int]
+
+
+def _evidence_from_json(e: Dict[str, Any]) -> TextEvidence:
+    return TextEvidence(
+        confidence=None if e.get("confidence") is None else float(e["confidence"]),
+        confirmations=int(e["confirmations"]),
+        authors=int(e["authors"]),
+        t_add=int(e["tAdd"]),
+        added_at=int(e["addedAt"]),
+    )
+
+
+def vector_result_from_json(j: Dict[str, Any]) -> VectorResult:
+    """Decode a ``vectorSearch`` result from the bridge."""
+    return VectorResult(
+        hits=[
+            VectorHit(
+                eid=int(h["eid"]),
+                s=term_from_json(h["s"]),
+                p=term_from_json(h["p"]),
+                o=term_from_json(h["o"]),
+                similarity=float(h["similarity"]),
+                rank=int(h["rank"]),
+                evidence=_evidence_from_json(h["evidence"]),
+            )
+            for h in j["hits"]
+        ],
+        candidates=int(j["candidates"]),
+        exact=bool(j["exact"]),
+    )
+
+
+def recall_hit_from_json(h: Dict[str, Any]) -> RecallHit:
+    """Decode one ``recall`` hit from the bridge."""
+
+    def opt_float(k: str) -> Optional[float]:
+        return None if h.get(k) is None else float(h[k])
+
+    def opt_int(k: str) -> Optional[int]:
+        return None if h.get(k) is None else int(h[k])
+
+    return RecallHit(
+        eid=int(h["eid"]),
+        s=term_from_json(h["s"]),
+        p=term_from_json(h["p"]),
+        o=term_from_json(h["o"]),
+        score=float(h["score"]),
+        rank=int(h["rank"]),
+        lexical=opt_float("lexical"),
+        similarity=opt_float("similarity"),
+        text_rank=opt_int("textRank"),
+        vector_rank=opt_int("vectorRank"),
+        evidence=_evidence_from_json(h["evidence"]),
+        via=opt_int("via"),
+    )
+
+
 def text_hit_from_json(j: Dict[str, Any]) -> TextHit:
     """Decode one ``textSearch`` hit from the bridge."""
     e = j["evidence"]

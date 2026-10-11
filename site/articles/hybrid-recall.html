@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Words, meaning and evidence: hybrid recall: tiramemsu</title>
+<meta name="description" content="How tiramemsu fuses text and vector recall for agents: reciprocal rank fusion, evidence tie-breaks, expansion to layers and subject facts with via, time travel, one recall in Rust, Python, SPARQL, Cypher and MCP, how it is tested, measured numbers and limits.">
+<link rel="icon" href="../assets/logo.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+<header class="top"><div class="wrap">
+  <a class="brand" href="../"><img src="../assets/logo.svg" alt="">Tiramemsu</a>
+  <nav class="menu"><a href="../#features">Features</a><a href="../#start">Quick start</a><a href="./" aria-current="page">Articles</a><a href="../paper/">Paper</a><a href="https://github.com/Volland/tiramemsu">GitHub</a></nav>
+</div></header>
+
+<article class="post">
+<h1>Words, meaning and evidence: hybrid recall</h1>
+<p class="meta">Tiramemsu articles · 11 October 2026</p>
+
+<p>An agent asked “what do I know about the Lisbon offsite?” should find the note that says “Lisbon offsite”, the note that says “team week in Portugal”, and the reason it believes each of them. The first is a match by words. The second is a match by meaning. The third is evidence: who wrote it, how sure they were, where it came from.</p>
+<p>Tiramemsu already had <a href="recall-review-recheck.html">text recall</a> for words and <a href="vector-memory.html">vector recall</a> for meaning. Hybrid recall is one call that runs both over the same view, fuses the results, and can bring each hit's evidence along. It shipped in 0.5.0, with storage format 5. This article is for developers building agents: how it works, how to call it from each language, how we test it, what it costs and where it stops.</p>
+
+<h2>Why one channel is not enough</h2>
+<p>Text search is precise about names, codes and rare words. It finds “Lisbon” every time and never finds “Portugal” for it. Vector search is good at paraphrase and other languages, but it is vague about exact names: two different offsites in two different cities can sit very close together. An agent that uses only one of them misses things the other would have found.</p>
+<p>And an agent must be able to say why it believes something. A recall result that is only a chunk of text and a number is not enough. In tiramemsu every hit is a statement with its own id, so it can carry its confidence, its confirmations, its authors, its source and its history. Hybrid recall keeps that, and adds where each hit came from: which channel found it, at which rank, and, for context it brought along, which hit led to it.</p>
+
+<h2>How fusion works</h2>
+<p>Each channel ranks its own candidates. Text recall scores with bm25; vector recall scores with similarity. Those two numbers are on different scales and mean different things: a bm25 of 7.2 and a cosine of 0.81 cannot be added, and any weight you choose to make them comparable is a guess that breaks on the next query. So hybrid recall never compares scores across channels. It uses only ranks.</p>
+<p>The method is reciprocal rank fusion (Cormack, Clarke and Büttcher, SIGIR 2009). A statement gets <code>1 / (60 + rank)</code> from each list it appears in, and the parts add up. The constant 60 keeps the first few places from dominating, so a statement that both channels rank well beats one that a single channel ranks first.</p>
+<p>A small example. The agent asks about the Lisbon offsite, with the text “lisbon offsite” and an embedding of the same words:</p>
+<pre><code> text channel                      vector channel
+  1  N1 "met Alice at the Lisbon offsite"     1  N4 "team week in Portugal, May"
+  2  N2 "Lisbon flights booked"               2  N3 "offsite agenda: Lisbon, day 2"
+  3  N3 "offsite agenda: Lisbon, day 2"       3  N1 "met Alice at the Lisbon offsite"
+
+ fused                     score
+  1  N1   1/61 + 1/63   = 0.03227   <span class="c">both channels</span>
+  2  N3   1/63 + 1/62   = 0.03200   <span class="c">both channels</span>
+  3  N4   1/61          = 0.01639   <span class="c">vector only</span>
+  4  N2   1/62          = 0.01613   <span class="c">text only</span></code></pre>
+<p>N3 was third in one list and second in the other, and it ends up above N4, which was first in a list. Agreement wins. Each hit keeps <code>text_rank</code> and <code>vector_rank</code>, and <code>lexical</code> and <code>similarity</code>, the channels' own scores, each absent when that channel did not find it. So the agent sees that N4 is there only because of its meaning.</p>
+<p>To give agreement a chance, each channel fetches more than you ask for: <code>depth</code> candidates, by default <code>max(4 × limit, 50)</code>. A statement at rank 30 in one channel can still rise if the other ranks it well. Then the fused list is cut to <code>limit</code>, 10 by default.</p>
+
+<h2>Ties are broken by evidence, never by invented scores</h2>
+<p>Fused scores tie more often than you might think: two statements with mirrored ranks, or several copies of the same note written by different agents. Tiramemsu does not invent a score to break the tie. It uses the evidence it actually holds, in a fixed order:</p>
+<ol>
+  <li>higher confidence first, no confidence last;</li>
+  <li>more confirmations;</li>
+  <li>more distinct authors;</li>
+  <li>newer first;</li>
+  <li>finally the statement id, so the order is always the same.</li>
+</ol>
+<p>This is the same tie-break text and vector recall use. Evidence a statement does not have is reported as absent, never estimated. The whole order has a name, <code>tiramemsu-recall-rank/1</code>; if it ever changes, the name changes too.</p>
+
+<h2>Expansion: bring the reasons along</h2>
+<p>A hit tells the agent what matched. Often it also needs what surrounds it. With <code>expand: n</code>, after the fused hits, recall adds for each hit, in rank order:</p>
+<ul>
+  <li>up to <code>n</code> statements <em>about the hit itself</em>: its layers, such as its source or its confidence;</li>
+  <li>then up to <code>n</code> statements <em>about the hit's subject</em>: other facts about Alice, or about the trip.</li>
+</ul>
+<p>Expanded statements come after every fused hit, with score 0 and <code>via</code> set to the hit they were reached from. Context is never mistaken for a match, and no statement appears twice. An agent can answer “I remember the Lisbon offsite (from chat 12, confidence 0.9), and that Alice leads the data team” from one call.</p>
+<p>Expansion ignores the <code>graphs</code> and <code>predicates</code> filters on purpose. Those filters choose which statements may <em>match</em>. But layers such as a source or a confidence are rarely members of the graph the fact is in, so a graph filter would hide exactly the context you asked for. The view still applies: expansion never reaches a statement the view cannot see, retracted or not yet written. Each distinct subject is read once per call.</p>
+
+<h2>Recall in the past</h2>
+<p>Every recall runs in a view. <code>now()</code> sees what the agent believes today. <code>as_of(t)</code> sees what it believed at transaction <code>t</code>, and <code>valid_at(d)</code> what was true on date <code>d</code>. Both channels and the expansion run in that view, in one snapshot. See <a href="time-travel.html">Time travel, explained</a> for the two clocks.</p>
+<p>The vectors have a clock too. As of <code>t</code>, recall sees only the embeddings stored by <code>t</code>. If you embed an old note today, a recall as of last week still does not find it by meaning, because last week the agent could not have. A past recall therefore gives the same answer forever, which is what makes <a href="recall-review-recheck.html">saved answers</a> on past views safe. And because both searches are exact over the visible statements, going back in time never silently shortens the list; the <a href="vector-memory.html">vector memory article</a> explains why approximate indexes fail here.</p>
+
+<h2>One recall, everywhere</h2>
+<p>Every surface calls the same operation, so the hits and their order are identical. In the snippets, <code>embed</code> is your own call to an embedding model; the store never calls one. The text half needs the text index (open the database with it, or start the MCP server with <code>--text-index</code>). A vector-only recall does not.</p>
+<p>Rust:</p>
+<pre><code><span class="k">let</span> model_id = db.now().encode(&amp;model)?.expect(<span class="s">"model defined"</span>);
+<span class="k">let</span> q = RecallQuery {
+    text: Some(TextQuery::new(<span class="s">"lisbon offsite"</span>)),
+    vector: Some(VectorQuery::new(model_id, embed(<span class="s">"lisbon offsite"</span>))),
+    expand: 2,
+    ..RecallQuery::default()
+};
+<span class="k">for</span> hit <span class="k">in</span> db.now().recall(&amp;q)? {
+    println!(<span class="s">"{} {:.4} {:?} {:?} via {:?}"</span>, hit.rank, hit.score, hit.text_rank, hit.vector_rank, hit.via);
+}
+<span class="k">let</span> then = db.as_of(TimeRef::Tx(150)).recall(&amp;q)?;   <span class="c">// what the agent could recall at transaction 150</span></code></pre>
+<p>Python:</p>
+<pre><code>v = embed(<span class="s">"lisbon offsite"</span>)
+<span class="k">for</span> hit <span class="k">in</span> db.now().recall(<span class="s">"lisbon offsite"</span>, model=<span class="s">"urn:example:minilm"</span>, vector=v, expand=2):
+    print(hit.rank, hit.score, hit.text_rank, hit.vector_rank, hit.evidence.confidence, hit.via)</code></pre>
+<p>SPARQL. The <code>tm:recall*</code> patterns on one variable are one recall. It needs <code>tm:recallText</code>, or <code>tm:recallVector</code> with <code>tm:recallModel</code>, or both. <code>GRAPH &lt;g&gt;</code> restricts it, <code>SERVICE &lt;tm:asOf/…&gt;</code> times it, and <code>tm:recallVia</code> stays unbound for fused hits:</p>
+<pre><code>SELECT ?e ?score ?via WHERE {
+  ?e tm:recallText <span class="s">"lisbon offsite"</span> ; tm:recallVector <span class="s">"[0.12, -0.4, …]"</span> ;
+     tm:recallModel &lt;urn:example:minilm&gt; ; tm:recallMode <span class="s">"any"</span> ;
+     tm:recallLimit 10 ; tm:recallExpand 2 ;
+     tm:recallScore ?score ; tm:recallRank ?r ; tm:recallVia ?via }
+ORDER BY ?r</code></pre>
+<p>Cypher. One procedure with one map; the time clauses apply, and <code>via</code> is null for fused hits:</p>
+<pre><code>CALL tiramemsu.recall({text: <span class="s">'lisbon offsite'</span>, model: <span class="s">'minilm'</span>, vector: $v,
+                       mode: <span class="s">'any'</span>, limit: 10, expand: 2, graphs: [<span class="s">'trip'</span>]})
+YIELD statement, subject, predicate, object, score, rank, via</code></pre>
+<p>MCP. An agent in Claude Code or Claude Desktop calls the <code>recall</code> tool (see <a href="mcp-memory.html">Give your agent a memory over MCP</a>). It takes <code>text</code>, <code>mode</code>, <code>model</code>, <code>vector</code>, <code>graphs</code>, <code>predicates</code>, <code>limit</code>, <code>depth</code>, <code>expand</code> and <code>view</code>:</p>
+<pre><code>{ <span class="s">"name"</span>: <span class="s">"recall"</span>,
+  <span class="s">"arguments"</span>: { <span class="s">"text"</span>: <span class="s">"lisbon offsite"</span>, <span class="s">"model"</span>: <span class="s">"urn:example:minilm"</span>,
+                 <span class="s">"vector"</span>: [0.12, -0.4, …], <span class="s">"expand"</span>: 2,
+                 <span class="s">"view"</span>: { <span class="s">"kind"</span>: <span class="s">"asOf"</span>, <span class="s">"tx"</span>: 150 } } }</code></pre>
+<p>The server now has 19 tools. Next to <code>recall</code> are <code>vector_search</code>, <code>unembedded</code> (the statements that still need a vector), and two writers, <code>define_embedding_model</code> and <code>set_embedding</code>, which read-only mode hides with every other writing tool. Node.js has <code>View.recall({text, mode, model, vector, limit, depth, expand, graphs, predicates})</code>, and the JSON bridge has <code>recall</code>.</p>
+<p>Give only text or only a vector, and recall becomes that one channel, in that channel's own order, with the same hit shape. A recall with neither is an error.</p>
+
+<h2>How we know it works</h2>
+<p>Ranking code is easy to get almost right. These are the checks that run on every build:</p>
+<ul>
+  <li><strong>Exact means exact.</strong> Property tests store random vectors and compare the engine's top hits with a brute-force ranking recomputed from scratch, for cosine, dot product and distance, in full and half precision, with retracted statements and different limits mixed in.</li>
+  <li><strong>The prefilter does not lie about similarity.</strong> Hits it returns carry their exact similarity, not the rough one it used to choose them.</li>
+  <li><strong>Fusion can be recomputed by hand.</strong> For random inputs, every fused score equals the sum of <code>1/(60 + rank)</code> over the ranks the standalone text and vector searches report, and a recall with one channel keeps that channel's order.</li>
+  <li><strong>Views and graphs.</strong> Fixtures check fused and expanded hits in now, past, valid-time and graph-scoped views.</li>
+  <li><strong>Missing pieces fail clearly.</strong> On a host without full-text search, vector-only recall still works and a text recall fails with a typed “missing capability” error. Over a budget the call fails (result limit exceeded, or cancelled) instead of returning a partial list.</li>
+  <li><strong>Every surface agrees.</strong> Rust, SPARQL, Cypher, the JSON bridge and MCP return the same hits with the same ranks for the same question.</li>
+  <li><strong>Every host agrees.</strong> The same brute-force-checked fixture passes on native SQLite, on the browser host compiled natively, and in WebAssembly under Node.js.</li>
+</ul>
+
+<h2>What we measured</h2>
+<p>Hybrid recall over notes with text and 384-dimension vectors, text index on, a query word that matches 2 % of notes, on an Apple laptop:</p>
+<table>
+<thead><tr><th>Statements</th><th>Text + vector</th><th>With <code>expand: 2</code></th><th>Text only</th></tr></thead>
+<tbody>
+<tr><td>10 000</td><td>10.0 ms</td><td>15.2 ms</td><td>0.49 ms</td></tr>
+<tr><td>100 000</td><td>90.7 ms</td><td>112.4 ms</td><td>7.6 ms</td></tr>
+</tbody>
+</table>
+<p>Almost all of the time is the vector half, an exact scan over every visible vector. That is fine for an agent's memory of tens of thousands of statements, and the cost grows in a straight line from there.</p>
+<p>Vector search also has an opt-in prefilter that first compares one sign bit per dimension, then scores only the closest <code>n</code> exactly. We measured it on real vectors (GloVe-100 from ann-benchmarks, 200 queries), and it is weaker than we hoped. Recall@10 against the exact answer:</p>
+<table>
+<thead><tr><th><code>n</code></th><th>100 000 vectors</th><th>200 000 vectors</th></tr></thead>
+<tbody>
+<tr><td>200</td><td>0.544</td><td>0.515</td></tr>
+<tr><td>1 000</td><td>0.785</td><td>0.754</td></tr>
+<tr><td>5 000</td><td>0.945</td><td>0.913</td></tr>
+<tr><td>10 000</td><td>0.979</td><td>0.961</td></tr>
+</tbody>
+</table>
+<p>Exact search took 44.5 ms and 89.9 ms. The bit scan alone costs about 28 and 58 ms, because it still visits every vector, so the best speed-up is about 1.5×, and only while losing three or more of the true ten. At 95 % recall it is no faster than exact search. GloVe has only 100 dimensions, so only 100 bits per vector; 384- and 768-dimension sentence models should do better, but we have not measured them. Exact search stays the default, and hybrid recall uses it.</p>
+<p>Storage, measured after <code>VACUUM</code>: a 768-dimension f32 vector adds about 4.2 KB to the file, mostly because only one such row fits in a 4 KB page. Half precision, or 384 dimensions, adds about 2.1 KB. The <a href="vector-memory.html">vector memory article</a> has the full numbers.</p>
+
+<h2>Limits and what is next</h2>
+<ul>
+  <li><strong>No approximate index yet.</strong> Past roughly a million vectors an exact scan gets slow. The plan is an optional tier (sqlite-vec, or an HNSW snapshot kept outside the file) that only proposes candidates; the view and an exact re-rank still decide, so time travel stays correct.</li>
+  <li><strong>The prefilter is unmeasured on sentence models.</strong> On 100-dimension word vectors it is a coarse trade-off. Until 384- and 768-dimension models are measured, leave it off unless you can afford to miss neighbours.</li>
+  <li><strong>You supply the embeddings.</strong> The store never calls a model. It checks the length of a vector, not that it came from the same model as the query. A mismatched model gives meaningless similarities, silently.</li>
+  <li><strong>Corrections need a new vector.</strong> A superseded statement's new version has no embedding until you store one; <code>unembedded</code> lists the gaps. Until then only the text channel can find it.</li>
+  <li><strong>Fusion knows ranks, not confidence in a match.</strong> A weak match that both channels happen to rank highly still rises. The per-channel scores are in every hit, so an agent can apply its own threshold.</li>
+</ul>
+<p class="note">Hybrid recall answers by words and by meaning, orders ties by evidence the store actually holds, brings the reasons along marked as context, and gives the same answer about the past every time it is asked.</p>
+<p><a href="vector-memory.html">← Vector memory that remembers when</a> · <a href="time-travel.html">Time travel, explained →</a></p>
+</article>
+
+<footer><div class="wrap">
+  <span>Tiramemsu · MIT OR Apache-2.0 · <a href="https://github.com/Volland/tiramemsu">github.com/Volland/tiramemsu</a></span>
+  <span><a href="../">Home</a> · <a href="./">All articles</a></span>
+  <span><a href="../impressum.html">Impressum</a> · <a href="../datenschutz.html">Datenschutz</a> · <a href="../agb.html">AGB</a></span>
+</div></footer>
+</body>
+</html>

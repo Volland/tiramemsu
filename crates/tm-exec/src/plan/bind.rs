@@ -160,6 +160,35 @@ impl Binder<'_> {
                 }
                 Op::Text(t)
             }
+            Op::Vector(t) => {
+                let mut t = t.clone();
+                t.model = self.term(&t.model)?;
+                t.vector = self.term(&t.vector)?;
+                if let GraphSel::Set(gs) = &mut t.graph {
+                    for g in gs.iter_mut() {
+                        *g = self.term(g)?;
+                    }
+                }
+                for p in t.predicates.iter_mut() {
+                    *p = self.term(p)?;
+                }
+                Op::Vector(t)
+            }
+            Op::Recall(t) => {
+                let mut t = t.clone();
+                for x in [&mut t.text, &mut t.model, &mut t.vector]
+                    .into_iter()
+                    .flatten()
+                {
+                    *x = self.term(x)?;
+                }
+                if let GraphSel::Set(gs) = &mut t.graph {
+                    for g in gs.iter_mut() {
+                        *g = self.term(g)?;
+                    }
+                }
+                Op::Recall(t)
+            }
             Op::Values(v) => {
                 let mut v = v.clone();
                 for r in &mut v.rows {

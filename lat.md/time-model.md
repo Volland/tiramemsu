@@ -202,7 +202,7 @@ The tx that confirms carries the source and author, so "seen five times from thr
 
 Retracting a statement retracts, in the same transaction and recursively, every live statement whose subject or object is that eid. Only statement eids cascade; nodes never do.
 
-- Walk: breadth-first over `live_spo` (`s = e`) and `live_osp` (`o = e`), with a visited set so cycles terminate.
+- Walk: breadth-first over `live_spo` (`s = e`) and `live_osp` (`o = e`), with a visited set so cycles terminate. Each frontier is expanded in one query per 500 ids, visiting parents in queue order and each parent's dependents in eid order, so the order equals a node-at-a-time walk; supersede then loads the set's rows in chunks of the same size ([[tests#Review Fixes#Batched Cascade Keeps Its Order]]).
 - Retracting `(alice worksAt acme)` touches only triples about that eid, never other triples about `alice` or `acme`.
 - Nothing is lost: cascaded rows get the same `t_ret`, so `asOf(t_ret − 1)` still shows the whole structure, including e.g. what a belief relied on.
 - Guard rails: `TxReport.retracted` lists the full set, `dry_run` previews it, `View::dependents` previews it without the writer (see below), and `max_cascade` (default 10 000) aborts the transaction with `CascadeLimitExceeded`.

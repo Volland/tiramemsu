@@ -143,6 +143,62 @@ pub struct PText {
     pub confidence: Option<Var>,
 }
 
+/// A vector recall: `tm_vector(model, vector, view, graphs, limit)` binds the eid
+/// and the optional similarity, rank and confidence columns.
+#[derive(Clone, Debug, PartialEq)]
+pub struct PVector {
+    /// The model IRI.
+    pub model: String,
+    /// The query vector as a JSON array.
+    pub vector: String,
+    /// View text (as for `tm_path`).
+    pub view_text: String,
+    /// The graph filter: `None` = any statement.
+    pub graphs: Option<Vec<ObjectId>>,
+    /// Hit limit.
+    pub limit: Option<u32>,
+    /// Eid variable.
+    pub eid: Var,
+    /// Similarity variable.
+    pub similarity: Option<Var>,
+    /// Rank variable.
+    pub rank: Option<Var>,
+    /// Confidence variable.
+    pub confidence: Option<Var>,
+    /// The predicate filter: `None` = any predicate.
+    pub predicates: Option<Vec<ObjectId>>,
+}
+
+/// A hybrid recall: `tm_recall(text, mode, model, vector, view, graphs, limit,
+/// expand)` binds the eid and the optional score, rank and via columns.
+#[derive(Clone, Debug, PartialEq)]
+pub struct PRecall {
+    /// The words, if there is a text channel.
+    pub text: Option<String>,
+    /// `all`, `any` or `phrase`.
+    pub mode: &'static str,
+    /// The model IRI, if there is a vector channel.
+    pub model: Option<String>,
+    /// The query vector as a JSON array, if there is a vector channel.
+    pub vector: Option<String>,
+    /// View text (as for `tm_path`).
+    pub view_text: String,
+    /// The graph filter: `None` = any statement.
+    pub graphs: Option<Vec<ObjectId>>,
+    /// Fused-hit limit.
+    pub limit: Option<u32>,
+    /// Expansion per fused hit.
+    pub expand: u32,
+    /// Eid variable.
+    pub eid: Var,
+    /// Score variable.
+    pub score: Option<Var>,
+    /// Rank variable.
+    pub rank: Option<Var>,
+    /// Via variable.
+    pub via: Option<Var>,
+}
+
 /// The graph selection of a routed path.
 #[derive(Clone, Debug, PartialEq)]
 pub enum PGraphs {
@@ -281,6 +337,10 @@ pub enum Node {
     Path(PPath),
     /// A text recall (`tm_text`).
     Text(PText),
+    /// Vector recall through `tm_vector`.
+    Vector(PVector),
+    /// Hybrid recall through `tm_recall`.
+    Recall(PRecall),
     /// Inline rows.
     Values(PValues),
     /// List unnesting.

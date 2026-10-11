@@ -108,6 +108,9 @@ fn read_only_refuses_writes_before_a_transaction() {
             "conflicts",
             "preview_bundle",
             "text_search",
+            "vector_search",
+            "recall",
+            "unembedded",
             "saved_answers"
         ]
     );
@@ -513,7 +516,7 @@ fn protocol_handshake_and_errors() {
         json!({ "jsonrpc": "2.0", "id": 3, "method": "tools/list" }),
     )
     .unwrap();
-    assert_eq!(r["result"]["tools"].as_array().unwrap().len(), 14);
+    assert_eq!(r["result"]["tools"].as_array().unwrap().len(), 19);
     // protocol errors
     let code = |r: Option<J>| r.unwrap()["error"]["code"].as_i64().unwrap();
     let raw: J = serde_json::from_str(&server.handle("{not json").unwrap()).unwrap();
@@ -673,4 +676,111 @@ fn conflict_and_preview_tools_read_without_writing() {
         .unwrap_err();
     assert_eq!(e.code, "ReadOnly");
     assert_eq!(counters(&ro), before);
+}
+
+// @lat: [[tests#Vector Recall#MCP Vector Tools]]
+#[test]
+fn vector_tools_store_and_recall_embeddings() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut s = open(&dir);
+    let model = "urn:example:models:toy";
+    let r = rpc_call(
+        &mut s,
+        "define_embedding_model",
+        json!({ "model": model, "dimensions": 2 }),
+    );
+    assert_eq!(r["structuredContent"]["new"], json!(true), "{r}");
+    let fact = |s: &mut Server, o: &str| {
+        let r = rpc_call(
+            s,
+            "assert",
+            json!({ "s": v("trip"), "p": v("note"), "o": o }),
+        );
+        r["structuredContent"]["eid"].clone()
+    };
+    let lisbon = fact(&mut s, "lisbon offsite");
+    let tram = fact(&mut s, "tram tickets");
+    for (eid, vec) in [(&lisbon, json!([1.0, 0.0])), (&tram, json!([0.0, 1.0]))] {
+        let r = rpc_call(
+            &mut s,
+            "set_embedding",
+            json!({ "eid": eid, "model": model, "vector": vec }),
+        );
+        assert_eq!(r["structuredContent"]["new"], json!(true), "{r}");
+    }
+    let r = rpc_call(
+        &mut s,
+        "vector_search",
+        json!({ "model": model, "vector": [0.8, 0.2], "limit": 1 }),
+    );
+    let out = &r["structuredContent"];
+    assert_eq!(out["exact"], json!(true), "{r}");
+    assert_eq!(out["hits"][0]["eid"], lisbon);
+    let r = rpc_call(
+        &mut s,
+        "recall",
+        json!({ "model": model, "vector": [0.0, 1.0], "limit": 2 }),
+    );
+    assert_eq!(r["structuredContent"]["hits"][0]["eid"], tram, "{r}");
+    let r = rpc_call(
+        &mut s,
+        "set_embedding",
+        json!({ "eid": lisbon, "model": model, "vector": [0.0, 1.0] }),
+    );
+    assert_eq!(tool_error(&r), "EmbeddingConflict");
+    // the backlog tool lists statements without a vector
+    let other = fact(&mut s, "unembedded note");
+    let r = rpc_call(&mut s, "unembedded", json!({ "model": model }));
+    let eids = r["structuredContent"]["eids"].as_array().unwrap().clone();
+    assert!(eids.contains(&other), "{r}");
+    assert!(!eids.contains(&lisbon));
+}
+
+// @lat: [[tests#Vector Recall#MCP Tools Agree With Queries]]
+#[test]
+fn vector_tool_agrees_with_a_sparql_query() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut s = open(&dir);
+    let model = "urn:tiramemsu:v:toy";
+    rpc_call(
+        &mut s,
+        "define_embedding_model",
+        json!({ "model": model, "dimensions": 2 }),
+    );
+    for (i, x) in [[1.0, 0.0], [0.6, 0.8], [0.0, 1.0]].iter().enumerate() {
+        let r = rpc_call(
+            &mut s,
+            "assert",
+            json!({ "s": v("trip"), "p": v("note"), "o": format!("n{i}") }),
+        );
+        let eid = r["structuredContent"]["eid"].clone();
+        rpc_call(
+            &mut s,
+            "set_embedding",
+            json!({ "eid": eid, "model": model, "vector": x }),
+        );
+    }
+    let tool = rpc_call(
+        &mut s,
+        "vector_search",
+        json!({ "model": model, "vector": [1.0, 0.3] }),
+    );
+    let hits: Vec<J> = tool["structuredContent"]["hits"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|h| h["eid"].clone())
+        .collect();
+    let q = rpc_call(
+        &mut s,
+        "query",
+        json!({ "language": "sparql",
+                "text": "SELECT ?e WHERE { ?e tm:vectorMatch \"[1.0, 0.3]\" ; tm:vectorModel v:toy ; tm:vectorRank ?r } ORDER BY ?r" }),
+    );
+    let rows = q["structuredContent"]["result"]["rows"]
+        .as_array()
+        .unwrap_or_else(|| panic!("{q}"))
+        .clone();
+    let from_query: Vec<J> = rows.iter().map(|r| r["e"]["stmt"].clone()).collect();
+    assert_eq!(hits, from_query, "{q}");
 }

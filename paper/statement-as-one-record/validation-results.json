@@ -1,0 +1,50 @@
+{
+  "by_size": [
+    {
+      "records": 0,
+      "candidates": 1,
+      "complete_exports": 1
+    },
+    {
+      "records": 1,
+      "candidates": 24,
+      "complete_exports": 4
+    },
+    {
+      "records": 2,
+      "candidates": 1600,
+      "complete_exports": 80
+    },
+    {
+      "records": 3,
+      "candidates": 216000,
+      "complete_exports": 4096
+    }
+  ],
+  "candidate_stores": 217625,
+  "four_record_structures": {
+    "up_to_relabeling": 72567,
+    "complete_exports": 267
+  },
+  "random_stores": {
+    "count": 20000,
+    "records": "4-7",
+    "complete_exports": 1162
+  },
+  "protocol_histories": {
+    "runs": 1500,
+    "steps": 8,
+    "snapshots_checked": 66000,
+    "states_with_cycles": 853
+  },
+  "dual_closure_checks": 3000,
+  "focused_stores": 10,
+  "rejected_image_mutations": 5,
+  "same_transaction_boundary": "passed",
+  "engine_trace": {
+    "engine": "tm-core 0.4.0",
+    "sha256": "ccb407ceb9c48115ee7500e092600533905349ef4fc038e2e74d8a5ab892822c"
+  },
+  "script_sha256": "4c21be7a9baa436f971d3ae234ee48d7a165cdeea6e895d2b07aa636be0afdd3",
+  "scope": "Finite models; engine evidence limited to the two traced examples."
+}

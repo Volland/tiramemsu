@@ -97,6 +97,21 @@ pub fn bound_by_non_paths(op: &Op) -> VarSet {
                     out.insert(v.clone());
                 }
             }
+            Op::Recall(t) => {
+                out.insert(t.eid.clone());
+                for v in [&t.score, &t.rank, &t.via].into_iter().flatten() {
+                    out.insert(v.clone());
+                }
+            }
+            Op::Vector(t) => {
+                out.insert(t.eid.clone());
+                for v in [&t.similarity, &t.rank, &t.confidence]
+                    .into_iter()
+                    .flatten()
+                {
+                    out.insert(v.clone());
+                }
+            }
             Op::Unnest(u) => {
                 out.insert(u.var.clone());
             }

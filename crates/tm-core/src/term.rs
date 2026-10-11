@@ -17,8 +17,8 @@ use crate::exec::{Executor, SqlValue};
 use crate::id::{ObjectId, Tag};
 use crate::value::Value;
 
-const LOOKUP_SQL: &str = "SELECT id FROM term WHERE tag = ?1 AND lex = ?2 \
-     AND ifnull(dt, 0) = ifnull(?3, 0) AND ifnull(lang, '') = ifnull(?4, '')";
+const LOOKUP_SQL: &str = "SELECT id FROM term WHERE tag = +?1 AND lex = +?2 \
+     AND ifnull(dt, 0) = ifnull(+?3, 0) AND ifnull(lang, '') = ifnull(+?4, '')";
 const BY_ID_SQL: &str = "SELECT tag, lex, dt, lang, num FROM term WHERE id = ?1";
 const INSERT_SQL: &str =
     "INSERT INTO term(id, tag, lex, dt, lang, num) VALUES (?1, ?2, ?3, ?4, ?5, ?6)";
@@ -98,29 +98,78 @@ pub fn load_term(exec: &mut dyn Executor, id: i64) -> Result<Option<Term>> {
     }))
 }
 
+/// A scan-resistant cache of about `2 × capacity` entries (segmented LRU in
+/// generations). New entries go to probation; a second use promotes them to the
+/// protected segment. A full probation segment is dropped, and a full protected
+/// segment is demoted to probation, so a burst of terms used once (a bulk chunk)
+/// cannot push out the terms that are used again and again.
+#[derive(Debug)]
+struct Slru<K, V> {
+    protected: HashMap<K, V>,
+    probation: HashMap<K, V>,
+    capacity: usize,
+}
+
+impl<K: std::hash::Hash + Eq, V: Clone> Slru<K, V> {
+    fn new(capacity: usize) -> Self {
+        Slru {
+            protected: HashMap::new(),
+            probation: HashMap::new(),
+            capacity,
+        }
+    }
+
+    fn get(&mut self, k: &K) -> Option<V> {
+        if let Some(v) = self.protected.get(k) {
+            return Some(v.clone());
+        }
+        let (k, v) = self.probation.remove_entry(k)?;
+        if self.protected.len() >= self.capacity {
+            self.probation = std::mem::take(&mut self.protected);
+        }
+        self.protected.insert(k, v.clone());
+        Some(v)
+    }
+
+    fn insert(&mut self, k: K, v: V) {
+        if let Some(slot) = self.protected.get_mut(&k) {
+            *slot = v;
+            return;
+        }
+        if self.probation.len() >= self.capacity {
+            self.probation.clear();
+        }
+        self.probation.insert(k, v);
+    }
+
+    #[cfg(test)]
+    fn len(&self) -> usize {
+        self.protected.len() + self.probation.len()
+    }
+}
+
 /// Writer-side dictionary: lookup-or-insert with a committed cache and a
 /// per-transaction overlay.
 // @lat: [[storage#Term Dictionary]]
 #[derive(Debug)]
 pub struct TermDict {
-    committed: HashMap<TermKey, i64>,
-    committed_rev: HashMap<i64, Term>,
+    committed: Slru<TermKey, i64>,
+    committed_rev: Slru<i64, Term>,
     overlay: HashMap<TermKey, i64>,
     overlay_rev: HashMap<i64, Term>,
     next_term: i64,
-    capacity: usize,
 }
 
 impl TermDict {
     /// A dictionary whose committed cache holds about `capacity` entries.
     pub fn new(capacity: usize) -> TermDict {
+        let capacity = capacity.max(16);
         TermDict {
-            committed: HashMap::new(),
-            committed_rev: HashMap::new(),
+            committed: Slru::new(capacity),
+            committed_rev: Slru::new(capacity),
             overlay: HashMap::new(),
             overlay_rev: HashMap::new(),
             next_term: 1,
-            capacity: capacity.max(16),
         }
     }
 
@@ -137,13 +186,15 @@ impl TermDict {
     }
 
     /// Merges the overlay into the committed cache (after `COMMIT`).
+    /// Terms created by the transaction enter on probation, so a large chunk of new
+    /// terms cannot evict the warm set.
     pub fn commit(&mut self) {
-        if self.committed.len() + self.overlay.len() > self.capacity * 2 {
-            self.committed.clear();
-            self.committed_rev.clear();
+        for (k, id) in self.overlay.drain() {
+            self.committed.insert(k, id);
         }
-        self.committed.extend(self.overlay.drain());
-        self.committed_rev.extend(self.overlay_rev.drain());
+        for (id, t) in self.overlay_rev.drain() {
+            self.committed_rev.insert(id, t);
+        }
     }
 
     /// Drops the overlay (after `ROLLBACK` or a savepoint rollback).
@@ -152,11 +203,11 @@ impl TermDict {
         self.overlay_rev.clear();
     }
 
-    fn cached(&self, k: &TermKey) -> Option<i64> {
-        self.overlay
-            .get(k)
-            .or_else(|| self.committed.get(k))
-            .copied()
+    fn cached(&mut self, k: &TermKey) -> Option<i64> {
+        match self.overlay.get(k) {
+            Some(id) => Some(*id),
+            None => self.committed.get(k),
+        }
     }
 
     /// Looks a term up without inserting it.
@@ -221,12 +272,11 @@ impl TermDict {
 
     /// The term with this id, visible to the running transaction.
     pub fn term(&mut self, exec: &mut dyn Executor, id: i64) -> Result<Option<Term>> {
-        if let Some(t) = self
-            .overlay_rev
-            .get(&id)
-            .or_else(|| self.committed_rev.get(&id))
-        {
+        if let Some(t) = self.overlay_rev.get(&id) {
             return Ok(Some(t.clone()));
+        }
+        if let Some(t) = self.committed_rev.get(&id) {
+            return Ok(Some(t));
         }
         let t = load_term(exec, id)?;
         if let Some(t) = &t {
@@ -424,5 +474,37 @@ impl TermReader {
     /// Number of cached terms.
     pub fn cached(&self) -> usize {
         self.cache.lock().expect("term cache").len()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Slru;
+
+    // @lat: [[tests#Review Fixes#Term Cache Survives A Burst]]
+    #[test]
+    fn slru_keeps_the_warm_set_through_a_burst() {
+        let mut c: Slru<u32, u32> = Slru::new(100);
+        for k in 0..50 {
+            c.insert(k, k);
+            assert_eq!(c.get(&k), Some(k)); // second use: protected
+        }
+        for k in 1_000..10_000 {
+            c.insert(k, k); // used once
+        }
+        for k in 0..50 {
+            assert_eq!(c.get(&k), Some(k), "warm key {k} evicted by a burst");
+        }
+        assert!(c.len() <= 200);
+    }
+
+    #[test]
+    fn slru_stays_bounded_when_everything_is_reused() {
+        let mut c: Slru<u32, u32> = Slru::new(10);
+        for k in 0..1_000 {
+            c.insert(k, k);
+            c.get(&k);
+            assert!(c.len() <= 20);
+        }
     }
 }

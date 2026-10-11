@@ -191,12 +191,15 @@ fn scan_sql(p: &LftjPattern, ordered: bool) -> Result<(String, Vec<SqlValue>, Ve
     Ok((sql, gen.params.values().to_vec(), cols))
 }
 
-/// The sorted access path of one pattern, read in the caller's snapshot.
+/// The sorted access path of one pattern, read in the caller's snapshot. The
+/// materialised input (8 bytes per cell) is charged to the operation's byte budget,
+/// so a budgeted query cannot make the join hold more memory than `max_bytes`.
 fn access_path(exec: &mut dyn Executor, p: &LftjPattern) -> Result<Relation> {
     let (sql, params, cols) = scan_sql(p, true)?;
     let mut data = Vec::new();
     exec.query(&sql, &params, &mut |r| {
         budget::poll()?;
+        budget::charge_bytes(8 * r.len() as u64)?;
         for v in r {
             data.push(v.as_i64().unwrap_or_default());
         }

@@ -25,8 +25,8 @@ use super::encode::{encode_value, position_ok, value_position_ok, Enc, Pos};
 use super::resolve::resolve;
 use super::route::{bound_before, bound_by_non_paths, orient, path_patterns, Orientation};
 use super::{
-    Cell, Node, PAgg, PConst, PExpr, PGraphs, PKey, PLookup, PObj, PPath, PTerm, PText, PTriple,
-    PValues, PVirtual, PVolatile,
+    Cell, Node, PAgg, PConst, PExpr, PGraphs, PKey, PLookup, PObj, PPath, PRecall, PTerm, PText,
+    PTriple, PValues, PVector, PVirtual, PVolatile,
 };
 use crate::error::invalid;
 use crate::path::ast::nullable;
@@ -367,6 +367,113 @@ impl<'e> Planner<'e> {
                     score: t.score.clone(),
                     rank: t.rank.clone(),
                     confidence: t.confidence.clone(),
+                })
+            }
+            Op::Vector(t) => {
+                let Some(view) = self.view(&t.view)? else {
+                    return Ok(empty());
+                };
+                let model = match &t.model {
+                    TermOrVar::Const(Value::Iri(s)) => s.clone(),
+                    other => {
+                        return Err(invalid(format!(
+                            "vector recall needs a model IRI, got {other:?}"
+                        )))
+                    }
+                };
+                let vector = match &t.vector {
+                    TermOrVar::Const(Value::Str(s)) => s.clone(),
+                    other => {
+                        return Err(invalid(format!(
+                            "vector recall needs a vector string, got {other:?}"
+                        )))
+                    }
+                };
+                let graphs = match self.path_graphs(&t.graph)? {
+                    PGraphs::Any => None,
+                    PGraphs::Ids(ids) => Some(ids),
+                    PGraphs::Var(_) => {
+                        return Err(invalid("vector recall cannot bind a graph variable"))
+                    }
+                };
+                let predicates = if t.predicates.is_empty() {
+                    None
+                } else {
+                    let mut ids = Vec::with_capacity(t.predicates.len());
+                    for p in &t.predicates {
+                        match p {
+                            TermOrVar::Id(id) => ids.push(*id),
+                            TermOrVar::Const(v) => {
+                                // a predicate that was never stored matches nothing
+                                if let Enc::Id(id) = self.encode(v)? {
+                                    ids.push(id);
+                                }
+                            }
+                            other => return Err(invalid(format!("invalid predicate {other:?}"))),
+                        }
+                    }
+                    Some(ids)
+                };
+                Node::Vector(PVector {
+                    model,
+                    vector,
+                    view_text: view_text(&view),
+                    graphs,
+                    limit: t.limit,
+                    eid: t.eid.clone(),
+                    similarity: t.similarity.clone(),
+                    rank: t.rank.clone(),
+                    confidence: t.confidence.clone(),
+                    predicates,
+                })
+            }
+            Op::Recall(t) => {
+                let Some(view) = self.view(&t.view)? else {
+                    return Ok(empty());
+                };
+                let text = match &t.text {
+                    None => None,
+                    Some(TermOrVar::Const(Value::Str(s))) => Some(s.clone()),
+                    Some(other) => {
+                        return Err(invalid(format!(
+                            "recall needs a string text, got {other:?}"
+                        )))
+                    }
+                };
+                let model = match &t.model {
+                    None => None,
+                    Some(TermOrVar::Const(Value::Iri(s))) => Some(s.clone()),
+                    Some(other) => {
+                        return Err(invalid(format!("recall needs a model IRI, got {other:?}")))
+                    }
+                };
+                let vector = match &t.vector {
+                    None => None,
+                    Some(TermOrVar::Const(Value::Str(s))) => Some(s.clone()),
+                    Some(other) => {
+                        return Err(invalid(format!(
+                            "recall needs a vector string, got {other:?}"
+                        )))
+                    }
+                };
+                let graphs = match self.path_graphs(&t.graph)? {
+                    PGraphs::Any => None,
+                    PGraphs::Ids(ids) => Some(ids),
+                    PGraphs::Var(_) => return Err(invalid("recall cannot bind a graph variable")),
+                };
+                Node::Recall(PRecall {
+                    text,
+                    mode: t.mode.name(),
+                    model,
+                    vector,
+                    view_text: view_text(&view),
+                    graphs,
+                    limit: t.limit,
+                    expand: t.expand,
+                    eid: t.eid.clone(),
+                    score: t.score.clone(),
+                    rank: t.rank.clone(),
+                    via: t.via.clone(),
                 })
             }
             Op::Values(v) => {

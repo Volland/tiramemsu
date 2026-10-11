@@ -4,7 +4,7 @@ use std::collections::{HashMap, HashSet, VecDeque};
 
 use super::schema::Flag;
 use super::{reserved, IntoObject, Tx};
-use crate::error::{Error, Result};
+use crate::error::{Error, Position, Result};
 use crate::exec::SqlValue;
 use crate::id::{Eid, ObjectId};
 use crate::report::{Patch, RetKind, Valid};
@@ -18,30 +18,82 @@ struct Row {
     valid: Valid,
 }
 
+/// The most ids bound in one `IN (…)` list; far below SQLite's variable limit on
+/// every host.
+pub(crate) const IN_CHUNK: usize = 500;
+
+/// A stored id column that must not be NULL; NULL means a damaged file.
+pub(crate) fn id_col(r: &[SqlValue], k: usize, position: Position) -> Result<ObjectId> {
+    r[k].as_i64()
+        .map(ObjectId::from_raw)
+        .ok_or_else(|| Error::InvalidTerm {
+            position,
+            reason: "NULL id column in the triple table".to_string(),
+        })
+}
+
+/// `+?1, +?2, …, +?n`, reused by every `IN` list of one statement. The unary plus
+/// keeps the plan fixed: see [`crate::exec::Executor`] on fixed-plan lookups.
+pub(crate) fn placeholders(n: usize) -> String {
+    (1..=n)
+        .map(|i| format!("+?{i}"))
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
+fn row_from(eid: Eid, r: &[SqlValue]) -> Result<(Row, bool)> {
+    Ok((
+        Row {
+            eid,
+            s: id_col(r, 0, Position::Subject)?,
+            p: id_col(r, 1, Position::Predicate)?,
+            o: id_col(r, 2, Position::Object)?,
+            valid: Valid {
+                from: r[3].as_i64(),
+                to: r[4].as_i64(),
+            },
+        },
+        r[5].is_null(),
+    ))
+}
+
 impl Tx<'_> {
     fn load_row(&mut self, eid: Eid) -> Result<Option<(Row, bool)>> {
-        Ok(self
-            .exec
+        self.exec
             .first_row(
                 "SELECT s, p, o, v_from, v_to, t_ret FROM triple WHERE eid = ?1",
                 &[SqlValue::Integer(eid.oid().raw())],
             )?
-            .map(|r| {
-                let id = |k: usize| ObjectId::from_raw(r[k].as_i64().unwrap_or(0));
-                (
-                    Row {
-                        eid,
-                        s: id(0),
-                        p: id(1),
-                        o: id(2),
-                        valid: Valid {
-                            from: r[3].as_i64(),
-                            to: r[4].as_i64(),
-                        },
-                    },
-                    r[5].is_null(),
-                )
-            }))
+            .map(|r| row_from(eid, &r))
+            .transpose()
+    }
+
+    /// The rows of `set`, in its order, in one query per [`IN_CHUNK`] ids. A
+    /// missing row is [`Error::NotLive`].
+    fn load_rows(&mut self, set: &[Eid]) -> Result<Vec<Row>> {
+        let mut found: HashMap<Eid, Row> = HashMap::with_capacity(set.len());
+        for chunk in set.chunks(IN_CHUNK) {
+            let sql = format!(
+                "SELECT s, p, o, v_from, v_to, t_ret, eid FROM triple WHERE eid IN ({})",
+                placeholders(chunk.len())
+            );
+            let params: Vec<SqlValue> = chunk
+                .iter()
+                .map(|e| SqlValue::Integer(e.oid().raw()))
+                .collect();
+            for r in self.exec.rows(&sql, &params)? {
+                let Some(eid) = r[6]
+                    .as_i64()
+                    .and_then(|e| Eid::from_oid(ObjectId::from_raw(e)))
+                else {
+                    continue;
+                };
+                found.insert(eid, row_from(eid, &r)?.0);
+            }
+        }
+        set.iter()
+            .map(|e| found.remove(e).ok_or(Error::NotLive(*e)))
+            .collect()
     }
 
     /// Corrects live statement `root`: retracts its cascade set with kind
@@ -120,11 +172,7 @@ impl Tx<'_> {
         let cascade: HashSet<Eid> = set.iter().copied().collect();
         let in_graph = self.sys_lookup(vocab::SYS_IN_GRAPH)?;
         let lineage = self.sys_lookup(vocab::SYS_SUPERSEDES)?;
-        let mut rows = Vec::with_capacity(set.len());
-        for m in &set {
-            let (r, _) = self.load_row(*m)?.expect("cascade member exists");
-            rows.push(r);
-        }
+        let rows = self.load_rows(&set)?;
         // Drop foreign memberships and propagate exclusion through structural
         // dependents. Only retained rows receive fresh identifiers.
         let mut dropped = HashSet::new();

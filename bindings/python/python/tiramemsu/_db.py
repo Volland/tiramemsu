@@ -37,6 +37,10 @@ from ._types import (
     term_from_json,
     text_hit_from_json,
     TextHit,
+    recall_hit_from_json,
+    RecallHit,
+    vector_result_from_json,
+    VectorResult,
     BundlePreview,
     bundle_preview_from_json,
     Conflict,
@@ -44,6 +48,18 @@ from ._types import (
     term_to_json,
     time_to_json,
 )
+
+def _model_json(model: Any) -> Any:
+    """An embedding model: a plain ``str`` is its IRI, anything else is a term."""
+    if isinstance(model, str):
+        return model
+    return term_to_json(model)
+
+
+def _vector_json(vector: Any) -> List[float]:
+    """A sequence of numbers as a JSON list."""
+    return [float(x) for x in vector]
+
 
 # A sentinel that is distinct from None (which means "clear the bound").
 _UNSET: Any = object()
@@ -261,9 +277,48 @@ class TxBuilder:
         """Create or return the unique node for ``(p, o)``."""
         self._ops.append({"op": "upsert", "p": self._v(p), "o": self._v(o)})
 
-    def new_node(self) -> None:
-        """Allocate a fresh anonymous node."""
-        self._ops.append({"op": "newNode"})
+    def new_node(self) -> Ref:
+        """Allocate a fresh anonymous node.  Returns a :class:`Ref` usable as a
+        subject or object in later operations of the same transaction."""
+        name = self._fresh()
+        self._ops.append({"op": "newNode", "as": name})
+        return Ref(name)
+
+    def define_embedding_model(
+        self,
+        model: Any,
+        dimensions: int,
+        *,
+        metric: str = "cosine",
+        encoding: str = "f32",
+    ) -> None:
+        """Define embedding model *model* (an IRI string or :class:`Iri`): its number
+        of *dimensions*, *metric* (``"cosine"``, ``"dot"`` or ``"l2"``) and storage
+        *encoding* (``"f32"`` or ``"f16"``).  Defining the identical model again is a
+        no-op; a different definition for the same IRI raises ``InvalidQuery``."""
+        self._ops.append(
+            {
+                "op": "defineEmbeddingModel",
+                "model": _model_json(model),
+                "dimensions": dimensions,
+                "metric": metric,
+                "encoding": encoding,
+            }
+        )
+
+    def set_embedding(self, eid: Any, model: Any, vector: Any) -> None:
+        """Store the embedding of live statement *eid* (int, :class:`Stmt` or a
+        :class:`Ref` from this transaction) under *model*.  The store never computes
+        embeddings: pass the vector your model produced.  The identical vector again
+        is a no-op; a different one raises ``EmbeddingConflict``."""
+        self._ops.append(
+            {
+                "op": "setEmbedding",
+                "eid": self._eid(eid),
+                "model": _model_json(model),
+                "vector": _vector_json(vector),
+            }
+        )
 
     def add_to_graph(self, eid: Any, graph: Any, *, on_existing: str = "return") -> Ref:
         """Tag statement *eid* as a member of *graph*.  Returns a :class:`Ref`."""
@@ -723,6 +778,83 @@ class View:
             args["confidence"] = term_to_json(confidence)
         rows: List[Any] = json.loads(self._call("textSearch", args))
         return [text_hit_from_json(r) for r in rows]
+
+    def vector_search(
+        self,
+        model: Any,
+        vector: Any,
+        *,
+        limit: Optional[int] = None,
+        graphs: Optional[List[Any]] = None,
+        predicates: Optional[List[Any]] = None,
+        prefilter: Optional[int] = None,
+        confidence: Any = None,
+    ) -> VectorResult:
+        """Vector recall: the statements of this view whose embedding under *model*
+        is closest to *vector*, ranked by similarity, then confidence,
+        confirmations, authors and recency, then eid (``tiramemsu-vector-rank/1``).
+
+        The search is exact over the statements this view selects, so as-of,
+        history and valid-time views never lose a hit.  *limit* defaults to 10.
+        *prefilter* scores only that many candidates chosen by sign-bit distance and
+        re-ranks them exactly (``result.exact`` is then false).  Works on every
+        SQLite build; no extension is needed.
+        """
+        args: Dict[str, Any] = {"model": _model_json(model), "vector": _vector_json(vector)}
+        if limit is not None:
+            args["limit"] = limit
+        if graphs is not None:
+            args["graphs"] = [term_to_json(g) for g in graphs]
+        if predicates is not None:
+            args["predicates"] = [term_to_json(p) for p in predicates]
+        if prefilter is not None:
+            args["prefilter"] = prefilter
+        if confidence is not None:
+            args["confidence"] = term_to_json(confidence)
+        return vector_result_from_json(json.loads(self._call("vectorSearch", args)))
+
+    def recall(
+        self,
+        text: Optional[str] = None,
+        *,
+        model: Any = None,
+        vector: Any = None,
+        mode: str = "all",
+        limit: Optional[int] = None,
+        depth: Optional[int] = None,
+        expand: int = 0,
+        graphs: Optional[List[Any]] = None,
+        predicates: Optional[List[Any]] = None,
+    ) -> List[RecallHit]:
+        """Hybrid recall: text recall of *text* and vector recall of *vector* under
+        *model* in this view, fused by reciprocal rank (``tiramemsu-recall-rank/1``).
+        Give text, a model with a vector, or both.  *expand* adds, per fused hit, up
+        to that many of its layers and facts about its subject (``via`` set)."""
+        args: Dict[str, Any] = {"mode": mode, "expand": expand}
+        if text is not None:
+            args["text"] = text
+        if model is not None:
+            args["model"] = _model_json(model)
+        if vector is not None:
+            args["vector"] = _vector_json(vector)
+        if limit is not None:
+            args["limit"] = limit
+        if depth is not None:
+            args["depth"] = depth
+        if graphs is not None:
+            args["graphs"] = [term_to_json(g) for g in graphs]
+        if predicates is not None:
+            args["predicates"] = [term_to_json(p) for p in predicates]
+        rows: List[Any] = json.loads(self._call("recall", args))
+        return [recall_hit_from_json(r) for r in rows]
+
+    def unembedded(self, model: Any, limit: Optional[int] = None) -> List[int]:
+        """The eids of statements in this view with no embedding under *model*, in
+        eid order: the backlog of an embedding job."""
+        args: Dict[str, Any] = {"model": _model_json(model)}
+        if limit is not None:
+            args["limit"] = limit
+        return [int(e) for e in json.loads(self._call("unembedded", args))]
 
     def conflicts(
         self,

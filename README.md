@@ -9,7 +9,7 @@ An embedded graph database on SQLite. Every fact has an id, so facts can carry l
 
 <p align="center"><a href="site/articles/layered-graphs.html">Layered graphs, explained</a> · <a href="site/articles/tiramemsu-vs-oxilite.html">Tiramemsu vs oxilite</a> · <a href="site/articles/metagraphs.html">Metagraphs</a> · <a href="lat.md/">Design (lat.md)</a> · <a href="openspec/specs/">Specs (OpenSpec)</a></p>
 
-> **Status: new.** Designed and implemented in September and October 2026 as one Rust library, released as 0.4.0 on crates.io (`tiramemsu`, plus the `tiramemsu-mcp` server) and PyPI (`tiramemsu`); the Node.js package `@tiramemsu/node` is built in [`bindings/`](bindings/) but not yet on npm. There is no network server; it runs on rusqlite natively and on SQLite compiled to WebAssembly in the browser. What is measured and what is not is listed under [Status](#status).
+> **Status: new.** Designed and implemented in September and October 2026 as one Rust library, released as 0.5.0 on crates.io (`tiramemsu`, plus the `tiramemsu-mcp` server) and PyPI (`tiramemsu`); the Node.js package `@tiramemsu/node` is built in [`bindings/`](bindings/) but not yet on npm. There is no network server; it runs on rusqlite natively and on SQLite compiled to WebAssembly in the browser. What is measured and what is not is listed under [Status](#status).
 
 ## Why
 
@@ -28,6 +28,7 @@ A knowledge graph stores facts. An agent also needs to say *how sure am I*, *whe
 - **Named graphs as tags.** A graph is a node, or a statement, and membership is one more layer statement. `GRAPH`, `FROM`, `FROM NAMED` and `WITH` work with no new column or table.
 - **Metagraphs.** Edges are vertices (statement ids), and vertices and edges are containers (graphs named by a node or a statement). Nesting, fold and unfold are ordinary statements, so they travel in time.
 - **Bulk import.** An opt-in import session commits chunks as ordinary atomic transactions, holds the write lease, skips the per-commit `ANALYZE`, and refreshes planner statistics once when finished. Progress counts committed rows and rejected chunks; cancelling keeps every committed chunk.
+- **Vector recall.** Store the embeddings your model computes (`define_embedding_model`, `set_embedding`) beside the facts, in the same file and transaction, append-only. `View::vector_search`, SPARQL `?e tm:vectorMatch "[…]"` and Cypher `CALL tiramemsu.vector.search(...)` run one exact, view-aware search: as-of, history, valid time and graphs filter before ranking, so time travel never loses a hit to an index cut, and it works on every SQLite build including WASM. `View::recall` fuses text and vector recall by reciprocal rank and can expand each hit to its layers. Design: [`docs/vector-architecture.md`](docs/vector-architecture.md).
 - **Text recall.** Opt-in FTS5 recall over string values (inline short strings included): `View::text_search`, SPARQL `?e tm:textMatch "words"` and Cypher `CALL tiramemsu.text.search(...)` share one operation. Hits respect as-of, history, valid time and graphs, and carry a lexical score plus evidence (confidence, confirmations, authors, when added); absent evidence is reported as absent, and ties break on the statement id.
 - **Cyclic joins.** Opt-in native leapfrog triejoin for pure cyclic patterns (triangles and longer cycles) as the `tm_lftj` table function: `OpenOptions::planner.lftj`. It returns exactly the SQL rows (set or bag semantics, per-pattern views, graphs, provenance), routes only when enabled, installed, applicable and the size estimate agrees, and `explain_sparql` names the route or the reason it stayed in SQL.
 - **Bounded calls.** Opt-in query budgets: a deadline, cancellation from another thread, a reader-pool timeout and row or byte limits per operation. A stopped write commits nothing, and an over-budget result is an error, never a truncated answer.
@@ -110,10 +111,13 @@ From [`crates/tiramemsu/examples/quickstart.rs`](crates/tiramemsu/examples/quick
 let db = Db::open(dir.join("memory.db"), OpenOptions::default())?;
 
 // 1. A fact is a statement with its own id, so it can carry layers.
+let mut fact = None;
 db.transact(TxOptions::default(), |tx| {
     let eid = match tx.assert(v("alice"), v("worksAt"), v("acme"), Valid::ALWAYS)? {
         Asserted::New(e) | Asserted::Existing(e) => e,
     };
+    fact = Some(eid);
+    let conf = Value::literal("0.8", Some("http://www.w3.org/2001/XMLSchema#double"), None);
     tx.assert(Value::Stmt(eid), v("confidence"), &conf, Valid::ALWAYS)?;
     tx.assert(Value::Stmt(eid), v("source"), Value::str("chat-2026-09-29"), Valid::ALWAYS)?;
     Ok(())
@@ -121,7 +125,7 @@ db.transact(TxOptions::default(), |tx| {
 
 // 2. Correct it. The layers are replayed on the new fact; nothing is deleted.
 let corrected = db.transact(TxOptions::default(), |tx| {
-    tx.supersede(fact, Patch { o: Some(v("globex")), ..Patch::default() })?;
+    tx.supersede(fact.unwrap(), Patch { o: Some(v("globex")), ..Patch::default() })?;
     Ok(())
 })?;
 

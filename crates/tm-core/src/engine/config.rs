@@ -51,7 +51,7 @@ impl Tx<'_> {
             Some(nid) => self
                 .read_with(|e| {
                     e.query_i64(
-                        "SELECT s FROM triple WHERE p = ?1 AND o = ?2 AND t_ret IS NULL ORDER BY eid LIMIT 1",
+                        "SELECT s FROM triple WHERE p = +?1 AND o = +?2 AND t_ret IS NULL ORDER BY eid LIMIT 1",
                         &[SqlValue::Integer(p_name.raw()), SqlValue::Integer(nid.raw())],
                     )
                 })?

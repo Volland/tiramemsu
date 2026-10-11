@@ -76,7 +76,7 @@ pub fn triples(
     for (col, v) in [("s", s), ("p", p), ("o", o)] {
         if let Some(v) = v {
             let ph = params.push(v.raw());
-            conds.push(format!("a.{col} = {ph}"));
+            conds.push(format!("a.{col} = +{ph}"));
         }
     }
     let time = scan_predicates(spec, "a", &mut params);
@@ -119,7 +119,7 @@ pub fn values(
     }
     Ok(exec
         .query_i64(
-            "SELECT value FROM volatile WHERE s = ?1 AND key = ?2",
+            "SELECT value FROM volatile WHERE s = +?1 AND key = +?2",
             &[SqlValue::Integer(s.raw()), SqlValue::Integer(key.raw())],
         )?
         .map(ObjectId::from_raw)

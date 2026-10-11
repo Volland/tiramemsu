@@ -1322,3 +1322,169 @@ Opening a format-3 file adds both date guards, advances the format, preserves or
 ### Cardinality Cannot Retract A New Endpoint
 
 A cardinality-one replacement whose cascade removes the proposed new endpoint is rejected; transaction rollback restores the original root and dependent layer.
+
+## Export Boundary
+
+Engine traces for the Statement Graph export paper: both corrections of its running example, checked with a test-local kernel (least fixpoint of the reference operator) on both SQLite hosts.
+
+### Full History Is Closed
+
+After a valid-time correction the full history is closed and wholly exportable, while the current snapshot is not closed because lineage targets the retracted route.
+
+### Snapshot Kernel Drops Dangling Lineage
+
+The kernel of the current snapshot keeps the replayed route and annotation and omits exactly the `sys:supersedes` lineage row.
+
+### History Kernel Drops Only Replay Cycles
+
+An object patch naming the annotation replays into a two-cycle; the history kernel omits the two live replayed rows and the lineage row and keeps the pre-correction rows.
+
+## Review Fixes
+
+Regressions for the 0.4.1 fixes of the 2026-10-10 review (`docs/project-review.md`): cascade batching, the term cache policy, the bounded writer wait, LFTJ memory and binding node refs.
+
+### Batched Cascade Keeps Its Order
+
+Superseding a statement with 1 200 layers, some with their own layers, loads its cascade in chunked queries yet replays every layer onto the new root with new eids in the original order, and leaves no old member live.
+
+### Term Cache Survives A Burst
+
+A warm set used twice stays cached while thousands of terms used once pass through, and the cache never holds more than twice its capacity ([[storage#Term Dictionary]]).
+
+### Bounded Writer Wait Wakes And Cancels
+
+A budgeted write that finds the writer held waits for the release signal and commits after it; cancelling the waiter ends the wait well before the holder lets go ([[query#Query Budgets]]).
+
+### LFTJ Inputs Count Against The Byte Budget
+
+A triangle count within a 4 KiB byte budget succeeds on the SQL route but fails with `ResultLimitExceeded(Bytes)` on the LFTJ route, whose materialised inputs are charged; without a byte budget LFTJ answers ([[query#Physical Planning#LFTJ]]).
+
+### Bridge Resolves New Node Refs
+
+A `newNode` op with `as` binds its node, so later ops in the same list can use `{"ref": …}` as a subject or object ([[bindings#JSON Bridge]]).
+
+### Bindings Return New Node Refs
+
+Python `TxBuilder.new_node()` and Node `Tx.newNode()` return a `Ref` that resolves to the new node in later ops of the same transaction.
+
+## Vector Recall
+
+Vector and hybrid recall ([[query#Vector Recall]], [[query#Hybrid Recall]]) over the append-only embeddings of [[storage#Embeddings]]. Tests are in `vector_recall.rs`, the bridge suite, the MCP server suite and both binding suites.
+
+### Models Are Defined Once
+
+Defining a model returns true, the identical definition again false, and a different definition for the same IRI fails with `InvalidQuery`.
+
+A non-IRI model is `InvalidTerm`, zero dimensions `InvalidQuery`, and users cannot assert `sys:dimensions` themselves.
+
+### Embeddings Are Checked And Append Only
+
+The same vector (scaled, after cosine normalisation) is a no-op and a different one is `EmbeddingConflict`.
+
+A wrong dimension, a non-finite component, a zero vector or an undefined model is `InvalidQuery`, and an unknown or retracted statement is `NotLive`.
+
+### Nearest Statements Rank First
+
+Under cosine f32 and f16, dot f32 and L2 f16, the nearest statement ranks first, ranks are 1 … n, similarities never increase, `limit` cuts the list and the search reports `exact` with every visible embedding counted.
+
+### Views Decide Visibility
+
+A retracted statement's vector is invisible now but found as of before the retraction and in history; valid time applies on top; predicate and graph filters restrict the hits and an empty graph list matches nothing.
+
+### Past Views See Past Embeddings
+
+A statement that was live at t1 but embedded later is not found as of t1 and is listed by `unembedded` there; now it is found and no longer listed.
+
+### Writes Roll Back With The Transaction
+
+A failing transaction and a dry run leave no vector; a speculation finds its own vector in its view and leaves nothing behind.
+
+### Supersede Leaves A Backlog
+
+After a supersede the old vector is invisible now and the replacement statement appears in `unembedded`, which also honours its limit.
+
+### Prefilter Reranks Exactly
+
+With a sign-bit prefilter of 5 over 40 vectors the exact match still ranks first with similarity 1, the result reports `exact: false` and 40 candidates, and the exact search agrees.
+
+### Ties Break On Evidence
+
+Statements with equal similarity rank by confidence (higher first, absent last), then eid, also when the limit cuts inside the tie.
+
+### Embeddings Are Never Rewritten
+
+Raw `DELETE` and `UPDATE` on `embedding` abort with the never-forget triggers, and a file migrated from format 4 gains the table and reports format 5.
+
+### Hybrid Recall Fuses Both Channels
+
+A statement found by text and by vector ranks first with both channel ranks, and single-channel hits are included.
+
+Expansion adds the top hit's source layer with `via` and score 0; a vector-only recall works without the text index and a recall with neither channel is `InvalidQuery`.
+
+### SPARQL And Cypher Share The Search
+
+`tm:vectorMatch` with model, similarity and rank bindings and `CALL tiramemsu.vector.search` return the same hits in the same order as `View::vector_search`.
+
+Limit, `GRAPH`, `SERVICE <tm:asOf/…>` and Cypher graph options apply, and misuse is `InvalidQuery` or a Cypher error.
+
+### Bridge Vector Recall
+
+`defineEmbeddingModel` and `setEmbedding` (with a ref) return `{"new": true}`, and `vectorSearch` returns the nearest hit with `exact` and `candidates`.
+
+`recall` fuses text and vectors, `unembedded` lists the backlog, and conflicts and undefined models carry their codes.
+
+### MCP Vector Tools
+
+`define_embedding_model`, `set_embedding`, `vector_search` and `recall` work through the JSON-RPC layer, the read tools stay offered in read-only mode, and a conflicting vector is a tool error `EmbeddingConflict`.
+
+### Bindings Store And Search Vectors
+
+Python defines a model, embeds statements by `Ref`, searches with `vector_search` and `recall`, lists `unembedded`, and raises `TiramemsuError` with code `EmbeddingConflict`.
+
+### Node Stores And Searches Vectors
+
+Node's `Tx.defineEmbeddingModel`, `Tx.setEmbedding`, `View.vectorSearch`, `View.recall` and `View.unembedded` behave like the bridge, and a conflicting vector throws.
+
+### Budgets Bound A Search
+
+A row budget smaller than the hits fails with `ResultLimitExceeded`, a cancelled token with `Cancelled`, and a roomy budget returns every hit.
+
+### Exact Search Equals Brute Force
+
+A property test over random vectors, metrics, f32 and f16, retractions and limits: hits are live, their similarities match a brute-force computation, ranks run 1 … k, and no statement left out is closer than the last hit.
+
+### Prefilter Hits Have Exact Similarities
+
+A property test: with a sign-bit prefilter every hit is live, its similarity is the exact one, hits are ordered, and the result says it is not exhaustive.
+
+### Fusion Recomputes From The Channels
+
+A property test over random notes and queries: every fused score equals the sum of `1 / (60 + rank)` over the standalone channels, channel ranks match, and a single-channel recall keeps its standalone order.
+
+### Hybrid Recall Honours Views And Graphs
+
+Fused hits and expanded layers follow the view: a later note and a later layer are absent as of an earlier transaction. Graph filters restrict both channels.
+
+### Channel Failures Are Typed
+
+On a host without FTS5 a vector-only recall works, a text channel fails with `MissingCapability("fts5")`, and an undefined model is `InvalidQuery`.
+
+### SPARQL And Cypher Share The Recall
+
+`tm:recall*` patterns and `CALL tiramemsu.recall` return the same statements, scores, ranks and `via` as `View::recall` with expansion; misuse is `InvalidQuery`. The vector predicate filter works in both languages.
+
+### Every Surface Returns The Same Hits
+
+Through the JSON bridge, `vectorSearch`, SPARQL `tm:vectorMatch` and the Cypher procedure return the same statements in the same ranks.
+
+### MCP Tools Agree With Queries
+
+The MCP `vector_search` tool returns the same statements in the same order as a SPARQL `tm:vectorMatch` query through the MCP `query` tool.
+
+### Same Results On Every Host
+
+One fixture checked against brute force (now, as of before a retraction, and SPARQL) passes on rusqlite, on the WASM host's logic natively, and in WebAssembly under Node.js.
+
+### Hybrid Expansion Is Capped And Budgeted
+
+With five layers on a hit, `expand: n` adds exactly `min(n, 5)` of them after the fused hits with ranks continuing; a row budget smaller than the result fails with `ResultLimitExceeded` and a cancelled token with `Cancelled`.

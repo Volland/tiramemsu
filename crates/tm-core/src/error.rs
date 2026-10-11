@@ -136,6 +136,16 @@ pub enum Error {
         /// The budget that was exceeded.
         limit: ResultLimit,
     },
+    /// `set_embedding` with a vector that differs from the one already stored for
+    /// the same model and statement. Embeddings are append-only: re-embed under a
+    /// new model instead.
+    #[error("statement {eid} already has a different embedding for model {model}")]
+    EmbeddingConflict {
+        /// The statement.
+        eid: Eid,
+        /// The model IRI.
+        model: String,
+    },
     /// `supersede` or `confirm` on a retracted or unknown eid.
     #[error("statement {0} is not live")]
     NotLive(Eid),

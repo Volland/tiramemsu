@@ -400,6 +400,8 @@ impl<'a> Gen<'a> {
             Node::Virtual(v) => self.virtual_pattern(v, None),
             Node::Volatile(v) => self.volatile(v),
             Node::Text(t) => self.text(t),
+            Node::Vector(t) => self.vector(t),
+            Node::Recall(t) => self.recall(t),
             Node::Path(p) => {
                 let saved = self.bgp_ctx.take();
                 let r = self.path(p, &Rel::default());
@@ -512,7 +514,9 @@ impl<'a> Gen<'a> {
             | Node::Virtual(_)
             | Node::Volatile(_)
             | Node::Path(_)
-            | Node::Text(_) => self.compile(node),
+            | Node::Text(_)
+            | Node::Vector(_)
+            | Node::Recall(_) => self.compile(node),
         }
     }
 

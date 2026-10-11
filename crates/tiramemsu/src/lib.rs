@@ -57,8 +57,13 @@ pub use tm_core::{
     TextQuery, TimeRef, Triple, Tx, TxId, TxOptions, TxReport, TxSel, Valid, ValidSel, Value,
     ViewSpec,
 };
+pub use tm_core::{recall, vector};
 pub use tm_core::{BTerm, Bundle, BundleStatement, IdUsage, ImportReport, ImportedStatement};
 pub use tm_core::{Conflict, ConflictEvidence, ConflictQuery, ConflictValue};
+pub use tm_core::{
+    EmbeddingModel, Metric, RecallHit, RecallQuery, VectorEncoding, VectorHit, VectorQuery,
+    VectorResult,
+};
 pub use tm_rusqlite::RusqliteHost;
 
 #[cfg(feature = "cypher")]

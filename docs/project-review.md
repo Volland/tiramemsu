@@ -1,125 +1,127 @@
-# Project and architecture review
+# Project review — tiramemsu 0.4.0
 
-Reviewed on 2026-10-03 at commit `8d20ed6`, including the working tree. The architecture is a strong fit for embedded, auditable agent memory. The immediate priorities are panic-safe resource cleanup, predictable import costs, and usable retrieval.
+Reviewed on 2026-10-10 at commit `5a55efc` (release 0.4.0 plus paper and site work). This is the second full review; the first (2026-10-03, against 0.1/0.2) proposed ten changes, and all ten shipped in 0.3.0 and are archived under `openspec/changes/archive/2026-10-04-*`. This review starts from that state.
 
-Follow-up patch: transaction, speculative, and read panic cleanup is repaired, including failed read-commit rollback. The path benchmark now fails on errors and correctly labels all-endpoint searches; the facade/direct benchmark decodes identical triples with matching snapshot boundaries. The findings and logs below are the original pre-patch review. Future features remain unimplemented and are indexed in [feature-proposals.md](feature-proposals.md).
+The review covered four areas in parallel — storage and transactions (`tm-core`, `tm-rusqlite`, the `tiramemsu` facade), the query stack (`tm-ir`, `tm-exec`, `tm-sparql`, `tm-cypher`), the outward surface (MCP server, JSON bridge, Python/Node/WASM bindings, CI, README), and repository health — and every finding below was checked against the source. Reviewer claims that did not hold up are listed at the end.
 
-## Architecture assessment
+## Scorecard
 
-The seven-crate split is coherent. `tm-core` owns the statement identity model, dictionary, temporal visibility, write invariants, and transactions. `tm-rusqlite` supplies the SQLite host. `tm-sparql` and `tm-cypher` lower into `tm-ir`; `tm-exec` generates SQL and runs native paths. `tiramemsu` owns the writer, readers, caches, and application API. The JSON bridge shares binding behavior between Python and Node.
+| Area | Score | One-line verdict |
+|---|---|---|
+| Architecture and design | **9 / 10** | One IR, one temporal predicate writer, one host boundary; layers by statement id give provenance, correction and graphs a single model |
+| Storage and transaction engine | **8 / 10** | Panic-safe transactions, id burning, invariant triggers in the file; remaining issues are performance, not correctness |
+| Query stack | **7.5 / 10** | Injection-proof codegen, bounded path engine with completeness reporting; conformance gaps users will hit |
+| Agent surface (MCP, bindings) | **8 / 10** | MCP server is unusually safety-conscious; bindings are idiomatic; a few asymmetries |
+| Verification | **9 / 10** | Closed W3C and TCK harnesses, differential SPARQL/Cypher suite, proptests, never-forget source audit, feature matrix, a paper with proofs |
+| Performance evidence | **6 / 10** | Good micro-benchmarks, but the scale ceiling is still unknown and the as-of churn target is unmet |
+| Release and operations | **6 / 10** | Publishing pipelines are ready, but no CHANGELOG, npm not published, no hosted API docs |
+| Repository hygiene | **6.5 / 10** | Clean crates; an orphaned Lean model at the repo root that cannot build as laid out |
+| **Overall** | **8 / 10** | A carefully engineered, unusually well-specified embedded store. The next cycle should be about evidence at scale, recall quality and release polish, not more breadth |
 
-```mermaid
-flowchart LR
-  Languages[SPARQL / Cypher] --> IR[Logical IR]
-  IR --> Execution[SQL planner / native paths]
-  Execution --> Boundary[Executor / Host]
-  Writes[Transaction API] --> Core[Core invariants / temporal visibility]
-  Core --> Boundary
-  Boundary --> SQLite[rusqlite / SQLite WAL]
-```
+## What works
 
-Keep the common IR, central temporal scan predicates, statement ids, and host capability checks. They prevent language-specific storage semantics and give provenance, corrections, and named graphs one model. The examples demonstrated annotation queries, history, graph scope, and Cypher reading the same layers. The existing conformance and differential suites provide useful protection against semantic drift.
+**The core idea is right and is implemented once.** A statement is a row `(eid, s, p, o)` with its own id, and an id can be the subject or object of another statement. Provenance, confidence, beliefs, named graphs, statement graphs and metagraphs all fall out of that without a second data structure. Time is resolved in exactly one function (`tm_core::scan_predicates`), reached by views, dependents, graph membership, events and both query languages. This is the decision that keeps the system coherent as features are added.
 
-The executor abstraction is specifically a SQLite host boundary, not a ready-made general database backend: it exposes SQLite values, functions, virtual tables, PRAGMAs, and SQLite-oriented schema/code generation. A WASM SQLite host is a natural extension; a DuckDB or remote database backend would require a larger redesign. `tm-core` is independently usable, but the facade still links both query frontends: its `sparql` feature currently controls differential tests, rather than optional library dependencies.
+**Transaction safety is production-grade.** Every write path (`transact`, `speculate`, derived writes, reads) catches unwinds, rolls back both SQLite and the term-dictionary overlay, and re-throws the original panic. Ids seen during a speculative transaction are burned so they are never reissued, with a fallback when the burn commit itself fails. The never-forget rule is enforced by SQLite triggers inside the file, so it holds even against external tools, and CI greps the engine source for forbidden `DELETE`/`UPDATE`.
 
-## Findings, in priority order
+**The generated SQL never contains data.** Every user value reaches SQLite as a bound `?N` parameter; `format!` in the codegen only interpolates generated aliases and fixed column names. The query reviewer found no exception.
 
-### 1. High: a caught transaction panic leaves the writer unusable
+**Malformed queries do not panic.** The `unwrap`/`expect` sites in the parsers, function evaluation and codegen are all guarded by preceding arity or presence checks.
 
-The probe asserts a fact inside `Db::transact`, panics, catches the unwind, and attempts another transaction. The second write returns `cannot start a transaction within a transaction`. A pooled committed read still sees zero rows, so this reproduces loss of handle usability rather than committed data corruption.
+**The path engine is bounded and honest.** Thompson NFA → DFA (state cap 4096), a configurable state limit (default 1 M), budget polling, and every result says whether it was `Exhaustive`, `StoppedAtBound` or `StoppedAtCap`. Time-respecting search is cross-checked against a brute-force oracle.
 
-[`Store::transact`](../crates/tm-core/src/engine/mod.rs) rolls back returned errors, but a panic bypasses its cleanup. [`Db::lock`](../crates/tiramemsu/src/db.rs) recovers the poisoned mutex and exposes the unrecovered store. `Store::read` and speculative transactions have similarly manual cleanup paths and need auditing; those additional paths were not separately reproduced here.
+**The conformance harnesses are closed in both directions.** The W3C SPARQL runner and the openCypher TCK runner fail on any unlisted deviation *and* on any listed deviation that starts passing, so the deviation lists can only change by an explicit edit, each with a reason.
 
-Add transaction guards that roll back on unwind and restore dictionary state. Speculation also needs to preserve its burned-id contract. Re-throw the original panic after cleanup, or explicitly mark the handle unusable when recovery fails. Verify caught panics followed by reads and writes, and confirm no transaction number or dictionary entry leaks. This is most relevant to applications that catch Rust panics; an aborting process does not continue using the handle.
+**The MCP server is designed for untrusted agents.** Tool schemas use `additionalProperties: false`, path keys are refused, raw SQL is refused, SPARQL/Cypher writes are rejected before a transaction opens, read-only mode removes write tools from `tools/list` *and* refuses them, and budgets default to 30 s / 10 000 rows / 8 MiB. Errors are structured (`ReadOnly`, `PathNotAllowed`, `DeadlineExceeded`) so an agent can act on them, and the `initialize` instructions orient an LLM well.
 
-### 2. High: a reader panic permanently shrinks the pool
+**Design, specs and code are kept in sync.** `lat.md/` is a checked knowledge graph with code references, `openspec/specs/` has 47 capability specs, and the paper formalises the cascade, grounding and supersede guarantees, with four conformance gaps it found repaired in 0.4.0 (storage format 4).
 
-With one reader, an intentional panic in the query engine's test hook is caught. A subsequent read does not finish within 250 ms, although `reader_count()` still reports one. Source inspection shows why: [`ReaderPool::read`](../crates/tiramemsu/src/pool.rs) removes the executor from `idle`, and only returns it after the callback completes normally or returns an error. Unwinding drops the checked-out executor. Future borrowers wait on the condition variable with no remaining reader.
+**Pay-for-what-you-use builds are real.** `default-features = false` links no parser, and the CI feature matrix checks six combinations, including dependency trees.
 
-The hook is a controlled fault injection, not evidence that ordinary query text causes a panic. It proves the resource lifetime problem if execution ever unwinds. Add an RAII reader lease that rolls back and returns or replaces the connection on every exit path. Also audit failed read commits, which currently return the connection without explicit rollback. Add bounded pool acquisition and report actual available/checked-out capacity for operational diagnostics.
+## What to improve
 
-### 3. Medium: bulk loading repeatedly performs full statistics analysis
+Findings are ranked by user impact. None is a data-loss or correctness bug in normal operation; the High items are about evidence and adoption rather than defects.
 
-[`Stats::after_commit`](../crates/tm-core/src/storage/stats.rs) uses the same threshold for commit count and inserted statement count. Its maintenance function runs full `ANALYZE`, `PRAGMA optimize`, and a schema-cookie bump synchronously after commit. In a debug probe loading 20,000 facts in twenty 1,000-fact transactions, the default threshold caused **20 analyses and took 3.00 s**; a threshold of 1,000,000 caused **zero analyses and took 1.77 s**.
+### High
 
-This small fixture demonstrates maintenance cost, not the asymptotic cost on a production database. A later query can also suffer when analysis is deferred. Introduce a bulk-import mode that postpones analysis and runs it once before handing the database back for queries. Separate maintenance thresholds, consider proportional data-growth triggers, and expose maintenance time and errors. Keep reader-statistics refresh: the code documents a real need for pooled readers to reload statistics.
+**H1. The scale ceiling is still unknown, and the as-of churn target is not met.** `lat.md/overview.md#Open Inputs` still lists the scale ceiling as unknown, so the benchmark targets in `lat.md/roadmap.md#Benchmarks` are unset. The last churn measurement (2026-10-03) showed as-of lookups going from 2.75 µs to 81.5 µs between 1 and 1 000 versions per key (about 30×), against a target of ≥ 70 % of the no-history baseline, and the current view also regressed at 1 000 versions with the cause unisolated. Nothing since has re-measured it, and `crates/tiramemsu/benches/README.md` says its path table is an older run. For a "never forget" store, history depth *is* the workload. Fix: pick a target (for example 10⁷ statements, 1 000 versions per hot key), run the churn, point, 2-hop and path benchmarks there, isolate the current-view regression (page cache vs. index choice vs. layout), and record the numbers as release gates.
 
-### 4. Medium: benchmark labels and error handling can mislead tuning
+**H2. No CHANGELOG, and the npm package is not published.** A user going from 0.3 to 0.4 cannot see that format 4 adds date guards or that `assert` now rejects non-live endpoints, both of which change behavior. `npm install @tiramemsu/node` fails, even though `npm-publish.yml` is ready. Fix: add `CHANGELOG.md` with entries back to 0.1, including storage format changes and behavior changes, and run the npm release.
 
-In [`path.rs`](../crates/tiramemsu/benches/path.rs), trail queries use `unwrap_or(0)`, turning a failed search into a successful-looking fast sample. The `any_shortest_pairs` benchmark evaluates an all-endpoints search and filters its results for a destination afterward; it does not measure target-directed shortest-path search.
+**H3. Cypher has no temporal types in a bitemporal database.** 1 064 of the 1 265 TCK deviations are one line: "temporal: durations, time/localtime, map constructors, truncation…". Users can ask `MATCH TIME RESPECTING`, but cannot write `datetime('2026-10-01')`, `duration('P1D')` or compare dates idiomatically. For a product whose pitch is time, this is the most visible gap in the second query language. Fix: implement `date`, `datetime`, `localdatetime`, `duration` and their comparison and arithmetic, mapped onto the existing instant and valid-time values; the TCK list shows exactly which scenarios become green.
 
-In [`core.rs`](../crates/tiramemsu/benches/core.rs), the facade/direct lookup comparison decodes full `Triple` values on one side and only `eid` on the other. Its roughly 2× gap cannot be attributed solely to dynamic dispatch. SPARQL benchmarks call `View::sparql` each iteration and therefore include settings reads, parsing, lowering, planning, execution, and decoding; they are application latency, not pure storage latency.
+### Medium
 
-Require expected result counts, fail on benchmark errors, align returned data in comparisons, and distinguish target-directed versus all-endpoints paths. Add prepared-query and full text-query measurements separately. The Python triangle benchmark measures a reduced raw schema and Python's SQLite build, not the Rust planner or complete temporal store.
+**M1. Supersede loads its cascade set row by row.** `crates/tm-core/src/engine/supersede.rs:124-127` issues one `SELECT … WHERE eid = ?` per cascade member. The 2026-10-03 measurement put a dry-run supersede at 53.7 ms for a 1 000-statement cascade. Fix: load the set in one query (`WHERE eid IN rarray(?)` where the host has the vtab, chunked `IN (…)` otherwise).
 
-## What the parameter runs showed
+**M2. The term-dictionary cache clears itself on large transactions.** `crates/tm-core/src/term.rs:141-147`: when `committed + overlay > 2 × capacity`, the whole committed cache is dropped. One bulk-import chunk with more new terms than the capacity (16 384 by default) discards the warm cache, and later transactions pay a SQL lookup per term until it refills. Fix: bounded LRU eviction, or cap only the committed side.
 
-Final Criterion runs were sequential after the workspace tests completed, with 0.2 s warmup and 0.5 s measurement. Values below are Criterion's central estimates, rounded. These short synthetic measurements are exploratory, not release targets or tail-latency guarantees. Host: macOS arm64, Rust 1.91.1. Raw logs are in [`review-results/`](review-results/).
+**M3. Bounded writer acquisition spin-waits.** `crates/tiramemsu/src/db.rs:369-383` polls `try_lock` with a 1 ms sleep when a budget or timeout is set. It adds up to 1 ms latency per attempt and burns CPU under contention. Fix: a `Condvar` notified on writer release, or `parking_lot`'s `try_lock_for`, with the interrupt check on wake.
 
-| Experiment | Parameters | Result | Interpretation |
-|---|---|---|---|
-| SPARQL point, now | 10k / 100k statements | 58.4 / 58.3 µs | Little sensitivity to this size increase |
-| SPARQL two-hop, now | 10k / 100k | 95.0 / 100.4 µs | Modest increase |
-| SPARQL point, as-of | 10k / 100k | 63.2 / 62.7 µs | Snapshot selection adds modest cost here |
-| SPARQL two-hop, as-of | 10k / 100k | 121.5 / 131.5 µs | More expensive than current view |
-| SPARQL point, valid-at | 10k / 100k | 64.8 / 69.3 µs | Valid-time filtering works with small overhead |
-| SPARQL two-hop, valid-at | 10k / 100k | 124.9 / 135.3 µs | Similar cost to as-of in this fixture |
-| As-of lookup after churn | 1 / 10 / 100 / 1,000 versions per key | 2.75 / 3.23 / 7.76 / 81.5 µs | About 30× slowdown at the high end |
-| Current lookup after churn | Same versions | 2.78 / 2.72 / 2.74 / 17.9 µs | Also regresses at 1,000 versions; cause needs isolation |
-| Supersede dry run | 1 / 10 / 100 / 1,000 statements in cascade | 0.51 / 0.96 / 4.77 / 53.7 ms | Large evidence fans make corrections expensive |
-| Chain reachability | 10,000 edges | 139 ms | Narrow frontiers expose per-hop query cost |
-| Small-world reachability | 5,000 ring nodes plus shortcuts | 4.88 ms | Wide frontiers amortize reads; different workload from chain |
-| All-shortest grid | 30×30 grid, 12-hop bound | 10.0 ms | Enumeration cost matters even on small graphs |
-| Frontier batch | 64 / 256 / 1,024 | 343 / 330 / 349 µs | No reason to raise the default 256 from this fixture |
+**M4. LFTJ materialises its inputs with no memory bound.** `crates/tm-exec/src/lftj/mod.rs:194-206` loads every pattern's matching rows into a `Vec<i64>`; it polls the deadline per row but charges no bytes. Routing requires patterns to be *large* (`min_rows`, default 100 000) but sets no upper bound. Fix: charge the byte budget while loading, and add a `max_input_rows` routing limit that falls back to SQL.
 
-The separate debug probe tested eight threads doing 4,000 total SPARQL point queries, reader counts 0/1/4/8, cache capacities 0/16/16,384, query-engine disablement, and path limits. More readers improved this read-heavy fixture; this does not establish a universal pool size. Cache changes showed no consistent benefit for one repeatedly queried string. With `query_engine=false`, core triples still worked and SPARQL returned `Unsupported`, as intended.
+**M5. SPARQL conformance gaps on common functions.** 147 of 781 W3C tests are listed deviations (about 81 % pass). The ones users will hit: decimal arithmetic returns `xsd:double` (11 tests), string functions drop language tags (10), negated property sets `!p` are `Unsupported`, and `xsd:date` drops its time zone (4). Relative IRIs are rejected by design. Fix the decimal and language-tag groups first; they are silent wrong-type results, not loud errors.
 
-On a 100-edge chain, a state limit of 10 allowed a 3-hop trail but rejected 15 and 100 hops with `PathLimitExceeded`. At 10,000 states the three requests returned 3, 15, and 100 endpoints. Valid time 999 returned none; time 1,000 returned all 100 reachable endpoints with sufficient state budget. A small successful bounded result must not be presented as exhaustive reachability. The API documents silent hop truncation for unbounded Cypher trail patterns.
+**M6. The Lean store model is orphaned at the repository root.** `Store/*.lean` and `Sqlite/Conn.lean` (918 lines, tracked) import `Tiramemsu.Store.*`, but there is no `lakefile`, no `lean-toolchain`, and the files are not under a `Tiramemsu/` directory, so they cannot build as laid out. They carry `@lat: [[architecture#Store Abstraction#Model Store]]`, but that section does not exist, and `lat check` passes anyway, so nothing catches it. The paper-2 Lean project under `paper/metagraphs-from-identified-triples/lean/` shows the intended setup. Fix: move them to `lean/Tiramemsu/{Store,Sqlite}/` with a lakefile and toolchain, add the missing lat section or fix the reference, and build it in CI.
 
-The churn probe's current-read plan used `live_spo` plus a temporary B-tree for ordering. It does not support claiming that the current-view slowdown is caused by selection of a history index. Test page/cache effects, maintenance, and historical table layout before choosing an index change. The roadmap's as-of throughput target of at least 70% of the no-history baseline is clearly not met by this churn fixture.
+**M7. Python `TxBuilder.new_node()` drops its result.** `bindings/python/python/tiramemsu/_db.py:264-266` returns `None`, so the allocated node cannot be referenced later in the same transaction. Node's `Tx.newNode()` returns a `Ref`. Fix: return `Ref(self._fresh())` with an `"as"` label, as `create` and `assert_` do.
 
-The raw triangle experiment reproduced equal counts using SQL and set intersection:
+**M8. Empty nodes and dual-view surprises for Neo4j users.** 60 TCK scenarios fail because `CREATE ()` with no properties leaves no trace (a node exists only through statements), and 46 because a relationship variable can stand in node position. Both are by design, but users porting Cypher will hit them in the first hour. Fix: a short "Cypher for Neo4j users" page, and optionally make `CREATE ()` assert an `rdf:type`-like existence statement under a setting.
 
-| Nodes per layer | Edges | Triangles | SQLite | Intersection | Ratio |
-|---|---|---|---|---|---|
-| 25 | 1,325 | 5,625 | 3.6 ms | 0.5 ms | 7.4× |
-| 50 | 5,150 | 22,500 | 23.3 ms | 1.7 ms | 13.6× |
-| 100 | 20,300 | 90,000 | 162.2 ms | 7.6 ms | 21.3× |
+### Low
 
-This supports developing the deferred native cyclic-join operator for skewed workloads. Validate end-to-end IR semantics and representative application queries before enabling automatic routing. Python's SQLite here was 3.53.0; do not directly compare these numbers with earlier committed runs on SQLite 3.45.3.
+- **L1.** `ObjectId::from_raw(r[k].as_i64().unwrap_or(0))` turns an unexpected NULL into a ghost id `0` instead of an error (`engine/supersede.rs:30`, `storage/schema.rs:136,241,271`, `graph.rs:75`). Return `InvalidTerm` instead.
+- **L2.** `expect("cascade member exists")` in `supersede.rs:125` panics on a corrupt file. The panic is caught and rolled back, but the caller gets a panic payload rather than `NotLive`.
+- **L3.** An instant-based `as_of` embeds `(SELECT max(t) FROM tx WHERE instant <= ?)` once per pattern (`tm-core/src/view.rs:115-118`). Resolve the instant to a `t` once per read.
+- **L4.** The post-`ANALYZE` `PRAGMA schema_version` bump (`storage/stats.rs`) forces every pooled reader to reload its schema, and would collide if two `Db` handles opened one file. Document single-handle ownership, or detect a second handle with a lock row.
+- **L5.** Node's `_refSeq` ref counter is module-global (`bindings/node/lib/index.ts:859`); make it per `Tx` like Python's.
+- **L6.** The README quick start references `conf` and `fact` without defining them; `examples/quickstart.rs` is complete. Either show the full example or mark the snippet as an excerpt.
+- **L7.** The Cypher prepass relies on non-local guards before `peek().unwrap()` (`tm-cypher/src/parse/prepass.rs`). Use `let … else` so a refactor cannot introduce a panic.
+- **L8.** `tm-sparql` corrects `spargebra` 0.4.7's right-associative subtraction after parsing. Add a test that fails when upstream fixes it, so the correction cannot apply twice.
+- **L9.** `lat.md/roadmap.md` called `reserve-replica-id` "a proposal only … waits for a decision", but its archived proposal says "decided (Option A) and implemented", and `lat.md/storage.md` documents the 48-bit counter bound. Fixed in `lat.md` with this review.
+- **L10.** There is no hosted API reference (rustdoc on docs.rs covers Rust; nothing for Python or TypeScript).
 
-## Proposed features and architecture work
+## Validation run
 
-| Priority | Proposal | User benefit | Implementation direction |
-|---|---|---|---|
-| First | Panic-safe resources and query budgets | One failed operation cannot strand an agent's memory handle | Transaction/read leases; pool wait timeout; cancellation and row/result limits |
-| First | Bulk import with explicit finalization | Predictable ingestion of documents or sessions | Batch transaction API, deferred analysis, one final statistics refresh, progress and maintenance metrics |
-| Next | Text retrieval with evidence ranking | Agents can recall a memory without already knowing its graph pattern | Start with FTS5 over live strings, then graph expansion and ranking by source diversity, confidence, and recency; vector retrieval later |
-| Next | Small MCP interface | Make existing memory verbs accessible to agent tools | Assert/confirm/supersede/query/dependents/bundle with typed terms, provenance, and bounded paths; start as a local embedded adapter |
-| Next | Saved answers and stale-answer notifications | Explain which remembered answers need rechecking | Persist query/view and supporting eids; use the existing event feed and dependents API for invalidation |
-| Next | Temporal path syntax and explicit completeness | Ask time-respecting questions in either language without dropping to Rust | Lower both frontends into existing path IR; report reached hop/state limits and completeness |
-| Targeted | Native cyclic joins | Avoid the demonstrated layered-graph join explosion | Implement the existing `NativeKind::Lftj` extension point; preserve per-pattern time, graph membership, and set/bag semantics |
-| Later | Conflict review and safe memory exchange | Show conflicting sources and corrections before merging agent knowledge | Build UI/API workflows over existing conflict recipes, bundles, and dry runs; decide replica identity before promising incremental multi-agent synchronization |
-| Later | Optional frontend dependencies / WASM host | Smaller embedding footprint and browser use | Real Cargo feature gates for frontends; a second SQLite host that demonstrates which executor capabilities are portable |
+`PROPTEST_CASES=32 cargo test --workspace --offline` and `cargo clippy --offline --workspace --all-targets -- -D warnings` were run for this review; results are recorded below.
 
-Retrieval, crypto-shredding, and LFTJ are already described in the design roadmap; these are prioritization proposals, not claims of newly discovered requirements. Saved-answer invalidation should mark incomplete provenance explicitly: recursive paths, negative conditions, and virtual predicates do not supply a complete dependency set today. Avoid promising a sound stale-answer detector from positive eids alone.
+- Tests: **1 311 passed, 0 failed, 1 ignored** across 139 test and doc-test suites (up from 1 127 at the first review). This includes the closed W3C SPARQL and openCypher TCK harnesses.
+- Clippy with `-D warnings`: clean.
+- `lat check`: passes after this review's `lat.md` updates.
+- Not run: Node and Python packaging tests, WASM browser tests, benchmarks, and any dataset above 10⁵ statements. The performance statements above rely on the 2026-10-03 measurements and the recorded benchmark READMEs.
 
-I would keep SQLite as the primary backend, and spend the next development cycle on resource safety and import/query observability, then FTS recall plus a narrow MCP adapter. Both fit the current architecture. A network server, alternative storage engine, and general reasoning system would expand the scope substantially before the embedded experience has been hardened.
+## Fix status (follow-up, 2026-10-10)
 
-## Validation and reproduction
+The 0.4.x items were fixed on the same day; entries are in `CHANGELOG.md` under Unreleased, regression tests in `crates/tiramemsu/tests/review_fixes.rs` (`lat.md/tests.md#Review Fixes`), and before/after numbers in `crates/tiramemsu/benches/README.md`. Workspace: 1 317 tests pass, clippy clean; Python 60/60 and Node 29/29.
 
-`PROPTEST_CASES=64 cargo test --workspace --offline` completed with **1,127 passed, zero failed, zero ignored** across 106 Rust test/doc-test summaries. W3C and TCK harnesses passed their configured deviation checks; that does not mean every upstream scenario is supported. All four shipped examples ran successfully. Node/Python runtime packaging tests and large 1M–10M datasets were not run. Existing unrelated working-tree edits were preserved.
+| Finding | Status | Evidence |
+|---|---|---|
+| **New: STAT4 re-prepares every fixed-plan lookup** | Fixed | Found while isolating H1. With STAT4 samples SQLite re-prepares a statement on every bind of a bare `?N` against an indexed column. `tm-core` single-table lookups now write `col = +?N`. Current-view lookup after churn 16.6 → 2.7 µs; SPARQL point 55 → 20 µs, two-hop 92 → 45 µs (term lookups were paying it too) |
+| H1 history depth | Partly fixed | The current-view regression is gone (above). As-of at 1 000 versions is still 66 µs because it scans every version of the key; the scale ceiling and gates remain in `add-scale-benchmarks` |
+| H2 CHANGELOG / npm | CHANGELOG done | Retrofitted from 0.1.0; the npm release is still to be run |
+| H3 Cypher temporal types | Specified | `openspec/changes/add-cypher-temporal-types` |
+| M1 supersede row by row | Fixed | Cascade walk batched per frontier, rows loaded per 500 ids; order unchanged. 1 000-statement supersede 83 → 68 ms |
+| M2 term cache clearing | Fixed | Segmented LRU; unit-tested. No measurable change on the hotspot fixture, whose cost is existence checks |
+| M3 spinning writer wait | Fixed | Release-signalled condvar, 10 ms cancellation poll; tested. No throughput change (none was expected) |
+| M4 LFTJ memory | Fixed | Inputs charged to `max_bytes`; tested on both routes |
+| M5 SPARQL value semantics | Specified | `openspec/changes/fix-sparql-value-semantics` |
+| M6 Lean model | Fixed | Moved to `lean/` with a lakefile; `lake build` passes; CI job added; lat sections restored |
+| M7 Python `new_node` | Fixed, wider than reported | The bridge never bound `newNode`'s `as`, so Node's `Ref` did not resolve either. Fixed in the bridge and both bindings, with tests |
+| M8 Neo4j surprises | Open | Documentation item |
+| L1 NULL id columns | Not applicable | The columns are `NOT NULL` in a STRICT table; supersede's loader returns a typed error anyway |
+| L2 cascade `expect` | Fixed | Missing rows are `NotLive` |
+| L3 instant as-of | Not needed | Measured equal to transaction as-of (855 vs 854 µs) |
+| L5 Node ref counter | Fixed | Per `Tx` |
+| L6 README snippet | Fixed | |
+| L9 replica-id drift | Fixed | `lat.md/roadmap.md` |
+| L4, L7, L8, L10 | Open | |
 
-`cargo clippy --offline --workspace --all-targets -- -D warnings` also passed. The review is indexed in the design graph, and `lat check` passed after that index was updated.
+## Reviewer claims that did not hold up
 
-```sh
-PROPTEST_CASES=64 cargo test --workspace --offline
-cargo bench --offline -p tiramemsu --bench core -- --warm-up-time 0.2 --measurement-time 0.5
-SPARQL_BENCH_STATEMENTS=10000 cargo bench --offline -p tiramemsu --bench sparql -- --warm-up-time 0.2 --measurement-time 0.5
-SPARQL_BENCH_STATEMENTS=100000 cargo bench --offline -p tiramemsu --bench sparql -- --warm-up-time 0.2 --measurement-time 0.5
-PATH_BENCH_STATEMENTS=10000 cargo bench --offline -p tiramemsu --bench path -- --warm-up-time 0.2 --measurement-time 0.5
-```
+- "Platform `.node` binaries are checked into git." They are local build outputs and are not tracked (`git ls-files bindings/node` lists none).
+- "The MCP server should answer `resources/list` and `prompts/list` with empty lists." The server advertises only the `tools` capability, so method-not-found is spec-compliant. Revisit only if resources are added (see the roadmap).
+- "`Relation::at` in LFTJ needs checked indexing." It is an internal invariant, not reachable from user input; a `debug_assert!` is the most it warrants.
 
-[`probe.rs`](review-results/probe.rs) is a standalone diagnostic program, not a change to the product. To rerun, create a temporary Cargo binary with a path dependency on this checkout's `crates/tiramemsu` and `tempfile = "3"`, copy the program into `src/main.rs`, and use `cargo run --offline --manifest-path <temporary-project>/Cargo.toml`. It intentionally catches panics and checks a blocked reader with a timeout. Timings use the debug profile and should only be compared within that probe.
+## Recommendation
 
-Run `python3 docs/review-results/triangle_sweep.py` from the repository root for the reduced triangle sweep. It reuses the definitions from `bench/triangles/bench.py` with layer sizes 25, 50, and 100. The full original script runs much larger cases.
+Keep the architecture; it is the project's main asset. Do not add another query language, storage engine or network server yet. Spend the next cycle on three things, in order: **measure at scale and fix history-depth performance** (H1, M1, M2), **make the release legible** (H2, M6, M7), and **close the time gap in Cypher** (H3). The feature work that follows is in [feature-roadmap.md](feature-roadmap.md).

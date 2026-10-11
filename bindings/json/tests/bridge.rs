@@ -70,6 +70,32 @@ fn a_transaction_reports_and_resolves_named_refs() {
     assert_eq!(r["refs"]["job"], r["results"][0]["eid"]);
 }
 
+// @lat: [[tests#Review Fixes#Bridge Resolves New Node Refs]]
+#[test]
+fn a_new_node_ref_resolves_in_later_ops() {
+    let (_d, db) = open();
+    let r = db
+        .call(
+            "transact",
+            &json!({ "ops": [
+                { "op": "newNode", "as": "n" },
+                { "op": "assert", "s": {"ref": "n"}, "p": v("name"), "o": "Ada", "as": "named" },
+                { "op": "assert", "s": v("alice"), "p": v("knows"), "o": {"ref": "n"} },
+                { "op": "assert", "s": {"ref": "named"}, "p": v("source"), "o": "chat-1" }
+            ]}),
+        )
+        .unwrap();
+    let node = r["results"][0].clone();
+    assert!(node.get("node").is_some(), "{node}");
+    let rows = db
+        .call(
+            "sparql",
+            &json!({ "text": "SELECT ?x WHERE { v:alice v:knows ?x . ?x v:name \"Ada\" }" }),
+        )
+        .unwrap();
+    assert_eq!(rows["rows"].as_array().unwrap().len(), 1, "{rows}");
+}
+
 #[test]
 fn time_travel_across_both_clocks() {
     let (_d, db) = open();
@@ -1461,4 +1487,120 @@ fn lftj_option_and_explain_over_the_bridge() {
         )
         .unwrap_err();
     assert_eq!(e.code(), "Unsupported");
+}
+
+// @lat: [[tests#Vector Recall#Bridge Vector Recall]]
+#[test]
+fn vectors_through_the_bridge() {
+    let dir = tempfile::tempdir().unwrap();
+    let db = Database::open(
+        dir.path().join("m.db").to_str().unwrap(),
+        &json!({ "textIndex": true }),
+    )
+    .unwrap();
+    let model = "urn:tiramemsu:v:toy";
+    let r = db
+        .call(
+            "transact",
+            &json!({ "ops": [
+                { "op": "defineEmbeddingModel", "model": model, "dimensions": 2 },
+                { "op": "assert", "s": v("trip"), "p": v("note"), "o": "lisbon offsite", "as": "a" },
+                { "op": "setEmbedding", "eid": {"ref": "a"}, "model": model, "vector": [1.0, 0.0] },
+                { "op": "assert", "s": v("trip"), "p": v("note"), "o": "tram tickets", "as": "b" },
+                { "op": "setEmbedding", "eid": {"ref": "b"}, "model": model, "vector": [0.0, 1.0] },
+                { "op": "assert", "s": v("trip"), "p": v("note"), "o": "unembedded" }
+            ]}),
+        )
+        .unwrap();
+    assert_eq!(r["results"][0]["new"], json!(true));
+    assert_eq!(r["results"][2]["new"], json!(true));
+    let found = db
+        .call(
+            "vectorSearch",
+            &json!({ "model": model, "vector": [0.9, 0.1], "limit": 1 }),
+        )
+        .unwrap();
+    assert_eq!(found["exact"], json!(true));
+    assert_eq!(found["candidates"], json!(2));
+    assert_eq!(found["hits"][0]["o"], json!("lisbon offsite"));
+    assert_eq!(found["hits"][0]["rank"], json!(1));
+    let fused = db
+        .call(
+            "recall",
+            &json!({ "text": "tram", "model": model, "vector": [1.0, 0.0], "limit": 5 }),
+        )
+        .unwrap();
+    let texts: Vec<&J> = fused.as_array().unwrap().iter().map(|h| &h["o"]).collect();
+    assert!(texts.contains(&&json!("lisbon offsite")) && texts.contains(&&json!("tram tickets")));
+    let backlog = db.call("unembedded", &json!({ "model": model })).unwrap();
+    assert!(!backlog.as_array().unwrap().is_empty());
+    // a different vector for the same statement is a typed error
+    let e = db
+        .call(
+            "transact",
+            &json!({ "ops": [
+                { "op": "setEmbedding", "eid": found["hits"][0]["eid"], "model": model, "vector": [0.0, 1.0] }
+            ]}),
+        )
+        .unwrap_err();
+    assert_eq!(e.code(), "EmbeddingConflict");
+    let e = db
+        .call(
+            "vectorSearch",
+            &json!({ "model": "urn:tiramemsu:v:nope", "vector": [1.0] }),
+        )
+        .unwrap_err();
+    assert_eq!(e.code(), "InvalidQuery");
+}
+
+// @lat: [[tests#Vector Recall#Every Surface Returns The Same Hits]]
+#[test]
+fn every_bridge_surface_returns_the_same_vector_hits() {
+    let (_d, db) = open();
+    let model = "urn:tiramemsu:v:toy";
+    let mut ops = vec![json!({ "op": "defineEmbeddingModel", "model": model, "dimensions": 2 })];
+    for (i, x) in [[1.0, 0.0], [0.6, 0.8], [0.0, 1.0], [0.9, 0.1]]
+        .iter()
+        .enumerate()
+    {
+        ops.push(json!({ "op": "create", "s": v("trip"), "p": v("note"), "o": format!("n{i}"), "as": format!("n{i}") }));
+        ops.push(json!({ "op": "setEmbedding", "eid": {"ref": format!("n{i}")}, "model": model, "vector": x }));
+    }
+    db.call("transact", &json!({ "ops": ops })).unwrap();
+    let api = db
+        .call(
+            "vectorSearch",
+            &json!({ "model": model, "vector": [1.0, 0.2] }),
+        )
+        .unwrap();
+    let api: Vec<(J, J)> = api["hits"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|h| (h["eid"].clone(), h["rank"].clone()))
+        .collect();
+    assert_eq!(api.len(), 4);
+    let sparql = db
+        .call(
+            "sparql",
+            &json!({ "text": "SELECT ?e ?r WHERE { ?e tm:vectorMatch \"[1.0, 0.2]\" ; \
+                     tm:vectorModel v:toy ; tm:vectorRank ?r } ORDER BY ?r" }),
+        )
+        .unwrap();
+    let cypher = db
+        .call(
+            "cypher",
+            &json!({ "text": "CALL tiramemsu.vector.search('toy', [1.0, 0.2]) \
+                     YIELD statement, rank RETURN statement, rank" }),
+        )
+        .unwrap();
+    let srows = sparql["rows"].as_array().unwrap();
+    let crows = cypher["rows"].as_array().unwrap();
+    assert_eq!(srows.len(), 4);
+    assert_eq!(crows.len(), 4);
+    for (i, (eid, rank)) in api.iter().enumerate() {
+        assert_eq!(srows[i]["e"], json!({ "stmt": eid }), "{sparql}");
+        assert_eq!(&srows[i]["r"], rank);
+        assert_eq!(&crows[i][1], rank, "{cypher}");
+    }
 }

@@ -16,13 +16,33 @@ The core comes first. After the IR lands, the two front ends and the path engine
 | M4 | `add-lftj-operator` (implemented, opt-in) | Leapfrog triejoin for pure cyclic patterns as `tm_lftj`, with routing reasons in explain ([[query#Physical Planning#LFTJ]]) | M1, benchmark evidence |
 | M5 | bindings: Python, Node, `add-mcp-adapter` and `add-wasm-sqlite-host` done | Python, Node and WASM over the JSON bridge, the `tiramemsu-mcp` stdio server ([[api#MCP Tools]]), the WebAssembly host ([[architecture#WebAssembly Host]]) | M0–M3 |
 | M6 | future: `add-crypto-shredding` | `sys:sensitive`, `SEALED` terms, `seal_key`, erase transaction. See [[time-model#Erasure]] | M0 |
-| M7 | `add-text-retrieval` (implemented); vectors future | FTS5 over string terms (`term_fts`, format 2) with evidence ranking from Rust, SPARQL and Cypher ([[query#Text Recall]]); later, on hosts with vector support, k-nearest-neighbour indexes defined as `sys:` triples | M1, M2 |
+| M7 | `add-text-retrieval`, `add-vector-recall`, `add-hybrid-recall` (implemented, archived) | FTS5 over string terms (`term_fts`, format 2) with evidence ranking ([[query#Text Recall]]); exact, view-aware vector recall over the append-only `embedding` table of format 5 ([[query#Vector Recall]]); and their fusion ([[query#Hybrid Recall]]), from Rust, SPARQL, Cypher, the bridge, MCP and the bindings | M1, M2 |
 
-Six smaller changes built on M0–M3 add the layer features of [[recipes]]: `add-statement-instants`, `add-typed-layers`, `add-query-provenance`, `add-fact-bundles`, `add-graph-scoped-paths` and `add-time-respecting-paths` (all archived). `add-query-budgets` adds opt-in deadlines, cancellation, reader timeouts and result limits ([[query#Query Budgets]]). `add-bulk-import` adds import sessions with deferred statistics ([[query#Bulk Import]]). `add-text-retrieval` adds opt-in text recall with evidence ranking over a derived FTS5 index introduced by format 2 ([[query#Text Recall]], [[storage#Text Index]]). `add-mcp-adapter` adds the opt-in `tiramemsu-mcp` crate, a local stdio MCP server with typed memory tools, read-only mode, budgets and provenance coverage ([[api#MCP Tools]]). `add-saved-answer-invalidation` adds saved answers with conservative event-driven invalidation in the derived tables of format 3 ([[query#Saved Answers]], [[storage#Saved Answers]]). `add-temporal-path-syntax` adds the SPARQL `SERVICE <tm:timeRespecting…>` scope with `tm:arrival`, the Cypher `MATCH TIME RESPECTING` modifier and path completeness reporting ([[query#Temporal Path Syntax]]). `add-lftj-operator` adds the opt-in native cyclic-join operator with conservative routing and explain reasons ([[query#Physical Planning#LFTJ]]). `add-memory-conflict-review` adds read-only conflict inspection with attributed evidence and noncommitting bundle import previews ([[query#Conflict Inspection]], [[data-model#Fact Bundles#Import Preview]]). `add-optional-query-frontends` makes the query engine and both front ends optional cargo features of the facade, with a core-only build that links no parser and a CI feature matrix ([[architecture#Crates#Cargo Features]]). `add-wasm-sqlite-host` adds `tm-wasm`, a host on SQLite compiled to WebAssembly with memory and OPFS storage and capabilities probed at open ([[architecture#WebAssembly Host]]). All ten are archived (2026-10-04). `reserve-replica-id` is a proposal only: it reserves origin bits in allocated ids so that agent memories can merge later, and waits for a decision.
+Six smaller changes built on M0–M3 add the layer features of [[recipes]]: `add-statement-instants`, `add-typed-layers`, `add-query-provenance`, `add-fact-bundles`, `add-graph-scoped-paths` and `add-time-respecting-paths` (all archived). `add-query-budgets` adds opt-in deadlines, cancellation, reader timeouts and result limits ([[query#Query Budgets]]). `add-bulk-import` adds import sessions with deferred statistics ([[query#Bulk Import]]). `add-text-retrieval` adds opt-in text recall with evidence ranking over a derived FTS5 index introduced by format 2 ([[query#Text Recall]], [[storage#Text Index]]). `add-mcp-adapter` adds the opt-in `tiramemsu-mcp` crate, a local stdio MCP server with typed memory tools, read-only mode, budgets and provenance coverage ([[api#MCP Tools]]). `add-saved-answer-invalidation` adds saved answers with conservative event-driven invalidation in the derived tables of format 3 ([[query#Saved Answers]], [[storage#Saved Answers]]). `add-temporal-path-syntax` adds the SPARQL `SERVICE <tm:timeRespecting…>` scope with `tm:arrival`, the Cypher `MATCH TIME RESPECTING` modifier and path completeness reporting ([[query#Temporal Path Syntax]]). `add-lftj-operator` adds the opt-in native cyclic-join operator with conservative routing and explain reasons ([[query#Physical Planning#LFTJ]]). `add-memory-conflict-review` adds read-only conflict inspection with attributed evidence and noncommitting bundle import previews ([[query#Conflict Inspection]], [[data-model#Fact Bundles#Import Preview]]). `add-optional-query-frontends` makes the query engine and both front ends optional cargo features of the facade, with a core-only build that links no parser and a CI feature matrix ([[architecture#Crates#Cargo Features]]). `add-wasm-sqlite-host` adds `tm-wasm`, a host on SQLite compiled to WebAssembly with memory and OPFS storage and capabilities probed at open ([[architecture#WebAssembly Host]]). All ten are archived (2026-10-04). `reserve-replica-id` is decided and implemented: it reserves 12 origin bits in allocated ids so that agent memories can merge later ([[data-model#ObjectId#Origin Bits]]); merging itself is future work.
 
 M7 exists because recall by text or embedding, not by graph pattern, is how agents usually query their memory. Ranking by support is part of it: a hit can be ordered by its confidence layers, its `sys:confirmedBy` count, the number of distinct transaction authors behind it and its `tm:addedAt`, all of which the store already holds ([[recipes]]). oxilite's design (index definitions stored as data, tables kept current by triggers, one k-NN statement per query) is the template ([[prior-art#oxilite]]).
 
-Status as of 0.4.0: M0–M5 are done, M4 as an opt-in operator; M7 has its text half done; M6 and the vector half of M7 are future work. 0.4.0 adds the conformance repairs of [[overview#Formal Model]] and storage format 4.
+Status as of 0.4.0: M0–M5 are done, M4 as an opt-in operator; M7 had its text half done and M6 was future work. 0.5.0 completes M7 with vector and hybrid recall (storage format 5). 0.4.0 adds the conformance repairs of [[overview#Formal Model]] and storage format 4.
+
+The releases after 0.4.0 are proposed in `docs/feature-roadmap.md` (see [[project-review#Second Review]]): hardening, evidence at scale, the vector half of M7 and hybrid recall (now implemented), Cypher temporal types, crypto-shredding (M6), memory merge over origin bits, and a 1.0 stability promise.
+
+### Proposed Changes
+
+Eleven OpenSpec proposals (2026-10-10) cover the releases after 0.4.0 in `docs/feature-roadmap.md`. Vector and hybrid recall are implemented and archived (`openspec/changes/archive/2026-10-11-*`); libSQL is deferred (2026-10-11); the rest are open.
+
+| Release | Change | Delivers |
+|---|---|---|
+| 0.5 | `add-scale-benchmarks` | Scale ceiling (10⁷ statements, 1 000 versions per key), nightly benchmark gates, `Db::metrics()` |
+| — | `add-libsql-host` (deferred) | An optional libSQL host that may later offer an approximate vector tier; not the vector path |
+| 0.6 | `add-vector-recall` (M7, archived) | Models as `sys:` statements, append-only `embedding` table (format 5), exact view-aware `vector_search`, SPARQL and Cypher |
+| 0.6 | `add-hybrid-recall` (archived) | Text and vector fusion by reciprocal rank, expansion to layers and subject facts, evidence ranking, SPARQL and Cypher forms |
+| 0.6 | `add-derived-beliefs` | `Tx::derive` with support cascade, read-time salience |
+| 0.7 | `add-cypher-temporal-types` | Cypher temporal values (1 064 TCK scenarios) |
+| 0.7 | `add-interval-algebra` | Allen relations over valid time in SPARQL and Cypher |
+| 0.7 | `fix-sparql-value-semantics` | Exact decimals, language-tag-preserving strings, zoned dates, `!p` paths |
+| 0.8 | `add-crypto-shredding` (M6) | Sealed terms under per-subject keys and erase, per [[time-model#Erasure]] |
+| 0.8 | `add-signed-bundles` | Ed25519-signed bundles with a trust policy |
+| 0.9 | `add-memory-merge` | Merge across origins over the reserved origin bits ([[data-model#ObjectId#Origin Bits]]) |
 
 ```plantuml
 @startuml milestones
@@ -35,7 +55,7 @@ rectangle "M3 add-path-engine\n(done)" as M3
 rectangle "M4 add-lftj-operator\n(done, opt-in)" as M4
 rectangle "M5 bindings: Python, Node,\nMCP, WASM host (done)" as M5
 rectangle "M6 add-crypto-shredding\n(future)" as M6
-rectangle "M7 retrieval\ntext: add-text-retrieval (done)\nvectors (future)" as M7
+rectangle "M7 retrieval\ntext: add-text-retrieval (done)\nvectors + hybrid (done)" as M7
 M0 --> M6
 M1 --> M7
 M2a --> M7

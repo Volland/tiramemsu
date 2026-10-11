@@ -745,3 +745,57 @@ describe("memory conflict review", () => {
     } finally { cleanup(a.dir); cleanup(b.dir); }
   });
 });
+
+// ---- new node references -------------------------------------------------
+
+describe("newNode", () => {
+  it("returns a Ref that resolves in later ops of the same transaction", () => {
+    const { db, dir } = tempDb();
+    try {
+      db.transact((tx) => {
+        const n = tx.newNode();
+        tx.assert(n, v("name"), "Ada");
+        tx.assert(alice, knows, n);
+      });
+      const r = db.now().sparql(
+        'SELECT ?x WHERE { <urn:tiramemsu:v:alice> <urn:tiramemsu:v:knows> ?x . ?x <urn:tiramemsu:v:name> "Ada" }',
+      );
+      if (r.kind !== "select") throw new Error("expected select");
+      expect(r.rows.length).toBe(1);
+    } finally {
+      cleanup(dir);
+    }
+  });
+});
+
+// ---- vector recall -------------------------------------------------------
+
+describe("vector recall", () => {
+  // @lat: [[tests#Vector Recall#Node Stores And Searches Vectors]]
+  it("stores embeddings, searches exactly and fuses with text", () => {
+    const dir = mkdtempSync(join(tmpdir(), "tiramemsu-test-"));
+    try {
+      const db = Database.open(join(dir, "v.db"), { textIndex: true });
+      const model = "urn:example:models:toy";
+      db.transact((tx) => {
+        tx.defineEmbeddingModel(model, 2);
+        const a = tx.assert(v("trip"), v("note"), "lisbon offsite");
+        tx.setEmbedding(a, model, [1, 0]);
+        const b = tx.assert(v("trip"), v("note"), "tram tickets");
+        tx.setEmbedding(b, model, [0, 1]);
+      });
+      const r = db.now().vectorSearch(model, [0.9, 0.1], { limit: 1 });
+      expect(r.exact).toBe(true);
+      expect(r.candidates).toBe(2);
+      expect(r.hits[0].o).toBe("lisbon offsite");
+      const fused = db.now().recall({ text: "tram", model, vector: [1, 0], limit: 5 });
+      expect(fused.map((h) => h.o).sort()).toEqual(["lisbon offsite", "tram tickets"]);
+      expect(db.now().unembedded(model).length).toBeGreaterThan(0);
+      expect(() =>
+        db.transact((tx) => { tx.setEmbedding(r.hits[0].eid, model, [0, 1]); }),
+      ).toThrowError(/EmbeddingConflict|different embedding/);
+    } finally {
+      cleanup(dir);
+    }
+  });
+});

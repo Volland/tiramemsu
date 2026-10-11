@@ -13,8 +13,9 @@ use crate::exec::{Executor, Host, HostOptions, SqlValue};
 /// of the derived text index (`meta.text_index`, `meta.text_stale`), so that a
 /// format-1 build, which would not keep `term_fts` current, refuses the file.
 /// Format 3 adds the derived saved-answer tables ([`DDL_SAVED_ANSWERS`]); format 4
-/// validates statement addition and retraction dates ([`DDL_DATE_GUARDS`]).
-pub const FORMAT_VERSION: i64 = 4;
+/// validates statement addition and retraction dates ([`DDL_DATE_GUARDS`]); format 5
+/// adds the append-only `embedding` table of vector recall ([`DDL_EMBEDDING`]).
+pub const FORMAT_VERSION: i64 = 5;
 
 /// The format-1 DDL: tables, indexes, the `event` view and the invariant triggers.
 // @lat: [[storage#Schema]]
@@ -26,6 +27,10 @@ pub const DDL_SAVED_ANSWERS: &str = include_str!("ddl_saved_answers.sql");
 
 /// The transaction-date guard triggers of format 4.
 pub const DDL_DATE_GUARDS: &str = include_str!("ddl_date_guards.sql");
+
+/// The format-5 DDL: the `embedding` table and its never-forget triggers.
+// @lat: [[storage#Embeddings]]
+pub const DDL_EMBEDDING: &str = include_str!("ddl_embedding.sql");
 
 /// Names reserved by format 1 for later milestones (never created by format 1).
 pub const RESERVED_NAMES: [&str; 2] = ["seal_key", "term_fts"];

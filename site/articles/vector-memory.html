@@ -1,0 +1,204 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Vector memory that remembers when: tiramemsu</title>
+<meta name="description" content="How tiramemsu adds recall by meaning to a memory that travels in time: exact search over the statements visible in a view, vectors in the same file and transaction, hybrid recall with text, and honest limits.">
+<link rel="icon" href="../assets/logo.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+<header class="top"><div class="wrap">
+  <a class="brand" href="../"><img src="../assets/logo.svg" alt="">Tiramemsu</a>
+  <nav class="menu"><a href="../#features">Features</a><a href="../#start">Quick start</a><a href="./" aria-current="page">Articles</a><a href="../paper/">Paper</a><a href="https://github.com/Volland/tiramemsu">GitHub</a></nav>
+</div></header>
+
+<article class="post">
+<h1>Vector memory that remembers when</h1>
+<p class="meta">Tiramemsu articles · 11 October 2026</p>
+
+<p>An agent rarely remembers the exact words. The user says “that team trip to Portugal”, and the memory says “met Alice at the Lisbon offsite”. Text recall, which tiramemsu already has, matches words: it finds “Lisbon” but not “Portugal”. Recall by meaning needs embeddings, vectors that put similar texts close together, and a search for the nearest ones.</p>
+<p>Every vector database does that. The hard part for tiramemsu is that its memory travels in time. You can ask what the agent knew last Tuesday, what was true in March, or what one session believed. A vector search has to give the right answer to those questions too, and the usual way of building one does not. This article explains why, and how vector recall in tiramemsu (storage format 5, released in 0.5.0) is built to avoid the problem. The engineering details are in <a href="https://github.com/Volland/tiramemsu/blob/main/docs/vector-architecture.md"><code>docs/vector-architecture.md</code></a>.</p>
+
+<h2>Why agents recall by meaning</h2>
+<p>An agent's memory fills up with notes, observations and facts written in many different words. When it needs something, it starts from the conversation, not from a graph pattern. Words get it part of the way: names, places, product codes. Meaning gets it the rest: paraphrases, synonyms, other languages, the same idea said another way. In practice an agent wants both, and wants to know which one found each result.</p>
+<p>In tiramemsu the unit of recall is a statement. Each fact, note or layer has its own id, so a hit is not a loose chunk of text but a fact the agent can follow into the graph: who said it, how confident they were, what it was later corrected to. Vector recall keeps that. A vector belongs to one statement, and a hit is that statement with its evidence.</p>
+
+<h2>Why time travel breaks approximate indexes</h2>
+<p>Fast vector databases use an approximate index (HNSW, DiskANN, IVF). You ask for the 10 nearest vectors and get them in a few milliseconds. Then you apply your filters.</p>
+<p>In tiramemsu the filter is the view. <code>now()</code> hides retracted and superseded statements. <code>as_of(t)</code> hides everything written after transaction <code>t</code>. <code>valid_at(d)</code> hides facts that were not true on date <code>d</code>. A graph scope hides everything outside the graph. Nothing is ever deleted, so the store holds every old version of every fact, and in a long-lived memory most rows are old versions.</p>
+<p>Here is what happens when you search first and filter second. The agent asks “where does Alice work?” as of March 2024. The index returns the 10 nearest statements:</p>
+<pre><code> rank  statement                               visible in valid_at(2024-03-15)?
+  1    alice worksAt Globex      (2025-)      no, not valid yet
+  2    alice worksAt Initech     (2024-01..06) yes
+  3    alice worksAt Globex      superseded   no, old version of 1
+  4    alice worksAt Acme        (2020-2023)  no, ended
+  5    note: "Alice moved to Globex"          no, written 2025
+  6    alice worksAt Initch      superseded   no, typo, corrected to 2
+  7    note: "Alice joined Initech"           yes
+  8    alice worksAt Acme        superseded   no, old version of 4
+  9    note: "Alice leaving Acme"             no, retracted
+ 10    alice worksAt Globex      superseded   no, old version of 1</code></pre>
+<p>Eight of the ten are superseded, retracted or not valid at the asked time. Two are left. The agent asked for 10 and got 2, and the other correct answers were further down the index's list, never seen. Asking the index for 100 instead of 10 helps this time, but there is no safe number: the further back you go, and the more history the memory holds, the smaller the visible fraction gets. An answer that silently shrinks with the age of the question is the wrong kind of answer for a memory that promises time travel.</p>
+
+<h2>Exact first</h2>
+<p>So tiramemsu does it the other way round: filter first, then search. SQL selects the statements visible in the view, through the same function that every other read uses to turn “now”, “as of” or “valid at” into conditions on rows. Only their vectors are read. Rust computes the similarity of each one to the query and keeps the best. Then it reads the evidence (confidence, confirmations, authors, when it was added) for the hits only.</p>
+<p>The search is exact. In the example above it returns 10 hits, all valid in March 2024, the 10 nearest among them. In <code>as_of(t)</code> it returns the 10 nearest among what the agent knew at <code>t</code>. The result says so: <code>exact: true</code>.</p>
+<p>“What the agent knew” includes the vectors themselves. Each vector records the transaction that stored it, and <code>as_of(t)</code> sees only the vectors stored by <code>t</code>. If you embed an old note today, a question asked as of last Tuesday still does not find it by meaning, because last Tuesday the agent could not have. A past view therefore gives the same answer forever, and an answer saved on a past view stays valid. <code>now()</code> and the history view see every vector.</p>
+<p>The cost is a scan. It is linear in the number of visible vectors, and there is no approximate index yet. For a memory of tens of thousands of statements this is not a problem; the measured numbers are below.</p>
+<p>A side benefit is that it runs everywhere tiramemsu runs. It needs only SQL and Rust, no SQLite extension, so the same code works natively and in the browser on SQLite compiled to WebAssembly.</p>
+
+<h2>Where the vectors live</h2>
+<p>In the same SQLite file, in one table:</p>
+<pre><code>CREATE TABLE embedding (
+  model INTEGER NOT NULL,  <span class="c">-- the model, an IRI</span>
+  eid   INTEGER NOT NULL,  <span class="c">-- the statement this vector describes</span>
+  t     INTEGER NOT NULL,  <span class="c">-- the transaction that stored it</span>
+  bits  BLOB NOT NULL,     <span class="c">-- one sign bit per dimension</span>
+  vec   BLOB NOT NULL      <span class="c">-- f32 or f16, unit length for cosine</span>
+) STRICT;
+CREATE UNIQUE INDEX embedding_model_eid ON embedding(model, eid);
+CREATE INDEX embedding_bits ON embedding(model, eid, bits);  <span class="c">-- for the prefilter</span></code></pre>
+<p>One vector per model per statement. A model is an IRI, and its definition (dimensions, metric, encoding) is ordinary <code>sys:</code> triples on it, so the definition is versioned like any other fact. A vector is written in the same transaction as the statement it describes. Either both are there or neither is. There is no second system to keep in sync, and the agent's whole memory is still one file you can copy.</p>
+
+<h2>Who keeps the index</h2>
+<p>The engine does, the same way it keeps the text index. When you store a vector inside a write transaction, the engine checks that the statement is live, that the model is defined, that the length is right and every number is finite, normalises it for cosine, encodes it, computes the sign bits and inserts the row. You never update an index by hand, and a reader never sees a statement whose vector is half written. A failed transaction, a dry run or a speculation leaves no vector behind.</p>
+<p>What the engine does <em>not</em> do is compute embeddings. Your application calls its model, of whatever kind, and hands the store the numbers. The store never calls a model and never sends your text anywhere.</p>
+
+<h2>In code</h2>
+<p>Rust. <code>embed</code> stands for your own call to an embedding model:</p>
+<pre><code><span class="k">let</span> model = v(<span class="s">"model/minilm-768"</span>);
+db.transact(TxOptions::default(), |tx| {
+    tx.define_embedding_model(model, &amp;EmbeddingModel {
+        dimensions: 768, metric: Metric::Cosine, encoding: VectorEncoding::F32,
+    })?;
+    <span class="k">let</span> text = <span class="s">"met Alice at the Lisbon offsite"</span>;
+    <span class="k">let</span> e = tx.assert(v(<span class="s">"alice"</span>), v(<span class="s">"note"</span>), Value::str(text), Valid::ALWAYS)?.eid();
+    tx.set_embedding(e, model, &amp;embed(text))?;   <span class="c">// true: stored</span>
+    Ok(())
+})?;
+
+<span class="k">let</span> q = VectorQuery { limit: Some(10), ..VectorQuery::new(model, embed(<span class="s">"team trip to Portugal"</span>)) };
+<span class="k">let</span> r = db.now().vector_search(&amp;q)?;
+<span class="k">for</span> hit <span class="k">in</span> &amp;r.hits {
+    println!(<span class="s">"{} {:.3} {:?}"</span>, hit.rank, hit.similarity, hit.evidence.confidence);
+}
+<span class="k">let</span> then = db.as_of(TimeRef::Tx(150)).vector_search(&amp;q)?;   <span class="c">// what the agent knew at transaction 150</span></code></pre>
+<p>Storing the same vector again returns <code>false</code> and changes nothing, so replaying an import is safe. Storing a <em>different</em> vector for the same model and statement is an error, <code>EmbeddingConflict</code>. Vectors are history, and history is not overwritten. The same goes for the model: defining it again identically is a no-op, and defining it differently is refused (<code>InvalidQuery</code>), because the stored vectors depend on it.</p>
+<p>Python:</p>
+<pre><code><span class="k">with</span> db.transact() <span class="k">as</span> tx:
+    tx.define_embedding_model(model, dimensions=768, metric=<span class="s">"cosine"</span>, encoding=<span class="s">"f32"</span>)
+    e = tx.assert_(alice, note, <span class="s">"met Alice at the Lisbon offsite"</span>)
+    tx.set_embedding(e, model, embed(<span class="s">"met Alice at the Lisbon offsite"</span>))
+
+<span class="k">for</span> hit <span class="k">in</span> db.now().vector_search(model, embed(<span class="s">"team trip to Portugal"</span>), limit=10):
+    print(hit.rank, hit.similarity, hit.evidence.confidence)
+
+<span class="c"># statements that still need a vector, for example after a correction</span>
+<span class="k">for</span> s <span class="k">in</span> db.now().unembedded(model, limit=100):
+    ...</code></pre>
+<p>In Python and Node a model can be a plain IRI string. Over MCP, an agent gets five tools for this: <code>define_embedding_model</code> and <code>set_embedding</code> to write, <code>vector_search</code> and <code>recall</code> to read, and <code>unembedded</code> to list the statements that still need a vector. In read-only mode the two that write are hidden, with every other writing tool. Node.js has its own methods: <code>Tx.defineEmbeddingModel</code>, <code>Tx.setEmbedding</code>, <code>View.vectorSearch</code> (which returns <code>{hits, candidates, exact}</code>), <code>View.recall</code> and <code>View.unembedded</code>.</p>
+<p>SPARQL and Cypher reach the same search. In SPARQL, a group of <code>tm:vector*</code> patterns on one variable is one recall; <code>tm:vectorMatch</code> (the vector as a JSON array in a string) and <code>tm:vectorModel</code> are required:</p>
+<pre><code>SELECT ?e ?sim ?o WHERE {
+  ?e tm:vectorMatch <span class="s">"[0.12, -0.4, …]"</span> ; tm:vectorModel &lt;urn:example:minilm&gt; ;
+     tm:vectorSimilarity ?sim ; tm:vectorRank ?r ; tm:vectorLimit 10 .
+  ?s ?p ?o ~ ?e }</code></pre>
+<p><code>GRAPH &lt;g&gt;</code> restricts the recall and <code>SERVICE &lt;tm:asOf/…&gt;</code> times it. <code>tm:vectorPredicate &lt;p&gt;</code>, repeatable, keeps only statements with one of those predicates, before ranking. In Cypher it is a procedure; the model is an IRI or a short name resolved like a graph name, the options are <code>limit</code>, <code>graphs</code> and <code>predicates</code>, and the time clauses apply:</p>
+<pre><code>CALL tiramemsu.vector.search(<span class="s">'minilm'</span>, $vector, {limit: 10, graphs: [<span class="s">'trip'</span>], predicates: [<span class="s">'note'</span>]})
+YIELD statement, subject, predicate, object, similarity, rank, confidence</code></pre>
+<p>Both compile to the same table function as every other surface, so they return the same hits in the same order.</p>
+
+<h2>How hits are ranked</h2>
+<p>Similarity comes first. When two hits are equally similar, which mostly happens when several agents wrote the same thing, evidence breaks the tie: higher confidence first (no confidence last), then more confirmations, then more distinct authors, then the newer statement, then the id. This is the same tie-break text recall uses, and it has a name, <code>tiramemsu-vector-rank/1</code>, so that if it ever changes, the name changes with it.</p>
+
+<h2>Words and meaning together</h2>
+<p>Most of the time an agent should not have to choose. <code>recall</code> runs a text search and a vector search over the same view and merges them:</p>
+<pre><code><span class="k">for</span> hit <span class="k">in</span> db.now().recall(text=<span class="s">"lisbon offsite"</span>, model=model,
+                           vector=embed(<span class="s">"lisbon offsite"</span>), limit=10, expand=2):
+    print(hit.rank, hit.text_rank, hit.vector_rank, hit.via)</code></pre>
+<p>The merge is reciprocal rank fusion: each statement scores <code>1/(60 + rank)</code> in every list it appears in, and the scores add up. Only ranks are combined, because a bm25 score and a cosine similarity are not on the same scale. A statement that both searches find rises to the top. Each hit keeps its <code>text_rank</code> and <code>vector_rank</code> (absent when one search did not find it), so the agent can see why it is there.</p>
+<p>Each search fetches more candidates than you asked for (by default <code>max(4 × limit, 50)</code>) before the merge, so a statement ranked low by one search can still rise when the other agrees. Equal scores are ordered by evidence, then by id. You can give only text or only a vector; a recall with neither is an error, and the text half needs the text index.</p>
+<p><code>expand: 2</code> brings context along. For each hit it adds up to two statements about the hit itself (its confidence, its source) and up to two facts about the hit's subject. They come after all the hits with score 0, each carrying <code>via</code>, the hit it was reached from, so context is never mistaken for a match, and no statement appears twice. The order has a name too: <code>tiramemsu-recall-rank/1</code>.</p>
+<p>The same recall works in SPARQL and Cypher, and gives the same hits in the same order:</p>
+<pre><code>SELECT ?e ?score ?via WHERE {
+  ?e tm:recallText <span class="s">"lisbon offsite"</span> ; tm:recallVector <span class="s">"[0.12, …]"</span> ; tm:recallModel &lt;urn:example:minilm&gt; ;
+     tm:recallExpand 2 ; tm:recallScore ?score ; tm:recallRank ?r ; tm:recallVia ?via }
+ORDER BY ?r
+
+CALL tiramemsu.recall({text: <span class="s">'lisbon offsite'</span>, model: <span class="s">'minilm'</span>, vector: $v, expand: 2})
+YIELD statement, subject, predicate, object, score, rank, via</code></pre>
+<p>Fusion, expansion and the evidence tie-breaks are explained in more depth in <a href="hybrid-recall.html">Words, meaning and evidence: hybrid recall</a>.</p>
+
+<h2>Never forget, still</h2>
+<p>Embedding rows are append-only; triggers forbid changing or deleting them. That fits the rest of the store, and it has three consequences worth knowing.</p>
+<ul>
+  <li><strong>Retraction does not remove a vector.</strong> The view decides. A retracted note does not show up in <code>now()</code>, and it shows up again in <code>as_of</code> a time before it was retracted (and after its vector was stored), as it should.</li>
+  <li><strong>A correction needs a new vector.</strong> Superseding a statement makes a new version with new content, and the old vector describes the old content. The store cannot recompute it, so it does not copy it. <code>unembedded</code> lists the statements that have no vector yet.</li>
+  <li><strong>A new model means new rows.</strong> Switch to a better embedding model by defining a new model IRI and embedding again. The old vectors stay, and old questions asked against the old model still get their old answers.</li>
+</ul>
+
+<h2>A coarse first pass, if you want one</h2>
+<p>Each vector also stores one sign bit per dimension, 96 bytes for 768 dimensions. With <code>prefilter: Some(n)</code>, the search first compares those bits (cheap XOR and bit counting), keeps the <code>n</code> closest, and computes exact similarity only for them. It can miss a true neighbour, so the result says <code>exact: false</code>. It is off by default.</p>
+<p>The speed-up does not come from skipping big rows. A 768-number f32 row is about 3.2 KB, roughly one page, so the exact scan reads about a page per vector. The sign bits are also kept in a small covering index, about 100 bytes per vector, and the prefilter scans that index instead of the table, then reads only the <code>n</code> rows it kept. It still visits every visible vector, so it is a constant factor, not an index.</p>
+<p>We measured what it costs in quality on real vectors: GloVe-100 word vectors from ann-benchmarks, 200 test queries, recall@10 against the exact answer (which matched a numpy brute force on 20 of 20 sampled queries).</p>
+<table>
+<thead><tr><th><code>n</code></th><th>Recall@10, 100k</th><th>Time, 100k</th><th>Recall@10, 200k</th><th>Time, 200k</th></tr></thead>
+<tbody>
+<tr><td>exact</td><td>1.000</td><td>44.5 ms</td><td>1.000</td><td>89.9 ms</td></tr>
+<tr><td>200</td><td>0.544</td><td>28.5 ms</td><td>0.515</td><td>58.1 ms</td></tr>
+<tr><td>1 000</td><td>0.785</td><td>30.8 ms</td><td>0.754</td><td>60.6 ms</td></tr>
+<tr><td>5 000</td><td>0.945</td><td>46.0 ms</td><td>0.913</td><td>72.5 ms</td></tr>
+<tr><td>10 000</td><td>0.979</td><td>92.2 ms</td><td>0.961</td><td>96.3 ms</td></tr>
+</tbody>
+</table>
+<p>The honest reading: scanning the bits alone costs about two thirds of an exact search, so the best speed-up is about 1.5×, and only when you accept losing three or more of the true ten. To keep 95 % of them you need about 5 % of the corpus as candidates, and then it is no faster than exact search. GloVe has only 100 dimensions, so only 100 sign bits; 384- and 768-dimension sentence models should do better, but we have not measured that. Exact search stays the default, and we recommend it.</p>
+
+<h2>How fast it is</h2>
+<p>Measured on an Apple laptop, in a <code>now()</code> view, top 10, with pseudo-random cosine vectors. These numbers measure the cost of the scan, not the quality of the answers.</p>
+<table>
+<thead><tr><th>Statements</th><th>Dimensions, encoding</th><th>Exact</th><th>Prefilter 200</th></tr></thead>
+<tbody>
+<tr><td>10 000</td><td>384 f32</td><td>7.4 ms</td><td>2.4 ms</td></tr>
+<tr><td>10 000</td><td>768 f32</td><td>11.6 ms</td><td>2.5 ms</td></tr>
+<tr><td>10 000</td><td>768 f16</td><td>11.0 ms</td><td>2.5 ms</td></tr>
+<tr><td>100 000</td><td>384 f32</td><td>84.8 ms</td><td>31.0 ms</td></tr>
+<tr><td>100 000</td><td>768 f32</td><td>134.4 ms</td><td>31.3 ms</td></tr>
+<tr><td>100 000</td><td>768 f16</td><td>116.2 ms</td><td>30.9 ms</td></tr>
+</tbody>
+</table>
+<p>Exact search costs about 1.2 µs per 768-number vector, and the cost grows in a straight line with the number of vectors the view can see. A narrow view, such as one graph or an early <code>as_of</code>, scans fewer. The prefilter column is speed only; its quality is measured on real vectors in the section above.</p>
+<p>Hybrid recall over 384-dimension notes with the text index on took 10.0 ms at 10 000 statements (15.2 ms with <code>expand: 2</code>) and 90.7 ms at 100 000 (112.4 ms). The vector half is nearly all of it: text alone took 0.49 ms and 7.6 ms.</p>
+<h2>How much room it takes</h2>
+<p>Measured on 10 000 vectors after <code>VACUUM</code>: a 768-number f32 vector is 3 072 bytes, but it adds 4 234 bytes to the file (4 105 in the table, 113 in the sign-bit index, 13 in the unique index). The row is about 3.2 KB, only one fits in a 4 KB page, and about a quarter of each page is left empty. A 768-number f16 vector or a 384-number f32 vector adds about 2 150 bytes, because two rows share a page. If file size matters, choose f16.</p>
+
+<h2>What comes later</h2>
+<p>Exact search is the base, and it stays the authority. Past roughly a million vectors, faster tiers will sit in front of it, each producing candidates that are checked against the view and re-ranked exactly:</p>
+<ul>
+  <li><strong>sqlite-vec</strong>, as an optional accelerator on hosts that can load extensions. Its tables would be derived from the embeddings and rebuildable, with a marker that says when they are behind, so a host without the extension can still write.</li>
+  <li><strong>HNSW snapshots</strong>, built from the table up to a known statement and kept as a cache outside the tiramemsu file. Newer vectors are scanned exactly. The snapshot only proposes candidates; the view and the exact re-rank decide, and when too few survive the view the search falls back to the exact scan.</li>
+  <li><strong>libSQL</strong> and its DiskANN index were considered and set aside; libSQL may come back later as an optional host, under the same rules.</li>
+  <li><strong>Prefilter quality on sentence models.</strong> Measured on 100-dimension GloVe only; 384- and 768-dimension models are next.</li>
+</ul>
+
+<h2>Honest limits</h2>
+<ul>
+  <li><strong>No approximate index yet.</strong> Search cost grows with the number of visible vectors. 100,000 vectors of 768 f32 numbers add about 420 MB to the file (f16 about half), and an exact search over them took 134 ms on a laptop. Fine for an agent's memory, slow for millions of vectors.</li>
+  <li><strong>The prefilter is coarse.</strong> On real word vectors it is at best about 1.5× faster, and only while losing three or more of the true top ten. It is opt-in, and the result says <code>exact: false</code> whenever it was used.</li>
+  <li><strong>You supply the embeddings.</strong> The store checks the length, not the meaning. If the query vector comes from a different model than the stored ones, the similarities are meaningless and nothing will tell you.</li>
+  <li><strong>Corrections need re-embedding.</strong> Until you embed the new version of a superseded statement, vector search cannot find it. Text recall can.</li>
+  <li><strong>Late vectors do not reach the past.</strong> A vector stored today is invisible to <code>as_of</code> any earlier time, even if its statement existed then. That is the price of past answers that never change.</li>
+  <li><strong>No overwrite.</strong> A changed vector for the same model and statement is refused. Improving your embeddings means a new model.</li>
+  <li><strong>Vectors are permanent.</strong> An embedding can reveal something about the text it came from, and like every row in tiramemsu it is kept.</li>
+</ul>
+<p class="note">Vector recall in tiramemsu is meant to be correct before it is fast: under every view, the hits are the nearest statements that the view can see. Speed comes in tiers on top, and none of them is allowed to change the answer without saying so.</p>
+<p><a href="recall-review-recheck.html">← Recall, review, recheck</a> · <a href="hybrid-recall.html">Words, meaning and evidence: hybrid recall →</a></p>
+</article>
+
+<footer><div class="wrap">
+  <span>Tiramemsu · MIT OR Apache-2.0 · <a href="https://github.com/Volland/tiramemsu">github.com/Volland/tiramemsu</a></span>
+  <span><a href="../">Home</a> · <a href="./">All articles</a></span>
+  <span><a href="../impressum.html">Impressum</a> · <a href="../datenschutz.html">Datenschutz</a> · <a href="../agb.html">AGB</a></span>
+</div></footer>
+</body>
+</html>

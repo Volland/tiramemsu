@@ -120,8 +120,8 @@ impl Tx<'_> {
             let one = self.sys_lookup(vocab::SYS_ONE)?;
             let raw = |o: Option<ObjectId>| SqlValue::Integer(o.map_or(0, ObjectId::raw));
             let rows = self.exec.rows(
-                "SELECT p, o FROM triple WHERE s = ?1 AND t_ret IS NULL \
-                 AND p IN (?2, ?3, ?4, ?5, ?6) ORDER BY eid",
+                "SELECT p, o FROM triple WHERE s = +?1 AND t_ret IS NULL \
+                 AND p IN (+?2, +?3, +?4, +?5, +?6) ORDER BY eid",
                 &[
                     SqlValue::Integer(p.raw()),
                     raw(ids[0]),
@@ -218,7 +218,7 @@ impl Tx<'_> {
             return Ok(Vec::new());
         };
         let rows = self.exec.rows(
-            "SELECT eid, o FROM triple WHERE s = ?1 AND p = ?2 AND t_ret IS NULL ORDER BY eid",
+            "SELECT eid, o FROM triple WHERE s = +?1 AND p = +?2 AND t_ret IS NULL ORDER BY eid",
             &[SqlValue::Integer(x.raw()), SqlValue::Integer(st.raw())],
         )?;
         Ok(rows
@@ -233,7 +233,7 @@ impl Tx<'_> {
     /// Live statements of predicate `x` whose subject tag is outside `tags`.
     fn subject_type_violations(&mut self, x: ObjectId, tags: &[Tag]) -> Result<Vec<Eid>> {
         let rows = self.exec.rows(
-            "SELECT eid, s FROM triple WHERE p = ?1 AND t_ret IS NULL ORDER BY eid",
+            "SELECT eid, s FROM triple WHERE p = +?1 AND t_ret IS NULL ORDER BY eid",
             &[SqlValue::Integer(x.raw())],
         )?;
         let mut out = Vec::new();
@@ -259,7 +259,7 @@ impl Tx<'_> {
             return Ok(());
         };
         let Some(row) = self.exec.first_row(
-            "SELECT s FROM triple WHERE eid = ?1 AND p = ?2 AND t_ret IS NULL",
+            "SELECT s FROM triple WHERE eid = ?1 AND p = +?2 AND t_ret IS NULL",
             &[
                 SqlValue::Integer(e.oid().raw()),
                 SqlValue::Integer(st.raw()),

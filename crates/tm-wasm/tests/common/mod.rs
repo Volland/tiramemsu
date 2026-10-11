@@ -244,3 +244,82 @@ pub fn check_operators(db: &Db) {
     let hits = db.now().text_search(&TextQuery::new("schichten")).unwrap();
     assert_eq!(hits.len(), 1, "text recall through tm_text");
 }
+
+/// Vector recall on `db`: eight embedded statements (cosine, f32), one retracted,
+/// searched now, as of before the retraction, and through SPARQL. Every result is
+/// checked against a brute-force ranking, so a host that passes returns exactly
+/// what every other passing host returns.
+pub fn check_vector_recall(db: &Db) {
+    let model = v("toy-model");
+    let vecs: Vec<[f32; 3]> = (0..8)
+        .map(|i| {
+            let a = i as f32 * 0.7;
+            [a.cos(), a.sin(), 0.25 * (i % 3) as f32 + 0.1]
+        })
+        .collect();
+    let mut eids = Vec::new();
+    let r1 = db
+        .transact(TxOptions::default(), |tx| {
+            tx.define_embedding_model(model.clone(), &EmbeddingModel::new(3))?;
+            for (i, x) in vecs.iter().enumerate() {
+                let e = tx.create(v("doc"), v("chunk"), Value::Int(i as i64), Valid::ALWAYS)?;
+                tx.set_embedding(e, model.clone(), x)?;
+                eids.push(e);
+            }
+            Ok(())
+        })
+        .unwrap();
+    db.transact(TxOptions::default(), |tx| tx.retract(eids[2]).map(|_| ()))
+        .unwrap();
+    let q = [0.9f32, 0.3, 0.2];
+    let unit = |x: &[f32]| {
+        let n = x.iter().map(|a| f64::from(*a).powi(2)).sum::<f64>().sqrt();
+        x.iter().map(|a| f64::from(*a) / n).collect::<Vec<f64>>()
+    };
+    let qu = unit(&q);
+    let expect = |skip_retracted: bool| {
+        let mut ranked: Vec<(Eid, f64)> = eids
+            .iter()
+            .zip(&vecs)
+            .filter(|(e, _)| !(skip_retracted && **e == eids[2]))
+            .map(|(e, x)| (*e, unit(x).iter().zip(&qu).map(|(a, b)| a * b).sum()))
+            .collect();
+        ranked.sort_by(|a, b| b.1.total_cmp(&a.1).then(a.0.cmp(&b.0)));
+        ranked.truncate(5);
+        ranked
+    };
+    let m = db.now().encode(&model).unwrap().unwrap();
+    let query = VectorQuery {
+        limit: Some(5),
+        ..VectorQuery::new(m, q.to_vec())
+    };
+    for (view, retracted_hidden) in [(db.now(), true), (db.as_of(TimeRef::Tx(r1.t.0)), false)] {
+        let got = view.vector_search(&query).unwrap();
+        assert!(got.exact);
+        let want = expect(retracted_hidden);
+        assert_eq!(got.hits.len(), want.len());
+        for (h, (e, s)) in got.hits.iter().zip(&want) {
+            assert_eq!(h.eid, *e);
+            assert!((h.similarity - s).abs() < 1e-5, "{} vs {s}", h.similarity);
+        }
+    }
+    let sparql = db
+        .now()
+        .sparql(
+            "SELECT ?e WHERE { ?e tm:vectorMatch \"[0.9, 0.3, 0.2]\" ; \
+             tm:vectorModel v:toy-model ; tm:vectorLimit 5 ; tm:vectorRank ?r } ORDER BY ?r",
+        )
+        .unwrap();
+    let rows: Vec<Option<Value>> = sparql
+        .solutions()
+        .unwrap()
+        .rows
+        .iter()
+        .map(|r| r[0].clone())
+        .collect();
+    let want: Vec<Option<Value>> = expect(true)
+        .iter()
+        .map(|(e, _)| Some(Value::Stmt(*e)))
+        .collect();
+    assert_eq!(rows, want);
+}

@@ -1,0 +1,46 @@
+{
+  "metadata": {
+    "upload_type": "publication",
+    "publication_type": "preprint",
+    "title": "Metagraph Encodings over Identified Triples: Exact Images, Temporal Integrity, and Structural Depth",
+    "creators": [
+      {
+        "name": "Pavlyshyn, Volodymyr",
+        "affiliation": "Independent researcher"
+      }
+    ],
+    "description": "<p>Identified triples give statements identities that other statements can reference, so set-valued incidence, higher-order endpoints and containment fit on one carrier. We argue that this representation is cheap and that invertibility is a separate integrity obligation, and we state that obligation exactly.</p>\n<p>For finite directed hypergraphs, nonempty-end Basu&ndash;Blanning metagraphs, identified higher-order metagraphs, a well-founded ubergraph fragment and a finite attributed annotating presentation, we give source signatures and exact image constraints under which encoding and decoding are inverse up to renaming, and we show that each constraint is necessary.</p>\n<p>Four results go beyond roundtrips: (1) a snapshot theorem that separates asserted rows from retained referents, so an annotation may be valid outside its bearer's interval; (2) a supersession relation that records identity across versions; (3) an executable-metapath recognizer that decides in linear time whether an edge set can fire, with a characterization of when it agrees with walk reachability; (4) operational consumers for reference rank, namely bulk-load strata and retraction-cascade depth.</p>\n<p>Evidence: exhaustive bounded enumeration, seeded randomized property tests, SHACL/SPARQL validators tested for agreement with a Python checker, and a Lean 4 proof of the directed roundtrip under canonical naming. No performance or retrieval results are reported. Source code, checkers, validators and the Lean proof: https://github.com/Volland/tiramemsu (paper/metagraphs-from-identified-triples/). Revision 2, 5 October 2026. Companion to &ldquo;Layered Bitemporal Graphs&rdquo; (doi:10.5281/zenodo.23139228).</p>",
+    "publication_date": "2026-10-05",
+    "version": "2",
+    "access_right": "open",
+    "license": "cc-by-4.0",
+    "language": "eng",
+    "keywords": [
+      "metagraphs",
+      "identified triples",
+      "RDF 1.2 reifiers",
+      "statement identity",
+      "knowledge graphs",
+      "agent memory",
+      "bitemporal data",
+      "SHACL",
+      "executable metapaths",
+      "Lean 4",
+      "provenance"
+    ],
+    "related_identifiers": [
+      {
+        "identifier": "10.5281/zenodo.23139228",
+        "relation": "cites",
+        "resource_type": "publication-preprint",
+        "scheme": "doi"
+      },
+      {
+        "identifier": "https://github.com/Volland/tiramemsu",
+        "relation": "isSupplementedBy",
+        "resource_type": "software",
+        "scheme": "url"
+      }
+    ]
+  }
+}

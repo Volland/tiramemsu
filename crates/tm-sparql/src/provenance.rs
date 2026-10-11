@@ -305,6 +305,25 @@ impl Pass {
                 };
                 (Op::Text(t), vec![c])
             }
+            Op::Vector(t) => {
+                let c = ProvColumn {
+                    var: t.eid.clone(),
+                    view: t.view,
+                    siblings: false,
+                    list: false,
+                };
+                (Op::Vector(t), vec![c])
+            }
+            Op::Recall(t) => {
+                // expanded statements are cited too: the eid column covers them
+                let c = ProvColumn {
+                    var: t.eid.clone(),
+                    view: t.view,
+                    siblings: false,
+                    list: false,
+                };
+                (Op::Recall(t), vec![c])
+            }
             op @ Op::Values(_) => (op, Vec::new()),
             Op::Join(j) => {
                 let mut inputs = Vec::with_capacity(j.inputs.len());

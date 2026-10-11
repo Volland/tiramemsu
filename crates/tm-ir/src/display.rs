@@ -235,6 +235,56 @@ fn write_op(out: &mut String, op: &Op, depth: usize, pretty: bool) {
             graph_text(&t.graph, out);
             out.push(')');
         }
+        Op::Recall(t) => {
+            let _ = write!(out, "(recall :eid {} :view {}", t.eid, view_text(&t.view));
+            if let Some(q) = &t.text {
+                let _ = write!(out, " :text {} :mode {}", term(q), t.mode.name());
+            }
+            if let (Some(m), Some(v)) = (&t.model, &t.vector) {
+                let _ = write!(out, " :model {} :vector {}", term(m), term(v));
+            }
+            for (k, v) in [("score", &t.score), ("rank", &t.rank), ("via", &t.via)] {
+                if let Some(v) = v {
+                    let _ = write!(out, " :{k} {v}");
+                }
+            }
+            if let Some(l) = t.limit {
+                let _ = write!(out, " :limit {l}");
+            }
+            if t.expand > 0 {
+                let _ = write!(out, " :expand {}", t.expand);
+            }
+            graph_text(&t.graph, out);
+            out.push(')');
+        }
+        Op::Vector(t) => {
+            let _ = write!(
+                out,
+                "(vector {} {} :eid {} :view {}",
+                term(&t.model),
+                term(&t.vector),
+                t.eid,
+                view_text(&t.view)
+            );
+            for (k, v) in [
+                ("similarity", &t.similarity),
+                ("rank", &t.rank),
+                ("confidence", &t.confidence),
+            ] {
+                if let Some(v) = v {
+                    let _ = write!(out, " :{k} {v}");
+                }
+            }
+            if let Some(l) = t.limit {
+                let _ = write!(out, " :limit {l}");
+            }
+            if !t.predicates.is_empty() {
+                let ps: Vec<String> = t.predicates.iter().map(term).collect();
+                let _ = write!(out, " :predicates ({})", ps.join(" "));
+            }
+            graph_text(&t.graph, out);
+            out.push(')');
+        }
         Op::Values(v) => {
             let _ = write!(out, "(values {}", vars(&v.vars));
             for r in &v.rows {

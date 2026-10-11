@@ -262,3 +262,10 @@ fn interop_wasm_side() {
         &[format!("{dir}/wasm.dump").into(), out.into()],
     );
 }
+
+// The vector half of [[tests#Vector Recall#Same Results On Every Host]]: the same
+// brute-force-checked recall in WebAssembly, on the memory VFS.
+#[wasm_bindgen_test]
+fn vector_recall_matches_brute_force_in_webassembly() {
+    check_vector_recall(&open(&memory(), &fresh("vectors"), engine_options()));
+}

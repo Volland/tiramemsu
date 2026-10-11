@@ -156,7 +156,7 @@ impl Tx<'_> {
         Ok(self
             .exec
             .query_i64(
-                "SELECT eid FROM triple WHERE s = ?1 AND p = ?2 AND o = ?3 AND t_ret IS NULL LIMIT 1",
+                "SELECT eid FROM triple WHERE s = +?1 AND p = +?2 AND o = +?3 AND t_ret IS NULL LIMIT 1",
                 &[
                     SqlValue::Integer(g.raw()),
                     SqlValue::Integer(ty.raw()),
@@ -192,10 +192,10 @@ impl Tx<'_> {
         g: ObjectId,
     ) -> Result<Vec<Eid>> {
         let mut sql =
-            String::from("SELECT eid FROM triple WHERE p = ?1 AND o = ?2 AND t_ret IS NULL");
+            String::from("SELECT eid FROM triple WHERE p = +?1 AND o = +?2 AND t_ret IS NULL");
         let mut params = vec![SqlValue::Integer(ig.raw()), SqlValue::Integer(g.raw())];
         if let Some(e) = eid {
-            sql.push_str(" AND s = ?3");
+            sql.push_str(" AND s = +?3");
             params.push(SqlValue::Integer(e.oid().raw()));
         }
         sql.push_str(" ORDER BY eid");

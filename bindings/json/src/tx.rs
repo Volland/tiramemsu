@@ -133,27 +133,50 @@ fn valid(op: &J) -> Res<Valid> {
 }
 
 /// A term, where `{"ref": name}` stands for the statement an earlier op named with `as`.
-fn resolve(j: &J, refs: &HashMap<String, Eid>) -> Res<tiramemsu::Value> {
+/// The names bound by `as` in one op list: statements (`assert`, `create`, …) and
+/// nodes (`newNode`). Derefs to the statement map for eid positions.
+#[derive(Default)]
+struct Refs {
+    stmts: HashMap<String, Eid>,
+    nodes: HashMap<String, tiramemsu::Value>,
+}
+
+impl std::ops::Deref for Refs {
+    type Target = HashMap<String, Eid>;
+    fn deref(&self) -> &Self::Target {
+        &self.stmts
+    }
+}
+
+fn resolve(j: &J, refs: &Refs) -> Res<tiramemsu::Value> {
+    if let Some(name) = j.get("ref").and_then(J::as_str) {
+        if let Some(node) = refs.nodes.get(name) {
+            return Ok(node.clone());
+        }
+    }
     if j.get("ref").is_some() {
         return Ok(tiramemsu::Value::Stmt(eid_from_json(j, refs)?));
     }
     value_from_json(j)
 }
 
-fn term(tx: &mut Tx<'_>, op: &J, key: &str, refs: &HashMap<String, Eid>) -> Res<ObjectId> {
+fn term(tx: &mut Tx<'_>, op: &J, key: &str, refs: &Refs) -> Res<ObjectId> {
     let j = op
         .get(key)
         .ok_or_else(|| arg(format!("`{key}` is required")))?;
     Ok(tx.encode(resolve(j, refs)?)?)
 }
 
+/// The `model` of an embedding op: an IRI term, or a plain string read as an IRI.
+fn model_term(tx: &mut Tx<'_>, op: &J, refs: &Refs) -> Res<ObjectId> {
+    match op.get("model") {
+        Some(J::String(s)) => Ok(tx.encode(tiramemsu::Value::iri(s.clone()))?),
+        _ => term(tx, op, "model", refs),
+    }
+}
+
 /// A pattern position: absent means "any", a term that is not stored matches nothing.
-fn pattern(
-    tx: &mut Tx<'_>,
-    op: &J,
-    key: &str,
-    refs: &HashMap<String, Eid>,
-) -> Res<Option<Option<ObjectId>>> {
+fn pattern(tx: &mut Tx<'_>, op: &J, key: &str, refs: &Refs) -> Res<Option<Option<ObjectId>>> {
     match op.get(key) {
         None | Some(J::Null) => Ok(Some(None)),
         Some(j) => Ok(tx.lookup(&resolve(j, refs)?)?.map(Some)),
@@ -206,7 +229,7 @@ fn patch(j: &J) -> Res<Patch> {
 
 /// Applies the ops in order; returns one result per op and the eids named with `as`.
 fn apply(tx: &mut Tx<'_>, ops: &[J]) -> Res<(Vec<J>, HashMap<String, Eid>)> {
-    let mut refs: HashMap<String, Eid> = HashMap::new();
+    let mut refs = Refs::default();
     let mut results = Vec::with_capacity(ops.len());
     for op in ops {
         let name = op
@@ -275,7 +298,41 @@ fn apply(tx: &mut Tx<'_>, ops: &[J]) -> Res<(Vec<J>, HashMap<String, Eid>)> {
             }
             "newNode" => {
                 let id = tx.new_node()?;
-                json!(value_to_json_of(tx, id)?)
+                let node = tx.decode(id)?;
+                if let Some(label) = op.get("as").and_then(J::as_str) {
+                    refs.nodes.insert(label.to_string(), node.clone());
+                }
+                json!(crate::value::value_to_json(&node))
+            }
+            "defineEmbeddingModel" => {
+                let m = model_term(tx, op, &refs)?;
+                let dims = op
+                    .get("dimensions")
+                    .and_then(J::as_u64)
+                    .and_then(|d| u32::try_from(d).ok())
+                    .ok_or_else(|| arg("`dimensions` must be a positive integer"))?;
+                let metric = match op.get("metric").and_then(J::as_str) {
+                    None => tiramemsu::Metric::Cosine,
+                    Some(n) => tiramemsu::Metric::from_name(n)
+                        .ok_or_else(|| arg("metric must be \"cosine\", \"dot\" or \"l2\""))?,
+                };
+                let encoding = match op.get("encoding").and_then(J::as_str) {
+                    None => tiramemsu::VectorEncoding::F32,
+                    Some(n) => tiramemsu::VectorEncoding::from_name(n)
+                        .ok_or_else(|| arg("encoding must be \"f32\" or \"f16\""))?,
+                };
+                let def = tiramemsu::EmbeddingModel {
+                    dimensions: dims,
+                    metric,
+                    encoding,
+                };
+                json!({ "new": tx.define_embedding_model(m, &def)? })
+            }
+            "setEmbedding" => {
+                let e = eid(op, "eid", &refs)?;
+                let m = model_term(tx, op, &refs)?;
+                let v = crate::read::vector_arg(op.get("vector"), "vector")?;
+                json!({ "new": tx.set_embedding(e, m, &v)? })
             }
             "addToGraph" => {
                 let e = eid(op, "eid", &refs)?;
@@ -324,11 +381,11 @@ fn apply(tx: &mut Tx<'_>, ops: &[J]) -> Res<(Vec<J>, HashMap<String, Eid>)> {
             other => return Err(arg(format!("unknown transaction operation {other:?}"))),
         };
         if let (Some(label), Some(e)) = (op.get("as").and_then(J::as_str), named) {
-            refs.insert(label.to_string(), e);
+            refs.stmts.insert(label.to_string(), e);
         }
         results.push(result);
     }
-    Ok((results, refs))
+    Ok((results, refs.stmts))
 }
 
 fn value_to_json_of(tx: &mut Tx<'_>, id: ObjectId) -> Result<J, Error> {

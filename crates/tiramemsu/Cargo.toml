@@ -47,6 +47,15 @@ name = "path"
 harness = false
 required-features = ["exec"]
 
+[[bench]]
+name = "hotspots"
+harness = false
+required-features = ["sparql"]
+
+[[bench]]
+name = "vector"
+harness = false
+
 [[example]]
 name = "quickstart"
 required-features = ["sparql", "cypher"]
@@ -62,6 +71,9 @@ required-features = ["sparql"]
 [[example]]
 name = "time_travel"
 required-features = ["sparql"]
+
+[[example]]
+name = "vector_footprint"
 
 [[example]]
 name = "triangles"

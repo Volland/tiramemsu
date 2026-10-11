@@ -1075,3 +1075,50 @@ class TestConflictReview:
         with db.transact() as tx:
             tx.import_bundle(src.now().bundle(2))
         assert tx.report is not None and len(tx.report.asserted) == 1
+
+
+# ------------------------------------------------------------------ new node references
+
+
+class TestNewNodeRef:
+    # @lat: [[tests#Review Fixes#Bindings Return New Node Refs]]
+    def test_new_node_ref_resolves_in_later_ops(self, db: Database) -> None:
+        with db.transact() as tx:
+            n = tx.new_node()
+            assert isinstance(n, Ref)
+            tx.assert_(n, iri("name"), "Ada")
+            tx.assert_(iri("alice"), iri("knows"), n)
+        result = db.now().sparql(
+            SPARQL_PREFIX + 'SELECT ?x WHERE { v:alice v:knows ?x . ?x v:name "Ada" }'
+        )
+        assert isinstance(result, SparqlSelectResult)
+        assert len(list(result)) == 1
+
+
+# ---------------------------------------------------------------------- vector recall
+
+
+class TestVectorRecall:
+    MODEL = "urn:example:models:toy"
+
+    # @lat: [[tests#Vector Recall#Bindings Store And Search Vectors]]
+    def test_vectors_store_search_and_fuse(self, tmp_path: Any) -> None:
+        db = Database(str(tmp_path / "v.db"), text_index=True)
+        with db.transact() as tx:
+            tx.define_embedding_model(self.MODEL, 2)
+            a = tx.assert_(iri("trip"), iri("note"), "lisbon offsite")
+            tx.set_embedding(a, self.MODEL, [1.0, 0.0])
+            b = tx.assert_(iri("trip"), iri("note"), "tram tickets")
+            tx.set_embedding(b, self.MODEL, [0.0, 1.0])
+        r = db.now().vector_search(self.MODEL, [0.9, 0.1], limit=1)
+        assert r.exact and r.candidates == 2 and len(r) == 1
+        assert r.hits[0].o == "lisbon offsite"
+        assert r.hits[0].rank == 1 and r.hits[0].evidence.confidence is None
+        hits = db.now().recall("tram", model=self.MODEL, vector=[1.0, 0.0], limit=5)
+        assert {h.o for h in hits} == {"lisbon offsite", "tram tickets"}
+        assert all(h.via is None for h in hits)
+        assert db.now().unembedded(self.MODEL) != []
+        with pytest.raises(TiramemsuError) as e:
+            with db.transact() as tx:
+                tx.set_embedding(r.hits[0].eid, self.MODEL, [0.0, 1.0])
+        assert e.value.code == "EmbeddingConflict"

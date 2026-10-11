@@ -649,12 +649,40 @@ impl EvidenceReader {
         terms: &TermReader,
         use_cache: bool,
     ) -> Result<()> {
-        let me = h.eid.oid();
-        h.evidence.confidence = self.confidence(exec, me, terms, use_cache)?;
-        let mut txs = vec![h.evidence.t_add.oid()];
+        h.evidence = self.evidence(
+            exec,
+            h.eid,
+            h.evidence.t_add,
+            h.evidence.added_at,
+            terms,
+            use_cache,
+        )?;
+        Ok(())
+    }
+
+    /// The evidence of statement `eid`, asserted by `t_add` at `added_at`, in this
+    /// reader's view. Shared by text, vector and hybrid recall.
+    pub(crate) fn evidence(
+        &self,
+        exec: &mut dyn Executor,
+        eid: Eid,
+        t_add: TxId,
+        added_at: i64,
+        terms: &TermReader,
+        use_cache: bool,
+    ) -> Result<TextEvidence> {
+        let me = eid.oid();
+        let mut ev = TextEvidence {
+            confidence: self.confidence(exec, me, terms, use_cache)?,
+            confirmations: 0,
+            authors: 0,
+            t_add,
+            added_at,
+        };
+        let mut txs = vec![t_add.oid()];
         if let Some(cb) = self.confirmed_by {
             let confirmations = self.objects(exec, me, cb)?;
-            h.evidence.confirmations = confirmations.len() as u64;
+            ev.confirmations = confirmations.len() as u64;
             txs.extend(
                 confirmations
                     .into_iter()
@@ -666,9 +694,9 @@ impl EvidenceReader {
             for t in txs {
                 seen.extend(self.objects(exec, t, author)?);
             }
-            h.evidence.authors = seen.len() as u64;
+            ev.authors = seen.len() as u64;
         }
-        Ok(())
+        Ok(ev)
     }
 }
 

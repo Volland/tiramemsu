@@ -188,6 +188,111 @@ impl TextPattern {
     }
 }
 
+/// Vector recall: one solution per visible statement with an embedding under
+/// `model`, nearest to `vector` first, in the order of the store's ranking policy
+/// (`lat.md/query#Vector Recall`). Exact over the statements its view selects.
+#[derive(Clone, Debug, PartialEq)]
+pub struct VectorPattern {
+    /// The model: an IRI constant or a parameter.
+    pub model: TermOrVar,
+    /// The query vector: a string constant holding a JSON array of numbers, or a
+    /// parameter (a list of numbers or such a string).
+    pub vector: TermOrVar,
+    /// Binds the statement's eid.
+    pub eid: Var,
+    /// Binds the similarity (a double; larger is closer).
+    pub similarity: Option<Var>,
+    /// Binds the 1-based rank under the ranking policy.
+    pub rank: Option<Var>,
+    /// Binds the confidence layer (a double), missing when the statement has none.
+    pub confidence: Option<Var>,
+    /// Keeps the first `limit` hits by rank (default 10).
+    pub limit: Option<u32>,
+    /// The pattern's own time selection.
+    pub view: View,
+    /// The graphs the statement must be a member of (`Any` by default).
+    pub graph: GraphSel,
+    /// Only statements with one of these predicates (IRI constants or
+    /// parameters); empty = any predicate.
+    pub predicates: Vec<TermOrVar>,
+}
+
+impl VectorPattern {
+    /// A recall of the statements nearest to `vector` under `model`, binding `eid`.
+    pub fn new(
+        model: impl Into<TermOrVar>,
+        vector: impl Into<TermOrVar>,
+        eid: &str,
+        view: View,
+    ) -> VectorPattern {
+        VectorPattern {
+            model: model.into(),
+            vector: vector.into(),
+            eid: Var::new(eid),
+            similarity: None,
+            rank: None,
+            confidence: None,
+            limit: None,
+            view,
+            graph: GraphSel::Any,
+            predicates: Vec::new(),
+        }
+    }
+}
+
+/// Hybrid recall: text and vector recall fused by reciprocal rank, optionally
+/// expanded to each hit's layers and subject facts (`lat.md/query#Hybrid Recall`).
+/// One solution per result statement, in rank order.
+#[derive(Clone, Debug, PartialEq)]
+pub struct RecallPattern {
+    /// The words of the text channel: a string constant or a parameter; `None`
+    /// for no text channel.
+    pub text: Option<TermOrVar>,
+    /// How the words combine.
+    pub mode: tm_core::TextMode,
+    /// The model of the vector channel (an IRI constant or a parameter).
+    pub model: Option<TermOrVar>,
+    /// The query vector (a JSON-array string constant or a parameter).
+    pub vector: Option<TermOrVar>,
+    /// Binds the statement's eid.
+    pub eid: Var,
+    /// Binds the fused score (a double; 0 for an expanded statement).
+    pub score: Option<Var>,
+    /// Binds the 1-based rank.
+    pub rank: Option<Var>,
+    /// Binds the eid of the fused hit an expanded statement was reached from;
+    /// missing for fused hits.
+    pub via: Option<Var>,
+    /// At most this many fused hits (default 10).
+    pub limit: Option<u32>,
+    /// Layers and subject facts added per fused hit (0 = none).
+    pub expand: u32,
+    /// The pattern's own time selection.
+    pub view: View,
+    /// The graphs the channels' statements must be members of (`Any` by default).
+    pub graph: GraphSel,
+}
+
+impl RecallPattern {
+    /// A recall binding `eid`, with no channel yet.
+    pub fn new(eid: &str, view: View) -> RecallPattern {
+        RecallPattern {
+            text: None,
+            mode: tm_core::TextMode::All,
+            model: None,
+            vector: None,
+            eid: Var::new(eid),
+            score: None,
+            rank: None,
+            via: None,
+            limit: None,
+            expand: 0,
+            view,
+            graph: GraphSel::Any,
+        }
+    }
+}
+
 /// Inline bindings; a `None` cell is UNDEF.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Values {
@@ -305,7 +410,8 @@ pub struct RowNumber {
 
 /// A logical operator: one node of the query tree.
 ///
-/// Leaves are [`TriplePattern`], [`PathPattern`], [`TextPattern`] and [`Values`]; the rest are
+/// Leaves are [`TriplePattern`], [`PathPattern`], [`TextPattern`], [`VectorPattern`] and
+/// [`Values`]; the rest are
 /// relational operators over child operators. Build trees with the constructor
 /// methods on `Op` (`Op::join`, [`Op::filter`], `Op::project`, ...) or with
 /// [`IrBuilder`](crate::builder::IrBuilder), then check them with
@@ -318,6 +424,10 @@ pub enum Op {
     Path(PathPattern),
     /// A text recall.
     Text(TextPattern),
+    /// Vector recall (leaf).
+    Vector(VectorPattern),
+    /// Hybrid recall (leaf).
+    Recall(RecallPattern),
     /// Inline rows.
     Values(Values),
     /// List unnesting.
@@ -428,7 +538,12 @@ impl Op {
     /// The direct children of this operator, mutably (not inside expressions).
     pub fn children_mut(&mut self) -> Vec<&mut Op> {
         match self {
-            Op::Triple(_) | Op::Path(_) | Op::Text(_) | Op::Values(_) => Vec::new(),
+            Op::Triple(_)
+            | Op::Path(_)
+            | Op::Text(_)
+            | Op::Vector(_)
+            | Op::Recall(_)
+            | Op::Values(_) => Vec::new(),
             Op::Join(j) => j.inputs.iter_mut().collect(),
             Op::Union(u) => u.inputs.iter_mut().collect(),
             Op::LeftJoin(l) => vec![&mut *l.left, &mut *l.right],
@@ -445,7 +560,12 @@ impl Op {
     /// The direct children of this operator (not inside expressions).
     pub fn children(&self) -> Vec<&Op> {
         match self {
-            Op::Triple(_) | Op::Path(_) | Op::Text(_) | Op::Values(_) => Vec::new(),
+            Op::Triple(_)
+            | Op::Path(_)
+            | Op::Text(_)
+            | Op::Vector(_)
+            | Op::Recall(_)
+            | Op::Values(_) => Vec::new(),
             Op::Join(j) => j.inputs.iter().collect(),
             Op::Union(u) => u.inputs.iter().collect(),
             Op::LeftJoin(l) => vec![&l.left, &l.right],
@@ -469,6 +589,18 @@ impl From<TriplePattern> for Op {
 impl From<TextPattern> for Op {
     fn from(t: TextPattern) -> Op {
         Op::Text(t)
+    }
+}
+
+impl From<VectorPattern> for Op {
+    fn from(t: VectorPattern) -> Op {
+        Op::Vector(t)
+    }
+}
+
+impl From<RecallPattern> for Op {
+    fn from(t: RecallPattern) -> Op {
+        Op::Recall(t)
     }
 }
 

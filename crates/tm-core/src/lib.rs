@@ -15,11 +15,13 @@ pub mod id;
 pub mod mapping;
 pub mod rdf;
 pub mod read;
+pub mod recall;
 pub mod report;
 pub mod storage;
 pub mod term;
 pub mod text;
 pub mod value;
+pub mod vector;
 pub mod view;
 pub mod vocab;
 
@@ -36,6 +38,7 @@ pub use exec::{
 };
 pub use id::{Eid, ObjectId, Tag, TxId};
 pub use mapping::Vocab;
+pub use recall::{RecallHit, RecallQuery};
 pub use report::{
     AssertOpts, Asserted, IdUsage, OnExisting, Patch, PatchField, RetKind, Triple, TxOptions,
     TxReport, Valid,
@@ -43,4 +46,5 @@ pub use report::{
 pub use term::{TermDict, TermReader};
 pub use text::{TextEvidence, TextHit, TextMode, TextQuery};
 pub use value::Value;
+pub use vector::{EmbeddingModel, Metric, VectorEncoding, VectorHit, VectorQuery, VectorResult};
 pub use view::{scan_predicates, TimeRef, TxSel, ValidSel, ViewSpec};

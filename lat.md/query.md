@@ -206,6 +206,7 @@ Measured on SQLite 3.53 with 1.1 million statements and a four-pattern BGP with 
 
 - **Always present:** `Db::open` runs `PRAGMA optimize=0x10002` and, on a populated file without STAT4 samples, a full `ANALYZE`. After bulk loads and at most once every `OpenOptions.optimize_every` commits (default 1000) the writer runs a full `ANALYZE` and then `PRAGMA optimize`. `Db::optimize()` runs a full `ANALYZE`. A bulk import session defers this trigger to one analysis at its end ([[query#Bulk Import]]).
 - **STAT4 and readers:** `PRAGMA optimize` alone analyses with a limit and writes no STAT4 samples, so the planner could not tell a 50-row predicate from an 18 000-row one. Pooled readers also keep the statistics they loaded when they opened, so the writer bumps the schema cookie after each analysis and readers reload the statistics at their next read.
+- **Bound constants and re-preparation:** with STAT4 samples SQLite re-prepares a statement whenever a bare `?N` compared with an indexed column is bound, so it can plan by the actual value. Generated BGP joins rely on that. Single-table lookups in `tm-core`, whose index is fixed by which positions are bound, write `col = +?N` instead: same index seek, no re-preparation. After churn and `ANALYZE` this took a point lookup from about 16 µs to about 2 µs ([[architecture#Executor]]).
 - **Only plans degrade:** stale statistics change a plan's speed, never its results. `sqlite_stat1` and `sqlite_stat4` are SQLite's own tables, outside the graph and outside [[time-model#Never Forget]].
 - **Index family:** with statistics, SQLite may use a `hist_*` index for a `Now` pattern whose predicate has no retracted rows, because the cost is the same. Once a predicate has churn, the statistics steer it to `live_*`. Plan tests assert the family on a churned fixture.
 - **Explain:** `explain()` returns SQLite's `EXPLAIN QUERY PLAN` for every SQL region. Golden plan tests run the skewed fixture with bound parameters.
@@ -374,7 +375,7 @@ A routed region is `RegionKind::NativeLftj` with `RouteNote::LftjNative`; `View:
 
 Each pattern becomes one sorted access path read through the calling statement's connection, so the operator sees that statement's snapshot, or the speculative state inside `with`.
 
-The access paths are loaded into memory as sorted arrays (`Relation` in [[crates/tm-exec/src/lftj/join.rs]]) before the join starts; if any one is empty the call returns no rows at once. Memory therefore holds every pattern's matches as well as the output.
+The access paths are loaded into memory as sorted arrays (`Relation` in [[crates/tm-exec/src/lftj/join.rs]]) before the join starts; if any one is empty the call returns no rows at once. Memory therefore holds every pattern's matches as well as the output. Each loaded row is charged to the operation's byte budget (8 bytes per cell), so a query with `max_bytes` cannot make the join materialise more than that; without a byte budget the inputs are unbounded, as on any unbudgeted call ([[tests#Review Fixes#LFTJ Inputs Count Against The Byte Budget]]).
 
 The scan is the pattern compiled by the same generator as a SQL pattern: its constants, its own view predicates ([[query#Views and Scans]]) and, under set semantics, the canonical-eid predicate, ordered by its variables in join order. A `GRAPH` selector is already a membership pattern `(e sys:inGraph g)` with its own view, so graph constraints are access paths too. Two patterns of one query may use different transaction and valid times.
 
@@ -668,7 +669,7 @@ An opt-in budget bounds one operation: how long it waits for a reader, how long 
 A [[crates/tiramemsu/src/budget.rs#QueryBudget]] has five independent fields: `timeout`, `cancel` (a `CancelToken`), `reader_timeout`, `max_rows` and `max_bytes`. `View::with_budget`, `Db::transact_budgeted`, `Db::cypher_write_budgeted` and `QueryBudget::run` (a sequence of calls as one operation) apply it. The JSON bridge takes the same budget per call ([[bindings#JSON Bridge#Budgets]]).
 
 - **One operation, one meter:** the facade enters a `tm_core::budget::Meter` on the calling thread for the whole call ([[crates/tiramemsu/src/budget.rs#run]]); the deadline starts then. A call nested in a budgeted operation (an update's `WHERE`, provenance sibling lookups, the statements of a Cypher query, the lookups of a bridge call) draws on the same meter, never on a fresh one.
-- **Reader acquisition:** the pool waits on its condition variable until the reader timeout (`PoolTimeout`), the deadline (`DeadlineExceeded`) or cancellation (`Cancelled`, polled every 10 ms), whichever comes first. `OpenOptions::reader_timeout` is the default and the budget overrides it. With no pool the writer's mutex wait is bounded the same way. SQLite's `busy_timeout` is unrelated and unchanged.
+- **Reader acquisition:** the pool waits on its condition variable until the reader timeout (`PoolTimeout`), the deadline (`DeadlineExceeded`) or cancellation (`Cancelled`, polled every 10 ms), whichever comes first. `OpenOptions::reader_timeout` is the default and the budget overrides it. With no pool the writer's mutex wait is bounded the same way: the waiter sleeps on a release signal bumped whenever the writer guard drops, and wakes at least every 10 ms to poll cancellation, instead of spinning. SQLite's `busy_timeout` is unrelated and unchanged.
 - **SQL:** the reader or writer carries the operation's `Interrupt` while the operation runs (`Executor::set_interrupt`). The `rusqlite` host installs it as SQLite's progress handler every 1 000 VM steps, so a running statement stops with `SQLITE_INTERRUPT`, reported as the typed error. The handler is removed before the read snapshot ends and the connection goes back to the pool, so no stale deadline survives the call.
 - **Native work:** the path engine polls the meter while charging search states during frontier expansion ([[crates/tm-exec/src/path/search/mod.rs#StateBudget#charge]]), so a path stops even on a host that cannot interrupt SQL.
 - **Writes:** the stop conditions cover waiting for the writer and every statement of the body; the facade checks them once more when the body returns, then removes the interrupt so bookkeeping and `COMMIT` run uninterrupted. A stopped write rolls back like any failed transaction: no statement, term, event or `tx` row.
@@ -767,6 +768,85 @@ YIELD statement, subject, predicate, text, score, rank, confidence
 
 - **SPARQL:** the `tm:text*` patterns on one subject variable form one recall ([[crates/tm-sparql/src/lower/bgp.rs]]); `GRAPH <g>` and `FROM` restrict it, `SERVICE <tm:asOf/…>` times it, and `GRAPH ?g` around it is `InvalidQuery`. Recall rows add no query provenance.
 - **Cypher:** the procedure ([[crates/tm-cypher/src/exec/text.rs]]) joins the recall with the hit's statement and yields it in node form; `USE AS OF` and the other time clauses apply.
+
+## Vector Recall
+
+Recall by meaning: the statements of a view whose embedding is nearest to a query vector, each with its similarity and the evidence the store holds. The search is exact and runs on every host, with no SQLite extension.
+
+One operation, [[crates/tm-core/src/vector.rs#search]], serves every surface: `View::vector_search(&VectorQuery)`, `vectorSearch` on the JSON bridge and MCP, and the `tm_vector` table function that SPARQL and Cypher compile to. Every query runs on the caller's connection, in one snapshot, as one budgeted operation.
+
+- **Why exact first:** an approximate index returns its top k and only then can the view filter it. Under `as_of`, `valid_at`, history and graph scopes most of those k may be invisible, so hits are silently lost. Here SQL selects the embeddings of the statements the view selects first, through `scan_predicates`, the same predicate list and graph `EXISTS` as text recall. Rust then scores only those rows.
+- **Transaction time:** an as-of view also requires `e.t <= t`, so it sees only the embeddings stored by then and a past view answers the same forever. Now and history see every embedding. A retracted statement's vector stays stored; visibility is the view's decision.
+- **Similarity:** cosine (vectors and query normalised to unit length, so a dot product), dot, or L2 reported as `-‖a−b‖`. Larger is always closer.
+- **Ranking policy** `tiramemsu-vector-rank/1`: similarity descending, then confidence (absent last), confirmations, distinct authors, `added_at` newer first, eid ascending. Evidence is read only for the hits plus any rows tied at the limit, so the policy also holds at the cut. `limit` defaults to 10.
+- **Prefilter:** `prefilter: Some(n)` keeps the `n` candidates with the smallest Hamming distance between sign bits, then re-scores them exactly from `vec`. The result says `exact: false`, because the cut can drop a closer statement. `candidates` counts the visible embeddings considered before the cut.
+- **Prefilter quality** (GloVe-100 angular, real word vectors, 100k corpus, 200 queries): recall@10 is 0.54 at n = 200, 0.79 at 1 000 and 0.95 at 5 000. The bit scan costs about two thirds of an exact search, so the best speedup is about 1.5× at recall ≤ 0.7. Exact search stays the default; 384- and 768-dimension models have more sign bits and should do better, but that is not yet measured.
+- **Errors:** `InvalidQuery` for a missing or undefined model, a vector of the wrong dimension, a non-finite component or a zero cosine vector.
+
+### Embeddings And Models
+
+A model is defined by three engine-owned `sys:` statements on its IRI, and vectors are stored per statement inside the write transaction. The application computes embeddings; the store never calls a model.
+
+- `Tx::define_embedding_model` ([[crates/tm-core/src/engine/embedding.rs]]) asserts `sys:dimensions` (1 to 16 384), `sys:metric` (`"cosine"`, `"dot"`, `"l2"`) and `sys:vectorEncoding` (`"f32"`, `"f16"`). The identical definition again is a no-op. A different definition for the same IRI is `InvalidQuery`, because stored vectors depend on it. Users cannot write these predicates directly (`ReservedNamespace`).
+- `Tx::set_embedding(eid, model, &[f32])` requires a live statement (`NotLive`), checks the vector against the model, normalises it for cosine, packs it with its sign bits and inserts it ([[storage#Embeddings]]).
+- Supersede gives the corrected statement a new eid and copies no vector. `View::unembedded(model, limit)` lists the statements of a view without an embedding, which is the backlog of an embedding job.
+
+### Query Languages
+
+SPARQL and Cypher reach the same search through the IR leaf `VectorPattern`, which compiles to `tm_vector(model, vector, view, graphs, limit)` ([[crates/tm-exec/src/vector.rs#call]]).
+
+```sparql
+SELECT ?e ?sim ?o WHERE {
+  ?e tm:vectorMatch "[0.12, -0.4, …]" ; tm:vectorModel <urn:example:minilm> ;
+     tm:vectorSimilarity ?sim ; tm:vectorLimit 10 .   # also tm:vectorRank, tm:vectorConfidence
+  ?s ?p ?o ~ ?e }
+```
+
+```cypher
+CALL tiramemsu.vector.search('minilm', $vector, {limit: 10, graphs: ['trip']})
+YIELD statement, subject, predicate, object, similarity, rank, confidence
+```
+
+- **SPARQL:** the `tm:vector*` patterns on one subject variable form one recall ([[crates/tm-sparql/src/lower/bgp.rs]]). `tm:vectorMatch` (a string literal holding a JSON array) and `tm:vectorModel` are required. `GRAPH <g>` restricts the recall, `SERVICE <tm:asOf/…>` times it, and `GRAPH ?g` around it is `InvalidQuery`.
+- **Cypher:** the procedure ([[crates/tm-cypher/src/exec/vector.rs]]) takes the model as an IRI or a name resolved like a graph name, the vector as a list of numbers, and options `limit`, `graphs` and `predicates`. It joins the recall with the hit's statement, and the time clauses apply.
+- **Predicates:** SPARQL `tm:vectorPredicate <p>` (repeatable) and the Cypher `predicates` option keep statements with one of those predicates, as `VectorQuery::predicates` does; the filter applies before ranking.
+
+### Future Tiers
+
+Accelerators may come later, each under the same rule: it is derived and rebuildable, it never decides visibility, and its candidates are re-ranked exactly.
+
+- **sqlite-vec** on native hosts that probe it: derived `vec_*` tables in the file, kept current by the writer, with a `vector_stale` catch-up marker like `text_stale` ([[storage#Text Index]]).
+- **In-memory HNSW** (USearch or a pure-Rust crate) for more than about a million vectors, built from `embedding`, optionally snapshotted outside the file with a high-water-mark eid. When too few candidates survive the view it falls back to the exact scan.
+- libSQL's DiskANN index was considered and deferred (`openspec/changes/add-libsql-host`).
+
+## Hybrid Recall
+
+Text and vector recall fused by reciprocal rank, optionally expanded to each hit's layers and to facts about its subject, so one call answers "what do I remember about this" by words and meaning.
+
+[[crates/tm-core/src/recall.rs#recall]] runs each channel exactly in one snapshot for `depth` candidates (default `max(4 × limit, 50)`). A hit's score is the sum over the channels that found it of `1 / (rrf_k + rank)`, with `rrf_k = 60` (Cormack, Clarke and Büttcher, SIGIR 2009). Scores from different channels are never compared directly.
+
+- **Ranking policy** `tiramemsu-recall-rank/1`: fused score descending, then the evidence tie-breaks of vector recall, then eid. Each hit keeps its `lexical`, `similarity`, `text_rank` and `vector_rank`, or `None` for a channel that missed it.
+- **Expansion:** `expand: n` adds, per fused hit in rank order, up to `n` visible statements whose subject is the hit (its layers: source, confidence, …), then up to `n` about the hit's subject node. They come after the fused hits with `score` 0 and `via` set to the hit, and are never repeated. Expansion follows the hit's structure in the view and ignores the channels' graph and predicate filters on purpose: layers such as a source or confidence are rarely graph members themselves.
+- **Errors:** `InvalidQuery` without either channel; a text channel needs the text index ([[query#Text Recall]]).
+
+### Query Languages
+
+SPARQL and Cypher reach hybrid recall through the IR leaf `RecallPattern`, which compiles to `tm_recall(text, mode, model, vector, view, graphs, limit, expand)` ([[crates/tm-exec/src/recall.rs#call]]).
+
+```sparql
+SELECT ?e ?score ?via WHERE {
+  ?e tm:recallText "lisbon offsite" ; tm:recallVector "[0.12, …]" ; tm:recallModel <urn:example:minilm> ;
+     tm:recallExpand 2 ; tm:recallScore ?score ; tm:recallRank ?r ; tm:recallVia ?via }
+ORDER BY ?r
+```
+
+```cypher
+CALL tiramemsu.recall({text: 'lisbon offsite', model: 'minilm', vector: $v, expand: 2})
+YIELD statement, subject, predicate, object, score, rank, via
+```
+
+- **SPARQL:** the `tm:recall*` patterns on one subject variable form one recall; it needs `tm:recallText` or `tm:recallVector` with `tm:recallModel`. `tm:recallMode`, `tm:recallLimit` and `tm:recallExpand` tune it, and `tm:recallVia` is unbound for fused hits. `GRAPH <g>` restricts both channels, `SERVICE <tm:asOf/…>` times it, and `GRAPH ?g` around it is `InvalidQuery`.
+- **Cypher:** `tiramemsu.recall` takes one map with `text` and/or `model` with `vector`, and `mode`, `limit`, `expand` and `graphs`. It yields expanded statements with `via` set and fused hits with `via` null.
 
 ## Conflict Inspection
 

@@ -6,6 +6,7 @@
 mod bundle;
 mod cascade;
 mod config;
+mod embedding;
 mod graph;
 mod ops;
 pub(crate) mod reserved;
@@ -787,7 +788,7 @@ impl<'a> Tx<'a> {
         let dup = self
             .exec
             .query_i64(
-                "SELECT eid FROM triple WHERE s = ?1 AND p = ?2 AND o = ?3 AND eid <> ?4 LIMIT 1",
+                "SELECT eid FROM triple WHERE s = +?1 AND p = +?2 AND o = +?3 AND eid <> ?4 LIMIT 1",
                 &[
                     SqlValue::Integer(s.raw()),
                     SqlValue::Integer(p.raw()),
@@ -800,7 +801,7 @@ impl<'a> Tx<'a> {
             self.multi_seen.insert(p);
             let added = self.exec.execute(
                 "INSERT INTO pred_multi(p) SELECT ?1 WHERE NOT EXISTS \
-                 (SELECT 1 FROM pred_multi WHERE p = ?1)",
+                 (SELECT 1 FROM pred_multi WHERE p = +?1)",
                 &[SqlValue::Integer(p.raw())],
             )?;
             if added > 0 {

@@ -49,5 +49,7 @@ pub fn install(exec: &mut dyn Executor, ops: &OperatorRegistry) -> Result<()> {
         reg.register_aggregate(f)?;
     }
     reg.register_conn_table(crate::text::table_function())?;
+    reg.register_conn_table(crate::vector::table_function())?;
+    reg.register_conn_table(crate::recall::table_function())?;
     ops.register_all(reg)
 }

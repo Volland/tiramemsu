@@ -130,7 +130,7 @@ impl Tx<'_> {
             return Err(Error::NotUniquePredicate(p));
         }
         let found = self.exec.query_i64(
-            "SELECT s FROM triple WHERE p = ?1 AND o = ?2 AND t_ret IS NULL ORDER BY eid LIMIT 1",
+            "SELECT s FROM triple WHERE p = +?1 AND o = +?2 AND t_ret IS NULL ORDER BY eid LIMIT 1",
             &[SqlValue::Integer(p.raw()), SqlValue::Integer(o.raw())],
         )?;
         if let Some(s) = found {
@@ -174,7 +174,7 @@ impl Tx<'_> {
                 v.tag()?;
                 v.check_origin()?;
                 let ph = params.push(v.raw());
-                sql.push_str(&format!(" AND {col} = {ph}"));
+                sql.push_str(&format!(" AND {col} = +{ph}"));
             }
         }
         sql.push_str(" ORDER BY eid");
@@ -295,7 +295,7 @@ impl Tx<'_> {
         };
         if schema.unique {
             if let Some(existing) = self.exec.query_i64(
-                "SELECT s FROM triple WHERE p = ?1 AND o = ?2 AND t_ret IS NULL AND s <> ?3 LIMIT 1",
+                "SELECT s FROM triple WHERE p = +?1 AND o = +?2 AND t_ret IS NULL AND s <> +?3 LIMIT 1",
                 &[
                     SqlValue::Integer(p.raw()),
                     SqlValue::Integer(o.raw()),
@@ -312,7 +312,7 @@ impl Tx<'_> {
         if schema.one {
             let valid = if is_flag { Valid::ALWAYS } else { valid };
             let rows = self.exec.rows(
-                "SELECT eid FROM triple WHERE s = ?1 AND p = ?2 AND o <> ?3 AND t_ret IS NULL \
+                "SELECT eid FROM triple WHERE s = +?1 AND p = +?2 AND o <> +?3 AND t_ret IS NULL \
                  AND (v_from IS NULL OR ?5 IS NULL OR v_from < ?5) \
                  AND (?4 IS NULL OR v_to IS NULL OR ?4 < v_to) ORDER BY eid",
                 &[
@@ -346,7 +346,7 @@ impl Tx<'_> {
         Ok(self
             .exec
             .query_i64(
-                "SELECT eid FROM triple WHERE s = ?1 AND p = ?2 AND o = ?3 AND t_ret IS NULL \
+                "SELECT eid FROM triple WHERE s = +?1 AND p = +?2 AND o = +?3 AND t_ret IS NULL \
                  AND (v_from IS NULL OR ?5 IS NULL OR v_from < ?5) \
                  AND (?4 IS NULL OR v_to IS NULL OR ?4 < v_to) ORDER BY eid LIMIT 1",
                 &[

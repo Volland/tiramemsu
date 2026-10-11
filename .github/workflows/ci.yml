@@ -144,6 +144,21 @@ jobs:
           npm run build
           npm test
 
+  # The Lean model of the store contract (lat.md/architecture.md#Store Abstraction):
+  # the pure model must keep building. The SQLite connector needs leansqlite and is
+  # not a default target.
+  lean:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install elan
+        run: |
+          curl -sSfL https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh | sh -s -- -y --default-toolchain none
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+      - name: Build the store model
+        working-directory: lean
+        run: lake build
+
   # The WASM SQLite host and binding (spec wasm-sqlite-host): clippy on wasm32,
   # the host and the JavaScript surface under Node.js (memory VFS), the native <->
   # WASM file handoff, a smoke test of the generated package, and OPFS in a

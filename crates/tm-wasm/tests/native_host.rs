@@ -306,3 +306,12 @@ fn interop_native_side() {
         other => panic!("TM_WASM_INTEROP_STEP must be write or check, got {other:?}"),
     }
 }
+
+// @lat: [[tests#Vector Recall#Same Results On Every Host]]
+#[test]
+fn vector_recall_matches_brute_force_on_the_wasm_host_logic_and_on_rusqlite() {
+    let (_d, p) = tmp();
+    check_vector_recall(&open_wasm(&p, engine_options()));
+    let (_d2, p2) = tmp();
+    check_vector_recall(&Db::open(&p2, engine_options()).unwrap());
+}

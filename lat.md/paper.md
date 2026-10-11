@@ -44,11 +44,25 @@ Firing closure decides in linear time whether an edge set can fire under all-inp
 
 A walk metapath is executable when the dependency graph is acyclic or every edge has one input, and the cyclic case is the counterexample. Reference rank gives the minimum number of referentially complete load batches, one more than the maximum rank, and bounds retraction-cascade rounds by maximum rank minus the retracted row's rank. Anchored encodings keep structural rows at rank one, compact binary ones make rank equal endpoint depth. These are pass counts over the reference graph, not performance claims.
 
+### Zenodo Metadata
+
+`paper/metagraphs-from-identified-triples/zenodo/` holds Zenodo-ready metadata and upload steps for this paper's PDF.
+
+The record cites the first paper's DOI and links the repository as supplementary material. Nothing is uploaded from the repository; publishing and the DOI are manual steps.
+
 ### Paper Validation
 
 Evidence is exhaustive bounded enumeration, seeded randomized tests, SHACL and SPARQL validators, and a Lean proof, and it is all finite or partial.
 
 `check_encodings.py` and `check_extensions.py` are deterministic and write the paper's two tables. The Lean development proves the directed, higher-order and extensional roundtrip under canonical naming only. The validators under `validators/` express the image constraints over a projected row view and are tested for agreement with the Python validators; they do not make the engine enforce anything.
+
+## Statement as One Record Paper
+
+`paper/statement-as-one-record/` holds the third paper, revision 3 titled "When Is a Temporal Statement Store a Statement Graph?", on exporting occurrence records to Statement Graphs and the OneGraph image.
+
+It proves that identity-preserving export exists exactly for closed, acyclic record sets; defines the export kernel as the least fixpoint of the reference operator (the greatest such subset, computed by a topological peel and maintainable as one bit per record) and the dual reference closure; shows that the append-only full history is closed, so its kernel drops only replay cycles ([[time-model#Operations#Supersede]]); and gives a lossless temporal encoding into the RDF-star branch of the OneGraph image.
+
+`validate.py` checks these on exhaustive and random stores and random protocol histories, and recomputes the kernels from `engine-trace.json`, which [[tests#Export Boundary]] writes when `TM_EXPORT_TRACE` is set. `build.py` refuses a stale validation. `SOURCE_AUDIT.md` records which claims were checked against primary sources and `REVISION_NOTES.md` maps review points to changes.
 
 ## Website Page
 

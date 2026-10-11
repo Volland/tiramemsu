@@ -678,6 +678,10 @@ impl Analysis {
                 self.recursive |= recursive(&p.path);
             }
             O::Text(t) => self.views.push(t.view),
+            // an as-of view sees only the embeddings stored by then, so a vector
+            // recall is as stable as its view
+            O::Vector(t) => self.views.push(t.view),
+            O::Recall(t) => self.views.push(t.view),
             O::Values(_) | O::Join(_) | O::Union(_) | O::Project(_) => {}
             O::Unnest(u) => self.expr(&u.list),
             O::LeftJoin(l) => {

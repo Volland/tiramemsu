@@ -115,6 +115,7 @@ Values that do not fit inline (IRIs, long strings, language strings, other datat
 - `term_key` is an expression index, because a plain UNIQUE index treats NULL `dt`/`lang` as distinct and would let duplicate IRIs and strings through.
 - `num` carries the numeric value of `DOUBLE` and `DECIMAL`, and `term_num` serves range filters on them. See [[data-model#ObjectId#Range Scans]].
 - The reader side keeps an LRU cache of `id → term`, since result decoding is the hot path.
+- The writer's committed cache is a segmented LRU in generations: terms enter on probation and move to a protected segment on a second use; a full probation segment is dropped and a full protected one demoted. A bulk chunk of new terms used once therefore cannot evict the warm set, and the cache holds at most twice `OpenOptions::term_cache_capacity` per direction ([[tests#Review Fixes#Term Cache Survives A Burst]]).
 
 ## Query Shapes
 
@@ -144,6 +145,7 @@ Measured on SQLite 3.53 with small ids, so varints stay 1–3 bytes. By B-tree: 
 
 - The three `hist_*` indexes are 44 % of the file, and they repeat every live row that `live_*` already holds.
 - **Candidate, benchmark-gated:** make `hist_*` partial on `t_ret IS NOT NULL` and read as-of as a live branch `UNION ALL` a dead branch. On this data that saves about 30 %. The cost is that SQLite does not flatten a compound subquery into a join, so every as-of pattern would become a subquery. It is adopted only if the as-of benchmarks show no regression. See [[roadmap#Benchmarks]].
+- **Embeddings** (`cargo run --release -p tiramemsu --example vector_footprint`, 10 000 vectors after `VACUUM`): 768 f32 adds 4 234 bytes per embedding to the file (table 4 105, `embedding_bits` 113, `embedding_model_eid` 13) for a 3 072-byte vector. A 3.2 KB row fits once in a 4 KB page, so about a quarter is page slack. 768 f16 and 384 f32 add about 2 150 bytes (two rows per page). Choose f16 when file size matters ([[storage#Embeddings]]).
 - oxilite writes about 4.8 rows per triple (index entries included) without history and 8.8 with its as-of index ([[prior-art#oxilite]]). The comparable figure here is 9 B-tree entries per assert. A retract moves the row out of the live indexes, rewrites its three `hist_*` entries and adds a `log_ret` entry.
 
 ## Event View
@@ -198,7 +200,7 @@ CREATE TRIGGER tx_no_update BEFORE UPDATE ON tx
 BEGIN SELECT RAISE(ABORT, 'tiramemsu: transactions are immutable'); END;
 ```
 
-Format 3 also rejects backdated assertions/retractions and dates without an active transaction. The engine inserts the transaction record before graph writes and advances `meta.last_t` on commit. Raw writers must follow that protocol. Guards assume schema and engine metadata are intact; they do not protect against deliberate trigger or metadata tampering.
+Format 4 also rejects backdated assertions/retractions and dates without an active transaction. The engine inserts the transaction record before graph writes and advances `meta.last_t` on commit. Raw writers must follow that protocol. Guards assume schema and engine metadata are intact; they do not protect against deliberate trigger or metadata tampering.
 
 `ROLLBACK TO` a savepoint is not a DELETE, so speculative transactions still work. See [[time-model#Speculative Transactions]].
 
@@ -218,10 +220,11 @@ High-churn state (`lastSeen`, counters, per-turn scores) lives in `volatile(s, k
 
 Migrations must respect [[time-model#Never Forget]]. They may add columns, indexes and tables, but never drop or rewrite triples.
 
-- **Current:** format 4. The migrations are [[crates/tm-core/src/storage/migrate.rs#MIGRATIONS]], applied in order by `run_migrations` inside the open transaction; a file newer than the build fails with `FormatVersion`.
+- **Current:** format 5. The migrations are [[crates/tm-core/src/storage/migrate.rs#MIGRATIONS]], applied in order by `run_migrations` inside the open transaction; a file newer than the build fails with `FormatVersion`.
 - **Format 2** inserts the `meta` rows `text_index = 0` and `text_stale = 0` of [[storage#Text Index]]. It runs on every host, creates no FTS5 table and touches no `triple`, `term` or `tx` row.
 - **Format 3** creates the empty derived tables of [[storage#Saved Answers]] and reads or writes no graph row.
 - **Format 4** adds the triggers `triple_add_date` and `triple_ret_date` ([[crates/tm-core/src/storage/mod.rs#DDL_DATE_GUARDS]]). A statement's dates must name the latest transaction in `tx`, strictly above the committed `meta.last_t` watermark; insertion and retraction in the same transaction are allowed. Historical rows are preserved, including references that were already non-conformant, and older engines refuse the newer format.
+- **Format 5** creates the empty, append-only table of [[storage#Embeddings]] with its no-update and no-delete triggers. It needs no host capability and reads or writes no graph row.
 - A new file is created as format 1 and migrated forward like an old file, so fresh and migrated files have the same schema.
 - The bump is what keeps the derived index honest: a format-1 build, which would write strings without indexing them, refuses a format-2 file with `FormatVersion` instead of letting `term_fts` drift.
 
@@ -236,8 +239,12 @@ state "Format 3" as F3 : + saved_answer, saved_answer_dep\n(derived records, wri
 [*] --> F1 : new file
 F1 --> F2 : v1_to_v2\n(no graph row read or written)
 F2 --> F3 : v2_to_v3\n(no graph row read or written)
-F3 --> [*] : current
-note bottom of F3
+state "Format 4" as F4 : + date guard triggers\n(triple_add_date, triple_ret_date)
+state "Format 5" as F5 : + embedding (append-only vectors,\nsource data supplied by the caller)
+F3 --> F4 : v3_to_v4
+F4 --> F5 : v4_to_v5\n(no graph row read or written)
+F5 --> [*] : current
+note bottom of F5
   An older build opening a newer file fails with FormatVersion.
   Graph history is never rewritten by a migration.
 end note
@@ -286,3 +293,25 @@ CREATE INDEX saved_answer_dep_eid ON saved_answer_dep(eid);
 - **Derived, not history:** rows are written by `Store::derived_write`, one `BEGIN IMMEDIATE` that allocates no transaction number, logs no event and changes no counter. No invariant trigger guards them, and deleting a saved answer deletes only its record.
 - **Layout version:** `layout` lets a later build change the record shape without a format bump; a build refuses a row of a layout it does not know with `Unsupported`.
 - **Why a format bump:** a format-2 build would leave the tables alone and still be correct, since the cursor replays the log, but the rule of [[storage#Format Versioning]] is that every schema addition is a migration.
+
+## Embeddings
+
+Vectors of vector recall ([[query#Vector Recall]]), one per (model, statement), in the format-5 table `embedding`. They are source data supplied by the caller, not a derived index, so they are guarded like the graph.
+
+```sql
+CREATE TABLE embedding (
+  model INTEGER NOT NULL,  -- IRI ObjectId of the model
+  eid   INTEGER NOT NULL,  -- STMT ObjectId of the statement the vector describes
+  t     INTEGER NOT NULL,  -- transaction that stored it
+  bits  BLOB NOT NULL,     -- sign bits, ceil(dim / 8) bytes, for the binary prefilter
+  vec   BLOB NOT NULL      -- dim values, little-endian f32 or f16; unit length for cosine
+) STRICT;
+CREATE UNIQUE INDEX embedding_model_eid ON embedding(model, eid);
+CREATE INDEX embedding_bits ON embedding(model, eid, bits);  -- covering index for the prefilter
+-- triggers embedding_no_delete and embedding_no_update abort any DELETE or UPDATE
+```
+
+- **Append-only:** `Tx::set_embedding` ([[crates/tm-core/src/engine/embedding.rs]]) inserts inside the write transaction, so a rollback, dry run or speculation leaves no row. The identical vector again is a no-op; a different one is `EmbeddingConflict`. A new model IRI adds new rows beside the old ones.
+- **Layout:** with f32 at 768 dimensions a row is about 3.2 KB, roughly one page; f16 halves `vec`. The covering index `embedding_bits` lets a prefilter scan read about 100 bytes per row from the index instead of a page per row.
+- **No capability:** plain tables, read with ordinary SQL on every host (rusqlite, WASM). The names `vec_*` stay reserved for an optional accelerator ([[query#Vector Recall#Future Tiers]]).
+- **Model definitions** are graph statements, not rows here: see [[query#Vector Recall#Embeddings And Models]].

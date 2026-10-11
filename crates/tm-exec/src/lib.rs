@@ -10,12 +10,14 @@ pub mod lftj;
 pub mod native;
 pub mod path;
 pub mod plan;
+pub mod recall;
 pub mod result;
 pub mod scan;
 pub mod sqlgen;
 pub mod text;
 pub mod udf;
 pub mod udf_fn;
+pub mod vector;
 pub mod virtual_pred;
 
 use std::sync::{Arc, Mutex};

@@ -5,9 +5,9 @@ use std::collections::HashMap;
 use serde_json::{json, Map, Value as J};
 use tiramemsu::{
     BundleFormat, ConflictQuery, Db, Eid, Event, Explain, ObjectId, Op, Params, PathArgs,
-    PathCompleteness, PathDir, PathMode, PathRow, RdfTerm, RdfTriple, RegionKind, RouteNote,
-    SparqlOptions, SparqlResult, TextMode, TextQuery, TimeRef, TimeRespecting, Triple, TxReport,
-    View,
+    PathCompleteness, PathDir, PathMode, PathRow, RdfTerm, RdfTriple, RecallQuery, RegionKind,
+    RouteNote, SparqlOptions, SparqlResult, TextEvidence, TextMode, TextQuery, TimeRef,
+    TimeRespecting, Triple, TxReport, VectorQuery, View,
 };
 
 use crate::value::{eid_from_json, params_from_json, value_from_json, value_to_json};
@@ -206,6 +206,24 @@ pub fn run(view: &View<'_>, op: &str, args: &J) -> Res<J> {
         }
         "bundle" => Ok(view.bundle(eid_arg(args)?)?.to_json()),
         "textSearch" => text_search(view, args),
+        "vectorSearch" => vector_search(view, args),
+        "recall" => recall(view, args),
+        "unembedded" => {
+            let model = model_arg(view, args)?;
+            let limit = match args.get("limit").filter(|v| !v.is_null()) {
+                None => None,
+                Some(l) => Some(
+                    l.as_u64()
+                        .ok_or_else(|| arg("limit must be a non-negative integer"))?
+                        as usize,
+                ),
+            };
+            Ok(json!(view
+                .unembedded(model, limit)?
+                .iter()
+                .map(|e| e.n())
+                .collect::<Vec<_>>()))
+        }
         "conflicts" => conflicts(view, args),
         "explainSparql" => Ok(explain_json(&view.explain_sparql(str_arg(args, "text")?)?)),
         other => Err(arg(format!("unknown read operation {other:?}"))),
@@ -317,6 +335,184 @@ fn text_search(view: &View<'_>, args: &J) -> Res<J> {
                         "tAdd": h.evidence.t_add.0,
                         "addedAt": h.evidence.added_at,
                     },
+                }))
+            })
+            .collect::<Res<_>>()?,
+    ))
+}
+
+fn evidence_json(e: &TextEvidence) -> J {
+    json!({
+        "confidence": e.confidence,
+        "confirmations": e.confirmations,
+        "authors": e.authors,
+        "tAdd": e.t_add.0,
+        "addedAt": e.added_at,
+    })
+}
+
+/// The `model` argument: an IRI term (or string) naming a defined model. A model
+/// that was never stored is undefined.
+fn model_arg(view: &View<'_>, args: &J) -> Res<ObjectId> {
+    let j = args
+        .get("model")
+        .filter(|v| !v.is_null())
+        .ok_or_else(|| arg("`model` is required"))?;
+    let v = match j {
+        J::String(s) => tiramemsu::Value::iri(s.clone()),
+        other => value_from_json(other)?,
+    };
+    view.encode(&v)?.ok_or_else(|| {
+        tiramemsu::Error::invalid_query(format!(
+            "{v} is not a defined embedding model (define it with defineEmbeddingModel)"
+        ))
+        .into()
+    })
+}
+
+/// A list of numbers as an `f32` vector.
+pub(crate) fn vector_arg(j: Option<&J>, key: &str) -> Res<Vec<f32>> {
+    let Some(J::Array(items)) = j else {
+        return Err(arg(format!("`{key}` must be a list of numbers")));
+    };
+    items
+        .iter()
+        .map(|x| {
+            x.as_f64()
+                .map(|f| f as f32)
+                .ok_or_else(|| arg(format!("`{key}` must be a list of numbers")))
+        })
+        .collect()
+}
+
+fn usize_arg(v: &J, k: &str) -> Res<usize> {
+    v.as_u64()
+        .map(|n| n as usize)
+        .ok_or_else(|| arg(format!("{k} must be a non-negative integer")))
+}
+
+fn term_list(view: &View<'_>, k: &str, v: &J) -> Res<Vec<ObjectId>> {
+    let J::Array(items) = v else {
+        return Err(arg(format!("`{k}` must be a list of terms")));
+    };
+    let mut ids = Vec::with_capacity(items.len());
+    for t in items {
+        // a term that is not stored matches nothing
+        if let Some(id) = view.encode(&value_from_json(t)?)? {
+            ids.push(id);
+        }
+    }
+    Ok(ids)
+}
+
+/// `vectorSearch`: `{model, vector, limit?, graphs?, predicates?, prefilter?,
+/// confidence?}` to `{hits: [{eid, s, p, o, similarity, rank, evidence}],
+/// candidates, exact}`.
+// @lat: [[bindings#JSON Bridge#Vector Recall]]
+fn vector_search(view: &View<'_>, args: &J) -> Res<J> {
+    let mut q = VectorQuery::new(
+        model_arg(view, args)?,
+        vector_arg(args.get("vector"), "vector")?,
+    );
+    for (k, v) in args.as_object().into_iter().flatten() {
+        if v.is_null() {
+            continue;
+        }
+        match k.as_str() {
+            "model" | "vector" | "view" | "budget" => {}
+            "limit" => q.limit = Some(usize_arg(v, k)?),
+            "prefilter" => q.prefilter = Some(usize_arg(v, k)?),
+            "graphs" => q.graphs = Some(term_list(view, k, v)?),
+            "predicates" => q.predicates = Some(term_list(view, k, v)?),
+            "confidence" => {
+                q.confidence = Some(
+                    view.encode(&value_from_json(v)?)?
+                        .unwrap_or(ObjectId::from_raw(0)),
+                )
+            }
+            other => return Err(arg(format!("unknown vectorSearch option {other:?}"))),
+        }
+    }
+    let r = view.vector_search(&q)?;
+    Ok(json!({
+        "hits": r.hits.iter().map(|h| Ok(json!({
+            "eid": h.eid.n(),
+            "s": value_to_json(&view.decode(h.s)?),
+            "p": value_to_json(&view.decode(h.p)?),
+            "o": value_to_json(&view.decode(h.o)?),
+            "similarity": h.similarity,
+            "rank": h.rank,
+            "evidence": evidence_json(&h.evidence),
+        }))).collect::<Res<Vec<_>>>()?,
+        "candidates": r.candidates,
+        "exact": r.exact,
+    }))
+}
+
+/// `recall`: `{text?, mode?, model?, vector?, limit?, depth?, expand?, rrfK?,
+/// graphs?, predicates?, prefilter?}` (text, a model with a vector, or both) to the
+/// fused hits `[{eid, s, p, o, score, rank, lexical, similarity, textRank,
+/// vectorRank, evidence, via}]`. `graphs` and `predicates` apply to both channels.
+// @lat: [[bindings#JSON Bridge#Hybrid Recall]]
+fn recall(view: &View<'_>, args: &J) -> Res<J> {
+    let get = |k: &str| args.get(k).filter(|v| !v.is_null());
+    let mut q = RecallQuery::default();
+    let (mut graphs, mut predicates) = (None, None);
+    for (k, v) in args.as_object().into_iter().flatten() {
+        if v.is_null() {
+            continue;
+        }
+        match k.as_str() {
+            "text" | "mode" | "model" | "vector" | "prefilter" | "view" | "budget" => {}
+            "limit" => q.limit = Some(usize_arg(v, k)?),
+            "depth" => q.depth = Some(usize_arg(v, k)?),
+            "expand" => q.expand = usize_arg(v, k)?,
+            "rrfK" => {
+                q.rrf_k = u32::try_from(usize_arg(v, k)?).map_err(|_| arg("rrfK is too large"))?
+            }
+            "graphs" => graphs = Some(term_list(view, k, v)?),
+            "predicates" => predicates = Some(term_list(view, k, v)?),
+            other => return Err(arg(format!("unknown recall option {other:?}"))),
+        }
+    }
+    if let Some(t) = get("text") {
+        let mut tq = TextQuery::new(t.as_str().ok_or_else(|| arg("text must be a string"))?);
+        if let Some(m) = get("mode") {
+            tq.mode = m
+                .as_str()
+                .and_then(TextMode::from_name)
+                .ok_or_else(|| arg("mode must be \"all\", \"any\" or \"phrase\""))?;
+        }
+        tq.graphs = graphs.clone();
+        tq.predicates = predicates.clone();
+        q.text = Some(tq);
+    }
+    if get("vector").is_some() || get("model").is_some() {
+        let mut vq = VectorQuery::new(model_arg(view, args)?, vector_arg(get("vector"), "vector")?);
+        vq.graphs = graphs;
+        vq.predicates = predicates;
+        if let Some(n) = get("prefilter") {
+            vq.prefilter = Some(usize_arg(n, "prefilter")?);
+        }
+        q.vector = Some(vq);
+    }
+    let hits = view.recall(&q)?;
+    Ok(J::Array(
+        hits.iter()
+            .map(|h| {
+                Ok(json!({
+                    "eid": h.eid.n(),
+                    "s": value_to_json(&view.decode(h.s)?),
+                    "p": value_to_json(&view.decode(h.p)?),
+                    "o": value_to_json(&view.decode(h.o)?),
+                    "score": h.score,
+                    "rank": h.rank,
+                    "lexical": h.lexical,
+                    "similarity": h.similarity,
+                    "textRank": h.text_rank,
+                    "vectorRank": h.vector_rank,
+                    "evidence": evidence_json(&h.evidence),
+                    "via": h.via.map(|e| e.n()),
                 }))
             })
             .collect::<Res<_>>()?,
