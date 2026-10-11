@@ -4,73 +4,121 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Tiramemsu: layered, never-forget memory for agents</title>
-<meta name="description" content="Tiramemsu is an embedded graph database on SQLite. Every fact has an id, so facts can carry layers of provenance and belief, and nothing is ever deleted. SPARQL and Cypher over one store.">
+<meta name="description" content="Tiramemsu is an embedded graph database on SQLite for agent memory. Recall by words and meaning that respects time travel, facts with layers of provenance and belief, two clocks, nothing ever deleted, SPARQL and Cypher over one file, natively and in the browser.">
 <link rel="icon" href="assets/logo.svg" type="image/svg+xml">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
 <header class="top"><div class="wrap">
   <a class="brand" href="./"><img src="assets/logo.svg" alt="">Tiramemsu</a>
-  <nav class="menu"><a href="#features">Features</a><a href="#feedback">Feedback</a><a href="#layers">Layers</a><a href="#start">Quick start</a><a href="articles/">Articles</a><a href="paper/">Paper</a><a href="https://github.com/Volland/tiramemsu">GitHub</a></nav>
+  <nav class="menu"><a href="#new">New in 0.5</a><a href="#why">Why</a><a href="#features">Features</a><a href="#start">Quick start</a><a href="articles/">Articles</a><a href="paper/">Paper</a><a href="https://github.com/Volland/tiramemsu">GitHub</a></nav>
 </div></header>
 
 <main>
 <div class="wrap hero">
   <div>
     <p class="slogan">Your agent’s brain loves Tiramemsu.</p>
-    <h1>Memory that has <em>layers</em> and never forgets.</h1>
-    <p class="lead">Tiramemsu is an embedded graph database on SQLite for agent and personal memory. Every fact has its own id, so a fact can carry a confidence, a source, or a belief about it, layer on layer. Every change is kept, with when it was made and when it was true.</p>
-    <div class="btns"><a class="btn primary" href="#start">Quick start</a><a class="btn" href="articles/layered-graphs.html">What are layered graphs?</a><a class="btn" href="articles/tiramemsu-vs-oxilite.html">Tiramemsu vs oxilite</a><a class="btn" href="paper/">Read the paper</a></div>
+    <h1>Memory that has <em>layers</em>, travels in time, and never forgets.</h1>
+    <p class="lead">Tiramemsu is an embedded graph database on SQLite for agent memory. Every fact has its own id, so it can carry a confidence, a source or a belief, layer on layer. Every change is kept with when it was learned and when it was true. And an agent can recall by words and by meaning, today or as of any moment in the past, from one file.</p>
+    <div class="btns"><a class="btn primary" href="#start">Quick start</a><a class="btn" href="articles/vector-memory.html">Vector memory that remembers when</a><a class="btn" href="articles/hybrid-recall.html">Hybrid recall</a><a class="btn" href="paper/">Read the paper</a></div>
   </div>
   <img src="assets/logo.svg" alt="A brain taking a bite out of a tiramisu whose layers are a graph">
 </div>
 
 <section id="new" class="new"><div class="wrap">
-  <h2>New in 0.3: memory for agents</h2>
-  <p class="sub">Ten features for what an agent does with its memory every day. Most are opt-in, so a store that does not ask for them behaves as before. <a href="articles/whats-new-0-3.html">All of them, with examples →</a></p>
+  <h2>New in 0.5: recall by meaning, in any moment</h2>
+  <p class="sub">Vector and hybrid recall, built for a memory that travels in time, plus faster queries and a round of fixes. <a href="articles/vector-memory.html">Read how it works →</a></p>
   <ul class="hl">
-    <li><a href="articles/whats-new-0-3.html#text"><strong>Text recall</strong><span>Find facts by words, each hit with its evidence.</span></a></li>
-    <li><a href="articles/whats-new-0-3.html#mcp"><strong>MCP server</strong><span>Typed memory tools for Claude Code and Claude Desktop.</span></a></li>
-    <li><a href="articles/whats-new-0-3.html#saved"><strong>Saved answers</strong><span>They know when later writes made them stale.</span></a></li>
-    <li><a href="articles/whats-new-0-3.html#conflicts"><strong>Conflict review</strong><span>See where sources disagree, and preview an import.</span></a></li>
-    <li><a href="articles/whats-new-0-3.html#journeys"><strong>Paths in time order</strong><span>Who could have heard it, and when, at the earliest.</span></a></li>
-    <li><a href="articles/whats-new-0-3.html#budgets"><strong>Budgets</strong><span>Deadlines, row limits and cancellation for every call.</span></a></li>
-    <li><a href="articles/whats-new-0-3.html#bulk"><strong>Bulk import</strong><span>Large loads in chunks, statistics once at the end.</span></a></li>
-    <li><a href="articles/whats-new-0-3.html#lftj"><strong>Cyclic joins</strong><span>An opt-in leapfrog triejoin for triangle patterns.</span></a></li>
-    <li><a href="articles/whats-new-0-3.html#wasm"><strong>In the browser</strong><span>The same engine and file format in a Web Worker.</span></a></li>
-    <li><a href="articles/whats-new-0-3.html#cargo-features"><strong>Optional front ends</strong><span>Embed the store without the query parsers.</span></a></li>
+    <li><a href="articles/vector-memory.html"><strong>Vector recall</strong><span>Store your model’s embeddings beside the facts and search them by meaning.</span></a></li>
+    <li><a href="articles/vector-memory.html#time"><strong>Exact under time travel</strong><span>The view filters first, so <code>as_of</code> and <code>valid_at</code> never lose a hit.</span></a></li>
+    <li><a href="articles/hybrid-recall.html"><strong>Hybrid recall</strong><span>Words and meaning fused by rank, ties broken by evidence.</span></a></li>
+    <li><a href="articles/hybrid-recall.html#expansion"><strong>Recall with context</strong><span>Each hit can bring its source, confidence and related facts.</span></a></li>
+    <li><a href="articles/hybrid-recall.html#everywhere"><strong>One recall everywhere</strong><span>Rust, Python, Node, SPARQL, Cypher and MCP run the same search.</span></a></li>
+    <li><a href="articles/vector-memory.html#hosts"><strong>Any SQLite, even the browser</strong><span>No extension needed: the same results natively and in WebAssembly.</span></a></li>
+    <li><a href="articles/vector-memory.html#never"><strong>Vectors never forgotten</strong><span>Append-only, in the same file and transaction as the facts.</span></a></li>
+    <li><a href="https://github.com/Volland/tiramemsu/blob/main/CHANGELOG.md"><strong>2–3× faster lookups</strong><span>Point and two-hop SPARQL queries no longer re-plan on every call.</span></a></li>
   </ul>
 </div></section>
 
+<section id="why"><div class="wrap">
+  <h2>What makes it different</h2>
+  <p class="sub">Most agent memories are a vector index, a graph, or a log of notes. Tiramemsu is all three over one row shape, and it remembers when.</p>
+  <div class="grid">
+    <div class="card"><span class="tag">Facts about facts</span><h3>Every statement has an id</h3><p>Confidence, source, belief and correction are statements about statements, not a side table. Ask “why do I believe this?” in one query.</p></div>
+    <div class="card"><span class="tag">Two clocks</span><h3>What we knew, and when it was true</h3><p>Transaction time and valid time on every fact. Read memory as it was at any transaction, at any instant, or across its whole history.</p></div>
+    <div class="card"><span class="tag">Recall in the past</span><h3>Search by meaning, as of then</h3><p>Vector and text recall run inside the chosen view. An as-of view sees only the facts and vectors that existed then, so a past answer never drifts.</p></div>
+    <div class="card"><span class="tag">Never forget</span><h3>History is guarded in the file</h3><p>SQLite triggers refuse deletes and rewrites of facts, terms, transactions and vectors. Forgetting is a retraction that stays visible in history.</p></div>
+    <div class="card"><span class="tag">Evidence, not guesses</span><h3>Every hit says why</h3><p>Hits carry their confidence, confirmations, authors and age, ranked in a fixed, named order. Missing evidence is reported as missing, never invented.</p></div>
+    <div class="card"><span class="tag">Embedded</span><h3>One file, no server</h3><p>A Rust library over SQLite, with Python and Node bindings, an MCP server for agents, and the same engine in the browser.</p></div>
+  </div>
+  <h3 class="group">How it compares</h3>
+  <table>
+    <thead><tr><th></th><th>Tiramemsu</th><th>Typical vector store</th><th>Typical graph database</th></tr></thead>
+    <tbody>
+      <tr><td>Recall by meaning</td><td class="win">Exact, view-aware</td><td>Approximate top-k</td><td>Plugin, if any</td></tr>
+      <tr><td>Recall by words</td><td class="win">Built in, same ranking rules</td><td>Often separate</td><td>Full-text index</td></tr>
+      <tr><td>Facts about facts</td><td class="win">Native: statements have ids</td><td>Metadata fields</td><td>Edge properties, reification</td></tr>
+      <tr><td>Time travel</td><td class="win">Two clocks, every query</td><td>Rarely</td><td>Rarely</td></tr>
+      <tr><td>Search a past moment</td><td class="win">Same results forever</td><td>Filter after top-k loses hits</td><td>Not usually</td></tr>
+      <tr><td>Deletes</td><td class="win">Refused; retract instead</td><td>Allowed</td><td>Allowed</td></tr>
+      <tr><td>Query languages</td><td class="win">SPARQL and Cypher, one store</td><td>API</td><td>One language</td></tr>
+      <tr><td>Deployment</td><td class="win">One SQLite file, also in the browser</td><td>Service or library</td><td>Server</td></tr>
+    </tbody>
+  </table>
+  <p class="sub">“Typical” means the common default, not every product. The time-travel argument is spelled out in <a href="articles/vector-memory.html">Vector memory that remembers when</a>.</p>
+  <h3 class="group">One question, any moment</h3>
+<pre><code><span class="c"># What did the agent remember about the Lisbon offsite, as of last Tuesday?</span>
+<span class="c"># (embed() is your embedding model; MODEL its IRI, defined with define_embedding_model)</span>
+past = db.as_of(instant=<span class="s">"2026-10-06T09:00:00Z"</span>)
+<span class="k">for</span> hit <span class="k">in</span> past.recall(<span class="s">"lisbon offsite"</span>, model=MODEL, vector=embed(<span class="s">"lisbon offsite"</span>), expand=2):
+    <span class="k">print</span>(hit.rank, hit.o, hit.evidence.confidence, hit.via)   <span class="c"># facts, their sources, why</span></code></pre>
+</div></section>
+
 <section id="features"><div class="wrap">
-  <h2>What it does</h2>
-  <p class="sub">A small Rust core over one SQLite file. Two query languages, one store, exact answers to “what did we know, and when?”.</p>
-  <h3 class="group">The core: layers, time and two query languages</h3>
+  <h2>Feature sets</h2>
+  <p class="sub">A small Rust core over one SQLite file. Most of what follows is opt-in, so a store that does not ask for it behaves as before.</p>
+  <h3 class="group">Remember</h3>
   <div class="grid">
-    <div class="card"><span class="tag">Layers</span><h3>Every fact has an id</h3><p>A statement is a row with its own id, so it can be the subject or object of other statements. Provenance, confidence and beliefs stack to any depth.</p></div>
-    <div class="card"><span class="tag">Time</span><h3>Bitemporal, forever</h3><p>Transaction time records when the database learned or dropped a fact. Valid time records when it held in the world. <code>as_of</code>, <code>history</code> and <code>valid_at</code> views, per query or per pattern.</p></div>
-    <div class="card"><span class="tag">Never forget</span><h3>Nothing is deleted</h3><p>SQLite triggers forbid <code>DELETE</code> and second retractions in the file itself. Forgetting means retracting, and the past stays exact.</p></div>
+    <div class="card"><span class="tag">Layers</span><h3>Provenance and belief stack</h3><p>A statement is a row with its own id, so it can be the subject or object of other statements, to any depth. Retracting a fact retracts its layers.</p></div>
     <div class="card"><span class="tag">Correct</span><h3>Supersede, confirm, speculate</h3><p>Correct a fact and its layers are replayed on the new one. Confirm a fact from a new source. Try changes in a <code>with</code> block that leaves no trace.</p></div>
-    <div class="card"><span class="tag">Query</span><h3>SPARQL and Cypher</h3><p>SPARQL 1.1 with RDF 1.2 annotations, and openCypher, share one IR and one semantics table. A relationship is also a <code>:Statement</code> node.</p></div>
-    <div class="card"><span class="tag">Paths</span><h3>Native path engine</h3><p>Reachability, trails and shortest paths as an automaton search, also as a SQL table function. Paths can cross layers to reach what a belief is about.</p></div>
-    <div class="card"><span class="tag">Graphs</span><h3>Named graphs as tags</h3><p>A graph is a node, or a statement, and membership is one more layer statement. <code>GRAPH</code>, <code>FROM</code> and <code>WITH</code> work with no new column or table.</p></div>
-    <div class="card"><span class="tag">Metagraphs</span><h3>Edges that hold graphs</h3><p>An edge is a node, and a node or an edge can hold a subgraph. Nest them, fold and unfold them, and ask how the structure looked last week. <a href="articles/metagraphs.html">Read more</a>.</p></div>
-    <div class="card"><span class="tag">Embedded</span><h3>One file, one crate</h3><p>Rust library over bundled SQLite (WAL, STRICT). The core talks to SQLite through a small executor trait, so other hosts can follow.</p></div>
+    <div class="card"><span class="tag">Schema</span><h3>Cardinality, uniqueness, types</h3><p>Predicates can be single-valued, unique or typed, checked on every write, with idempotent <code>assert</code> and parallel edges by <code>create</code>.</p></div>
+    <div class="card"><span class="tag">Review</span><h3>Conflicts and import previews</h3><p>See where values overlap in valid time, with every statement’s evidence, and dry-run a bundle from another memory before taking it.</p></div>
   </div>
-  <h3 class="group">For agents: new in 0.3</h3>
+  <h3 class="group">Time travel</h3>
   <div class="grid">
-    <div class="card"><span class="tag">Recall</span><h3>Find it by words</h3><p>Text recall over string values, in any view. Each hit comes with its evidence: confidence, confirmations, authors and age, ranked in a fixed, named order. From Rust, SPARQL and Cypher.</p></div>
-    <div class="card"><span class="tag">Agents</span><h3>An MCP server</h3><p><code>tiramemsu-mcp</code> serves one memory file to Claude Code or Claude Desktop as typed tools. Queries only read, every call has a budget, and answers say which statements back them.</p></div>
-    <div class="card"><span class="tag">Recheck</span><h3>Answers that know they are stale</h3><p>Save a query with the statements it cited. Later writes mark it <code>stale</code> or <code>recheck</code>, each mark once, and only a successful refresh makes it fresh again.</p></div>
-    <div class="card"><span class="tag">Review</span><h3>Conflicts and import previews</h3><p>See where two values overlap in valid time, with every statement’s evidence. Dry-run an import from another memory before you take it. Neither one decides for you.</p></div>
-    <div class="card"><span class="tag">Journeys</span><h3>Paths that respect time</h3><p>Ask who could have heard it from Ana after March 1st, in SPARQL or Cypher, with the earliest arrival. Every path query can say whether it was complete or cut at a cap.</p></div>
-    <div class="card"><span class="tag">Budgets</span><h3>Deadlines and cancellation</h3><p>Bound a call by time, rows, bytes or the wait for a reader, or cancel it. Over a limit is a typed error, never a silent prefix, and a stopped write leaves no trace.</p></div>
-    <div class="card"><span class="tag">Bulk</span><h3>Large loads in chunks</h3><p>A bulk import session commits in chunks, holds the write lease, and refreshes planner statistics once at the end instead of after every big commit.</p></div>
-    <div class="card"><span class="tag">Joins</span><h3>Leapfrog triejoin for cycles</h3><p>An opt-in native operator for triangle-shaped patterns, with <code>explain</code> saying which route ran and why. Up to 12× faster on a small hub-and-spoke benchmark, same counts.</p></div>
-    <div class="card"><span class="tag">Browser</span><h3>The engine in a Web Worker</h3><p>The same engine runs on SQLite compiled to WebAssembly, in memory or in OPFS, and reads and writes the same file format. Built from the repository, not on npm yet.</p></div>
-    <div class="card"><span class="tag">Lean</span><h3>Optional query front ends</h3><p>Turn off default features and the Rust crate links no parser or planner. Transactions, views, text recall and budgets still work.</p></div>
+    <div class="card"><span class="tag">Bitemporal</span><h3>Now, as of, history, valid at</h3><p>Pick a view per query or per pattern, in Rust, SPARQL (<code>SERVICE &lt;tm:asOf/…&gt;</code>) and Cypher (<code>USE AS OF</code>).</p></div>
+    <div class="card"><span class="tag">Journeys</span><h3>Paths that respect time</h3><p>Who could have heard it from Ana after March 1st, with the earliest arrival, and whether the search was complete or cut at a cap.</p></div>
+    <div class="card"><span class="tag">Recheck</span><h3>Answers that know they are stale</h3><p>Saved queries are marked <code>stale</code> or <code>recheck</code> by later writes, once each; answers on a past view stay fresh.</p></div>
+    <div class="card"><span class="tag">Metagraphs</span><h3>Structure with two clocks</h3><p>Edges are nodes and can hold subgraphs. Nest, fold and unfold them, and ask how the structure looked last week. <a href="articles/metagraphs.html">Read more</a>.</p></div>
   </div>
-  <p class="sub more">Every 0.3 feature with examples in every language: <a href="articles/whats-new-0-3.html">what’s new in 0.3 →</a></p>
+  <h3 class="group">Recall</h3>
+  <div class="grid">
+    <div class="card"><span class="tag">New</span><h3>Vector recall</h3><p>Define a model, store the vectors your model computes, search exactly (cosine, dot, L2; f32 or f16). As-of views see only vectors stored by then.</p></div>
+    <div class="card"><span class="tag">New</span><h3>Hybrid recall</h3><p>Text and vector channels fused by reciprocal rank, expanded to each hit’s layers and subject facts, with <code>via</code> saying how each arrived.</p></div>
+    <div class="card"><span class="tag">Text</span><h3>Find it by words</h3><p>FTS5 recall over string values in any view, each hit with its evidence, from Rust, SPARQL and Cypher.</p></div>
+    <div class="card"><span class="tag">Evidence</span><h3>Ranked, never invented</h3><p>Ties break on confidence, confirmations, distinct authors and recency; absent evidence stays absent. Every policy has a name.</p></div>
+  </div>
+  <h3 class="group">Query</h3>
+  <div class="grid">
+    <div class="card"><span class="tag">Languages</span><h3>SPARQL and Cypher</h3><p>SPARQL 1.1 with RDF 1.2 annotations and openCypher share one IR and one semantics table. A relationship is also a <code>:Statement</code> node.</p></div>
+    <div class="card"><span class="tag">Paths</span><h3>Native path engine</h3><p>Reachability, trails and shortest paths as an automaton search that can cross layers and stay inside named graphs.</p></div>
+    <div class="card"><span class="tag">Graphs</span><h3>Named graphs as tags</h3><p>A graph is a node or a statement, and membership is one more layer. <code>GRAPH</code>, <code>FROM</code> and <code>WITH</code> need no new table.</p></div>
+    <div class="card"><span class="tag">Joins</span><h3>Leapfrog triejoin</h3><p>An opt-in native operator for cyclic patterns, with <code>explain</code> saying which route ran and why.</p></div>
+  </div>
+  <h3 class="group">For agents and operations</h3>
+  <div class="grid">
+    <div class="card"><span class="tag">Agents</span><h3>An MCP server</h3><p><code>tiramemsu-mcp</code> gives Claude Code, Claude Desktop or any MCP client typed memory tools, from <code>assert</code> to <code>recall</code>, with a read-only mode.</p></div>
+    <div class="card"><span class="tag">Budgets</span><h3>Deadlines and cancellation</h3><p>Bound any call by time, rows, bytes or the wait for a reader. Over a limit is a typed error, never a silent prefix.</p></div>
+    <div class="card"><span class="tag">Bulk</span><h3>Large loads in chunks</h3><p>Import sessions commit in chunks, hold the write lease and refresh planner statistics once at the end.</p></div>
+    <div class="card"><span class="tag">Portable</span><h3>Fact bundles</h3><p>Export a fact with its layers and evidence, and import it into another memory idempotently.</p></div>
+  </div>
+  <h3 class="group">Run anywhere</h3>
+  <div class="grid">
+    <div class="card"><span class="tag">Embedded</span><h3>One file, one crate</h3><p>Rust over bundled SQLite (WAL, STRICT), behind a small executor trait. Python and Node bindings share one JSON bridge.</p></div>
+    <div class="card"><span class="tag">Browser</span><h3>The engine in a Web Worker</h3><p>SQLite compiled to WebAssembly, in memory or in OPFS, with the same file format, vector and text recall included.</p></div>
+    <div class="card"><span class="tag">Lean</span><h3>Optional query front ends</h3><p>Turn off default features and the crate links no parser or planner; transactions, views and recall still work.</p></div>
+    <div class="card"><span class="tag">Verified</span><h3>Specs, tests and a paper</h3><p>Fifty capability specs, property tests against brute force, closed W3C and TCK harnesses, and a formal model with proofs.</p></div>
+  </div>
 </div></section>
 
 <section id="feedback"><div class="wrap">
@@ -195,7 +243,7 @@ db.now().cypher(<span class="s">"MATCH (p)-[r:worksAt]-&gt;(o) RETURN p, o, r.co
   </div>
   <p class="sub">Every binding wraps the same core, so all three see the same past. See the <a href="https://github.com/Volland/tiramemsu/tree/main/bindings">bindings</a> for the full API.</p>
   <h3 id="agent">Use it from an agent</h3>
-  <p class="sub">No code needed: register the MCP server and the agent gets tools such as <code>assert</code>, <code>query</code>, <code>text_search</code> and <code>check_answers</code>. <a href="articles/mcp-memory.html">How it works →</a></p>
+  <p class="sub">No code needed: register the MCP server and the agent gets tools such as <code>assert</code>, <code>query</code>, <code>recall</code>, <code>vector_search</code>, <code>set_embedding</code> and <code>check_answers</code>. <a href="articles/mcp-memory.html">How it works →</a></p>
 <pre><code><span class="c"># install from crates.io, then register it with Claude Code</span>
 cargo install tiramemsu-mcp
 claude mcp add tiramemsu -- tiramemsu-mcp --db ./memory.db --text-index</code></pre>
@@ -203,14 +251,14 @@ claude mcp add tiramemsu -- tiramemsu-mcp --db ./memory.db --text-index</code></
 
 <section id="numbers"><div class="wrap">
   <h2>Where it stands</h2>
-  <p class="sub">Tiramemsu is new: designed in September 2026 and implemented in one pass. Here is what is measured, and what is not.</p>
+  <p class="sub">Tiramemsu is new: designed in September 2026 and grown in the open since. Here is what is measured, and what is not.</p>
   <div class="grid">
-    <div class="card"><h3>88 000 lines of Rust</h3><p>Nine crates plus four bindings, 1 311 tests, 48 capability specs written before the code (OpenSpec) and a design graph kept in sync (lat.md).</p></div>
+    <div class="card"><h3>95 000 lines of Rust</h3><p>Nine crates plus four bindings, 1 355 tests including property tests against brute force, 50 capability specs written before the code (OpenSpec) and a design graph kept in sync (lat.md).</p></div>
     <div class="card"><h3>SPARQL</h3><p>634 of 781 in-scope W3C tests pass (66 more are skipped: named-graph data, unsupported formats). Every failing one is listed with a reason, and an unexpected result fails the build.</p></div>
-    <div class="card"><h3>Cypher</h3><p>2 615 of 3 880 openCypher TCK scenarios (67 %). Temporal types, <code>CALL</code> and a few dual-view cases are deferred and listed.</p></div>
-    <div class="card"><h3>Speed</h3><p>Raw SQLite lookups on its schema take about 4 µs at 11 million statements. Statements cost about 150 bytes each with all indexes. <a href="articles/tiramemsu-vs-oxilite.html#numbers">Details and caveats</a>.</p></div>
+    <div class="card"><h3>Cypher</h3><p>2 615 of 3 880 openCypher TCK scenarios (67 %). Temporal types and a few dual-view cases are deferred and listed.</p></div>
+    <div class="card"><h3>Speed</h3><p>SPARQL point query 20 µs at 100 000 statements. Exact vector search over 10 000 768-d vectors in 12 ms, 100 000 in 134 ms; text plus vector recall in 10 ms at 10 000. <a href="https://github.com/Volland/tiramemsu/blob/main/crates/tiramemsu/benches/README.md">Benchmarks and caveats</a>.</p></div>
   </div>
-  <p class="note"><strong>Known limits.</strong> As-of lookups slow down as one key collects many updates. Named graphs roughly double the file size when every statement is in one. Decimals come back as doubles in SPARQL. There is no network server; the MCP server is local and speaks stdio only. In the browser the database uses a rollback journal and refuses query budgets and bulk import. The crates are on crates.io and the Python package on PyPI; the Node.js and browser packages are not on npm yet.</p>
+  <p class="note"><strong>Known limits.</strong> Vector search is exact, so its cost grows with the number of visible vectors; an approximate tier is the next step past about a million. The optional sign-bit prefilter is coarse: on real 100-d vectors it needs about 5 % of the corpus as candidates for 0.95 recall. The application computes embeddings, and a corrected fact needs a new one. As-of lookups slow down as one key collects many updates. Decimals come back as doubles in SPARQL. There is no network server; the MCP server is local and speaks stdio only. In the browser the database uses a rollback journal and refuses query budgets and bulk import.</p>
 </div></section>
 
 <section id="paper"><div class="wrap">

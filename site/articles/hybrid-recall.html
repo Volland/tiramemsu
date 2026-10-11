@@ -53,7 +53,7 @@
 </ol>
 <p>This is the same tie-break text and vector recall use. Evidence a statement does not have is reported as absent, never estimated. The whole order has a name, <code>tiramemsu-recall-rank/1</code>; if it ever changes, the name changes too.</p>
 
-<h2>Expansion: bring the reasons along</h2>
+<h2 id="expansion">Expansion: bring the reasons along</h2>
 <p>A hit tells the agent what matched. Often it also needs what surrounds it. With <code>expand: n</code>, after the fused hits, recall adds for each hit, in rank order:</p>
 <ul>
   <li>up to <code>n</code> statements <em>about the hit itself</em>: its layers, such as its source or its confidence;</li>
@@ -66,7 +66,7 @@
 <p>Every recall runs in a view. <code>now()</code> sees what the agent believes today. <code>as_of(t)</code> sees what it believed at transaction <code>t</code>, and <code>valid_at(d)</code> what was true on date <code>d</code>. Both channels and the expansion run in that view, in one snapshot. See <a href="time-travel.html">Time travel, explained</a> for the two clocks.</p>
 <p>The vectors have a clock too. As of <code>t</code>, recall sees only the embeddings stored by <code>t</code>. If you embed an old note today, a recall as of last week still does not find it by meaning, because last week the agent could not have. A past recall therefore gives the same answer forever, which is what makes <a href="recall-review-recheck.html">saved answers</a> on past views safe. And because both searches are exact over the visible statements, going back in time never silently shortens the list; the <a href="vector-memory.html">vector memory article</a> explains why approximate indexes fail here.</p>
 
-<h2>One recall, everywhere</h2>
+<h2 id="everywhere">One recall, everywhere</h2>
 <p>Every surface calls the same operation, so the hits and their order are identical. In the snippets, <code>embed</code> is your own call to an embedding model; the store never calls one. The text half needs the text index (open the database with it, or start the MCP server with <code>--text-index</code>). A vector-only recall does not.</p>
 <p>Rust:</p>
 <pre><code><span class="k">let</span> model_id = db.now().encode(&amp;model)?.expect(<span class="s">"model defined"</span>);

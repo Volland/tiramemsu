@@ -25,7 +25,7 @@
 <p>An agent's memory fills up with notes, observations and facts written in many different words. When it needs something, it starts from the conversation, not from a graph pattern. Words get it part of the way: names, places, product codes. Meaning gets it the rest: paraphrases, synonyms, other languages, the same idea said another way. In practice an agent wants both, and wants to know which one found each result.</p>
 <p>In tiramemsu the unit of recall is a statement. Each fact, note or layer has its own id, so a hit is not a loose chunk of text but a fact the agent can follow into the graph: who said it, how confident they were, what it was later corrected to. Vector recall keeps that. A vector belongs to one statement, and a hit is that statement with its evidence.</p>
 
-<h2>Why time travel breaks approximate indexes</h2>
+<h2 id="time">Why time travel breaks approximate indexes</h2>
 <p>Fast vector databases use an approximate index (HNSW, DiskANN, IVF). You ask for the 10 nearest vectors and get them in a few milliseconds. Then you apply your filters.</p>
 <p>In tiramemsu the filter is the view. <code>now()</code> hides retracted and superseded statements. <code>as_of(t)</code> hides everything written after transaction <code>t</code>. <code>valid_at(d)</code> hides facts that were not true on date <code>d</code>. A graph scope hides everything outside the graph. Nothing is ever deleted, so the store holds every old version of every fact, and in a long-lived memory most rows are old versions.</p>
 <p>Here is what happens when you search first and filter second. The agent asks “where does Alice work?” as of March 2024. The index returns the 10 nearest statements:</p>
@@ -42,7 +42,7 @@
  10    alice worksAt Globex      superseded   no, old version of 1</code></pre>
 <p>Eight of the ten are superseded, retracted or not valid at the asked time. Two are left. The agent asked for 10 and got 2, and the other correct answers were further down the index's list, never seen. Asking the index for 100 instead of 10 helps this time, but there is no safe number: the further back you go, and the more history the memory holds, the smaller the visible fraction gets. An answer that silently shrinks with the age of the question is the wrong kind of answer for a memory that promises time travel.</p>
 
-<h2>Exact first</h2>
+<h2 id="hosts">Exact first</h2>
 <p>So tiramemsu does it the other way round: filter first, then search. SQL selects the statements visible in the view, through the same function that every other read uses to turn “now”, “as of” or “valid at” into conditions on rows. Only their vectors are read. Rust computes the similarity of each one to the query and keeps the best. Then it reads the evidence (confidence, confirmations, authors, when it was added) for the hits only.</p>
 <p>The search is exact. In the example above it returns 10 hits, all valid in March 2024, the 10 nearest among them. In <code>as_of(t)</code> it returns the 10 nearest among what the agent knew at <code>t</code>. The result says so: <code>exact: true</code>.</p>
 <p>“What the agent knew” includes the vectors themselves. Each vector records the transaction that stored it, and <code>as_of(t)</code> sees only the vectors stored by <code>t</code>. If you embed an old note today, a question asked as of last Tuesday still does not find it by meaning, because last Tuesday the agent could not have. A past view therefore gives the same answer forever, and an answer saved on a past view stays valid. <code>now()</code> and the history view see every vector.</p>
@@ -130,7 +130,7 @@ CALL tiramemsu.recall({text: <span class="s">'lisbon offsite'</span>, model: <sp
 YIELD statement, subject, predicate, object, score, rank, via</code></pre>
 <p>Fusion, expansion and the evidence tie-breaks are explained in more depth in <a href="hybrid-recall.html">Words, meaning and evidence: hybrid recall</a>.</p>
 
-<h2>Never forget, still</h2>
+<h2 id="never">Never forget, still</h2>
 <p>Embedding rows are append-only; triggers forbid changing or deleting them. That fits the rest of the store, and it has three consequences worth knowing.</p>
 <ul>
   <li><strong>Retraction does not remove a vector.</strong> The view decides. A retracted note does not show up in <code>now()</code>, and it shows up again in <code>as_of</code> a time before it was retracted (and after its vector was stored), as it should.</li>
