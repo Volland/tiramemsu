@@ -2,11 +2,12 @@
 
 use std::collections::HashMap;
 
-use tm_core::{AssertOpts, Eid, Error, ObjectId, Result, SqlValue, Tx, Valid, Value};
+use tm_core::vector::{parse_vector, EmbeddingModel, Metric, VectorEncoding};
+use tm_core::{vocab, AssertOpts, Eid, Error, ObjectId, Result, SqlValue, Tx, Valid, Value};
 use tm_ir::IrQuery;
 
 use super::inst::{instantiate, Node, Row, TripleN};
-use super::{GraphRef, GraphTarget, Template, UpdateOp, UpdatePlan};
+use super::{vector_kind, GraphRef, GraphTarget, Template, UpdateOp, UpdatePlan, VectorKind};
 use crate::error::{unsupported, REIFIER_MANY, REIFIER_NOT_STATEMENT, REIFIES_WITHOUT_TRIPLE};
 use crate::results::Solutions;
 
@@ -26,7 +27,7 @@ pub fn run(plan: &UpdatePlan, tx: &mut Tx<'_>, select: &mut Select<'_>) -> Resul
         match op {
             UpdateOp::InsertData(templates) => {
                 let ts = instantiate_all(templates, None)?;
-                Inserter::new(tx).insert(ts)?;
+                Inserter::new(tx).insert_all(ts)?;
             }
             UpdateOp::DeleteData(templates) => {
                 let ts = instantiate_all(templates, None)?;
@@ -49,7 +50,7 @@ pub fn run(plan: &UpdatePlan, tx: &mut Tx<'_>, select: &mut Select<'_>) -> Resul
                     let r = Row { sol: &sol, row };
                     let ts = instantiate_all(insert, Some(r))?;
                     // blank nodes are fresh for each solution
-                    Inserter::new(tx).insert(ts)?;
+                    Inserter::new(tx).insert_all(ts)?;
                 }
             }
             UpdateOp::Create { graph, silent } => {
@@ -212,6 +213,114 @@ impl<'a, 't> Inserter<'a, 't> {
         Ok(())
     }
 
+    /// Inserts `all`: plain triples first (binding reifiers), then the model
+    /// definitions and embeddings among them, which are engine operations rather
+    /// than triples (`lat.md/query#Vector Recall#Writes From Query Languages`).
+    fn insert_all(&mut self, all: Vec<InGraph>) -> Result<()> {
+        let (vectors, rest): (Vec<InGraph>, Vec<InGraph>) =
+            all.into_iter().partition(|(t, _)| kind_of(t).is_some());
+        self.insert(rest)?;
+        for (subject, group) in groups(&vectors) {
+            let kinds: Vec<VectorKind> = group.iter().filter_map(|t| kind_of(t)).collect();
+            if kinds.contains(&VectorKind::Definition) && kinds.contains(&VectorKind::Embedding) {
+                return Err(Error::invalid_query(
+                    "one subject cannot be both an embedding model and an embedded statement",
+                ));
+            }
+            if kinds[0] == VectorKind::Definition {
+                self.define(subject, &group)?;
+            }
+        }
+        for (subject, group) in groups(&vectors) {
+            if kind_of(group[0]) == Some(VectorKind::Embedding) {
+                self.embed(subject, &group)?;
+            }
+        }
+        Ok(())
+    }
+
+    /// One model definition from its `sys:` triples on `subject`.
+    fn define(&mut self, subject: &Node, group: &[&TripleN]) -> Result<()> {
+        let Node::Val(model) = subject else {
+            return Err(Error::invalid_query(
+                "an embedding model is named by an IRI",
+            ));
+        };
+        let mut def = EmbeddingModel::new(0);
+        let (dims, metric, enc) = (
+            one(group, vocab::SYS_DIMENSIONS)?,
+            one(group, vocab::SYS_METRIC)?,
+            one(group, vocab::SYS_VECTOR_ENCODING)?,
+        );
+        def.dimensions = match dims {
+            Some(Node::Val(Value::Int(n))) => u32::try_from(*n)
+                .map_err(|_| Error::invalid_query("sys:dimensions is out of range"))?,
+            Some(_) => return Err(Error::invalid_query("sys:dimensions needs an integer")),
+            None => {
+                return Err(Error::invalid_query(format!(
+                    "the definition of {model} needs sys:dimensions"
+                )))
+            }
+        };
+        if let Some(m) = metric {
+            def.metric = match m {
+                Node::Val(Value::Str(s)) => Metric::from_name(s),
+                _ => None,
+            }
+            .ok_or_else(|| Error::invalid_query(r#"sys:metric needs "cosine", "dot" or "l2""#))?;
+        }
+        if let Some(e) = enc {
+            def.encoding = match e {
+                Node::Val(Value::Str(s)) => VectorEncoding::from_name(s),
+                _ => None,
+            }
+            .ok_or_else(|| Error::invalid_query(r#"sys:vectorEncoding needs "f32" or "f16""#))?;
+        }
+        self.tx.define_embedding_model(model, &def)?;
+        Ok(())
+    }
+
+    /// One embedding from the `tm:vectorEmbedding` and `tm:vectorModel` triples on
+    /// `subject`, which must denote a statement.
+    fn embed(&mut self, subject: &Node, group: &[&TripleN]) -> Result<()> {
+        let eid = match subject {
+            Node::Val(Value::Stmt(e)) => Some(*e),
+            Node::Blank(l) => self.sigma.get(l).copied(),
+            _ => None,
+        }
+        .ok_or_else(|| {
+            Error::invalid_query(
+                "the subject of tm:vectorEmbedding must denote a statement \
+                 (a statement IRI, a bound ?e, or a reifier of an inserted triple)",
+            )
+        })?;
+        let vector = match one(group, tm_ir::vocab::TM_VECTOR_EMBEDDING)? {
+            Some(Node::Val(Value::Str(s))) => parse_vector(s)
+                .map_err(|m| Error::invalid_query(format!("tm:vectorEmbedding: {m}")))?,
+            Some(_) => {
+                return Err(Error::invalid_query(
+                    "tm:vectorEmbedding needs a string literal holding a JSON array",
+                ))
+            }
+            None => {
+                return Err(Error::invalid_query(
+                    "tm:vectorModel without tm:vectorEmbedding",
+                ))
+            }
+        };
+        let model = match one(group, tm_ir::vocab::TM_VECTOR_MODEL)? {
+            Some(Node::Val(m @ Value::Iri(_))) => m.clone(),
+            Some(_) => return Err(Error::invalid_query("tm:vectorModel needs an IRI")),
+            None => {
+                return Err(Error::invalid_query(
+                    "tm:vectorEmbedding needs tm:vectorModel",
+                ))
+            }
+        };
+        self.tx.set_embedding(eid, &model, &vector)?;
+        Ok(())
+    }
+
     fn insert(&mut self, all: Vec<InGraph>) -> Result<()> {
         let triples: Vec<&TripleN> = all.iter().map(|(t, _)| t).collect();
         // 1. reifiers: each maps to exactly one triple (and the graph of the pattern)
@@ -255,6 +364,67 @@ impl<'a, 't> Inserter<'a, 't> {
         let _ = triples;
         Ok(())
     }
+}
+
+fn kind_of(t: &TripleN) -> Option<VectorKind> {
+    match &t.p {
+        Value::Iri(p) => vector_kind(p),
+        _ => None,
+    }
+}
+
+/// The vector triples grouped by subject, in first-seen order.
+fn groups(ts: &[InGraph]) -> Vec<(&Node, Vec<&TripleN>)> {
+    let mut out: Vec<(&Node, Vec<&TripleN>)> = Vec::new();
+    for (t, _) in ts {
+        match out.iter_mut().find(|(s, _)| **s == t.s) {
+            Some((_, g)) => {
+                if !g.contains(&t) {
+                    g.push(t)
+                }
+            }
+            None => out.push((&t.s, vec![t])),
+        }
+    }
+    out
+}
+
+/// The single object of predicate `p` in `group` (`None` when absent); two
+/// different objects are `InvalidQuery`.
+fn one<'g>(group: &[&'g TripleN], p: &str) -> Result<Option<&'g Node>> {
+    let mut found: Option<&Node> = None;
+    for t in group
+        .iter()
+        .filter(|t| matches!(&t.p, Value::Iri(x) if x == p))
+    {
+        match found {
+            Some(prev) if *prev != t.o => {
+                return Err(Error::invalid_query(format!(
+                    "more than one <{p}> on one subject"
+                )))
+            }
+            _ => found = Some(&t.o),
+        }
+    }
+    Ok(found)
+}
+
+/// Drops the models whose live definition statements the delete triples match;
+/// a triple that matches no live statement is a no-op, like any absent triple.
+fn drop_models(tx: &mut Tx<'_>, defs: &[InGraph]) -> Result<()> {
+    for (t, _) in defs {
+        let (Node::Val(s), Node::Val(o)) = (&t.s, &t.o) else {
+            continue;
+        };
+        let (Some(si), Some(pi), Some(oi)) = (tx.lookup(s)?, tx.lookup(&t.p)?, tx.lookup(o)?)
+        else {
+            continue;
+        };
+        if !live_eids(tx, si, pi, oi)?.is_empty() {
+            tx.drop_embedding_model(s)?;
+        }
+    }
+    Ok(())
 }
 
 /// The `(s, p, o)` ids of a stored statement, live or not.
@@ -312,6 +482,10 @@ fn candidate_ids(tx: &mut Tx<'_>, n: &Node) -> Result<Vec<ObjectId>> {
 /// with that content. A triple in a `GRAPH` block retracts only the membership of
 /// those statements in that graph. Instantiated triples are deduplicated.
 fn delete(tx: &mut Tx<'_>, triples: Vec<InGraph>) -> Result<()> {
+    let (defs, triples): (Vec<InGraph>, Vec<InGraph>) = triples
+        .into_iter()
+        .partition(|(t, _)| kind_of(t) == Some(VectorKind::Definition));
+    drop_models(tx, &defs)?;
     let mut seen = std::collections::HashSet::new();
     let triples: Vec<InGraph> = triples
         .into_iter()

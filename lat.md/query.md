@@ -811,6 +811,26 @@ YIELD statement, subject, predicate, object, similarity, rank, confidence
 - **Cypher:** the procedure ([[crates/tm-cypher/src/exec/vector.rs]]) takes the model as an IRI or a name resolved like a graph name, the vector as a list of numbers, and options `limit`, `graphs` and `predicates`. It joins the recall with the hit's statement, and the time clauses apply.
 - **Predicates:** SPARQL `tm:vectorPredicate <p>` (repeatable) and the Cypher `predicates` option keep statements with one of those predicates, as `VectorQuery::predicates` does; the filter applies before ranking.
 
+### Writes From Query Languages
+
+SPARQL Update and Cypher define, drop and fill models too. A Cypher *vector index* is a model: creating one writes its definition and builds nothing, because search stays exact.
+
+- **Drop:** `Tx::drop_embedding_model` ([[crates/tm-core/src/engine/embedding.rs]]) retracts the live definition in one engine operation. Vectors stay (append-only); now the model is undefined, views before the drop still use it. A model IRI keeps one definition for ever: an identical redefinition restores it, a different one is `InvalidQuery`.
+- **Definitions in the view:** search reads the definition visible in its view (as of `t`: the one live at `t`).
+- **SPARQL** ([[crates/tm-sparql/src/update/run.rs]]): `sys:dimensions` (required), `sys:metric` and `sys:vectorEncoding` templates on one subject define a model; a delete template matching a live definition statement drops it. `?e tm:vectorEmbedding "[…]" ; tm:vectorModel <m>` stores an embedding when the subject denotes a statement (a bound `?e`, a statement IRI, or the reifier of an inserted triple, as in `{| … |}`). Deleting an embedding is `Unsupported`, and a `GRAPH` block around these templates is `InvalidQuery`.
+- **Cypher** ([[crates/tm-cypher/src/parse/schema.rs]], [[crates/tm-cypher/src/exec/schema.rs]]): `CREATE VECTOR INDEX name [IF NOT EXISTS] OPTIONS {dimensions, metric, encoding}` (or Neo4j `indexConfig` with `vector.dimensions` and `vector.similarity_function`, `euclidean` = `l2`), `DROP [VECTOR] INDEX name [IF EXISTS]` and `SHOW [VECTOR] INDEXES` are whole queries recognised before the parser. `CALL tiramemsu.vector.setEmbedding(r, 'm', $vector) YIELD stored` is a write clause. Read handles refuse the writes.
+
+```sparql
+INSERT DATA { <urn:ex:minilm> sys:dimensions 384 ; sys:metric "cosine" .
+  v:alice v:worksAt v:acme {| tm:vectorEmbedding "[0.1, …]" ; tm:vectorModel <urn:ex:minilm> |} }
+```
+
+```cypher
+CREATE VECTOR INDEX minilm IF NOT EXISTS OPTIONS {dimensions: 384, metric: 'cosine'}
+MATCH ()-[r:worksAt]->() CALL tiramemsu.vector.setEmbedding(r, 'minilm', $v) YIELD stored RETURN count(*)
+DROP INDEX minilm IF EXISTS
+```
+
 ### Future Tiers
 
 Accelerators may come later, each under the same rule: it is derived and rebuildable, it never decides visibility, and its candidates are re-ranked exactly.

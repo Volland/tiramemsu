@@ -3,8 +3,9 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use crate::ast::Query;
-use crate::error::CResult;
+use crate::error::{CResult, CypherError};
 use crate::parse::adapter;
+use crate::parse::schema::{self, SchemaCommand};
 use crate::sema::check::{self, CheckOpts};
 use crate::value::CypherValue;
 use crate::vocab::Vocab;
@@ -44,6 +45,8 @@ pub struct CypherProgram {
     pub ctx: CompileCtx,
     /// True when the query has a write clause.
     pub has_write: bool,
+    /// A vector index command; the query is then empty.
+    pub schema: Option<SchemaCommand>,
 }
 
 /// Parses, checks and packages a query, without touching a store.
@@ -53,9 +56,9 @@ pub struct CypherProgram {
 ///
 /// # Errors
 ///
-/// [`CypherError::Parse`](crate::CypherError::Parse) with the byte span of the
+/// [`CypherError::Parse`] with the byte span of the
 /// problem in `text` (extensions such as `USE` included);
-/// [`CypherError::Unsupported`](crate::CypherError::Unsupported) for a construct
+/// [`CypherError::Unsupported`] for a construct
 /// outside the v1 subset.
 ///
 /// # Example
@@ -74,6 +77,38 @@ pub struct CypherProgram {
 /// # Ok::<(), CypherError>(())
 /// ```
 pub fn compile(text: &str, params: &CypherParams, ctx: &CompileCtx) -> CResult<CypherProgram> {
+    if let Some(cmd) = schema::recognise(text)? {
+        let span = crate::span::Span::new(0, text.len());
+        if cmd.writes() && !ctx.writable {
+            return Err(CypherError::unsupported(
+                "a vector index command on a read-only view",
+                Some(span),
+            ));
+        }
+        if let SchemaCommand::Create {
+            options: schema::IndexOptions::Param(p),
+            ..
+        } = &cmd
+        {
+            if !params.contains_key(p) {
+                return Err(CypherError::parse(
+                    span,
+                    format!("missing parameter `${p}`"),
+                ));
+            }
+        }
+        return Ok(CypherProgram {
+            text: text.to_string(),
+            query: Query {
+                parts: Vec::new(),
+                unions: Vec::new(),
+                span,
+            },
+            ctx: ctx.clone(),
+            has_write: cmd.writes(),
+            schema: Some(cmd),
+        });
+    }
     let query = adapter::parse(text)?;
     let names: BTreeSet<String> = params.keys().cloned().collect();
     check::check(
@@ -89,5 +124,6 @@ pub fn compile(text: &str, params: &CypherParams, ctx: &CompileCtx) -> CResult<C
         query,
         ctx: ctx.clone(),
         has_write,
+        schema: None,
     })
 }

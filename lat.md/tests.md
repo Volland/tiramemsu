@@ -1369,7 +1369,7 @@ Python `TxBuilder.new_node()` and Node `Tx.newNode()` return a `Ref` that resolv
 
 ## Vector Recall
 
-Vector and hybrid recall ([[query#Vector Recall]], [[query#Hybrid Recall]]) over the append-only embeddings of [[storage#Embeddings]]. Tests are in `vector_recall.rs`, the bridge suite, the MCP server suite and both binding suites.
+Vector and hybrid recall ([[query#Vector Recall]], [[query#Hybrid Recall]]) over the append-only embeddings of [[storage#Embeddings]]. Tests are in `vector_recall.rs`, `vector_writes.rs`, the bridge suite, the MCP server suite and both binding suites.
 
 ### Models Are Defined Once
 
@@ -1484,6 +1484,32 @@ The MCP `vector_search` tool returns the same statements in the same order as a 
 ### Same Results On Every Host
 
 One fixture checked against brute force (now, as of before a retraction, and SPARQL) passes on rusqlite, on the WASM host's logic natively, and in WebAssembly under Node.js.
+
+### Dropping A Model Keeps Its Past
+
+`Tx::drop_embedding_model` makes the model undefined now (search and `set_embedding` are `InvalidQuery`) while an as-of view before the drop returns the same hits; a second drop writes nothing.
+
+A different redefinition is refused; the identical one restores the stored vectors. Tests are in `vector_writes.rs`.
+
+### Definitions Are Read In The View
+
+A model defined after a transaction is undefined in an as-of view of that transaction, so a past search fails with `InvalidQuery` while the now search runs.
+
+### SPARQL Update Defines Embeds And Drops
+
+One `INSERT DATA` defines a model from `sys:` triples and asserts and embeds a statement through an annotation; `INSERT … WHERE` embeds matched statements, and `tm:vectorMatch` finds them.
+
+Deleting an embedding is `Unsupported`; a `GRAPH` block, a non-statement subject, a wrong dimension, a missing model and a definition without dimensions are `InvalidQuery` and write nothing. A non-matching definition delete is a no-op; a matching one drops the model.
+
+### Cypher Creates Embeds And Drops Indexes
+
+A read handle refuses the commands and `setEmbedding`. `CREATE VECTOR INDEX` refuses an existing model without `IF NOT EXISTS` and a different one with it; `setEmbedding` returns `stored`, and search agrees with Rust.
+
+`SHOW VECTOR INDEXES` lists the model; `DROP INDEX` needs `IF EXISTS` the second time. Neo4j `indexConfig`, a `$parameter` map, bad options and `FOR … ON …` are covered.
+
+### SPARQL And Cypher Writes Agree
+
+Two models filled over the same statements, one through SPARQL Update and one through Cypher, return the same statements in the same order.
 
 ### Hybrid Expansion Is Capped And Budgeted
 

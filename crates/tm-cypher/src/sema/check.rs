@@ -62,6 +62,11 @@ fn clause_write_name(c: &Clause) -> Option<(&'static str, Span)> {
         Clause::Delete { detach, span, .. } => {
             (if *detach { "DETACH DELETE" } else { "DELETE" }, *span)
         }
+        Clause::Procedure { name, span, .. }
+            if name.eq_ignore_ascii_case(crate::exec::schema::SET_EMBEDDING) =>
+        {
+            ("CALL tiramemsu.vector.setEmbedding", *span)
+        }
         _ => return None,
     })
 }
@@ -439,6 +444,7 @@ fn check_clause(c: &Clause, scope: &mut Scope, opts: &CheckOpts) -> CResult<Opti
                 crate::exec::text::NAME,
                 crate::exec::vector::NAME,
                 crate::exec::recall::NAME,
+                crate::exec::schema::SET_EMBEDDING,
             ];
             if !known.contains(&name.to_ascii_lowercase().as_str()) {
                 return Err(CypherError::unsupported(

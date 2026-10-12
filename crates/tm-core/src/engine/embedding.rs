@@ -24,13 +24,19 @@ impl Tx<'_> {
         Ok(m)
     }
 
-    /// The live object of `(model p ?)`, decoded, if any.
-    fn model_value(&mut self, model: ObjectId, p: &str) -> Result<Option<Value>> {
+    /// The object of `(model p ?)`, decoded, if any: the live statement, or with
+    /// `ever` the latest one ever stored.
+    fn model_value(&mut self, model: ObjectId, p: &str, ever: bool) -> Result<Option<Value>> {
         let Some(p) = self.sys_lookup(p)? else {
             return Ok(None);
         };
+        let sql = if ever {
+            "SELECT o FROM triple WHERE s = +?1 AND p = +?2 ORDER BY eid DESC LIMIT 1"
+        } else {
+            "SELECT o FROM triple WHERE s = +?1 AND p = +?2 AND t_ret IS NULL ORDER BY eid LIMIT 1"
+        };
         let o = self.exec.query_i64(
-            "SELECT o FROM triple WHERE s = +?1 AND p = +?2 AND t_ret IS NULL ORDER BY eid LIMIT 1",
+            sql,
             &[SqlValue::Integer(model.raw()), SqlValue::Integer(p.raw())],
         )?;
         o.map(|o| self.decode(ObjectId::from_raw(o))).transpose()
@@ -39,14 +45,19 @@ impl Tx<'_> {
     /// The definition of `model` visible to this transaction, if it is defined.
     pub fn embedding_model(&mut self, model: impl IntoObject) -> Result<Option<EmbeddingModel>> {
         let m = self.model_id(model)?;
-        let Some(Value::Int(dims)) = self.model_value(m, vocab::SYS_DIMENSIONS)? else {
+        self.model_def(m, false)
+    }
+
+    /// The live definition of `m`, or with `ever` the latest one ever stored.
+    fn model_def(&mut self, m: ObjectId, ever: bool) -> Result<Option<EmbeddingModel>> {
+        let Some(Value::Int(dims)) = self.model_value(m, vocab::SYS_DIMENSIONS, ever)? else {
             return Ok(None);
         };
-        let metric = match self.model_value(m, vocab::SYS_METRIC)? {
+        let metric = match self.model_value(m, vocab::SYS_METRIC, ever)? {
             Some(Value::Str(s)) => Metric::from_name(&s),
             _ => None,
         };
-        let encoding = match self.model_value(m, vocab::SYS_VECTOR_ENCODING)? {
+        let encoding = match self.model_value(m, vocab::SYS_VECTOR_ENCODING, ever)? {
             Some(Value::Str(s)) => VectorEncoding::from_name(&s),
             _ => None,
         };
@@ -64,14 +75,16 @@ impl Tx<'_> {
     /// `sys:metric` and `sys:vectorEncoding` statements. Returns true when the
     /// definition is new and false when the identical definition exists.
     ///
-    /// Definitions are fixed: vectors already stored depend on them. To change one,
-    /// define a new model IRI.
+    /// Definitions are fixed for the life of the IRI: vectors already stored depend
+    /// on them. A dropped model may be defined again only identically, which makes
+    /// its stored vectors visible again. To change a definition, define a new model
+    /// IRI.
     ///
     /// # Errors
     ///
     /// `InvalidQuery` for 0 or more than [`crate::vector::MAX_DIMENSIONS`]
-    /// dimensions or a model already defined differently; `InvalidTerm` when
-    /// `model` is not an IRI.
+    /// dimensions or a model that is, or ever was, defined differently;
+    /// `InvalidTerm` when `model` is not an IRI.
     // @lat: [[query#Vector Recall#Embeddings And Models]]
     pub fn define_embedding_model(
         &mut self,
@@ -80,19 +93,20 @@ impl Tx<'_> {
     ) -> Result<bool> {
         def.check()?;
         let m = self.model_id(model)?;
-        match self.embedding_model(m)? {
-            Some(existing) if existing == *def => return Ok(false),
-            Some(existing) => {
+        if self.model_def(m, false)?.as_ref() == Some(def) {
+            return Ok(false);
+        }
+        if let Some(existing) = self.model_def(m, true)? {
+            if existing != *def {
                 return Err(Error::invalid_query(format!(
-                    "embedding model {} is already defined as {} dimensions, {}, {}; \
+                    "embedding model {} is, or was, defined as {} dimensions, {}, {}; \
                      define a new model IRI instead",
                     self.decode(m)?,
                     existing.dimensions,
                     existing.metric.name(),
                     existing.encoding.name()
-                )))
+                )));
             }
-            None => {}
         }
         for (p, v) in [
             (vocab::SYS_DIMENSIONS, Value::Int(i64::from(def.dimensions))),
@@ -102,6 +116,35 @@ impl Tx<'_> {
             let p = self.sys(p)?;
             let o = self.dict.intern(self.exec, &v)?;
             self.write(m, p, o, Valid::ALWAYS, true, Writer::Engine)?;
+        }
+        Ok(true)
+    }
+
+    /// Drops embedding model `model`: retracts its live definition statements in
+    /// one engine operation. Returns true when it was defined and false (writing
+    /// nothing) when it was not.
+    ///
+    /// Stored embeddings are kept (they are append-only). The now view no longer
+    /// sees the model, so storing and searching with it fail; views before the drop
+    /// still see it. Defining it again identically restores it with its vectors.
+    ///
+    /// # Errors
+    ///
+    /// `InvalidTerm` when `model` is not an IRI.
+    // @lat: [[query#Vector Recall#Embeddings And Models]]
+    pub fn drop_embedding_model(&mut self, model: impl IntoObject) -> Result<bool> {
+        let m = self.model_id(model)?;
+        if self.model_def(m, false)?.is_none() {
+            return Ok(false);
+        }
+        for p in [
+            vocab::SYS_DIMENSIONS,
+            vocab::SYS_METRIC,
+            vocab::SYS_VECTOR_ENCODING,
+        ] {
+            if let Some(p) = self.sys_lookup(p)? {
+                self.retract_matching(Some(m), Some(p), None)?;
+            }
         }
         Ok(true)
     }

@@ -3,4 +3,5 @@
 pub mod adapter;
 mod adapter_expr;
 pub mod prepass;
+pub mod schema;
 mod subq;

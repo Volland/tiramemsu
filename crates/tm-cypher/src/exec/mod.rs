@@ -21,6 +21,7 @@ pub mod funcs;
 pub mod pattern;
 pub mod project;
 pub mod recall;
+pub mod schema;
 pub mod text;
 pub mod time;
 pub mod vector;
@@ -111,6 +112,9 @@ pub fn run(
         writer: write::WriteState::default(),
         uid: 0,
     };
+    if let Some(cmd) = &prog.schema {
+        return ex.run_schema(cmd, params);
+    }
     let (cols, mut rows) = ex.run_query(&prog.query, vec![Row::new()], true)?;
     ex.finish_writes()?;
     if cols.is_empty() {
@@ -357,6 +361,9 @@ impl Exec<'_> {
         }
         if lname == recall::NAME {
             return self.exec_recall(rows, args, yields, standalone);
+        }
+        if lname == schema::SET_EMBEDDING {
+            return self.exec_set_embedding(rows, args, yields, standalone);
         }
         let (col, values) = self.builtin_procedure(&lname)?;
         let mut out = Vec::new();

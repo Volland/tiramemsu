@@ -45,6 +45,8 @@ pub const ADD: &str = "ADD";
 pub const MOVE: &str = "MOVE";
 /// `COPY`.
 pub const COPY: &str = "COPY";
+/// Feature name: a delete template with `tm:vectorEmbedding` or `tm:vectorModel`.
+pub const EMBEDDING_DELETE: &str = "deleting an embedding (embeddings are append-only)";
 /// An update request in a call that accepts only queries
 /// (`SparqlOptions::query_only` in the facade).
 pub const UPDATE_QUERY_ONLY: &str = "update in a query-only call";

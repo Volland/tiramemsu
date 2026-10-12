@@ -68,6 +68,12 @@ pub const TM_VECTOR_LIMIT: &str = "urn:tiramemsu:tm:vectorLimit";
 /// `tm:vectorPredicate`: keeps statements with this predicate (repeatable).
 pub const TM_VECTOR_PREDICATE: &str = "urn:tiramemsu:tm:vectorPredicate";
 
+/// `tm:vectorEmbedding`: in a SPARQL Update insert template, `?e tm:vectorEmbedding
+/// "[0.1, …]" ; tm:vectorModel <m>` stores the embedding of statement `?e` under
+/// model `m` (`lat.md/query#Vector Recall#Writes From Query Languages`). Not a
+/// recall pattern.
+pub const TM_VECTOR_EMBEDDING: &str = "urn:tiramemsu:tm:vectorEmbedding";
+
 /// The `tm:vector*` pattern predicates.
 pub const VECTOR: [&str; 7] = [
     TM_VECTOR_MATCH,

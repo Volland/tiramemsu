@@ -346,23 +346,44 @@ fn similarity(metric: Metric, q: &[f32], v: &[f32]) -> f64 {
 // ---------------------------------------------------------------------------
 // Model definitions
 
-/// Reads the definition of `model` from its live `sys:` statements; `None` when it
-/// is not defined.
+/// Reads the definition of `model` visible in `spec` from its `sys:` statements;
+/// `None` when it is not defined there. Now reads the live statements, as of `t`
+/// the statements live at `t`, and history the latest definition ever made (a
+/// model IRI keeps one definition, so that is the only one).
 pub fn model_definition(
     exec: &mut dyn Executor,
+    spec: &ViewSpec,
     model: ObjectId,
     terms: &TermReader,
     use_cache: bool,
 ) -> Result<Option<EmbeddingModel>> {
-    let one = |exec: &mut dyn Executor, p: &str| -> Result<Option<Value>> {
-        let Some(p) = TermReader::encode(exec, &Value::iri(p))? else {
+    let mut params = Params::new();
+    let s = params.push(model.raw());
+    let p = params.push(0_i64);
+    let live = match spec.tx {
+        TxSel::Now => "t_ret IS NULL".to_string(),
+        TxSel::AsOf(at) => {
+            let t = match at {
+                TimeRef::Tx(t) => params.push(t as i64),
+                TimeRef::Instant(ms) => format!(
+                    "(SELECT coalesce(max(t), 0) FROM tx WHERE instant <= {})",
+                    params.push(ms)
+                ),
+            };
+            format!("t_add <= {t} AND (t_ret IS NULL OR t_ret > {t})")
+        }
+        TxSel::History => "1".to_string(),
+    };
+    let sql = format!(
+        "SELECT o FROM triple WHERE s = +{s} AND p = +{p} AND {live} ORDER BY eid DESC LIMIT 1"
+    );
+    let one = |exec: &mut dyn Executor, pred: &str| -> Result<Option<Value>> {
+        let Some(pid) = TermReader::encode(exec, &Value::iri(pred))? else {
             return Ok(None);
         };
-        let Some(o) = exec.query_i64(
-            "SELECT o FROM triple WHERE s = +?1 AND p = +?2 AND t_ret IS NULL ORDER BY eid LIMIT 1",
-            &[SqlValue::Integer(model.raw()), SqlValue::Integer(p.raw())],
-        )?
-        else {
+        let mut values = params.values().to_vec();
+        values[1] = SqlValue::Integer(pid.raw());
+        let Some(o) = exec.query_i64(&sql, &values)? else {
             return Ok(None);
         };
         terms
@@ -392,13 +413,15 @@ pub fn model_definition(
 
 fn require_model(
     exec: &mut dyn Executor,
+    spec: &ViewSpec,
     model: ObjectId,
     terms: &TermReader,
     use_cache: bool,
 ) -> Result<EmbeddingModel> {
-    model_definition(exec, model, terms, use_cache)?.ok_or_else(|| {
+    model_definition(exec, spec, model, terms, use_cache)?.ok_or_else(|| {
         Error::invalid_query(format!(
-            "{model} is not a defined embedding model (define it with define_embedding_model)"
+            "{model} is not a defined embedding model in this view (define it with \
+             define_embedding_model)"
         ))
     })
 }
@@ -587,7 +610,7 @@ pub fn search(
     let Some(model) = q.model else {
         return Err(Error::invalid_query("a vector query needs a model"));
     };
-    let def = require_model(exec, model, terms, use_cache)?;
+    let def = require_model(exec, spec, model, terms, use_cache)?;
     let query = def.prepare(&q.vector, "the query vector")?;
     let limit = q.limit.unwrap_or(DEFAULT_LIMIT);
     let mut params = Params::new();

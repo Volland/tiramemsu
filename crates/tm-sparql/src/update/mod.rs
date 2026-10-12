@@ -18,7 +18,8 @@ use tm_ir::{IrQuery, Op, Project};
 use crate::dataset::{graph_name, is_tm_iri, GraphDataset, ViewScope};
 use crate::env::Env;
 use crate::error::{
-    parse_error, time_iri_in_graph, unsupported, CLEAR, DROP, LOAD, UPDATE_NON_CURRENT,
+    parse_error, time_iri_in_graph, unsupported, CLEAR, DROP, EMBEDDING_DELETE, LOAD,
+    UPDATE_NON_CURRENT,
 };
 use crate::lower::vars::visible;
 use crate::lower::Lowerer;
@@ -263,6 +264,62 @@ fn check_graph_vars(templates: &[Template], select: &IrQuery) -> Result<()> {
     Ok(())
 }
 
+/// The kind of a vector write template (`lat.md/query#Vector Recall#Writes From
+/// Query Languages`).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum VectorKind {
+    /// `sys:dimensions`, `sys:metric`, `sys:vectorEncoding`: a model definition.
+    Definition,
+    /// `tm:vectorEmbedding`, `tm:vectorModel`: an embedding.
+    Embedding,
+}
+
+/// The vector write kind of predicate `p`, if it is one.
+pub fn vector_kind(p: &str) -> Option<VectorKind> {
+    use tm_core::vocab;
+    if [
+        vocab::SYS_DIMENSIONS,
+        vocab::SYS_METRIC,
+        vocab::SYS_VECTOR_ENCODING,
+    ]
+    .contains(&p)
+    {
+        Some(VectorKind::Definition)
+    } else if [
+        tm_ir::vocab::TM_VECTOR_EMBEDDING,
+        tm_ir::vocab::TM_VECTOR_MODEL,
+    ]
+    .contains(&p)
+    {
+        Some(VectorKind::Embedding)
+    } else {
+        None
+    }
+}
+
+/// Model definitions and embeddings name no graph membership, and embeddings are
+/// never deleted: both fail here, before the transaction opens.
+fn check_vector_templates(templates: &[Template], delete: bool) -> Result<()> {
+    for t in templates {
+        let NamedNodePattern::NamedNode(p) = &t.triple.predicate else {
+            continue;
+        };
+        let Some(kind) = vector_kind(p.as_str()) else {
+            continue;
+        };
+        if delete && kind == VectorKind::Embedding {
+            return Err(unsupported(EMBEDDING_DELETE));
+        }
+        if t.graph != GraphRef::Default {
+            return Err(tm_core::Error::invalid_query(format!(
+                "<{}> in a GRAPH block: model definitions and embeddings belong to no graph",
+                p.as_str()
+            )));
+        }
+    }
+    Ok(())
+}
+
 /// Checks and lowers an update request. Nothing is executed: every unsupported
 /// operation and every invalid graph name fails here, before any transaction opens.
 pub fn plan_update(u: &Update, env: &Env, assoc: AssocHints) -> Result<UpdatePlan> {
@@ -273,10 +330,14 @@ pub fn plan_update(u: &Update, env: &Env, assoc: AssocHints) -> Result<UpdatePla
     for op in &u.operations {
         ops.push(match op {
             GraphUpdateOperation::InsertData { data } => {
-                UpdateOp::InsertData(data.iter().map(insert_quad).collect::<Result<_>>()?)
+                let ts: Vec<Template> = data.iter().map(insert_quad).collect::<Result<_>>()?;
+                check_vector_templates(&ts, false)?;
+                UpdateOp::InsertData(ts)
             }
             GraphUpdateOperation::DeleteData { data } => {
-                UpdateOp::DeleteData(data.iter().map(delete_quad).collect::<Result<_>>()?)
+                let ts: Vec<Template> = data.iter().map(delete_quad).collect::<Result<_>>()?;
+                check_vector_templates(&ts, true)?;
+                UpdateOp::DeleteData(ts)
             }
             GraphUpdateOperation::DeleteInsert {
                 delete,
@@ -288,6 +349,8 @@ pub fn plan_update(u: &Update, env: &Env, assoc: AssocHints) -> Result<UpdatePla
                     delete.iter().map(delete_template).collect::<Result<_>>()?;
                 let insert: Vec<Template> =
                     insert.iter().map(insert_template).collect::<Result<_>>()?;
+                check_vector_templates(&delete, true)?;
+                check_vector_templates(&insert, false)?;
                 let sc = ViewScope::from_dataset(using.as_ref())?;
                 let mut l = Lowerer::new(env);
                 l.assoc = assoc;

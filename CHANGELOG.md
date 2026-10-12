@@ -9,6 +9,23 @@ OpenSpec changes in `openspec/changes/archive/`.
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-10-12
+
+Vector writes and vector index commands from SPARQL and Cypher (`openspec/changes/add-vector-query-writes`).
+
+**Upgrade notes**
+
+- No storage format change.
+- A SPARQL delete of one `sys:dimensions`, `sys:metric` or `sys:vectorEncoding` statement now drops the whole model instead of leaving a half-defined one.
+- A model IRI keeps one definition for its whole history: redefining a dropped model differently is `InvalidQuery`.
+- Vector search reads the model definition visible in its view, so an as-of search before a model was defined fails with `InvalidQuery`.
+
+### Added
+
+- `Tx::drop_embedding_model`: retracts a model's definition in one step; stored vectors stay, views before the drop still search with it, and an identical redefinition restores it.
+- SPARQL Update: `sys:dimensions` / `sys:metric` / `sys:vectorEncoding` templates define a model, deleting a live definition statement drops it, and `tm:vectorEmbedding "[…]" ; tm:vectorModel <m>` on a statement (bound `?e`, statement IRI or reifier, e.g. `{| … |}`) stores its embedding.
+- Cypher: `CREATE VECTOR INDEX name [IF NOT EXISTS] OPTIONS {dimensions, metric, encoding}` (also Neo4j `indexConfig`), `DROP [VECTOR] INDEX name [IF EXISTS]`, `SHOW [VECTOR] INDEXES`, and the write procedure `CALL tiramemsu.vector.setEmbedding(r, model, vector) YIELD stored`.
+
 ## [0.5.0] - 2026-10-11
 
 Vector and hybrid recall, and the fixes of the 2026-10-10 review (`docs/project-review.md`).
@@ -139,7 +156,8 @@ First release.
 - Named graphs: `Tx::add_to_graph`, `remove_from_graph`, `clear_graph`, `View::graphs`, `View::graph_members`. SPARQL gains `GRAPH`, `FROM NAMED` and graph management updates.
 - JSON bridge (`tiramemsu-json`), Node.js bindings (`@tiramemsu/node`) and Python bindings (`tiramemsu`), with release workflows for PyPI wheels and npm.
 
-[Unreleased]: https://github.com/Volland/tiramemsu/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/Volland/tiramemsu/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/Volland/tiramemsu/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/Volland/tiramemsu/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/Volland/tiramemsu/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/Volland/tiramemsu/compare/v0.2.0...v0.3.0
