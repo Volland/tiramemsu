@@ -16,10 +16,10 @@
 
 <article class="post">
 <h1>Vector memory that remembers when</h1>
-<p class="meta">Tiramemsu articles · 11 October 2026</p>
+<p class="meta">Tiramemsu articles · 11 October 2026 · updated 12 October 2026 for 0.6.0</p>
 
 <p>An agent rarely remembers the exact words. The user says “that team trip to Portugal”, and the memory says “met Alice at the Lisbon offsite”. Text recall, which tiramemsu already has, matches words: it finds “Lisbon” but not “Portugal”. Recall by meaning needs embeddings, vectors that put similar texts close together, and a search for the nearest ones.</p>
-<p>Every vector database does that. The hard part for tiramemsu is that its memory travels in time. You can ask what the agent knew last Tuesday, what was true in March, or what one session believed. A vector search has to give the right answer to those questions too, and the usual way of building one does not. This article explains why, and how vector recall in tiramemsu (storage format 5, released in 0.5.0) is built to avoid the problem. The engineering details are in <a href="https://github.com/Volland/tiramemsu/blob/main/docs/vector-architecture.md"><code>docs/vector-architecture.md</code></a>.</p>
+<p>Every vector database does that. The hard part for tiramemsu is that its memory travels in time. You can ask what the agent knew last Tuesday, what was true in March, or what one session believed. A vector search has to give the right answer to those questions too, and the usual way of building one does not. This article explains why, and how vector recall in tiramemsu (storage format 5, released in 0.5.0; writable from SPARQL and Cypher since 0.6.0) is built to avoid the problem. The engineering details are in <a href="https://github.com/Volland/tiramemsu/blob/main/docs/vector-architecture.md"><code>docs/vector-architecture.md</code></a>.</p>
 
 <h2>Why agents recall by meaning</h2>
 <p>An agent's memory fills up with notes, observations and facts written in many different words. When it needs something, it starts from the conversation, not from a graph pattern. Words get it part of the way: names, places, product codes. Meaning gets it the rest: paraphrases, synonyms, other languages, the same idea said another way. In practice an agent wants both, and wants to know which one found each result.</p>
@@ -109,6 +109,29 @@ db.transact(TxOptions::default(), |tx| {
 YIELD statement, subject, predicate, object, similarity, rank, confidence</code></pre>
 <p>Both compile to the same table function as every other surface, so they return the same hits in the same order.</p>
 
+<h2 id="ddl">Indexes and vectors from the query languages</h2>
+<p>Since 0.6.0 the query languages can do the writing as well. A vector index is the embedding model: creating one stores its definition, dropping one retracts it. Cypher has index commands and a write procedure:</p>
+<pre><code>CREATE VECTOR INDEX minilm IF NOT EXISTS OPTIONS {dimensions: 384, metric: <span class="s">'cosine'</span>}
+
+MATCH ()-[r:visited]-&gt;(:City {name: <span class="s">'Lisbon'</span>})
+CALL tiramemsu.vector.setEmbedding(r, <span class="s">'minilm'</span>, $vector) YIELD stored
+RETURN stored
+
+SHOW VECTOR INDEXES
+DROP INDEX minilm IF EXISTS</code></pre>
+<p>SPARQL Update writes the definition as the <code>sys:</code> statements it is stored as, and embeds a statement with <code>tm:vectorEmbedding</code> and <code>tm:vectorModel</code>, here asserting and embedding a note in one request:</p>
+<pre><code>PREFIX sys: &lt;urn:tiramemsu:sys:&gt;
+INSERT DATA {
+  &lt;urn:example:minilm&gt; sys:dimensions 384 ; sys:metric <span class="s">"cosine"</span> .
+  v:alice v:note <span class="s">"met Alice at the Lisbon offsite"</span>
+    {| tm:vectorEmbedding <span class="s">"[0.12, -0.4, …]"</span> ; tm:vectorModel &lt;urn:example:minilm&gt; |} }
+
+INSERT { ?e tm:vectorEmbedding <span class="s">"[…]"</span> ; tm:vectorModel &lt;urn:example:minilm&gt; }
+WHERE  { ?s v:note ?text ~ ?e }
+
+DELETE DATA { &lt;urn:example:minilm&gt; sys:dimensions 384 }   <span class="c"># drops the index</span></code></pre>
+<p>Dropping keeps the past: the vectors stay, a search as of a time before the drop still answers as it did, and creating the index again with the same definition brings them back. A dropped name cannot be reused with other settings. Every sample, in every language, is in the <a href="vector-cookbook.html">vector cookbook</a>.</p>
+
 <h2>How hits are ranked</h2>
 <p>Similarity comes first. When two hits are equally similar, which mostly happens when several agents wrote the same thing, evidence breaks the tie: higher confidence first (no confidence last), then more confirmations, then more distinct authors, then the newer statement, then the id. This is the same tie-break text recall uses, and it has a name, <code>tiramemsu-vector-rank/1</code>, so that if it ever changes, the name changes with it.</p>
 
@@ -188,11 +211,11 @@ YIELD statement, subject, predicate, object, score, rank, via</code></pre>
   <li><strong>You supply the embeddings.</strong> The store checks the length, not the meaning. If the query vector comes from a different model than the stored ones, the similarities are meaningless and nothing will tell you.</li>
   <li><strong>Corrections need re-embedding.</strong> Until you embed the new version of a superseded statement, vector search cannot find it. Text recall can.</li>
   <li><strong>Late vectors do not reach the past.</strong> A vector stored today is invisible to <code>as_of</code> any earlier time, even if its statement existed then. That is the price of past answers that never change.</li>
-  <li><strong>No overwrite.</strong> A changed vector for the same model and statement is refused. Improving your embeddings means a new model.</li>
+  <li><strong>No overwrite.</strong> A changed vector for the same model and statement is refused. Improving your embeddings means a new model. Dropping an index hides it now but deletes nothing.</li>
   <li><strong>Vectors are permanent.</strong> An embedding can reveal something about the text it came from, and like every row in tiramemsu it is kept.</li>
 </ul>
 <p class="note">Vector recall in tiramemsu is meant to be correct before it is fast: under every view, the hits are the nearest statements that the view can see. Speed comes in tiers on top, and none of them is allowed to change the answer without saying so.</p>
-<p><a href="recall-review-recheck.html">← Recall, review, recheck</a> · <a href="hybrid-recall.html">Words, meaning and evidence: hybrid recall →</a></p>
+<p><a href="recall-review-recheck.html">← Recall, review, recheck</a> · <a href="vector-cookbook.html">Vector cookbook →</a> · <a href="hybrid-recall.html">Words, meaning and evidence: hybrid recall →</a></p>
 </article>
 
 <footer><div class="wrap">

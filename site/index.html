@@ -11,7 +11,7 @@
 <body>
 <header class="top"><div class="wrap">
   <a class="brand" href="./"><img src="assets/logo.svg" alt="">Tiramemsu</a>
-  <nav class="menu"><a href="#new">New in 0.5</a><a href="#why">Why</a><a href="#features">Features</a><a href="#start">Quick start</a><a href="articles/">Articles</a><a href="paper/">Paper</a><a href="https://github.com/Volland/tiramemsu">GitHub</a></nav>
+  <nav class="menu"><a href="#new">New in 0.6</a><a href="#why">Why</a><a href="#features">Features</a><a href="#start">Quick start</a><a href="articles/">Articles</a><a href="paper/">Paper</a><a href="https://github.com/Volland/tiramemsu">GitHub</a></nav>
 </div></header>
 
 <main>
@@ -20,13 +20,21 @@
     <p class="slogan">Your agent’s brain loves Tiramemsu.</p>
     <h1>Memory that has <em>layers</em>, travels in time, and never forgets.</h1>
     <p class="lead">Tiramemsu is an embedded graph database on SQLite for agent memory. Every fact has its own id, so it can carry a confidence, a source or a belief, layer on layer. Every change is kept with when it was learned and when it was true. And an agent can recall by words and by meaning, today or as of any moment in the past, from one file.</p>
-    <div class="btns"><a class="btn primary" href="#start">Quick start</a><a class="btn" href="articles/vector-memory.html">Vector memory that remembers when</a><a class="btn" href="articles/hybrid-recall.html">Hybrid recall</a><a class="btn" href="paper/">Read the paper</a></div>
+    <div class="btns"><a class="btn primary" href="#start">Quick start</a><a class="btn" href="articles/vector-memory.html">Vector memory that remembers when</a><a class="btn" href="articles/vector-cookbook.html">Vector cookbook</a><a class="btn" href="articles/hybrid-recall.html">Hybrid recall</a><a class="btn" href="paper/">Read the paper</a></div>
   </div>
   <img src="assets/logo.svg" alt="A brain taking a bite out of a tiramisu whose layers are a graph">
 </div>
 
 <section id="new" class="new"><div class="wrap">
-  <h2>New in 0.5: recall by meaning, in any moment</h2>
+  <h2>New in 0.6: vector indexes in SPARQL and Cypher</h2>
+  <p class="sub">The whole vector loop now works from the query languages: create an index, add embeddings, search, drop. <a href="articles/vector-cookbook.html">See every sample →</a></p>
+  <ul class="hl">
+    <li><a href="articles/vector-cookbook.html#create"><strong>CREATE VECTOR INDEX</strong><span>Cypher index commands, Neo4j <code>indexConfig</code> included, plus <code>SHOW</code> and <code>DROP</code>.</span></a></li>
+    <li><a href="articles/vector-cookbook.html#add"><strong>Embed from Cypher</strong><span><code>CALL tiramemsu.vector.setEmbedding(r, 'minilm', $v)</code>, one row or a whole <code>UNWIND</code>.</span></a></li>
+    <li><a href="articles/vector-cookbook.html#add"><strong>Embed from SPARQL</strong><span><code>tm:vectorEmbedding</code> in <code>INSERT DATA</code> and <code>INSERT … WHERE</code>, annotations included.</span></a></li>
+    <li><a href="articles/vector-cookbook.html#show"><strong>Drop keeps the past</strong><span>A dropped index is gone now; searches as of before the drop still answer.</span></a></li>
+  </ul>
+  <h3 class="group">New in 0.5: recall by meaning, in any moment</h3>
   <p class="sub">Vector and hybrid recall, built for a memory that travels in time, plus faster queries and a round of fixes. <a href="articles/vector-memory.html">Read how it works →</a></p>
   <ul class="hl">
     <li><a href="articles/vector-memory.html"><strong>Vector recall</strong><span>Store your model’s embeddings beside the facts and search them by meaning.</span></a></li>
@@ -94,6 +102,7 @@ past = db.as_of(instant=<span class="s">"2026-10-06T09:00:00Z"</span>)
   <h3 class="group">Recall</h3>
   <div class="grid">
     <div class="card"><span class="tag">New</span><h3>Vector recall</h3><p>Define a model, store the vectors your model computes, search exactly (cosine, dot, L2; f32 or f16). As-of views see only vectors stored by then.</p></div>
+    <div class="card"><span class="tag">New in 0.6</span><h3>Vector indexes in queries</h3><p><code>CREATE VECTOR INDEX</code>, <code>setEmbedding</code> and <code>DROP INDEX</code> in Cypher; <code>tm:vectorEmbedding</code> in SPARQL Update. <a href="articles/vector-cookbook.html">Cookbook</a>.</p></div>
     <div class="card"><span class="tag">New</span><h3>Hybrid recall</h3><p>Text and vector channels fused by reciprocal rank, expanded to each hit’s layers and subject facts, with <code>via</code> saying how each arrived.</p></div>
     <div class="card"><span class="tag">Text</span><h3>Find it by words</h3><p>FTS5 recall over string values in any view, each hit with its evidence, from Rust, SPARQL and Cypher.</p></div>
     <div class="card"><span class="tag">Evidence</span><h3>Ranked, never invented</h3><p>Ties break on confidence, confirmations, distinct authors and recency; absent evidence stays absent. Every policy has a name.</p></div>
@@ -242,6 +251,16 @@ db.now().cypher(<span class="s">"MATCH (p)-[r:worksAt]-&gt;(o) RETURN p, o, r.co
     </div>
   </div>
   <p class="sub">Every binding wraps the same core, so all three see the same past. See the <a href="https://github.com/Volland/tiramemsu/tree/main/bindings">bindings</a> for the full API.</p>
+  <h3 id="vectors">Recall by meaning</h3>
+  <p class="sub">Your model computes the vectors; tiramemsu stores them with the facts and searches them exactly, in any view. <code>embed()</code> stands for your model.</p>
+<pre><code>db.cypher_write(<span class="s">"CREATE VECTOR INDEX minilm IF NOT EXISTS OPTIONS {dimensions: 384}"</span>)
+db.cypher_write(<span class="s">"MATCH ()-[r:visited]-&gt;(:City {name: 'Lisbon'}) "</span>
+                <span class="s">"CALL tiramemsu.vector.setEmbedding(r, 'minilm', $v) YIELD stored RETURN stored"</span>,
+                {<span class="s">"v"</span>: embed(<span class="s">"visited Lisbon"</span>)})
+db.now().cypher(<span class="s">"CALL tiramemsu.vector.search('minilm', $q, {limit: 5}) "</span>
+                <span class="s">"YIELD subject, predicate, object, similarity RETURN *"</span>, {<span class="s">"q"</span>: embed(<span class="s">"trip to Portugal"</span>)})
+db.now().vector_search(<span class="s">"urn:tiramemsu:v:minilm"</span>, embed(<span class="s">"trip to Portugal"</span>), limit=5)   <span class="c"># same hits</span></code></pre>
+  <p class="sub">SPARQL, Rust, Node.js, MCP, time travel and dropping indexes: <a href="articles/vector-cookbook.html">the vector cookbook</a>.</p>
   <h3 id="agent">Use it from an agent</h3>
   <p class="sub">No code needed: register the MCP server and the agent gets tools such as <code>assert</code>, <code>query</code>, <code>recall</code>, <code>vector_search</code>, <code>set_embedding</code> and <code>check_answers</code>. <a href="articles/mcp-memory.html">How it works →</a></p>
 <pre><code><span class="c"># install from crates.io, then register it with Claude Code</span>

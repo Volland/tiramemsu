@@ -1,0 +1,222 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Vector cookbook: tiramemsu</title>
+<meta name="description" content="Working samples for vectors in tiramemsu 0.6: create and drop vector indexes, add embeddings and search them from Cypher, SPARQL, Rust, Python, Node.js and MCP, backfill, time travel and the rules behind them.">
+<link rel="icon" href="../assets/logo.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+<header class="top"><div class="wrap">
+  <a class="brand" href="../"><img src="../assets/logo.svg" alt="">Tiramemsu</a>
+  <nav class="menu"><a href="../#features">Features</a><a href="../#start">Quick start</a><a href="./" aria-current="page">Articles</a><a href="../paper/">Paper</a><a href="https://github.com/Volland/tiramemsu">GitHub</a></nav>
+</div></header>
+
+<article class="post">
+<h1>Vector cookbook: indexes, embeddings and search in every language</h1>
+<p class="meta">Tiramemsu articles · 12 October 2026 · for 0.6.0</p>
+
+<p>Since 0.6.0 the whole vector loop works from the query languages too: create a vector index, add embeddings, search, list what still needs a vector, and drop the index. This page is a set of samples you can copy. Every Cypher, SPARQL and Python sample here was run against the published 0.6.0 package. Why the search works the way it does is explained in <a href="vector-memory.html">Vector memory that remembers when</a>.</p>
+
+<p>Install:</p>
+<pre><code>cargo add tiramemsu          <span class="c"># Rust</span>
+pip install tiramemsu        <span class="c"># Python</span>
+npm install @tiramemsu/node  <span class="c"># Node.js</span>
+cargo install tiramemsu-mcp  <span class="c"># MCP server for agents</span></code></pre>
+
+<h2 id="model">One idea: the index is the model</h2>
+<p>A <em>vector index</em> in tiramemsu is an <em>embedding model</em>: an IRI with three settings, stored as ordinary <code>sys:</code> statements on it.</p>
+<table>
+<thead><tr><th>Setting</th><th>Values</th><th>Default</th></tr></thead>
+<tbody>
+<tr><td>dimensions</td><td>1 to 16 384</td><td>required</td></tr>
+<tr><td>metric</td><td><code>cosine</code>, <code>dot</code>, <code>l2</code> (Neo4j's <code>euclidean</code> means <code>l2</code>)</td><td><code>cosine</code></td></tr>
+<tr><td>encoding</td><td><code>f32</code>, <code>f16</code> (half the size)</td><td><code>f32</code></td></tr>
+</tbody>
+</table>
+<p>Search is exact, so creating an index builds no extra structure. It only fixes what the vectors look like. A vector belongs to one <em>statement</em> (a fact, a relationship, a note), and the store never computes vectors: your application calls its embedding model and hands over the numbers.</p>
+<p><strong>Names.</strong> In Cypher a short name resolves through the default vocabulary, so the index <code>minilm</code> is the IRI <code>urn:tiramemsu:v:minilm</code>, written <code>v:minilm</code> in SPARQL. Use a backticked IRI in Cypher (<code>`urn:example:minilm`</code>) to name any other IRI. Python and Node accept a plain IRI string.</p>
+
+<h2 id="create">Create an index</h2>
+<p>Cypher:</p>
+<pre><code>CREATE VECTOR INDEX minilm IF NOT EXISTS
+OPTIONS {dimensions: 384, metric: <span class="s">'cosine'</span>, encoding: <span class="s">'f32'</span>}
+
+<span class="c">// Neo4j's spelling works too</span>
+CREATE VECTOR INDEX minilm
+OPTIONS {indexConfig: {`vector.dimensions`: 384, `vector.similarity_function`: <span class="s">'cosine'</span>}}
+
+<span class="c">// or pass the options as a parameter</span>
+CREATE VECTOR INDEX minilm OPTIONS $options</code></pre>
+<p>Without <code>IF NOT EXISTS</code> an existing index is an error. With it, the same definition is a no-op and a different one is still an error, because stored vectors depend on it.</p>
+<p>SPARQL Update writes the definition as the statements it is stored as. Only <code>sys:dimensions</code> is required:</p>
+<pre><code>PREFIX sys: &lt;urn:tiramemsu:sys:&gt;
+INSERT DATA {
+  &lt;urn:example:minilm&gt; sys:dimensions 384 ; sys:metric <span class="s">"cosine"</span> ; sys:vectorEncoding <span class="s">"f32"</span> }</code></pre>
+<p>Rust, Python and Node.js:</p>
+<pre><code><span class="c">// Rust</span>
+db.transact(TxOptions::default(), |tx| {
+    tx.define_embedding_model(Value::iri(<span class="s">"urn:example:minilm"</span>), &amp;EmbeddingModel {
+        dimensions: 384, metric: Metric::Cosine, encoding: VectorEncoding::F32,
+    })?;
+    Ok(())
+})?;
+
+<span class="c"># Python</span>
+<span class="k">with</span> db.transact() <span class="k">as</span> tx:
+    tx.define_embedding_model(<span class="s">"urn:example:minilm"</span>, 384, metric=<span class="s">"cosine"</span>, encoding=<span class="s">"f32"</span>)
+
+<span class="c">// Node.js</span>
+db.transact((tx) =&gt; tx.defineEmbeddingModel(<span class="s">"urn:example:minilm"</span>, 384, { metric: <span class="s">"cosine"</span> }));</code></pre>
+
+<h2 id="add">Add vectors</h2>
+<p><strong>Cypher</strong> has a write procedure. The first argument is a relationship (or a statement node), and <code>stored</code> is <code>true</code> when the vector is new and <code>false</code> when the same vector was already there:</p>
+<pre><code>MATCH (:Person {name: <span class="s">'Alice'</span>})-[r:visited]-&gt;(:City {name: <span class="s">'Lisbon'</span>})
+CALL tiramemsu.vector.setEmbedding(r, <span class="s">'minilm'</span>, $vector) YIELD stored
+RETURN stored</code></pre>
+<p>Many at once, from a parameter list:</p>
+<pre><code>UNWIND $rows AS row
+MATCH (a:Trip {name: row.name})-[r:note]-&gt;()
+CALL tiramemsu.vector.setEmbedding(r, <span class="s">'notes'</span>, row.vector) YIELD stored
+RETURN row.name AS name, stored</code></pre>
+<p><strong>SPARQL Update</strong> uses two predicates on the statement: <code>tm:vectorEmbedding</code> (the vector as a JSON array in a string) and <code>tm:vectorModel</code>. The annotation syntax asserts a fact and embeds it in one go, and one request can also define the model:</p>
+<pre><code>PREFIX sys: &lt;urn:tiramemsu:sys:&gt;
+INSERT DATA {
+  &lt;urn:example:minilm&gt; sys:dimensions 3 ; sys:metric <span class="s">"cosine"</span> .
+  v:alice v:note <span class="s">"met Alice at the Lisbon offsite"</span>
+    {| tm:vectorEmbedding <span class="s">"[0.8, 0.2, 0.0]"</span> ; tm:vectorModel &lt;urn:example:minilm&gt; |} }</code></pre>
+<p>To embed statements that are already stored, bind them with <code>~ ?e</code> in <code>WHERE</code>:</p>
+<pre><code>INSERT { ?e tm:vectorEmbedding <span class="s">"[0.1, 0.9, 0.0]"</span> ; tm:vectorModel v:minilm }
+WHERE  { ?p v:visited ?c ~ ?e . ?c v:name <span class="s">"Oslo"</span> }</code></pre>
+<p>The subject can be a bound <code>?e</code>, a statement IRI (<code>&lt;urn:tiramemsu:stmt:42&gt;</code>), or the reifier of a triple inserted in the same request. Anything else is an error.</p>
+<p><strong>Rust, Python, Node.js</strong>, with <code>embed</code> standing for your model call:</p>
+<pre><code><span class="c">// Rust</span>
+db.transact(TxOptions::default(), |tx| {
+    <span class="k">let</span> e = tx.assert(v(<span class="s">"alice"</span>), v(<span class="s">"note"</span>), Value::str(text), Valid::ALWAYS)?.eid();
+    tx.set_embedding(e, model.clone(), &amp;embed(text))?;   <span class="c">// true: stored</span>
+    Ok(())
+})?;
+
+<span class="c"># Python</span>
+<span class="k">with</span> db.transact() <span class="k">as</span> tx:
+    e = tx.assert_(alice, note, text)
+    tx.set_embedding(e, <span class="s">"urn:example:minilm"</span>, embed(text))
+
+<span class="c">// Node.js</span>
+db.transact((tx) =&gt; {
+  <span class="k">const</span> e = tx.assert(alice, note, text);
+  tx.setEmbedding(e, <span class="s">"urn:example:minilm"</span>, embed(text));
+});</code></pre>
+<p>A vector is written in the same transaction as everything else, so it rolls back with it. Writing the same vector again changes nothing. A different vector for the same index and statement is refused (<code>EmbeddingConflict</code>): vectors are history, and to improve them you define a new index.</p>
+
+<h2 id="search">Search</h2>
+<p><strong>Cypher</strong>: the options are <code>limit</code> (default 10), <code>graphs</code> and <code>predicates</code>, and the procedure joins each hit with its statement:</p>
+<pre><code>CALL tiramemsu.vector.search(<span class="s">'minilm'</span>, $vector, {limit: 5, predicates: [<span class="s">'visited'</span>]})
+YIELD subject, predicate, object, similarity, rank, confidence
+RETURN predicate, similarity, rank
+
+<span class="c">// follow a hit into the graph</span>
+CALL tiramemsu.vector.search(<span class="s">'notes'</span>, $vector, {limit: 1}) YIELD statement, similarity
+MATCH (a)-[r]-&gt;() WHERE r = statement
+RETURN a.name, similarity</code></pre>
+<p><strong>SPARQL</strong>: a group of <code>tm:vector*</code> patterns on one variable is one search. <code>tm:vectorMatch</code> and <code>tm:vectorModel</code> are required, the rest bind or filter:</p>
+<pre><code>SELECT ?o ?sim ?rank WHERE {
+  ?e tm:vectorMatch <span class="s">"[1, 0, 0]"</span> ; tm:vectorModel &lt;urn:example:minilm&gt; ;
+     tm:vectorSimilarity ?sim ; tm:vectorRank ?rank ; tm:vectorLimit 10 ;
+     tm:vectorPredicate v:note .               <span class="c"># optional, repeatable</span>
+  ?s ?p ?o ~ ?e }
+ORDER BY ?rank</code></pre>
+<p><code>GRAPH &lt;g&gt; { … }</code> around the group searches one graph. <code>tm:vectorConfidence ?c</code> binds the hit's confidence.</p>
+<p><strong>Rust, Python, Node.js</strong>:</p>
+<pre><code><span class="c">// Rust</span>
+<span class="k">let</span> m = db.now().encode(&amp;model)?.unwrap();
+<span class="k">let</span> r = db.now().vector_search(&amp;VectorQuery { limit: Some(5), ..VectorQuery::new(m, embed(<span class="s">"trip to Portugal"</span>)) })?;
+<span class="k">for</span> hit <span class="k">in</span> &amp;r.hits { println!(<span class="s">"{} {:.3}"</span>, hit.rank, hit.similarity); }
+
+<span class="c"># Python</span>
+<span class="k">for</span> hit <span class="k">in</span> db.now().vector_search(<span class="s">"urn:example:minilm"</span>, embed(<span class="s">"trip to Portugal"</span>), limit=5):
+    print(hit.rank, hit.similarity, hit.o)
+
+<span class="c">// Node.js</span>
+<span class="k">const</span> { hits, exact } = db.now().vectorSearch(<span class="s">"urn:example:minilm"</span>, embed(<span class="s">"trip to Portugal"</span>), { limit: 5 });</code></pre>
+<p>Words and meaning together, fused by rank, with context from each hit's layers:</p>
+<pre><code>CALL tiramemsu.recall({text: <span class="s">'lisbon offsite'</span>, model: <span class="s">'minilm'</span>, vector: $v, expand: 2})
+YIELD statement, object, score, rank, via
+
+<span class="c"># Python</span>
+db.now().recall(<span class="s">"lisbon offsite"</span>, model=<span class="s">"urn:example:minilm"</span>, vector=embed(<span class="s">"lisbon offsite"</span>), expand=2)</code></pre>
+<p>Hybrid recall is covered in <a href="hybrid-recall.html">Words, meaning and evidence</a>.</p>
+
+<h2 id="time">Search in the past</h2>
+<p>Every search runs inside a view. An as-of view sees only the statements and the vectors that existed then, so an old question keeps its old answer:</p>
+<pre><code>USE AS OF 41
+CALL tiramemsu.vector.search(<span class="s">'notes'</span>, $vector) YIELD statement, rank
+RETURN statement, rank
+
+SELECT ?e WHERE { SERVICE &lt;urn:tiramemsu:tm:asOf/41&gt; {
+  ?e tm:vectorMatch <span class="s">"[1, 0, 0]"</span> ; tm:vectorModel v:notes } }
+
+<span class="c"># Python</span>
+db.as_of(tx=41).vector_search(<span class="s">"urn:tiramemsu:v:notes"</span>, query)</code></pre>
+<p>A vector stored after transaction 41 is invisible as of 41, even if its statement existed then. The index definition is read in the view too: as of a time before the index was created, a search is an error.</p>
+
+<h2 id="backfill">Find what still needs a vector</h2>
+<p>A corrected (superseded) statement gets a new id and no vector. <code>unembedded</code> lists the statements of a view that have none, in id order, which is the work list of an embedding job:</p>
+<pre><code><span class="c"># Python</span>
+<span class="k">for</span> eid <span class="k">in</span> db.now().unembedded(<span class="s">"urn:example:minilm"</span>, limit=500):
+    ...   <span class="c"># read the statement, embed it, set_embedding(eid, ...)</span>
+
+<span class="c">// Node.js</span>
+<span class="k">const</span> todo = db.now().unembedded(<span class="s">"urn:example:minilm"</span>, 500);</code></pre>
+<p>It lists every statement without a vector, including properties and labels, so filter for the predicates you embed.</p>
+
+<h2 id="show">List and drop indexes</h2>
+<pre><code>SHOW VECTOR INDEXES
+<span class="c">// name     model                      dimensions  metric   encoding</span>
+<span class="c">// minilm   urn:tiramemsu:v:minilm     384         cosine   f32</span>
+
+DROP INDEX minilm IF EXISTS</code></pre>
+<p>In SPARQL, deleting a live definition statement drops the whole index; a value that does not match is a no-op, like deleting any absent triple. In Rust, <code>tx.drop_embedding_model(model)</code> returns whether it was defined.</p>
+<pre><code>PREFIX sys: &lt;urn:tiramemsu:sys:&gt;
+DELETE DATA { &lt;urn:example:minilm&gt; sys:dimensions 384 }</code></pre>
+<p>What a drop does, and does not do:</p>
+<ul>
+  <li><strong>Now</strong>, the index is gone: searching it or adding vectors to it is an error.</li>
+  <li><strong>The vectors stay.</strong> Nothing is deleted in tiramemsu. A search as of a time before the drop still returns what it returned then.</li>
+  <li><strong>Create it again identically</strong> and the stored vectors are back.</li>
+  <li><strong>A name keeps one definition for good.</strong> Re-creating a dropped index with other dimensions or another metric is refused. Use a new name.</li>
+</ul>
+
+<h2 id="mcp">For agents, over MCP</h2>
+<p>The <code>tiramemsu-mcp</code> server gives an agent the same loop as tools: <code>define_embedding_model</code> and <code>set_embedding</code> to write, <code>vector_search</code>, <code>recall</code> and <code>unembedded</code> to read. In read-only mode the writing tools are hidden. The <code>query</code> tool runs the SPARQL and Cypher searches above.</p>
+<pre><code>{<span class="s">"name"</span>: <span class="s">"set_embedding"</span>, <span class="s">"arguments"</span>: {<span class="s">"eid"</span>: 42, <span class="s">"model"</span>: <span class="s">"urn:example:minilm"</span>, <span class="s">"vector"</span>: [0.1, 0.9, 0.0]}}
+{<span class="s">"name"</span>: <span class="s">"vector_search"</span>, <span class="s">"arguments"</span>: {<span class="s">"model"</span>: <span class="s">"urn:example:minilm"</span>, <span class="s">"vector"</span>: [1, 0, 0], <span class="s">"limit"</span>: 5}}</code></pre>
+
+<h2 id="rules">Rules and errors at a glance</h2>
+<table>
+<thead><tr><th>You do</th><th>You get</th></tr></thead>
+<tbody>
+<tr><td>Vector of the wrong length, a NaN, or all zeros under cosine</td><td><code>InvalidQuery</code></td></tr>
+<tr><td>A different vector for the same index and statement</td><td><code>EmbeddingConflict</code></td></tr>
+<tr><td>Embed a retracted statement</td><td><code>NotLive</code></td></tr>
+<tr><td>Search or embed with an undefined or dropped index</td><td><code>InvalidQuery</code></td></tr>
+<tr><td>Redefine an index differently, even after a drop</td><td><code>InvalidQuery</code></td></tr>
+<tr><td>SPARQL delete of <code>tm:vectorEmbedding</code></td><td><code>Unsupported</code> (vectors are append-only)</td></tr>
+<tr><td>Vector templates inside a SPARQL <code>GRAPH</code> block</td><td><code>InvalidQuery</code></td></tr>
+<tr><td><code>CREATE VECTOR INDEX … FOR (n:Label) ON (n.prop)</code></td><td><code>Unsupported</code> (vectors belong to statements)</td></tr>
+<tr><td>Index commands or <code>setEmbedding</code> on a read-only view</td><td><code>Unsupported</code></td></tr>
+</tbody>
+</table>
+<p class="note">Everything here runs the same exact, view-aware search: the hits are always the nearest statements the view can see, natively and in the browser.</p>
+<p><a href="vector-memory.html">← Vector memory that remembers when</a> · <a href="hybrid-recall.html">Words, meaning and evidence: hybrid recall →</a></p>
+</article>
+
+<footer><div class="wrap">
+  <span>Tiramemsu · MIT OR Apache-2.0 · <a href="https://github.com/Volland/tiramemsu">github.com/Volland/tiramemsu</a></span>
+  <span><a href="../">Home</a> · <a href="./">All articles</a></span>
+  <span><a href="../impressum.html">Impressum</a> · <a href="../datenschutz.html">Datenschutz</a> · <a href="../agb.html">AGB</a></span>
+</div></footer>
+</body>
+</html>

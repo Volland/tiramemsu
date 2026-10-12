@@ -9,7 +9,7 @@ An embedded graph database on SQLite. Every fact has an id, so facts can carry l
 
 <p align="center"><a href="site/articles/layered-graphs.html">Layered graphs, explained</a> · <a href="site/articles/tiramemsu-vs-oxilite.html">Tiramemsu vs oxilite</a> · <a href="site/articles/metagraphs.html">Metagraphs</a> · <a href="lat.md/">Design (lat.md)</a> · <a href="openspec/specs/">Specs (OpenSpec)</a></p>
 
-> **Status: new.** Designed and implemented in September and October 2026 as one Rust library, released as 0.6.0 on crates.io (`tiramemsu`, plus the `tiramemsu-mcp` server) and PyPI (`tiramemsu`); the Node.js package `@tiramemsu/node` is built in [`bindings/`](bindings/) but not yet on npm. There is no network server; it runs on rusqlite natively and on SQLite compiled to WebAssembly in the browser. What is measured and what is not is listed under [Status](#status).
+> **Status: new.** Designed and implemented in September and October 2026 as one Rust library, released as 0.6.0 on crates.io (`tiramemsu`, plus the `tiramemsu-mcp` server), PyPI (`tiramemsu`) and npm (`@tiramemsu/node`). There is no network server; it runs on rusqlite natively and on SQLite compiled to WebAssembly in the browser. What is measured and what is not is listed under [Status](#status).
 
 ## Why
 
@@ -28,7 +28,7 @@ A knowledge graph stores facts. An agent also needs to say *how sure am I*, *whe
 - **Named graphs as tags.** A graph is a node, or a statement, and membership is one more layer statement. `GRAPH`, `FROM`, `FROM NAMED` and `WITH` work with no new column or table.
 - **Metagraphs.** Edges are vertices (statement ids), and vertices and edges are containers (graphs named by a node or a statement). Nesting, fold and unfold are ordinary statements, so they travel in time.
 - **Bulk import.** An opt-in import session commits chunks as ordinary atomic transactions, holds the write lease, skips the per-commit `ANALYZE`, and refreshes planner statistics once when finished. Progress counts committed rows and rejected chunks; cancelling keeps every committed chunk.
-- **Vector recall.** Store the embeddings your model computes (`define_embedding_model`, `set_embedding`) beside the facts, in the same file and transaction, append-only. `View::vector_search`, SPARQL `?e tm:vectorMatch "[…]"` and Cypher `CALL tiramemsu.vector.search(...)` run one exact, view-aware search: as-of, history, valid time and graphs filter before ranking, so time travel never loses a hit to an index cut, and it works on every SQLite build including WASM. `View::recall` fuses text and vector recall by reciprocal rank and can expand each hit to its layers. Design: [`docs/vector-architecture.md`](docs/vector-architecture.md).
+- **Vector recall.** Store the embeddings your model computes (`define_embedding_model`, `set_embedding`) beside the facts, in the same file and transaction, append-only. `View::vector_search`, SPARQL `?e tm:vectorMatch "[…]"` and Cypher `CALL tiramemsu.vector.search(...)` run one exact, view-aware search: as-of, history, valid time and graphs filter before ranking, so time travel never loses a hit to an index cut, and it works on every SQLite build including WASM. `View::recall` fuses text and vector recall by reciprocal rank and can expand each hit to its layers. Since 0.6 the query languages write too: Cypher `CREATE VECTOR INDEX` / `DROP INDEX` / `SHOW VECTOR INDEXES` and `CALL tiramemsu.vector.setEmbedding(...)`, SPARQL Update `tm:vectorEmbedding`. Samples: [Vectors](#vectors) below and the [vector cookbook](https://www.tiramemsu.com/articles/vector-cookbook.html). Design: [`docs/vector-architecture.md`](docs/vector-architecture.md).
 - **Text recall.** Opt-in FTS5 recall over string values (inline short strings included): `View::text_search`, SPARQL `?e tm:textMatch "words"` and Cypher `CALL tiramemsu.text.search(...)` share one operation. Hits respect as-of, history, valid time and graphs, and carry a lexical score plus evidence (confidence, confirmations, authors, when added); absent evidence is reported as absent, and ties break on the statement id.
 - **Cyclic joins.** Opt-in native leapfrog triejoin for pure cyclic patterns (triangles and longer cycles) as the `tm_lftj` table function: `OpenOptions::planner.lftj`. It returns exactly the SQL rows (set or bag semantics, per-pattern views, graphs, provenance), routes only when enabled, installed, applicable and the size estimate agrees, and `explain_sparql` names the route or the reason it stayed in SQL.
 - **Bounded calls.** Opt-in query budgets: a deadline, cancellation from another thread, a reader-pool timeout and row or byte limits per operation. A stopped write commits nothing, and an over-budget result is an error, never a truncated answer.
@@ -147,6 +147,90 @@ SELECT ?c ?s WHERE { v:alice v:worksAt v:acme {| v:confidence ?c ; v:source ?s |
 ```cypher
 MATCH (a)-[r:worksAt]->(c), (b:Belief)-[:supportedBy]->(r) RETURN a, c, r.confidence, b
 ```
+
+## Vectors
+
+A vector index is an embedding model: dimensions, a metric (`cosine`, `dot`, `l2`) and an encoding (`f32`, `f16`). Your application computes the embeddings; tiramemsu stores them with the statements they describe, in the same transaction, and searches them exactly inside any view. Every sample below runs against the published 0.6 packages.
+
+**Create an index, add vectors, search, drop: Cypher.** A short name such as `minilm` is the IRI `urn:tiramemsu:v:minilm` (`v:minilm` in SPARQL).
+
+```cypher
+CREATE VECTOR INDEX minilm IF NOT EXISTS OPTIONS {dimensions: 384, metric: 'cosine'}
+
+MATCH (:Person {name: 'Alice'})-[r:visited]->(:City {name: 'Lisbon'})
+CALL tiramemsu.vector.setEmbedding(r, 'minilm', $vector) YIELD stored
+RETURN stored
+
+UNWIND $rows AS row
+MATCH (:Trip {name: row.name})-[r:note]->()
+CALL tiramemsu.vector.setEmbedding(r, 'minilm', row.vector) YIELD stored
+RETURN row.name, stored
+
+CALL tiramemsu.vector.search('minilm', $query, {limit: 5, predicates: ['visited']})
+YIELD subject, predicate, object, similarity, rank
+RETURN subject, object, similarity, rank
+
+SHOW VECTOR INDEXES
+DROP INDEX minilm IF EXISTS
+```
+
+**The same in SPARQL.** The definition is written as its `sys:` statements, and `tm:vectorEmbedding` (a JSON array in a string) with `tm:vectorModel` embeds a statement, here a new one through an annotation and existing ones through `~ ?e`:
+
+```sparql
+PREFIX sys: <urn:tiramemsu:sys:>
+INSERT DATA {
+  <urn:example:minilm> sys:dimensions 384 ; sys:metric "cosine" .
+  v:alice v:note "met Alice at the Lisbon offsite"
+    {| tm:vectorEmbedding "[0.12, -0.4, …]" ; tm:vectorModel <urn:example:minilm> |} }
+
+INSERT { ?e tm:vectorEmbedding "[0.1, 0.9, …]" ; tm:vectorModel <urn:example:minilm> }
+WHERE  { ?p v:visited ?c ~ ?e . ?c v:name "Oslo" }
+
+SELECT ?o ?sim WHERE {
+  ?e tm:vectorMatch "[0.1, 0.8, …]" ; tm:vectorModel <urn:example:minilm> ;
+     tm:vectorSimilarity ?sim ; tm:vectorLimit 5 .
+  ?s ?p ?o ~ ?e }
+
+DELETE DATA { <urn:example:minilm> sys:dimensions 384 }   # drops the index
+```
+
+**Python, Node.js and Rust** (`embed` is your model):
+
+```python
+with db.transact() as tx:
+    tx.define_embedding_model("urn:example:minilm", 384, metric="cosine")
+    e = tx.assert_(alice, note, "met Alice at the Lisbon offsite")
+    tx.set_embedding(e, "urn:example:minilm", embed("met Alice at the Lisbon offsite"))
+
+for hit in db.now().vector_search("urn:example:minilm", embed("trip to Portugal"), limit=5):
+    print(hit.rank, hit.similarity, hit.o)
+db.as_of(tx=41).vector_search("urn:example:minilm", embed("trip to Portugal"))  # what it knew then
+db.now().unembedded("urn:example:minilm", limit=100)                             # still needs a vector
+```
+
+```js
+db.transact((tx) => {
+  tx.defineEmbeddingModel("urn:example:minilm", 384, { metric: "cosine" });
+  const e = tx.assert(alice, note, "met Alice at the Lisbon offsite");
+  tx.setEmbedding(e, "urn:example:minilm", embed("met Alice at the Lisbon offsite"));
+});
+const { hits } = db.now().vectorSearch("urn:example:minilm", embed("trip to Portugal"), { limit: 5 });
+```
+
+```rust
+let model = Value::iri("urn:example:minilm");
+db.transact(TxOptions::default(), |tx| {
+    tx.define_embedding_model(model.clone(), &EmbeddingModel::new(384))?;
+    let e = tx.assert(v("alice"), v("note"), Value::str(text), Valid::ALWAYS)?.eid();
+    tx.set_embedding(e, model.clone(), &embed(text))?;
+    Ok(())
+})?;
+let m = db.now().encode(&model)?.unwrap();
+let hits = db.now().vector_search(&VectorQuery::new(m, embed("trip to Portugal")))?.hits;
+// tx.drop_embedding_model(model) drops it: vectors stay, past views still search them
+```
+
+Rules: a vector of the wrong length is `InvalidQuery`; a different vector for the same index and statement is `EmbeddingConflict` (vectors are append-only, so a better model is a new index); a dropped index is gone now but answers as of before the drop, and comes back if created again with the same definition. Over MCP the agent gets `define_embedding_model`, `set_embedding`, `vector_search`, `recall` and `unembedded`.
 
 ## Build and test
 
