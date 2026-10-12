@@ -1,4 +1,4 @@
-% Preprint draft (revision 3). Build instructions: README.md.
+% Preprint draft (revision 4). Build instructions: README.md.
 \documentclass[11pt]{article}
 \usepackage[T1]{fontenc}
 \usepackage[utf8]{inputenc}
@@ -38,7 +38,7 @@
 \author{Volodymyr Pavlyshyn\\[2pt]\small Independent researcher\\
 \small\href{mailto:pavlyshyn@tiramemsu.com}{pavlyshyn@tiramemsu.com}\quad
 \small\href{https://tiramemsu.com}{tiramemsu.com}}
-\date{Revision 3, 11 October 2026}
+\date{Revision 4, 12 October 2026}
 \hypersetup{pdftitle={When Is a Temporal Statement Store a Statement Graph?},pdfauthor={Volodymyr Pavlyshyn}}
 \begin{document}
 \maketitle
@@ -56,14 +56,20 @@ one-line operator, computed by a linear-time topological peel that also yields a
 export order. When content is immutable, records are never deleted and inserts
 reference only existing records, the whole history is closed, so exporting the history rather than a snapshot loses only cycles created by
 atomic correction, and a per-record bit maintained at insert time turns export into
-a filter scan. \emph{What is dropped:} snapshot export additionally drops
+a filter scan; a batch-local check at correction time removes even those cycles.
+\emph{What is dropped:} snapshot export additionally drops
 supersession lineage, whose targets are retracted; a dual reference-closure keeps it
 by adding the retracted targets. \emph{What is reported:} every omitted record with
 a reason. An explicit encoding into the RDF-star branch of the OneGraph image, with
 transaction and valid time as reserved statements, makes the roundtrip of the
-exportable history lossless. Proofs are by hand; a validator checks the
-constructions on exhaustive small stores and random protocol histories, and both
-counterexamples are traced through the tiramemsu engine.
+exportable history lossless, and conjunctive queries over the asserted part are answered
+identically up to a quoting bijection. Two contrasts locate the boundary: RDF~1.2
+reifiers name occurrences instead of nesting them and need neither closure nor
+acyclicity, but assert per triple, not per occurrence; the property-graph branch
+admits only edges and unreferenced properties, so it carries both clocks for edges
+alone. Proofs are by hand; a validator checks the constructions on exhaustive small
+stores and random protocol histories, and both counterexamples are traced through
+the tiramemsu engine.
 \end{abstract}
 
 \section{Introduction}
@@ -119,15 +125,22 @@ closed and its cycles lie inside single replay batches, so the history kernel dr
 only replay cycles and their dependents (Section~\ref{sec:history}).
 \item An explicit encoding into the RDF-star branch of the OneGraph image, extended
 with reserved time statements to a lossless roundtrip of the exportable bitemporal
-history (Section~\ref{sec:encoding}).
+history (Section~\ref{sec:encoding}), and a query-preservation result for
+conjunctive queries over its asserted part (Section~\ref{sec:queries}).
+\item Two boundary contrasts: an RDF~1.2 reifier encoding that exports every store,
+cycles included, and the exact direct-export condition for the property-graph
+branch (Section~\ref{sec:other}).
+\item An acyclic-replay rule, checkable on the replay batch alone, under which the
+whole history is always exportable (Section~\ref{sec:history}).
 \item A validator over exhaustive and random stores and protocol histories, and
 engine traces of both running-example corrections (Section~\ref{sec:validation}).
 \end{enumerate}
 The graph facts used are elementary: the kernel is the well-founded part of the
 reference relation, and its computation is Kahn's topological sort
 \cite{kahn1962topological}. The contribution is their application to temporal
-statement stores: which subset to export, what an exporter must report, and how
-time travels with it.
+statement stores, and their value is in the engine invariants they license: which
+subset to export, which rule a writer must enforce so that nothing is lost, what one
+stored bit buys, what an exporter must report, and how time travels with it.
 
 \paragraph{Relation to earlier work.}
 The first companion paper develops temporal integrity, the distinction between
@@ -455,11 +468,46 @@ own batch. Hence a cycle cannot leave one batch. The description of $\Kernel(D)$
 Corollary~\ref{cor:obstructions} with no missing targets.
 \end{proof}
 
-Two practical consequences follow. First, a store can forbid cyclic corrections at
-the cost of an acyclicity check over the replay batch only, $O(|C|)$ with the peel
-of Section~\ref{sec:kernel}; then $\Kernel(D)=D$ always. The present paper covers
-both policies; we know of no use case that needs a correction cycle, and the engine
-permits one because replay substitutes the patch through $\sigma$ uniformly.
+Two practical consequences follow. First, cycles can be prevented where they arise.
+
+\begin{definition}[Acyclic-replay rule]\label{def:strict}
+Before a supersession writes anything, build the replay batch
+$B=\{\sigma(c):c\in C\}$ with its rewritten references, treat references outside
+$B$ as resolved, and peel $B$. If the peel leaves a record, abort the transaction.
+\end{definition}
+
+\begin{proposition}[Acyclic history]\label{prop:strict}
+Under C3--C5, and C6 restricted by the acyclic-replay rule, $D$ is closed and acyclic
+after every committed transaction, so $\Kernel(D)=D$, every exportable bit of
+Proposition~\ref{prop:bit} is set, and the full history exports with no omissions.
+The check costs $O(|C|)$ beyond the replay itself.
+\end{proposition}
+\begin{proof}
+Closure is Proposition~\ref{prop:history}. A cycle of $D$ lies inside one replay
+batch; references leaving the batch cannot be on it. The peel of
+Section~\ref{sec:kernel} over $B$ with external references resolved leaves a
+record exactly when $B$ contains a cycle or reaches one inside $B$, so an accepted
+batch contains no cycle. The batch has $|C|$ records with at most two references
+each.
+\end{proof}
+
+Under the rule the earlier history is acyclic, so the rewritten references among
+$B$ copy an acyclic structure, and only the patch can add a cycle. Since every
+member of $C$ reaches the root, a patch naming a member $c$ always closes the cycle
+$\sigma(\mathit{root})\refs\sigma(c)\refs^{*}\sigma(\mathit{root})$ (a self-reference
+when $c$ is the root). The rule therefore rejects exactly the patches that name a
+member of $C$, as in Example~\ref{ex:cycle}, and the abort happens before any
+retraction, with the offending member as its reason. tiramemsu~0.4.0 does not apply the rule: replay
+substitutes the patch through $\sigma$ uniformly, and the resulting cycle is live
+and closed, so the engine's own invariants (live endpoints, cascade, immutability)
+hold for it and do not call for rejection. Its regression test pins this
+behavior, and the engine rejects only a direct self-reference. Export is the first
+consumer that needs a DAG. The theorems cover both policies: with the rule,
+Proposition~\ref{prop:strict} applies; without it, Proposition~\ref{prop:history}
+bounds the loss to replay cycles and their dependents. The validator runs the
+protocol under both (Section~\ref{sec:validation}). We know of no use case that
+needs a correction cycle, and we recommend the rule for stores that export.
+
 Second, the kernel can be maintained incrementally.
 
 \begin{proposition}[Exportable bit]\label{prop:bit}
@@ -581,8 +629,8 @@ asserted; RDF-star consumers that ignore $\tau_d$ then see retracted facts as tr
 Taking $\mathcal A=S\cap D@t$ asserts the snapshot and quotes history; consumers
 that ignore time see exactly the snapshot, and the history remains attached as
 statements about quoted triples. This matches the RDF~1.2 separation of a
-proposition from its assertion \cite{w3c2026rdf12concepts}, although our image is
-the cited RDF-star one, not RDF~1.2 reifiers. Each record costs up to nine
+proposition from its assertion \cite{w3c2026rdf12concepts}; Section~\ref{sec:other}
+compares the two encodings. Each record costs up to nine
 additional statement vertices; sharing one time statement per distinct clock value
 would reduce that, at the price of a less direct decoder.
 
@@ -593,6 +641,177 @@ structurally. Its native named-graph meaning is not mapped to the target
 $\mathit{in}$; recovering the source dataset view is a separate interpretation step
 after decoding.
 
+\section{What queries see}\label{sec:queries}
+A structural roundtrip says nothing about answers. We state what a time-unaware
+RDF-star consumer of $T_f(S,\mathcal A)$ sees, for conjunctive queries.
+
+On the store side, an \emph{occurrence pattern} is $(x_s,x_p,x_o)$ with an optional
+statement variable, written $(x_s,x_p,x_o)\mathbin{\sim}x_e$ as in the
+\texttt{?s ?p ?o \textasciitilde{} ?e} patterns of tiramemsu; each position is a
+variable or a constant (a term or an eid). A basic graph pattern (BGP) is a finite set
+of occurrence patterns. A solution over $\mathcal A$ is a map $\mu$ from its variables
+to $\Term\cup\Stmt$ such that every pattern is matched by some $r\in\mathcal A$:
+$\mu(x_s)=s_r$, $\mu(x_p)=p_r$, $\mu(x_o)=o_r$ and $\mu(x_e)=e_r$. Answers are sets.
+
+For a closed, acyclic $S$ define the \emph{quoting map} $q$ by $q(t)=f(t)$ on terms
+and $q(e)=\langle\!\langle q(s_e)\;f(p_e)\;q(o_e)\rangle\!\rangle$ on eids of $S$,
+by recursion on rank; closure and acyclicity are exactly what make this recursion
+total and finite. On the RDF-star side, $q(P)$ replaces each constant $c$ by $q(c)$
+and each $\sim x_e$ by binding $x_e$ to the quoted form of the matched triple. Let
+$G_{\mathcal A}$ be the RDF-star graph asserted by $T_f(S,\mathcal A)$, without the
+triples whose predicate is reserved.
+
+\begin{proposition}[Query view]\label{prop:queries}
+Let $S$ be closed and acyclic and $\mathcal A\subseteq S$. Then
+(i) $G_{\mathcal A}=\{(q(s_r),f(p_r),q(o_r)):r\in\mathcal A\}$;
+(ii) $q$ is injective on $S$ exactly when no two records of $S$ share $(s,p,o)$;
+(iii) for every BGP $P$, $\mu\mapsto q\circ\mu$ maps the solutions of $P$ over
+$\mathcal A$ into the solutions of $q(P)$ over $G_{\mathcal A}$, and is a bijection
+onto them when $q$ is injective.
+\end{proposition}
+\begin{proof}
+(i) A membership $m_e$ asserts the triple denoted by the vertex $e$, and unfolding
+its role edges through nested statement vertices is the definition of $q$; the time
+statements' memberships assert triples with reserved predicates, which are removed.
+(ii) Records with equal content have equal images. Conversely let $q(x)=q(y)$ with
+$x\neq y$ and the rank of $x$ least. Quoted triples are disjoint from the image of
+$f$, so the two subjects are both terms, with equal images under the injective $f$,
+or both eids of lower rank, equal by minimality; likewise for objects, and
+predicates are equal; so $x$ and $y$ share content.
+(iii) As $q$ is injective on terms and on the eids it is applied to, a record $r$
+matches a pattern under $\mu$ exactly when its image triple matches $q(P)$ under
+$q\circ\mu$, with $\mu(x_e)=e_r$ sent to the quoted form $q(e_r)$. Every value in a
+solution over $G_{\mathcal A}$ lies in the image of $q$; when $q$ is injective it has
+a unique preimage, and the preimages form a solution over $\mathcal A$.
+\end{proof}
+
+The proposition extends to every SPARQL operator that combines solutions by
+equality of bound values (join, union, optional, minus, projection, and filters
+comparing bound values) whenever $q$ is injective, because $q$ is then a bijection
+on the values involved; it does not extend to
+built-ins that inspect term kind or lexical form, such as \texttt{isIRI} or
+\texttt{STR}, on statement-valued variables, which see a quoted triple instead of an
+eid. Injectivity on the records reachable from $\mathcal A$ suffices, by the same
+argument.
+
+\begin{corollary}[Snapshot answers]\label{cor:snapshot-queries}
+Let $S=\Kernel(D)$, $\mathcal A=S\cap D@t$ with $D@t$ closed, and let contents be
+distinct on the records reachable from $\mathcal A$. A time-unaware RDF-star consumer
+of $T_f(S,\mathcal A)$ answers every BGP exactly as the store answers it over
+$\Kernel(D@t)$, up to $q$.
+\end{corollary}
+\begin{proof}
+$\mathcal A=\Kernel(D@t)$ by Proposition~\ref{prop:bit}; apply
+Proposition~\ref{prop:queries}.
+\end{proof}
+
+The distinctness condition is not idle. A valid-time correction produces a new
+occurrence with the old content: in Example~\ref{ex:lineage} the history contains
+$e_1$ and $e_1'$, both $(\iri{:FRA},\iri{:route},\iri{:LHR})$. Then $q(e_1)=q(e_1')$, the
+history export lies in the OneGraph but not the RDF-star image
+(Theorem~\ref{thm:temporal}), the lineage $\ell$ reads as a quoted triple that
+supersedes itself, and an RDF-star join can combine annotations of $e_1$ and $e_1'$
+that the store keeps apart. The validator finds such merged answers on stores with
+duplicate content. Records outside $\Kernel(D@t)$ contribute no answers; they are
+the reported omissions. Time-travel queries must be rewritten to filter on the
+reserved clock predicates; we do not claim equivalence for them.
+
+\section{Other targets}\label{sec:other}
+The criterion of Theorem~\ref{thm:criterion} belongs to the Statement Graph model,
+which quotes by nesting. Two other targets show where the boundary moves.
+
+\subsection{RDF 1.2 reifiers}
+RDF~1.2 replaces quoted triples by \emph{triple terms}, allowed only as objects,
+and names a proposition by a \emph{reifier} $r$ in a reifying triple
+$(r,\iri{rdf:reifies},\langle\!\langle(s\;p\;o)\rangle\!\rangle)$; asserting the
+triple is a separate, ordinary triple $(s,p,o)$ \cite{w3c2026rdf12concepts}. Let
+$\iota$ map eids injectively to IRIs outside the image of $f$ and the reserved
+IRIs, and let $g$ be $\iota$ on eids and $f$ on terms.
+
+\begin{definition}[Reifier encoding $\Omega_f$]\label{def:rdf12}
+For $S\subseteq D$ and $\mathcal A\subseteq S$, $\Omega_f(S,\mathcal A)$ contains,
+for each $r\in S$, the reifying triple
+$(\iota(e_r),\iri{rdf:reifies},\langle\!\langle(g(s_r)\;f(p_r)\;g(o_r))\rangle\!\rangle)$
+and the time triples $(\iota(e_r),\tau_a,a_r)$, \dots, as in $T_f$; and, for each
+$r\in\mathcal A$, the asserted triple $(g(s_r),f(p_r),g(o_r))$.
+\end{definition}
+
+\begin{proposition}[Reifier roundtrip]\label{prop:rdf12}
+For every $S$, closed or not and acyclic or not, the reifying and time triples of
+$\Omega_f(S,\mathcal A)$ determine $S$ with all eight fields. The set
+$\{r\in S:(g(s_r),f(p_r),g(o_r))\in\Omega_f(S,\mathcal A)\}$ equals $\mathcal A$
+exactly when no record of $\mathcal A$ has the content of a record of
+$S\setminus\mathcal A$ under $g$.
+\end{proposition}
+\begin{proof}
+Reifiers are distinct, so each record has its own reifying triple, which $g^{-1}$
+decodes; references are IRIs in the triple term, which needs no target to exist and
+imposes no order, so neither closure nor acyclicity is used. An asserted triple is
+keyed by its content only, so a record outside $\mathcal A$ with the content of a
+record in $\mathcal A$ is read back as asserted, and only then.
+\end{proof}
+
+The comparison with $T_f$ is now precise. First, RDF~1.2 removes the membership
+statements: the incoming-edge condition that forced $(e,\mathit{in},G_D)$ onto
+unreferenced records has no counterpart, and assertion is the plain triple. Second,
+it removes the export boundary: a reference is a name, so the correction-cycle
+history of Example~\ref{ex:cycle}, which no Statement Graph export can carry whole,
+roundtrips; a dangling reference is an $\iota$-IRI without a reifying triple, which
+a consumer must detect itself, as in the leaf-substitution remark, but can, because
+$\iota$'s namespace is part of the dictionary. Closure and acyclicity become checks
+for consumers that dereference rather than conditions of the format. Third,
+assertion is per triple, not per occurrence: in Example~\ref{ex:lineage} the live
+$e_1'$ and the retracted $e_1$ share content, so the asserted triple cannot say
+which occurrence it asserts. The asserted set is then recovered from the clocks
+($\mathcal A=S\cap D@t$ from $\tau_a$ and $\tau_d$) or from a reserved per-reifier
+marker. $T_f$ has the dual failure: memberships assert per occurrence, but nesting
+merges equal contents (Section~\ref{sec:queries}). For reifier-only patterns,
+\texttt{?e rdf:reifies \textless{}\textless{}( ?s ?p ?o )\textgreater{}\textgreater{}}, the argument of
+Proposition~\ref{prop:queries} applies with $g$ in place of $q$, and $g$ is always
+injective. Both engine traces were exported this way, and their roundtrips were checked.
+
+\subsection{The property-graph branch}
+The LPG image \cite[Def.~5.3]{gelling2023bridging} types subject targets as nodes
+or statements, predicate targets as property keys or label sets, and object targets
+as values, nodes or label sets, and requires each statement to be exactly one of an
+edge statement (label-set predicate other than the reserved $l_p$, node subject and
+object), a node-label statement (predicate $l_p$, node subject, label-set object, no
+incoming edges) or a property statement (key predicate, node or statement subject,
+value object, no incoming edges); edge properties are property statements about edge
+statements. Fix a role conversion $h$ that sends node terms to nodes, a set
+$R$ of relationship-type IRIs to label sets, a set $K$ of property-key IRIs to keys,
+literals to values and, optionally, a label predicate to $l_p$ with class IRIs to
+label sets. Let $L_h(S)$ be $\SG(S)$ with leaves typed by $h$.
+
+\begin{proposition}[LPG direct export]\label{prop:lpg}
+For closed, acyclic $S$, $L_h(S)$ meets the typing and statement-kind conditions of
+the LPG image exactly when every record of $S$ is an \emph{edge} ($p\in R$, $s$ and
+$o$ node terms), a \emph{label} (label predicate, node subject, class object, not
+referenced) or a \emph{property} ($p\in K$, literal object, subject a node term or
+the eid of an edge record, not referenced).
+\end{proposition}
+\begin{proof}
+Unfold the conditions. No object target may be a statement, so no record has an eid
+object. Label and property statements have no incoming edges, so only edges can be
+referenced, and edges have node subjects, so references occur only as subjects of
+properties.
+\end{proof}
+
+Within the identity-preserving contract the property-graph branch therefore admits
+reference depth at most one. The running example's $e_1$ is an edge and $e_2$ an edge
+property, so $\{e_1,e_2\}$ exports; the lineage $\ell$ has an eid object, and
+annotations of annotations, annotated memberships and statement-valued objects
+(commitment C9 in Appendix~\ref{app:commitments}) are excluded. Turning such a
+record into a node invents a vertex, which condition (a) of
+Definition~\ref{def:direct} forbids. Unlike the kernel, the greatest LPG-exportable
+subset is not given by a monotone operator, since deleting a referrer can make a
+record unreferenced; we leave it open. Time travels only partly: clock properties
+need an incoming edge on their subject, which edges admit and properties and labels
+do not, so both clocks survive for edge records only. The image also has no
+assertion marker, so an LPG export presents everything it contains as current and
+should export a snapshot. The validator checks Proposition~\ref{prop:lpg} without
+label records.
+
 \section{Validation}\label{sec:validation}
 The accompanying \texttt{validate.py} uses only the Python standard library. It
 compares three kernel implementations, the peel, the component-based version of
@@ -600,7 +819,13 @@ revision~2 and literal Kleene iteration of $F_S$, with an oracle that enumerates
 subsets and tests closure and acyclicity by transitive closure. For each kernel it
 checks that the peel order is topological, builds $E_f$, checks the image
 conditions and identity preservation, decodes, and compares with temporal erasure,
-the RDF-star duplicate criterion and idempotence.
+the RDF-star duplicate criterion and idempotence. On every kernel it also checks
+Proposition~\ref{prop:queries} with $\mathcal A=S$ (the asserted graph is the
+$q$-image, $q$ is injective exactly for distinct contents, and four BGPs, including
+joins through statement variables, map into the RDF-star answers and onto them when
+contents are distinct) and Proposition~\ref{prop:lpg} against an independent check of
+the LPG typing and statement-kind conditions; on every store, kernel or not, it
+checks Proposition~\ref{prop:rdf12}.
 \input{validation-counts}
 
 The labeled stores use up to three records over one node, one literal, two
@@ -615,8 +840,13 @@ $\Kernel(D)$), Proposition~\ref{prop:bit} (bit equals kernel; closed snapshots a
 filtered by the bit), Proposition~\ref{prop:closure} for histories without
 supersession, Proposition~\ref{prop:dual} for every snapshot (the closure exists,
 adds only records retracted by then, and the kernel inclusions hold), and
-Theorem~\ref{thm:temporal} with $\mathcal A=\Kernel(D)\cap D@t$. A separate check
-compares $\Close_D(S)$ with the intersection of all closed supersets.
+Theorem~\ref{thm:temporal} with $\mathcal A=\Kernel(D)\cap D@t$. A second set of
+histories applies the acyclic-replay rule and checks Proposition~\ref{prop:strict}
+($D$ acyclic, $\Kernel(D)=D$, every bit set) and that the rule rejects exactly the
+patches naming a member of the cascade set. A separate check compares $\Close_D(S)$
+with the intersection of all closed supersets. Among stores with duplicate content
+the validator finds RDF-star answers with no store counterpart, so the ``onto'' part
+of Proposition~\ref{prop:queries}(iii) needs distinct contents.
 
 \paragraph{Engine traces.}
 The test \texttt{crates/tm-core/tests/export\_boundary.rs} runs both corrections of
@@ -624,7 +854,9 @@ the running example on the engine, on its native SQLite host and on a minimal ho
 and asserts the kernels stated in Examples~\ref{ex:lineage} and~\ref{ex:cycle}
 using a test-local peel. With \texttt{TM\_EXPORT\_TRACE} set it dumps the raw
 records; the validator recomputes both kernels from the dump with its own
-implementations and checks the temporal roundtrip on them. The engine was the
+implementations and checks the temporal roundtrip on them. It also exports both
+whole histories with $\Omega_f$: both roundtrip, and the asserted set is ambiguous
+exactly in the lineage trace, where $e_1'$ repeats the content of $e_1$. The engine was the
 repository working tree with version string 0.4.0, built on commit
 \href{https://github.com/Volland/tiramemsu/tree/5a55efc}{\texttt{5a55efc}}.
 
@@ -671,14 +903,18 @@ condition. The metagraph companion concerns different exact images
 \section{Limitations}\label{sec:limits}
 The proofs are by hand and the validator is a finite model check, not a mechanized
 proof. Engine evidence is limited to the two traced examples and to the engine's
-documentation and tests; the kernel is implemented in a test and in the validator,
-not as an engine API. Valid-time selection is outside the closure results. The
-encodings target the RDF-star branch of the cited OneGraph image: we claim neither
-an LPG image theorem, which would need role-specific term conversion and label
-statements, nor full RDF~1.2 interchange, nor any equivalence of SPARQL or Cypher
-query answers between the store and its export. The source dataset view and the
-named-graph meaning of source memberships are not transferred. The inherited
-storage measurements in Appendix~\ref{app:bench} are exploratory and were not rerun.
+documentation and tests; the kernel and the acyclic-replay rule are implemented in a
+test and in the validator, not as engine APIs. Valid-time selection is outside the
+closure results. The full encodings target the RDF-star branch of the cited OneGraph
+image. For the LPG branch we give the direct-export condition only, without a
+temporal roundtrip or the greatest exportable subset; for RDF~1.2 we give the
+reifier encoding, not a check against the full RDF~1.2 semantics or syntaxes. Query
+preservation covers conjunctive patterns and the SPARQL operators built on equality
+of bound values, under set semantics; it excludes time travel, aggregates,
+multiplicities, Cypher and built-ins that inspect statement-valued terms. The source
+dataset view and the named-graph meaning of source memberships are not transferred.
+The paper makes no performance claims: the peel is linear by construction, and we
+report no measurements.
 
 \section{Conclusion}
 A temporal statement store is a Statement Graph exactly on its closed, acyclic
@@ -686,9 +922,12 @@ record sets. Every selection has a greatest such subset, the least fixpoint of a
 one-line operator, computable by a topological peel and maintainable as one bit per
 record. Exporting the full history rather than a snapshot removes the lineage
 failure, so the only records an append-only store cannot export are replay cycles
-and their dependents, and a store that rejects cyclic corrections loses nothing. With
-time encoded as reserved statements, the exportable history roundtrips through the
-OneGraph image without loss. An exporter built on these results should state which
+and their dependents, and a store that applies the batch-local acyclic-replay rule
+loses nothing. With time encoded as reserved statements, the exportable history
+roundtrips through the OneGraph image without loss, and conjunctive queries over its
+asserted part are answered as in the store when contents are distinct. The boundary
+is a property of nested quoting: RDF~1.2 reifiers export every store but assert per
+triple, and the property-graph branch admits only edges and their properties. An exporter built on these results should state which
 of kernel and reference closure it applies, return each omitted record with its
 reason, and ship the dictionary its decoder requires.
 
@@ -715,34 +954,6 @@ C7 Two clocks & Lifetime and valid interval are columns; valid-time containment 
 C8 Occurrences & Parallel content can have distinct eids, episodes and annotations; a triple view collapses them. \\
 C9 Addressability & Any occurrence may be referenced, including property and membership records outside a direct LPG view. \\
 C10 Predicate schema & Optional cardinality, uniqueness and type policies constrain writes; they are not consequences of row shape. \\
-\bottomrule
-\end{tabular}
-\end{table}
-
-\section{Inherited layout measurements}\label{app:bench}
-Table~\ref{tab:bench} reproduces an earlier article \cite{pavlyshyn2026layoutarticle}
-and was not rerun. The script \path{bench/eid-vs-reifier/bench.py} compares a
-SQLite layout with an eid rowid and three content indexes (A) against a clustered
-$(s,p,o)$ key with two permutation indexes and a triple-term table (B), on 700\,000
-synthetic triples, 50\,000 annotations and 500 annotations of annotations. Neither
-layout has time or graph columns. Both use \texttt{synchronous=OFF}, A is timed
-before B, the write workloads use different targets, most query results are not
-compared, and no hardware or variance is recorded. The numbers do not isolate the
-cost of an identifier and support no claim about durable writes, temporal queries
-or Neptune.
-
-\begin{table}[h]
-\centering\small
-\caption{Exploratory timings reproduced from \cite{pavlyshyn2026layoutarticle}.}\label{tab:bench}
-\begin{tabular}{@{}lrr@{}}
-\toprule
-Measure & A: eid layout & B: reifier layout \\
-\midrule
-File size & 53.6\,MB & 35.5\,MB \\
-Point lookup & 2.7\,$\mu$s & 2.8\,$\mu$s \\
-A node's edges and confidence & 6.5\,$\mu$s & 8.7\,$\mu$s \\
-All edges with confidence $\ge95$ & 2.1\,ms & 5.2\,ms \\
-Write an edge and confidence & 35\,$\mu$s & 47\,$\mu$s \\
 \bottomrule
 \end{tabular}
 \end{table}

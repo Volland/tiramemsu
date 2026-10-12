@@ -38,6 +38,19 @@
     "states_with_cycles": 853
   },
   "dual_closure_checks": 3000,
+  "strict_policy_histories": {
+    "runs": 1500,
+    "steps": 8,
+    "rejected_supersessions": 337
+  },
+  "duplicate_stores_with_merged_answers": 33,
+  "per_store_checks": [
+    "kernel",
+    "encoding",
+    "query view",
+    "RDF 1.2 reifiers",
+    "LPG branch"
+  ],
   "focused_stores": 10,
   "rejected_image_mutations": 5,
   "same_transaction_boundary": "passed",
@@ -45,6 +58,6 @@
     "engine": "tm-core 0.4.0",
     "sha256": "ccb407ceb9c48115ee7500e092600533905349ef4fc038e2e74d8a5ab892822c"
   },
-  "script_sha256": "4c21be7a9baa436f971d3ae234ee48d7a165cdeea6e895d2b07aa636be0afdd3",
+  "script_sha256": "40128aabfbf3a54d9a46f23cafe2db0bca2ce97255d0e81a51ac6a12f0da94a6",
   "scope": "Finite models; engine evidence limited to the two traced examples."
 }

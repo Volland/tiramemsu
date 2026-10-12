@@ -1,5 +1,20 @@
 # Revision notes
 
+## Revision 4 — 12 October 2026
+
+Responds to a meta-review (recommendation: major revision for journals, minor for short/systems tracks) with four actionable points and three weaknesses.
+
+| Review point | Revision |
+| --- | --- |
+| 1. Fix or excise Appendix B | Excised. The inherited SQLite timings (`synchronous=OFF`, no variance, unequal workloads) supported no claim of the paper. Limitations now state that the paper makes no performance claims. |
+| 2. RDF 1.2 reification | New §9.1: reifier encoding Ω_f and Proposition (reifier roundtrip). Reifiers remove the membership statements and the export boundary itself (references are names; the cyclic engine history roundtrips) but assert per triple, so the asserted set is recoverable exactly when no asserted record shares content with an unasserted one, which fails on Example 1 (e1′ repeats e1). The dual failure of the RDF-star encoding is stated. |
+| 3. Engine enforcement of C6 | New Definition (acyclic-replay rule) and Proposition (acyclic history): a peel over the replay batch alone, O(\|C\|), rejects exactly the patches that name a member of the cascade set; then K(D)=D and every bit is set. The paper explains why tiramemsu 0.4.0 does not apply it (the cycle satisfies the engine's own invariants; export is the first DAG consumer) and recommends it for exporting stores. The engine itself was not changed. |
+| 4. Query equivalence | New §8: quoting map q, Proposition (query view) — asserted graph is the q-image, q injective iff contents are distinct, BGP solutions map into RDF-star solutions and bijectively onto them when injective; extension to equality-based SPARQL operators; Corollary for snapshot answers. Duplicate contents from valid-time corrections are shown to merge answers. |
+| Weakness: LPG branch | New §9.2: Proposition (LPG direct export) under Gelling et al. Def. 5.3 — only edges between node terms, unreferenced labels and unreferenced properties on nodes or edges; clocks travel for edges only; no assertion marker. Greatest LPG subset left open (not monotone). |
+| Weakness: elementary proofs | Introduction reframes the contribution around engine invariants (write rule, stored bit, omission reports, time). |
+
+Validation additions: per-store checks of the query view (four BGPs including joins through statement variables), RDF 1.2 roundtrip and asserted-set criterion on every store, LPG condition against an independent Def. 5.3 checker on every kernel; 1,500 protocol histories under the acyclic-replay rule (337 rejections, each confirmed to name a cascade member); 33 duplicate-content stores with RDF-star answers that have no store counterpart; both engine histories exported through RDF 1.2 (ambiguous asserted set exactly in the lineage trace). Not done: no new engine code, no LPG temporal theorem, no performance experiment.
+
 ## Revision 3 — 11 October 2026
 
 Responds to the second review (framing and scope). Retitled *When Is a Temporal Statement Store a Statement Graph?* to match the content, an export boundary rather than a physical claim.

@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""Finite checks for revision 3 of the export-boundary paper.
+"""Finite checks for revision 4 of the export-boundary paper.
 
 Mathematical models only, except the optional engine trace (engine-trace.json),
 which `cargo test -p tm-core --test export_boundary` writes when TM_EXPORT_TRACE is set.
 """
+from ast import literal_eval
 from collections import deque
 from itertools import permutations, product
 from pathlib import Path
@@ -19,6 +20,7 @@ SUPERSEDES = ('I', 'sys:supersedes')
 TIME = {'a': ('I', 'reserved:addedAt'), 'd': ('I', 'reserved:retractedAt'),
         'v1': ('I', 'reserved:validFrom'), 'v2': ('I', 'reserved:validTo')}
 RESERVED = {IN, DEFAULT, *TIME.values()}
+REIFIES = ('I', 'rdf:reifies')
 
 
 def ref(i):
@@ -271,6 +273,193 @@ def identity_preserving(rows, graph):
         for i, row in rows.items() for k, term in enumerate(row) if term[0] == 'E')
 
 
+# --------------------------------------------------------------------------- query view
+
+def denote(graph, vertex):
+    """RDF-star reading of a statement vertex: nested quoted triples, leaves as terms."""
+    return tuple(('Q', denote(graph, t)) if t[0] == 'E' else t for t in graph[vertex])
+
+
+def asserted_triples(graph):
+    """The RDF-star default graph: triples denoted by vertices that carry a membership."""
+    return {denote(graph, s) for (s, p, o) in graph.values()
+            if p == IN and graph[s][1] not in RESERVED}
+
+
+def quoting(rows, mapping):
+    """q: eids -> nested quoted triples, terms -> f(term). Well defined on closed, acyclic rows."""
+    q = {}
+
+    def term(t):
+        return eid(t[1]) if t[0] == 'E' else mapping[t]
+
+    def eid(i):
+        if i not in q:
+            s, p, o = rows[i]
+            q[i] = ('Q', (term(s), mapping[p], term(o)))
+        return q[i]
+    for i in rows:
+        eid(i)
+    return q, term
+
+
+QUERIES = (
+    # (?x ?p ?y ~ ?e)
+    ((('?x', '?p', '?y', '?e'),)),
+    # (?x P ?y ~ ?e) . (?e Q ?z)
+    ((('?x', P, '?y', '?e'), ('?e', Q, '?z', None))),
+    # (?e ?p ?y ~ ?f) . (?x P ?y2 ~ ?e)
+    ((('?e', '?p', '?y', '?f'), ('?x', P, '?y2', '?e'))),
+    # (?e Q ?z) . (?e P ?w): two annotations joined on one statement
+    ((('?e', Q, '?z', None), ('?e', P, '?w', None))),
+)
+
+
+def solutions(query, facts):
+    """Set-semantics BGP evaluation. `facts` are (s, p, o, statement) tuples."""
+    out = [{}]
+    for pattern in query:
+        nxt = []
+        for mu in out:
+            for fact in facts:
+                nu, ok = dict(mu), True
+                for slot, value in zip(pattern, fact):
+                    if slot is None:
+                        continue
+                    if isinstance(slot, str) and slot.startswith('?'):
+                        if nu.setdefault(slot, value) != value:
+                            ok = False
+                            break
+                    elif slot != value:
+                        ok = False
+                        break
+                if ok:
+                    nxt.append(nu)
+        out = nxt
+    return {tuple(sorted(mu.items())) for mu in out}
+
+
+MERGED = [0]
+
+
+def query_check(rows, graph, mapping):
+    """Proposition (query view): asserted RDF-star triples are the q-image of the records,
+    q is injective iff contents are distinct, and q maps BGP solutions onto RDF-star ones."""
+    q, term = quoting(rows, mapping)
+    image = {i: (term(s), mapping[p], term(o)) for i, (s, p, o) in rows.items()}
+    assert asserted_triples(graph) == set(image.values())
+    unique = len(set(rows.values())) == len(rows)
+    assert (len(set(q.values())) == len(q)) == unique
+    store = [row + (ref(i),) for i, row in rows.items()]
+    star = [t + (('Q', t),) for t in image.values()]
+    lift = lambda v: term(v) if v[0] == 'E' or v in mapping else v
+    for query in QUERIES:
+        here = solutions(query, store)
+        mapped_query = tuple(tuple(lift(x) if isinstance(x, tuple) else x for x in pat)
+                             for pat in query)
+        there = solutions(mapped_query, star)
+        moved = {tuple(sorted((k, lift(v)) for k, v in mu)) for mu in here}
+        # q maps store answers into RDF-star answers, onto and one-to-one when contents differ.
+        assert moved <= there
+        if unique:
+            assert moved == there and len(here) == len(there)
+        else:
+            MERGED[0] += moved != there
+
+
+# --------------------------------------------------------------------------- RDF 1.2
+
+def eid_iri(i):
+    return ('I', 'eid:' + repr(i))
+
+
+def encode_rdf12(rows, asserted):
+    """Reifier encoding: (e rdf:reifies <<( s p o )>>) per record, eids named by IRIs,
+    plus the plain triple for asserted records. Needs neither closure nor acyclicity."""
+    terms = {t for row in rows.values() for t in row if t[0] != 'E'}
+    mapping = term_map(terms)
+    term = lambda t: eid_iri(t[1]) if t[0] == 'E' else mapping[t]
+    triples = set()
+    for i, (s, p, o) in rows.items():
+        tt = (term(s), term(p), term(o))
+        assert tt[0][0] in ('I', 'B') and tt[1][0] == 'I'
+        triples.add((eid_iri(i), REIFIES, ('TT', tt)))
+        if i in asserted:
+            triples.add(tt)
+    return triples, {v: k for k, v in mapping.items()}
+
+
+def decode_rdf12(triples, inverse):
+    back = lambda t: ref(literal_eval(t[1][4:])) if t[0] == 'I' and t[1].startswith('eid:') else inverse[t]
+    rows, flags = {}, set()
+    for s, p, o in triples:
+        if p == REIFIES:
+            i = literal_eval(s[1][4:])
+            rows[i] = tuple(back(t) for t in o[1])
+    for s, p, o in triples:
+        if p == REIFIES:
+            if o[1] in triples:
+                flags.add(literal_eval(s[1][4:]))
+    return rows, flags
+
+
+def rdf12_check(rows, asserted):
+    triples, inverse = encode_rdf12(rows, asserted)
+    back, flags = decode_rdf12(triples, inverse)
+    assert back == rows
+    ambiguous = any(rows[i] == rows[j] for i in asserted for j in rows if j not in asserted)
+    assert (flags == asserted) == (not ambiguous)
+    return ambiguous
+
+
+# --------------------------------------------------------------------------- LPG branch
+
+def lpg_type(term):
+    """Role-specific conversion g: nodes -> N, P -> relationship label set, Q -> key, literals -> V."""
+    if term[0] in ('N', 'X'):
+        return 'node'
+    if term == P:
+        return 'labels'
+    if term == Q:
+        return 'key'
+    if term[0] == 'L':
+        return 'value'
+    return None
+
+
+def lpg_image_valid(rows):
+    """Gelling et al. Def. 5.3 on SG(rows): role typing plus edge/property statement kinds."""
+    incoming = {i: 0 for i in rows}
+    for row in rows.values():
+        for t in (row[0], row[2]):
+            if t[0] == 'E':
+                incoming[t[1]] += 1
+    kind = lambda t: 'stmt' if t[0] == 'E' else lpg_type(t)
+    for i, (s, p, o) in rows.items():
+        ks, kp, ko = kind(s), kind(p), kind(o)
+        if ks not in ('node', 'stmt') or kp not in ('key', 'labels') or ko not in ('value', 'node', 'labels'):
+            return False
+        if kp == 'labels' and not (ks == 'node' and ko == 'node'):
+            return False
+        if kp == 'key' and not (ko == 'value' and not incoming[i]):
+            return False
+    return True
+
+
+def lpg_direct(rows):
+    """Characterization: edges between node terms; unreferenced properties on nodes or edges."""
+    edge = lambda r: r[1] == P and lpg_type(r[0]) == 'node' and lpg_type(r[2]) == 'node'
+    referenced = {t[1] for r in rows.values() for t in (r[0], r[2]) if t[0] == 'E'}
+    for i, r in rows.items():
+        if edge(r):
+            continue
+        if r[1] != Q or lpg_type(r[2]) != 'value' or i in referenced:
+            return False
+        if not (lpg_type(r[0]) == 'node' or (r[0][0] == 'E' and edge(rows[r[0][1]]))):
+            return False
+    return True
+
+
 # --------------------------------------------------------------------------- checks
 
 def check(rows, with_oracle=True):
@@ -288,6 +477,9 @@ def check(rows, with_oracle=True):
     unique = len(set(result.values())) == len(result)
     assert image_valid(graph, leaves, rdf_star=True) == unique
     assert (result == rows) == oracle_admissible(rows, set(rows))
+    query_check(result, graph, term_map({t for r in result.values() for t in r if t[0] != 'E'}))
+    assert lpg_image_valid(result) == lpg_direct(result)
+    rdf12_check(rows, {i for k, i in enumerate(sorted(rows, key=repr)) if k % 2 == 0})
     return result == rows
 
 
@@ -351,7 +543,9 @@ def random_stores(count, rng):
 class Store:
     """Restricted protocol plus engine-style supersession (replay with fresh eids + lineage)."""
 
-    def __init__(self):
+    def __init__(self, strict=False):
+        self.strict = strict
+        self.rejected = 0
         self.rows, self.t, self.next, self.batch = {}, 0, 0, {}
         self.exportable = {}
         self.supersessions = 0
@@ -420,9 +614,23 @@ class Store:
             patch = rng.choice(candidates)
             if patch[0] == 'E' and patch[1] in members:
                 patch = ref(sigma[patch[1]])
+            remap = lambda x: ref(sigma[x[1]]) if x[0] == 'E' and x[1] in sigma else x
+            if self.strict:
+                # Acyclic-replay rule: peel the replay batch alone before writing anything.
+                batch = {sigma[j]: (remap(self.rows[j][0]), self.rows[j][1],
+                                    patch if j == root else remap(self.rows[j][2]))
+                         for j in members}
+                inside = {k: tuple(t if t[0] != 'E' or t[1] in batch else NODE for t in r)
+                          for k, r in batch.items()}
+                cyclic = len(peel(inside)[0]) < len(inside)
+                # The rule rejects exactly the patches that name a member of the cascade set.
+                assert cyclic == (patch[0] == 'E' and patch[1] in batch)
+                if cyclic:
+                    self.next -= len(members)
+                    self.rejected += 1
+                    return
             for j in members:
                 self.retract(j)
-            remap = lambda x: ref(sigma[x[1]]) if x[0] == 'E' and x[1] in sigma else x
             for j in sorted(members):
                 s, p, o, _, _, v1, v2 = self.rows[j]
                 o = patch if j == root else remap(o)
@@ -449,6 +657,21 @@ def cycle_vertices(rows):
                 seen.add(i)
                 stack.extend(adjacency[i])
     return out
+
+
+def strict_runs(count, steps, rng):
+    """Under the acyclic-replay rule D stays acyclic, K(D) = D and every bit is set."""
+    rejected = 0
+    for _ in range(count):
+        store = Store(strict=True)
+        for _ in range(steps):
+            store.step(rng)
+            content = store.content()
+            assert closed(content) and not cycle_vertices(content)
+            assert kernel(content) == content
+            assert all(store.exportable.values())
+        rejected += store.rejected
+    return rejected
 
 
 def protocol_runs(count, steps, rng):
@@ -580,6 +803,9 @@ def engine_trace():
         graph, leaves, inverse = encode_temporal(k, set(case['now_eids']) & k.keys())
         assert image_valid(graph, leaves)
         assert decode_temporal(graph, inverse) == (k, set(case['now_eids']) & k.keys())
+        # The whole history, cycle included, roundtrips through RDF 1.2 reifiers; the asserted
+        # set is ambiguous exactly in Example 1, where e1' repeats the content of retracted e1.
+        assert rdf12_check(content, set(case['now_eids'])) == (name == 'lineage')
     assert data['lineage']['kernel_history'] == [1, 2, 3, 4, 5]
     assert data['lineage']['kernel_now'] == [3, 4]
     assert data['correction_cycle']['kernel_history'] == [1, 2]
@@ -607,6 +833,8 @@ def main():
     runs, steps = 1500, 8
     snapshots, cyclic = protocol_runs(runs, steps, rng)
     dual = dual_minimality(3000, rng)
+    strict_count = 1500
+    strict_rejected = strict_runs(strict_count, steps, rng)
     focused, mutations = focused_checks()
     trace = engine_trace()
     total = sum(item['candidates'] for item in counts)
@@ -619,6 +847,11 @@ def main():
                                       'snapshots_checked': snapshots,
                                       'states_with_cycles': cyclic},
                'dual_closure_checks': dual,
+               'strict_policy_histories': {'runs': strict_count, 'steps': steps,
+                                           'rejected_supersessions': strict_rejected},
+               'duplicate_stores_with_merged_answers': MERGED[0],
+               'per_store_checks': ['kernel', 'encoding', 'query view', 'RDF 1.2 reifiers',
+                                    'LPG branch'],
                'focused_stores': focused, 'rejected_image_mutations': mutations,
                'same_transaction_boundary': 'passed', 'engine_trace': trace,
                'script_sha256': hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
@@ -632,7 +865,9 @@ def main():
         'up to three records, \\textbf{' + fmt(structures) + '} four-record reference structures up '
         'to relabeling, \\textbf{' + fmt(random_count) + '} random stores of four to seven records, '
         'and \\textbf{' + fmt(runs) + '} random protocol histories of ' + str(steps) + ' transactions ('
-        + fmt(snapshots) + ' snapshot checks, ' + fmt(cyclic) + ' states containing replay cycles); '
+        + fmt(snapshots) + ' snapshot checks, ' + fmt(cyclic) + ' states containing replay cycles), '
+        'and ' + fmt(strict_count) + ' histories under the acyclic-replay rule (' + fmt(strict_rejected)
+        + ' supersessions rejected); '
         + fmt(dual) + ' reference-closure minimality checks, ' + str(focused) + ' focused store cases, '
         + str(mutations) + ' rejected image mutations and the same-transaction boundary also passed; '
         + engine + 'with no disagreements.\\par\n')

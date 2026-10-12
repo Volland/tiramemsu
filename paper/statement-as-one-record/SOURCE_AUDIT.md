@@ -1,4 +1,11 @@
-# Source audit — revision 3, 11 October 2026
+# Source audit — revision 4, 12 October 2026
+
+## Revision 4 additions
+
+- Gelling et al. arXiv 2304.13097v1 Definition 5.3 (LPG image) re-read for §9.2: subject targets in nodes ∪ statements, predicate targets in keys ∪ label sets, object targets in values ∪ nodes ∪ label sets; edge, node-label and property statements, the latter two without incoming edges; edge properties as property statements about edge statements (Appendix 10.1). The proposition uses only these typing and statement-kind conditions.
+- RDF 1.2 terminology (triple terms in object position only, reifiers, `rdf:reifies`, assertion as a separate triple) follows the dated CR snapshot already cited; no claim about later standard status.
+- The engine's acceptance of correction cycles and rejection of direct self-reference: `lat.md/tests.md`, "Correction Remaps Patched References" and "Invalid Correction Endpoints Roll Back". The acyclic-replay rule is modelled in the validator only.
+- Appendix B (inherited timings) removed; the blog article is no longer cited.
 
 ## Revision 3 additions
 

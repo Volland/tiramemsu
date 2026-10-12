@@ -58,9 +58,11 @@ Evidence is exhaustive bounded enumeration, seeded randomized tests, SHACL and S
 
 ## Statement as One Record Paper
 
-`paper/statement-as-one-record/` holds the third paper, revision 3 titled "When Is a Temporal Statement Store a Statement Graph?", on exporting occurrence records to Statement Graphs and the OneGraph image.
+`paper/statement-as-one-record/` holds the third paper, revision 4 titled "When Is a Temporal Statement Store a Statement Graph?", on exporting occurrence records to Statement Graphs and the OneGraph image.
 
 It proves that identity-preserving export exists exactly for closed, acyclic record sets; defines the export kernel as the least fixpoint of the reference operator (the greatest such subset, computed by a topological peel and maintainable as one bit per record) and the dual reference closure; shows that the append-only full history is closed, so its kernel drops only replay cycles ([[time-model#Operations#Supersede]]); and gives a lossless temporal encoding into the RDF-star branch of the OneGraph image.
+
+Revision 4 adds a batch-local acyclic-replay rule under which the whole history exports (modelled in the validator, not applied by the engine), a query-view result for conjunctive queries through the quoting map, an RDF 1.2 reifier encoding that needs neither closure nor acyclicity but asserts per triple, and the direct-export condition for the LPG branch. The inherited benchmark appendix was removed.
 
 `validate.py` checks these on exhaustive and random stores and random protocol histories, and recomputes the kernels from `engine-trace.json`, which [[tests#Export Boundary]] writes when `TM_EXPORT_TRACE` is set. `build.py` refuses a stale validation. `SOURCE_AUDIT.md` records which claims were checked against primary sources and `REVISION_NOTES.md` maps review points to changes.
 
