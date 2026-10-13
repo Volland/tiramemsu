@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1456 700" font-family="Helvetica Neue, Helvetica, Arial, sans-serif">
+<title>Beyond single parenthood</title>
+<defs>
+<marker id="ck" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="#3b2418"/></marker>
+<marker id="pk" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="#d2456a"/></marker>
+</defs>
+<rect width="1456" height="700" fill="#fffaf0"/>
+<text x="60.0" y="56.0" font-size="16" fill="#6b5443" font-weight="700">A REAL PARALLEL FORK: TWO WEB SEARCHES, ONE NEXT STEP</text>
+<line x1="375.4" y1="220" x2="856.3" y2="220" stroke="#3b2418" stroke-width="4" marker-end="url(#ck)"/>
+<path d="M253.4 248 C253.4 310.0 252.7 310.0 268.7 392" fill="none" stroke="#3b2418" stroke-width="4" marker-end="url(#ck)"/>
+<line x1="414.7" y1="400" x2="930.3" y2="400" stroke="#3b2418" stroke-width="4" marker-end="url(#ck)"/>
+<line x1="1076.3" y1="400" x2="1163.4" y2="400" stroke="#3b2418" stroke-width="4" marker-end="url(#ck)"/>
+<path d="M880.3 248 C880.3 310.0 1147.4 310.0 1163.4 392" fill="none" stroke="#d2456a" stroke-width="4" stroke-dasharray="10 7" marker-end="url(#pk)"/>
+<rect x="233.4" y="194" width="140" height="52" rx="12" fill="#ffd98a" stroke="#3b2418" stroke-width="3"/><text x="303.4" y="226.0" font-size="17" fill="#2a1a10" font-weight="700" text-anchor="middle">search A</text><text x="303.4" y="182.0" font-size="15" fill="#6b5443" text-anchor="middle" font-family="Menlo, monospace">16.408 s</text>
+<rect x="272.7" y="374" width="140" height="52" rx="12" fill="#ffd98a" stroke="#3b2418" stroke-width="3"/><text x="342.7" y="406.0" font-size="17" fill="#2a1a10" font-weight="700" text-anchor="middle">search B</text><text x="342.7" y="452.0" font-size="15" fill="#6b5443" text-anchor="middle" font-family="Menlo, monospace">16.889 s</text>
+<rect x="860.3" y="194" width="140" height="52" rx="12" fill="#f6e2bf" stroke="#3b2418" stroke-width="3"/><text x="930.3" y="226.0" font-size="17" fill="#2a1a10" font-weight="700" text-anchor="middle">result A</text><text x="930.3" y="182.0" font-size="15" fill="#6b5443" text-anchor="middle" font-family="Menlo, monospace">24.080 s</text>
+<rect x="934.3" y="374" width="140" height="52" rx="12" fill="#f6e2bf" stroke="#3b2418" stroke-width="3"/><text x="1004.3" y="406.0" font-size="17" fill="#2a1a10" font-weight="700" text-anchor="middle">result B</text><text x="1004.3" y="452.0" font-size="15" fill="#6b5443" text-anchor="middle" font-family="Menlo, monospace">24.986 s</text>
+<rect x="1167.4" y="374" width="140" height="52" rx="12" fill="#ffd98a" stroke="#3b2418" stroke-width="3"/><text x="1237.4" y="406.0" font-size="17" fill="#2a1a10" font-weight="700" text-anchor="middle">fetch paper</text><text x="1237.4" y="452.0" font-size="15" fill="#6b5443" text-anchor="middle" font-family="Menlo, monospace">27.839 s</text>
+<text x="1020.3" y="300.0" font-size="18" fill="#d2456a" font-weight="700">v:consumed</text>
+<rect x="60" y="520" width="1336" height="140" rx="20" fill="#fff" stroke="#ecdcc0" stroke-width="3"/>
+<text x="90.0" y="560.0" font-size="18" fill="#2a1a10">Solid: v:caused, the single-parent CTEG. The harness logs the second parallel call under the first.</text>
+<text x="90.0" y="592.0" font-size="18" fill="#2a1a10">Dashed: v:consumed. The next step read both results, but only result B can be its parent.</text>
+<text x="90.0" y="624.0" font-size="18" fill="#6b5443">Both are statements in one graph, so the tree keeps its guarantees and the extra dependency is not lost.</text>
+</svg>

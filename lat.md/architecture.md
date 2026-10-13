@@ -361,6 +361,12 @@ The pages are plain HTML with one stylesheet (`site/style.css`), light and dark 
 
 `tiramemsu-long-read.md` is the source; `preview.html` is a self-contained copy for pasting into the Substack editor, rebuilt by `build-preview.sh` with pandoc. The illustrations are SVGs in `images/src/`, rendered to 1456 px PNGs, because Substack takes no SVG. The article avoids tables, which Substack cannot show, and `article/README.md` lists the title, captions and publishing steps.
 
+### CTEG Article
+
+`article/cteg/` holds a second article, on causal-temporal event graphs (Foldvik, arXiv 2604.17557) built on statements, published on Substack and as `site/articles/causal-temporal-event-graphs.html`.
+
+Its working example is the sanitized trace of the Claude Code session that wrote it (`code/trace.json`, made by `code/extract-trace.py`). `code/cteg-demo.mjs` loads that trace through the Node binding and runs every SPARQL query the article quotes, writing `code/queries.out.txt`; `code/gen-figures.py` draws the data figures from the same trace. The queries use reifiers, `tm:validFrom`, `tm:addedAt`, `validAt`, `asOf` and `SERVICE <urn:tiramemsu:tm:timeRespecting>` ([[query#Temporal Syntax]], [[query#Temporal Path Syntax]]), so a change there means re-running the demo and updating the article. The site page copies its SVGs to `site/assets/cteg/`.
+
 ## Crate Documentation and Publishing
 
 Each crate's `README.md` is its crates.io page and, through `#![doc = include_str!("../README.md")]`, its crate-level rustdoc, so every Rust block in it is a doctest.

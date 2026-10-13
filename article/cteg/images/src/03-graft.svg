@@ -1,0 +1,64 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1456 760" font-family="Helvetica Neue, Helvetica, Arial, sans-serif">
+  <title>Grafting a subagent's trace onto its parent</title>
+  <defs>
+    <marker id="ck" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M0 0L10 5L0 10z" fill="#3b2418"/></marker>
+    <marker id="pk" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M0 0L10 5L0 10z" fill="#d2456a"/></marker>
+  </defs>
+  <rect width="1456" height="760" fill="#fffaf0"/>
+  <text x="60" y="64" font-size="16" font-weight="700" fill="#6b5443" letter-spacing="1.5">SUBAGENT INVOCATION: BUILD LOCALLY, GRAFT ON RETURN</text>
+
+  <!-- parent lane -->
+  <text x="60" y="140" font-size="18" font-weight="700" fill="#2a1a10">Parent agent</text>
+  <g stroke="#3b2418" stroke-width="3">
+    <line x1="246" y1="200" x2="404" y2="200" marker-end="url(#ck)"/>
+    <line x1="476" y1="200" x2="634" y2="200" marker-end="url(#ck)"/>
+    <line x1="706" y1="200" x2="1144" y2="200" marker-end="url(#ck)"/>
+  </g>
+  <g stroke="#3b2418" stroke-width="3">
+    <circle cx="210" cy="200" r="36" fill="#ff8fa3"/>
+    <circle cx="440" cy="200" r="36" fill="#fff4d8"/>
+    <circle cx="670" cy="200" r="40" fill="#e8c9a0" stroke-width="5"/>
+    <circle cx="1180" cy="200" r="36" fill="#fff4d8"/>
+  </g>
+  <g font-size="22" font-weight="700" text-anchor="middle" fill="#2a1a10">
+    <text x="210" y="208">r₀</text><text x="440" y="208">e₁</text><text x="670" y="208">p</text><text x="1180" y="208">e₂</text>
+  </g>
+  <g font-family="Menlo, monospace" font-size="17" text-anchor="middle" fill="#6b5443">
+    <text x="210" y="266">t = 0</text><text x="440" y="266">t = 4</text><text x="1180" y="266">t = 24</text>
+  </g>
+  <text x="670" y="118" font-size="17" text-anchor="middle" fill="#2a1a10" font-weight="700">invocation</text>
+  <text x="670" y="142" font-family="Menlo, monospace" font-size="17" text-anchor="middle" fill="#6b5443">t = 10</text>
+  <text x="1180" y="296" font-size="16" text-anchor="middle" fill="#6b5443">continuation:</text>
+  <text x="1180" y="318" font-size="16" text-anchor="middle" fill="#6b5443">child of p</text>
+
+  <!-- subagent box -->
+  <rect x="520" y="390" width="880" height="300" rx="22" fill="#fff" stroke="#c9924f" stroke-width="3" stroke-dasharray="12 8"/>
+  <text x="548" y="428" font-size="18" font-weight="700" fill="#2a1a10">Subagent: its own local trace, its own type set</text>
+  <g stroke="#3b2418" stroke-width="3" fill="none">
+    <line x1="706" y1="540" x2="864" y2="540" marker-end="url(#ck)"/>
+    <path d="M936 540 C980 540 990 480 1044 480" marker-end="url(#ck)"/>
+    <path d="M936 540 C980 540 990 610 1044 610" marker-end="url(#ck)"/>
+    <line x1="1116" y1="610" x2="1244" y2="610" marker-end="url(#ck)"/>
+  </g>
+  <g stroke="#3b2418" stroke-width="3">
+    <circle cx="670" cy="540" r="36" fill="#ff8fa3"/>
+    <circle cx="900" cy="540" r="36" fill="#fff4d8"/>
+    <rect x="1044" y="456" width="72" height="48" rx="10" fill="#ffd98a"/>
+    <rect x="1044" y="586" width="72" height="48" rx="10" fill="#ffd98a"/>
+    <circle cx="1280" cy="610" r="36" fill="#f6e2bf"/>
+  </g>
+  <g font-size="22" font-weight="700" text-anchor="middle" fill="#2a1a10">
+    <text x="670" y="548">r</text><text x="900" y="548">s₁</text><text x="1080" y="488">s₂</text><text x="1080" y="618">s₃</text><text x="1280" y="618">s₄</text>
+  </g>
+  <g font-family="Menlo, monospace" font-size="16" text-anchor="middle" fill="#6b5443">
+    <text x="670" y="604">t = 12</text><text x="900" y="604">t = 15</text><text x="1080" y="530">t = 17</text><text x="1080" y="660">t = 18</text><text x="1280" y="674">t = 21</text>
+  </g>
+
+  <!-- graft edge -->
+  <path d="M670 244 L670 496" stroke="#d2456a" stroke-width="5" marker-end="url(#pk)"/>
+  <rect x="120" y="282" width="480" height="92" rx="16" fill="#ffe3ea" stroke="#d2456a" stroke-width="3"/>
+  <text x="144" y="318" font-size="20" font-weight="700" fill="#2a1018">graft: one edge (p, r)</text>
+  <text x="144" y="352" font-family="Menlo, monospace" font-size="19" fill="#2a1018">t(p) = 10  &lt;  t(r) = 12  ✓</text>
+
+  <text x="60" y="728" font-size="17" fill="#6b5443">Only the finished subagent graph is exposed to the parent; how it was built stays inside the subagent.</text>
+</svg>

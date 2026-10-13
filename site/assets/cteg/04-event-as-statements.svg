@@ -1,0 +1,65 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1456 860" font-family="Helvetica Neue, Helvetica, Arial, sans-serif">
+  <title>One CTEG event stored as statements with ids and two clocks</title>
+  <defs>
+    <marker id="ck" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M0 0L10 5L0 10z" fill="#3b2418"/></marker>
+    <marker id="pk" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M0 0L10 5L0 10z" fill="#d2456a"/></marker>
+  </defs>
+  <rect width="1456" height="860" fill="#fffaf0"/>
+  <text x="60" y="64" font-size="16" font-weight="700" fill="#6b5443" letter-spacing="1.5">A TOOL CALL AND ITS RESULT, FROM THE REAL TRACE, AS STATEMENTS</text>
+
+  <!-- nodes -->
+  <g stroke="#3b2418" stroke-width="3">
+    <rect x="120" y="230" width="250" height="64" rx="14" fill="#ffd98a"/>
+    <rect x="980" y="230" width="250" height="64" rx="14" fill="#f6e2bf"/>
+  </g>
+  <g font-family="Menlo, monospace" font-size="19" text-anchor="middle" fill="#2a1a10" font-weight="700">
+    <text x="245" y="269">ev-eb0a1af1</text><text x="1105" y="269">ev-a12e356f</text>
+  </g>
+
+  <!-- causal edge as a statement -->
+  <line x1="374" y1="262" x2="972" y2="262" stroke="#3b2418" stroke-width="4" marker-end="url(#ck)"/>
+  <rect x="470" y="196" width="400" height="44" rx="22" fill="#fff4d8" stroke="#3b2418" stroke-width="3"/>
+  <text x="670" y="225" text-anchor="middle" font-size="19" fill="#2a1a10"><tspan font-weight="700">e172</tspan>  v:caused</text>
+  <text x="670" y="300" text-anchor="middle" font-family="Menlo, monospace" font-size="16" fill="#6b5443">valid [11:31:57.279, +1 ms)</text>
+
+  <!-- annotation on the edge -->
+  <line x1="670" y1="196" x2="670" y2="132" stroke="#d2456a" stroke-width="3" stroke-dasharray="8 6" marker-end="url(#pk)" transform="rotate(180 670 164)"/>
+  <rect x="520" y="90" width="300" height="44" rx="12" fill="#ffe3ea" stroke="#d2456a" stroke-width="3"/>
+  <text x="670" y="119" text-anchor="middle" font-size="19" fill="#2a1018"><tspan font-weight="700">e173</tspan>  e172 v:latencyMs 4158</text>
+  <text x="836" y="119" font-size="16" fill="#d2456a">a fact about the link</text>
+
+  <!-- type statements -->
+  <line x1="245" y1="298" x2="245" y2="372" stroke="#3b2418" stroke-width="3" marker-end="url(#ck)"/>
+  <rect x="80" y="376" width="430" height="88" rx="14" fill="#fff" stroke="#3b2418" stroke-width="3"/>
+  <text x="104" y="410" font-size="19" fill="#2a1a10"><tspan font-weight="700">e129</tspan>  ev a v:ToolCall</text>
+  <text x="104" y="442" font-family="Menlo, monospace" font-size="16" fill="#6b5443">valid [11:31:53.121, 11:31:57.279)</text>
+
+  <line x1="1105" y1="298" x2="1105" y2="372" stroke="#3b2418" stroke-width="3" marker-end="url(#ck)"/>
+  <rect x="900" y="376" width="430" height="88" rx="14" fill="#fff" stroke="#3b2418" stroke-width="3"/>
+  <text x="924" y="410" font-size="19" fill="#2a1a10"><tspan font-weight="700">e167</tspan>  ev a v:ToolResult</text>
+  <text x="924" y="442" font-family="Menlo, monospace" font-size="16" fill="#6b5443">valid [11:31:57.279, +1 ms)</text>
+
+  <g font-size="17" fill="#2a1a10">
+    <text x="104" y="500">ev v:tool "Bash" · ev v:inSession v:session-main</text>
+    <text x="924" y="500">ev v:inSession v:session-main</text>
+  </g>
+
+  <!-- tx -->
+  <rect x="480" y="540" width="500" height="66" rx="14" fill="#f3ece0" stroke="#b8a58c" stroke-width="3"/>
+  <text x="730" y="570" text-anchor="middle" font-size="18" fill="#2a1a10"><tspan font-weight="700">tx 28</tspan> wrote e167–e173 at the store's clock</text>
+  <text x="730" y="594" text-anchor="middle" font-family="Menlo, monospace" font-size="16" fill="#6b5443">tx v:recordedBy "cteg-demo replay"</text>
+
+  <!-- mapping legend -->
+  <rect x="60" y="636" width="1336" height="190" rx="20" fill="#fff" stroke="#ecdcc0" stroke-width="3"/>
+  <text x="90" y="672" font-size="16" font-weight="700" fill="#6b5443" letter-spacing="1.5">THE PAPER'S NODE TABLE  →  TIRAMEMSU</text>
+  <g font-size="18" fill="#2a1a10">
+    <text x="90" y="710">type τ  →  the statement  ev a v:Type</text>
+    <text x="90" y="742">timestamp t  →  valid time of that statement</text>
+    <text x="90" y="774">parent reference  →  a v:caused statement with its own id</text>
+    <text x="90" y="806">session, payload  →  ordinary statements</text>
+    <text x="760" y="710" fill="#d2456a" font-weight="700">New: annotations on the causal link</text>
+    <text x="760" y="742" fill="#d2456a" font-weight="700">New: transaction time, when the store learned it</text>
+    <text x="760" y="774">Time queries use the engine:</text>
+    <text x="760" y="806" font-family="Menlo, monospace" font-size="16">validAt · asOf · timeRespecting</text>
+  </g>
+</svg>

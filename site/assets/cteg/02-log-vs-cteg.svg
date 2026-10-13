@@ -1,0 +1,68 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1456 780" font-family="Helvetica Neue, Helvetica, Arial, sans-serif">
+  <title>A linear log versus a causal-temporal event graph</title>
+  <defs>
+    <marker id="ck" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M0 0L10 5L0 10z" fill="#3b2418"/></marker>
+  </defs>
+  <rect width="1456" height="780" fill="#fffaf0"/>
+
+  <!-- left: log -->
+  <text x="60" y="64" font-size="16" font-weight="700" fill="#6b5443" letter-spacing="1.5">A LOG: ORDER, NOT CAUSE</text>
+  <rect x="60" y="90" width="560" height="600" rx="20" fill="#fff" stroke="#ecdcc0" stroke-width="3"/>
+  <g font-family="Menlo, monospace" font-size="19" fill="#2a1a10">
+    <text x="92" y="150">0.000</text><text x="200" y="150">prompt</text>
+    <text x="92" y="222">3.302</text><text x="200" y="222">reasoning</text>
+    <text x="92" y="294">11.548</text><text x="200" y="294">call A: list folders</text>
+    <text x="92" y="366">12.426</text><text x="200" y="366">call B: read docs</text>
+    <text x="92" y="438">12.935</text><text x="200" y="438" font-weight="700">result</text>
+    <text x="92" y="510">12.938</text><text x="200" y="510" font-weight="700">result</text>
+    <text x="92" y="582">14.698</text><text x="200" y="582">reasoning</text>
+  </g>
+  <g stroke="#ecdcc0" stroke-width="2">
+    <line x1="84" y1="186" x2="596" y2="186"/><line x1="84" y1="258" x2="596" y2="258"/><line x1="84" y1="330" x2="596" y2="330"/>
+    <line x1="84" y1="402" x2="596" y2="402"/><line x1="84" y1="474" x2="596" y2="474"/><line x1="84" y1="546" x2="596" y2="546"/>
+  </g>
+  <g fill="#d2456a" font-size="40" font-weight="700">
+    <text x="520" y="452">?</text><text x="520" y="524">?</text>
+  </g>
+  <text x="92" y="650" font-size="18" fill="#6b5443">Which result came from which call?</text>
+  <text x="92" y="676" font-size="18" fill="#6b5443">Which one did the next step use?</text>
+
+  <!-- arrow between -->
+  <line x1="650" y1="390" x2="760" y2="390" stroke="#3b2418" stroke-width="4" marker-end="url(#ck)"/>
+
+  <!-- right: CTEG -->
+  <text x="800" y="64" font-size="16" font-weight="700" fill="#6b5443" letter-spacing="1.5">A CTEG: ONE PARENT, TIME INCREASES</text>
+  <g stroke="#3b2418" stroke-width="3" fill="none">
+    <line x1="1050" y1="148" x2="1050" y2="196" marker-end="url(#ck)"/>
+    <path d="M1050 248 C1050 280 920 270 920 300" marker-end="url(#ck)"/>
+    <path d="M1050 248 C1050 280 1180 270 1180 300" marker-end="url(#ck)"/>
+    <line x1="920" y1="352" x2="920" y2="420" marker-end="url(#ck)"/>
+    <line x1="1180" y1="352" x2="1180" y2="420" marker-end="url(#ck)"/>
+    <path d="M920 472 C920 520 1000 520 1020 552" marker-end="url(#ck)"/>
+  </g>
+  <g stroke="#3b2418" stroke-width="3">
+    <rect x="960" y="100" width="180" height="48" rx="24" fill="#ff8fa3"/>
+    <rect x="960" y="200" width="180" height="48" rx="24" fill="#fff4d8"/>
+    <rect x="820" y="304" width="200" height="48" rx="12" fill="#ffd98a"/>
+    <rect x="1080" y="304" width="200" height="48" rx="12" fill="#ffd98a"/>
+    <rect x="820" y="424" width="200" height="48" rx="12" fill="#f6e2bf"/>
+    <rect x="1080" y="424" width="200" height="48" rx="12" fill="#f6e2bf"/>
+    <rect x="960" y="556" width="180" height="48" rx="24" fill="#fff4d8"/>
+  </g>
+  <g font-size="19" text-anchor="middle" fill="#2a1a10" font-weight="700">
+    <text x="1050" y="131">prompt</text>
+    <text x="1050" y="231">reasoning</text>
+    <text x="920" y="335">call A</text><text x="1180" y="335">call B</text>
+    <text x="920" y="455">result A</text><text x="1180" y="455">result B</text>
+    <text x="1050" y="587">reasoning</text>
+  </g>
+  <g font-family="Menlo, monospace" font-size="16" fill="#6b5443">
+    <text x="1152" y="130">0.000</text><text x="1152" y="230">3.302</text>
+    <text x="824" y="380">11.548</text><text x="1084" y="380">12.426</text>
+    <text x="824" y="500">12.938</text><text x="1084" y="500">12.935</text>
+    <text x="1152" y="586">14.698</text>
+  </g>
+  <text x="800" y="650" font-size="18" fill="#2a1a10">Each event has exactly one cause.</text>
+  <text x="800" y="676" font-size="18" fill="#2a1a10">Times strictly increase down every branch.</text>
+  <text x="800" y="702" font-size="18" fill="#6b5443">B finished 3 ms first; the next step hangs under A’s result.</text>
+</svg>

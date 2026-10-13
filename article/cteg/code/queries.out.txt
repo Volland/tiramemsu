@@ -1,0 +1,227 @@
+root v:ev-bf7a21b0, graft committed in tx 229, last tx 271
+
+### 1. Rebuild the session: every event, its parent and its time
+SELECT ?t ?type ?label ?parent WHERE {
+  ?e v:inSession v:session-main ; a ?type .
+  OPTIONAL { ?e v:label ?label }
+  OPTIONAL { ?parent v:caused ?e ~ ?edge . }
+  ?e a ?type ~ ?occ . ?occ tm:validFrom ?t .
+  FILTER(?type != v:HarnessContext)
+} ORDER BY ?t
+--
+t | type | label | parent
+11:31:47.806 | Prompt | user message | 
+11:31:51.108 | Thinking | reasoning | ev-bf7a21b0
+11:31:51.525 | Message | I'll start by grounding in the project docs and site structu | ev-4d7a34ba
+11:31:53.121 | ToolCall | Search lat docs and list repo structure | ev-3c8b83d1
+11:31:57.279 | ToolResult | result | ev-eb0a1af1
+11:31:59.354 | ToolCall | Inspect article folders and an existing site article | ev-a12e356f
+11:32:00.232 | ToolCall | Read time model and temporal query docs | ev-bc23b59d
+11:32:00.741 | ToolResult | result | ev-04e93c07
+11:32:00.744 | ToolResult | result | ev-bc23b59d
+11:32:02.504 | Thinking | reasoning | ev-99cdf370
+11:32:02.505 | Message | Now the research on the original CTEG paper. | ev-68f53191
+11:32:02.635 | ToolCall | select:WebSearch,WebFetch | ev-98d390bb
+11:32:02.785 | ToolResult | result | ev-d389f20e
+11:32:04.214 | ToolCall | "causal temporal event graph" paper | ev-64e8ecb8
+11:32:04.695 | ToolCall | "temporal event graph" causal LLM agents memory CTEG | ev-7578de2e
+… 73 rows
+
+### 2. How big is it: events per type (whole graph, both agents)
+SELECT ?type (COUNT(?e) AS ?n) WHERE { ?e a ?type } GROUP BY ?type ORDER BY DESC(?n)
+--
+type | n
+HarnessContext | 180
+ToolCall | 28
+ToolResult | 28
+Thinking | 21
+Message | 8
+Prompt | 3
+SubagentCall | 1
+SubagentReturn | 1
+(8 rows)
+
+### 3. Why did this happen? Typed causal ancestors of the subagent's last tool call
+SELECT ?anc ?type ?label WHERE {
+  ?anc v:caused+ v:ev-d4f93438 ; a ?type .
+  OPTIONAL { ?anc v:label ?label }
+  FILTER(?type IN (v:Prompt, v:SubagentCall, v:ToolCall))
+}
+--
+anc | type | label
+ev-bf7a21b0 | Prompt | user message
+ev-c5847514 | Prompt | task prompt
+ev-fda184ae | Prompt | user message
+ev-eb0a1af1 | ToolCall | Search lat docs and list repo structure
+ev-bc23b59d | ToolCall | Inspect article folders and an existing site article
+ev-d389f20e | ToolCall | select:WebSearch,WebFetch
+ev-7578de2e | ToolCall | "causal temporal event graph" paper
+ev-d04f4ce3 | ToolCall | "temporal event graph" causal LLM agents memory CTEG
+ev-709e4d9b | ToolCall | https://arxiv.org/html/2604.17557
+ev-781adcad | ToolCall | https://arxiv.org/html/2604.17557
+ev-c755d3c0 | ToolCall | PROV-AGENT Unified Provenance for Tracking AI Agent Interactions in Ag
+ev-e1824bd6 | ToolCall | Find SPARQL statement and time vocabulary in query docs
+ev-8fcddb7e | ToolCall | Read statement-graphs article and check Python binding
+ev-9f515431 | ToolCall | Read SPARQL frontend docs and Node binding README
+ev-d5e27db3 | ToolCall | Inspect this session's transcript timestamps and tool calls
+… 22 rows
+
+### 4. What did it cause? Everything downstream of the subagent call
+SELECT ?agent (COUNT(?d) AS ?n) WHERE {
+  ?call a v:SubagentCall . ?call v:caused+ ?d . ?d v:agent ?agent
+} GROUP BY ?agent
+--
+agent | n
+fact-checker | 17
+main | 25
+(2 rows)
+
+### 5a. raw log: links that do not go strictly forward in time
+SELECT (COUNT(*) AS ?backwards) WHERE {
+  ?p v:loggedBefore ?c ~ ?link . ?link tm:validFrom ?tc .
+  ?p a ?pt ~ ?occ . ?occ tm:validFrom ?tp .
+  FILTER(?tc <= ?tp)
+}
+--
+backwards
+77
+(1 rows)
+
+### 5b. raw log: reachable from the root, but not by a forward-in-time journey
+SELECT (COUNT(?e) AS ?reachable) (SUM(?cut) AS ?cutOff) WHERE {
+  v:ev-c9930725 v:loggedBefore+ ?e .
+  BIND(IF(EXISTS { SERVICE <urn:tiramemsu:tm:timeRespecting> { v:ev-c9930725 v:loggedBefore+ ?e } }, 0, 1) AS ?cut)
+}
+--
+reachable | cutOff
+204 | 180
+(1 rows)
+
+### 5a. CTEG: links that do not go strictly forward in time
+SELECT (COUNT(*) AS ?backwards) WHERE {
+  ?p v:caused ?c ~ ?link . ?link tm:validFrom ?tc .
+  ?p a ?pt ~ ?occ . ?occ tm:validFrom ?tp .
+  FILTER(?tc <= ?tp)
+}
+--
+backwards
+0
+(1 rows)
+
+### 5b. CTEG: reachable from the root, but not by a forward-in-time journey
+SELECT (COUNT(?e) AS ?reachable) (SUM(?cut) AS ?cutOff) WHERE {
+  v:ev-bf7a21b0 v:caused+ ?e .
+  BIND(IF(EXISTS { SERVICE <urn:tiramemsu:tm:timeRespecting> { v:ev-bf7a21b0 v:caused+ ?e } }, 0, 1) AS ?cut)
+}
+--
+reachable | cutOff
+89 | 0
+(1 rows)
+
+### 6. Earliest arrival: when could each tool call first have been influenced by the prompt?
+SELECT ?tool ?label ?arrived WHERE {
+  SERVICE <urn:tiramemsu:tm:timeRespecting> {
+    v:ev-bf7a21b0 v:caused+ ?call .
+    ?call tm:arrival ?arrived
+  }
+  ?call a v:ToolCall ; v:tool ?tool .
+  FILTER(?tool IN ("WebFetch", "WebSearch"))
+  OPTIONAL { ?call v:label ?label }
+} ORDER BY ?arrived
+--
+tool | label | arrived
+WebSearch | "causal temporal event graph" paper | 1791891124214
+WebSearch | "temporal event graph" causal LLM agents memory CTEG | 1791891124695
+WebFetch | https://arxiv.org/html/2604.17557 | 1791891135645
+WebFetch | https://arxiv.org/html/2604.17557 | 1791891158900
+WebSearch | PROV-AGENT Unified Provenance for Tracking AI Agent Interactions in Ag | 1791891186880
+WebSearch | OpenTelemetry GenAI semantic conventions agent spans invoke_agent exec | 1791891187359
+(6 rows)
+
+### 7. Annotated edges: the slowest tool calls (latency lives on the causal link)
+SELECT ?tool ?label ?ms WHERE {
+  ?call v:caused ?result {| v:latencyMs ?ms |} .
+  ?call v:tool ?tool .
+  OPTIONAL { ?call v:label ?label }
+} ORDER BY DESC(?ms) LIMIT 5
+--
+tool | label | ms
+Agent | Fact-check CTEG paper claims | 41119
+WebFetch | https://arxiv.org/html/2604.17557 | 25621
+WebFetch | https://arxiv.org/html/2604.17557 | 19418
+WebSearch | PROV-AGENT Unified Provenance for Tracking AI Agent Interactions in Ag | 15774
+WebSearch | OpenTelemetry GenAI semantic conventions agent spans invoke_agent exec | 10552
+(5 rows)
+
+### 8. What was in flight at 2026-10-13T11:35:04.015Z?
+SELECT ?type ?agent ?label
+FROM <urn:tiramemsu:tm:validAt/2026-10-13T11:35:04.015Z>
+WHERE { ?e a ?type ; v:agent ?agent . OPTIONAL { ?e v:label ?label }
+        FILTER(?type IN (v:ToolCall, v:SubagentCall)) }
+--
+type | agent | label
+SubagentCall | main | Fact-check CTEG paper claims
+(1 rows)
+
+### 9a. Before the graft (as of tx 228): subagent events reachable from the prompt
+SELECT (COUNT(?e) AS ?n) WHERE { v:ev-bf7a21b0 v:caused+ ?e . ?e v:agent "fact-checker" }
+--
+n
+0
+(1 rows)
+
+### 9b. Before the graft: subagent events already stored
+SELECT (COUNT(?e) AS ?n) WHERE { ?e v:agent "fact-checker" ; a ?t FILTER(?t != v:HarnessContext) }
+--
+n
+16
+(1 rows)
+
+### 9c. After the graft (now)
+SELECT (COUNT(?e) AS ?n) WHERE { v:ev-bf7a21b0 v:caused+ ?e . ?e v:agent "fact-checker" }
+--
+n
+17
+(1 rows)
+
+### 9d. The graft edge itself: when it was true, when we learned it
+SELECT ?call ?root ?validFrom ?addedAt ?tx WHERE {
+  ?call v:caused ?root ~ ?g . ?g v:grafts ?name ;
+     tm:validFrom ?validFrom ; tm:addedAt ?addedAt ; tm:txAdded ?tx .
+}
+--
+call | root | validFrom | addedAt | tx
+ev-0efbe02c | ev-c5847514 | 11:34:45.399 | 11:48:39.989 | 229
+(1 rows)
+
+### 10. Beyond single parenthood: inputs a step consumed that are not its causal ancestors
+SELECT ?stepType ?inputTool (COUNT(*) AS ?n) WHERE {
+  ?step v:consumed ?input ; a ?stepType .
+  ?call v:caused ?input . ?call v:tool ?inputTool .
+  MINUS { ?step v:consumed ?input . ?input v:caused+ ?step }
+} GROUP BY ?stepType ?inputTool ORDER BY DESC(?n)
+--
+stepType | inputTool | n
+Thinking | Bash | 3
+Thinking | WebSearch | 1
+Thinking | Agent | 1
+ToolCall | WebSearch | 1
+ToolCall | Bash | 1
+(5 rows)
+
+### 11. Prefix property: the trace as of tx 228, mid-run, before the subagent returned
+SELECT (COUNT(?e) AS ?events) (SUM(?bad) AS ?backwards) WHERE {
+  ?p v:caused ?e ~ ?link . ?link tm:validFrom ?te .
+  ?p a ?pt ~ ?occ . ?occ tm:validFrom ?tp .
+  BIND(IF(?te <= ?tp, 1, 0) AS ?bad)
+}
+--
+events | backwards
+72 | 0
+(1 rows)
+
+### 12. Single parenthood holds: events with more than one cause
+SELECT ?e (COUNT(?p) AS ?parents) WHERE { ?p v:caused ?e } GROUP BY ?e HAVING (COUNT(?p) > 1)
+--
+e | parents
+(0 rows)
