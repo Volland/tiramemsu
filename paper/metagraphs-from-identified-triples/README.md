@@ -2,6 +2,7 @@
 
 **Exact Images, Temporal Integrity, and Structural Depth.** Revision 2, 5 October 2026. Author: Volodymyr Pavlyshyn.
 
+- Zenodo: [10.5281/zenodo.23167938](https://doi.org/10.5281/zenodo.23167938) (concept DOI, all versions); website page `site/paper/metagraph-encodings.html`.
 - [PDF](metagraphs-layered-graphs.pdf) and [LaTeX source](metagraphs-layered-graphs.tex): revised paper (19 pages).
 - [Checker](check_encodings.py) and [extension checks](check_extensions.py), [results](validation-results.json), `validation-counts.tex` and `ablation-table.tex`: reproducible validation and the two generated tables.
 - [validators/](validators/): SHACL shapes and SPARQL queries for the image constraints, with a test of agreement against the Python validators.

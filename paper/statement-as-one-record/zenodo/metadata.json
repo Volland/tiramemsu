@@ -1,0 +1,68 @@
+{
+  "metadata": {
+    "upload_type": "publication",
+    "publication_type": "preprint",
+    "title": "When Is a Temporal Statement Store a Statement Graph? Export Boundaries for Occurrence Records with Two Clocks",
+    "creators": [
+      {
+        "name": "Pavlyshyn, Volodymyr",
+        "affiliation": "Independent researcher"
+      }
+    ],
+    "description": "<p>A temporal statement store keeps every statement occurrence as a record with an identifier, a triple, a transaction-time lifetime and a valid-time interval, and lets other records refer to it. We ask which part of such a store can be exported as a Statement Graph, the DAG model behind OneGraph interoperability between RDF-star and property graphs, without inventing or renaming any occurrence.</p>\n<p>The answer has three parts. <strong>What can be exported:</strong> a record set admits an identity-preserving export exactly when it is closed under references and acyclic. Every set contains a greatest such subset, the export kernel: the least fixpoint of a one-line operator, computed by a linear-time topological peel that also yields an export order, and maintainable as one bit per record. When content is immutable, records are never deleted and inserts reference only existing records, the whole history is closed, so exporting the history loses only cycles created by atomic correction; a batch-local acyclic-replay check at correction time removes even those. <strong>What is dropped:</strong> snapshot export also drops supersession lineage, whose targets are retracted; a dual reference closure keeps it by adding the retracted targets. <strong>What is reported:</strong> every omitted record, with a reason.</p>\n<p>An explicit encoding into the RDF-star branch of the OneGraph image, with transaction and valid time as reserved statements, makes the roundtrip of the exportable history lossless, and conjunctive queries over the asserted part are answered identically up to a quoting bijection. Two contrasts locate the boundary: RDF 1.2 reifiers name occurrences instead of nesting them and need neither closure nor acyclicity, but assert per triple rather than per occurrence; the property-graph branch admits only edges and unreferenced properties, so it carries both clocks for edges alone.</p>\n<p>Evidence: hand proofs in the PDF; a companion Lean 4 development (core only, no sorry) that re-proves the closure, kernel, history, encoding, query-view and reifier results; and an executable validator over 217,625 exhaustive labeled stores of up to three records, 72,567 four-record reference structures up to relabeling, 20,000 random stores, 1,500 random protocol histories (66,000 snapshot checks) and 1,500 histories under the acyclic-replay rule, with three kernel implementations compared against an exhaustive subset oracle. Both running-example counterexamples are traced through the tiramemsu engine and the trace is recomputed independently. No performance claims are made.</p>\n<p>Files: the revision-4 PDF and a validation archive (LaTeX source, validator, results, engine trace and test, Lean development, SHA-256 checksums). Repository: https://github.com/Volland/tiramemsu (paper/statement-as-one-record/). Revision 4, 12 October 2026; revisions 1&ndash;2 were titled &ldquo;The Statement as One Record&rdquo;. Third paper in a series with &ldquo;Layered Bitemporal Graphs&rdquo; (doi:10.5281/zenodo.23139228) and &ldquo;Metagraph Encodings over Identified Triples&rdquo; (doi:10.5281/zenodo.23167938).</p>",
+    "publication_date": "2026-10-12",
+    "version": "4",
+    "access_right": "open",
+    "license": "cc-by-4.0",
+    "language": "eng",
+    "keywords": [
+      "statement graphs",
+      "OneGraph",
+      "RDF-star",
+      "RDF 1.2 reifiers",
+      "property graphs",
+      "statement identity",
+      "bitemporal data",
+      "temporal databases",
+      "graph export",
+      "knowledge graphs",
+      "data interoperability",
+      "Lean 4",
+      "provenance",
+      "agent memory"
+    ],
+    "subjects": [
+      {
+        "term": "Databases (cs.DB)",
+        "identifier": "cs.DB",
+        "scheme": "arxiv"
+      }
+    ],
+    "related_identifiers": [
+      {
+        "identifier": "10.5281/zenodo.23139228",
+        "relation": "cites",
+        "resource_type": "publication-preprint",
+        "scheme": "doi"
+      },
+      {
+        "identifier": "10.5281/zenodo.23167938",
+        "relation": "cites",
+        "resource_type": "publication-preprint",
+        "scheme": "doi"
+      },
+      {
+        "identifier": "arXiv:2304.13097",
+        "relation": "cites",
+        "resource_type": "publication-preprint",
+        "scheme": "arxiv"
+      },
+      {
+        "identifier": "https://github.com/Volland/tiramemsu",
+        "relation": "isSupplementedBy",
+        "resource_type": "software",
+        "scheme": "url"
+      }
+    ]
+  }
+}

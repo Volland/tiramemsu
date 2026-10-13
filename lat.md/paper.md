@@ -66,6 +66,20 @@ Revision 4 adds a batch-local acyclic-replay rule under which the whole history 
 
 `validate.py` checks these on exhaustive and random stores and random protocol histories, and recomputes the kernels from `engine-trace.json`, which [[tests#Export Boundary]] writes when `TM_EXPORT_TRACE` is set. `build.py` refuses a stale validation. `SOURCE_AUDIT.md` records which claims were checked against primary sources and `REVISION_NOTES.md` maps review points to changes.
 
-## Website Page
+### Lean Mechanization
 
-`site/paper/index.html` gives the title, abstract, the four main results, status, the engine caveat and a BibTeX entry, and links the PDF, the Zenodo DOI (10.5281/zenodo.23139228), the LaTeX source and the companion article. See [[architecture#Project Website]].
+`lean/` re-proves the paper's combinatorial results in Lean 4 core (no Mathlib, no `sorry`), named by their LaTeX labels; the PDF's proofs remain by hand.
+
+It covers the direct-export criterion, the kernel as greatest closed acyclic subset, obstructions, the reference closure, snapshot and history closure, cycles confined to one replay batch, the acyclic-replay rule, the exportable bit, the lossless temporal encoding, the query view and the reifier roundtrip. Statement Graph vertices are identified with their labels, and the protocol is abstracted to insert batches with fresh eids. The LPG proposition, the peel's cost and the engine itself are not mechanized; `lean/README.md` maps labels to Lean names.
+
+### Zenodo Record
+
+`zenodo/` holds the metadata and upload steps for one record with two files: the revision-4 PDF and a validation archive.
+
+`zenodo/build_archive.py` refuses a stale validation or changed engine trace, builds the Lean project, and zips the source, validator, results, engine trace and test, and the Lean files with SHA-256 checksums, in the repository's layout so `validate.py` and `build.py` run unchanged. The record cites the first paper's DOI, the second paper and the Statement Graph paper. Publishing is a manual step.
+
+## Website Pages
+
+`site/paper/index.html` lists all three papers with their concept DOIs, PDFs, companion articles and BibTeX; each paper has its own page beside it. See [[architecture#Project Website]].
+
+The concept DOIs are 10.5281/zenodo.23139228 (layered bitemporal graphs), 10.5281/zenodo.23167938 (metagraph encodings) and 10.5281/zenodo.23335652 (export boundaries). Each paper page (`layered-bitemporal-graphs.html`, `metagraph-encodings.html`, `export-boundaries.html`) gives the abstract, main results, status with the engine caveat, and a BibTeX entry, and serves its PDF (`layered-bitemporal-graphs-v4.pdf`, `metagraph-encodings-r2.pdf`, `export-boundaries-r4.pdf`). The export page says the engine neither exposes the kernel nor applies the acyclic-replay rule; a change to either should be reflected there and in its companion article.

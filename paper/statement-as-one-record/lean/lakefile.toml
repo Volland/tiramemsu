@@ -1,0 +1,5 @@
+name = "statementexport"
+defaultTargets = ["StatementExport"]
+
+[[lean_lib]]
+name = "StatementExport"

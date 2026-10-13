@@ -3,6 +3,7 @@
 **Revision 4, 3 October 2026.** *Statement Identity, Two Clocks, and Metagraphs as Tags.* An open-access preprint draft (CC BY 4.0) describing an integrity calculus for statement occurrences and temporal metagraph snapshots.
 
 - Zenodo archive: [10.5281/zenodo.23139228](https://doi.org/10.5281/zenodo.23139228)
+- Companion papers: [Metagraph Encodings over Identified Triples](metagraphs-from-identified-triples/) (10.5281/zenodo.23167938) and [When Is a Temporal Statement Store a Statement Graph?](statement-as-one-record/) (10.5281/zenodo.23335652). The website lists all three at `site/paper/`.
 - [Revision 4 PDF](arxiv/revision-4/layered-bitemporal-graphs-arxiv-preview-v4.pdf)
 - [LaTeX source](layered-bitemporal-graphs.tex) and [bibliography](references.bib)
 - Post-revision review and reference audit
