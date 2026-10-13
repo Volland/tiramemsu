@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>When Is a Temporal Statement Store a Statement Graph? tiramemsu papers</title>
+<meta name="description" content="When Is a Temporal Statement Store a Statement Graph? Export Boundaries for Occurrence Records with Two Clocks. Which part of a bitemporal statement store exports to OneGraph and RDF-star without losing identity, with proofs, a validator and Lean. Revision 4 preprint (PDF, CC BY 4.0).">
+<link rel="icon" href="../assets/logo.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+<header class="top"><div class="wrap">
+  <a class="brand" href="../"><img src="../assets/logo.svg" alt="">Tiramemsu</a>
+  <nav class="menu"><a href="../#features">Features</a><a href="../#start">Quick start</a><a href="../articles/">Articles</a><a href="./" aria-current="page">Papers</a><a href="https://github.com/Volland/tiramemsu">GitHub</a></nav>
+</div></header>
+
+<article class="post">
+<h1>When Is a Temporal Statement Store a Statement Graph?</h1>
+<p class="meta"><a href="./">Papers</a> · paper 3 of 3 · <em>Export Boundaries for Occurrence Records with Two Clocks</em> · Volodymyr Pavlyshyn · Revision 4, 12 October 2026 · Draft preprint, CC BY 4.0</p>
+
+<p>A tiramemsu record looks like a statement vertex with its three role edges, so it is tempting to say the store already <em>is</em> a Statement Graph, the model behind Amazon Neptune's OneGraph. In general it is not. This paper says exactly which part of the store is one, what an export has to drop or report, and how both clocks can travel into RDF-star without loss.</p>
+
+<div class="btns">
+  <a class="btn primary" href="export-boundaries-r4.pdf">Download the PDF (revision 4, 16 pages)</a>
+  <a class="btn" href="../articles/statement-store-export.html">Read the companion article</a>
+  <a class="btn" href="https://doi.org/10.5281/zenodo.23335652">Zenodo · DOI 10.5281/zenodo.23335652</a>
+  <a class="btn" href="https://github.com/Volland/tiramemsu/tree/main/paper/statement-as-one-record">Source, validator and Lean</a>
+</div>
+
+<h2>Abstract</h2>
+<p>A temporal statement store keeps every statement occurrence as a record with an identifier, a triple, a transaction-time lifetime and a valid-time interval, and lets other records refer to it. We ask which part of such a store can be exported as a Statement Graph, the DAG model that underlies OneGraph interoperability between RDF-star and property graphs, without inventing or renaming any occurrence. The answer has three parts. <em>What can be exported:</em> a selected record set admits an identity-preserving export exactly when it is closed under references and acyclic. Every set contains a greatest such subset, the least fixpoint of a one-line operator, computed by a linear-time topological peel that also yields an export order. When content is immutable, records are never deleted and inserts reference only existing records, the whole history is closed. Exporting the history rather than a snapshot then loses only cycles created by atomic correction, and a per-record bit maintained at insert time turns export into a filter scan. A batch-local check at correction time removes even those cycles. <em>What is dropped:</em> snapshot export additionally drops supersession lineage, whose targets are retracted; a dual reference closure keeps it by adding the retracted targets. <em>What is reported:</em> every omitted record with a reason. An explicit encoding into the RDF-star branch of the OneGraph image, with transaction and valid time as reserved statements, makes the roundtrip of the exportable history lossless, and conjunctive queries over the asserted part are answered identically up to a quoting bijection. Two contrasts locate the boundary. RDF 1.2 reifiers name occurrences instead of nesting them and need neither closure nor acyclicity, but assert per triple, not per occurrence. The property-graph branch admits only edges and unreferenced properties, so it carries both clocks for edges alone.</p>
+
+<h2>The main results</h2>
+<div class="grid">
+  <div class="card"><span class="tag">Criterion</span><h3>Closed and acyclic</h3><p>A record set exports with every occurrence kept and no reference rewritten exactly when every record it points at is in the set and there are no reference cycles.</p></div>
+  <div class="card"><span class="tag">Kernel</span><h3>The most you can export</h3><p>Every set has one greatest exportable part. A topological peel finds it in linear time and gives the order a streaming writer needs. One stored bit per record keeps it current.</p></div>
+  <div class="card"><span class="tag">History</span><h3>Export the past, not the present</h3><p>The full history is closed, so it loses only cycles that a correction can create. A check on the replay batch rejects those, and then the whole history exports.</p></div>
+  <div class="card"><span class="tag">Time</span><h3>Both clocks, losslessly</h3><p>Clocks become reserved statements in RDF-star, and the roundtrip returns every field of every record. Queries agree with the store when contents are distinct.</p></div>
+</div>
+
+<h2>Who it is for</h2>
+<p>Anyone moving data between a temporal statement store and RDF-star, RDF 1.2 or a property graph who needs to know what survives: the occurrence ids, the annotations on them, the corrections and both clocks. If you want the ideas without the proofs, start with the <a href="../articles/statement-store-export.html">companion article</a>. For the informal comparison it builds on, see <a href="../articles/statement-graphs.html">statement graphs and tiramemsu</a>.</p>
+
+<h2>Status and evidence</h2>
+<p>A draft preprint, archived on <a href="https://doi.org/10.5281/zenodo.23335652">Zenodo</a> together with a validation archive. It has not been peer reviewed. The evidence has three parts:</p>
+<ul>
+  <li><strong>Proofs.</strong> The PDF's proofs are by hand. A Lean 4 development re-proves the criterion, the kernel, the history results, the temporal roundtrip, the query view and the reifier roundtrip. The property-graph result and the cost bounds are not mechanized.</li>
+  <li><strong>Validator.</strong> It covers 217 625 exhaustive stores, 72 567 four-record reference structures, 20 000 random stores and 3 000 random protocol histories.</li>
+  <li><strong>Engine traces.</strong> Both counterexamples are traced through the engine and recomputed independently.</li>
+</ul>
+<div class="note"><strong>Paper and engine.</strong> Tiramemsu does not expose the export kernel as an API, and its correction does not apply the acyclic-replay rule. A correction whose patch names a member of its own cascade can still create a cycle. The paper describes what an exporter and a writer should do; the engine's own invariants (live endpoints, cascade, immutability) hold either way.</div>
+
+<h2>Cite</h2>
+<pre><code>@misc{pavlyshyn2026export,
+  author = {Pavlyshyn, Volodymyr},
+  title  = {When Is a Temporal Statement Store a Statement Graph?
+            Export Boundaries for Occurrence Records with Two Clocks},
+  year   = {2026},
+  note   = {Draft preprint, revision 4. CC BY 4.0},
+  doi    = {10.5281/zenodo.23335652},
+  url    = {https://doi.org/10.5281/zenodo.23335652}
+}</code></pre>
+
+<p><a href="metagraph-encodings.html">← Paper 2: Metagraph Encodings over Identified Triples</a> · <a href="./">All papers</a></p>
+</article>
+
+<footer><div class="wrap">
+  <span>Tiramemsu · MIT OR Apache-2.0 · Paper CC BY 4.0 · <a href="https://github.com/Volland/tiramemsu">github.com/Volland/tiramemsu</a></span>
+  <span><a href="../">Home</a> · <a href="./">All papers</a> · <a href="../articles/">All articles</a></span>
+  <span><a href="../impressum.html">Impressum</a> · <a href="../datenschutz.html">Datenschutz</a> · <a href="../agb.html">AGB</a></span>
+</div></footer>
+</body>
+</html>

@@ -11,12 +11,12 @@
 <body>
 <header class="top"><div class="wrap">
   <a class="brand" href="../"><img src="../assets/logo.svg" alt="">Tiramemsu</a>
-  <nav class="menu"><a href="../#features">Features</a><a href="../#start">Quick start</a><a href="./" aria-current="page">Articles</a><a href="../paper/">Paper</a><a href="https://github.com/Volland/tiramemsu">GitHub</a></nav>
+  <nav class="menu"><a href="../#features">Features</a><a href="../#start">Quick start</a><a href="./" aria-current="page">Articles</a><a href="../paper/">Papers</a><a href="https://github.com/Volland/tiramemsu">GitHub</a></nav>
 </div></header>
 
 <article class="post">
 <h1>Memory that stays grounded</h1>
-<p class="meta">Tiramemsu articles · 3 October 2026 · companion to the paper <a href="../paper/"><em>Layered Bitemporal Graphs</em></a></p>
+<p class="meta">Tiramemsu articles · 3 October 2026 · companion to the paper <a href="../paper/layered-bitemporal-graphs.html"><em>Layered Bitemporal Graphs</em></a></p>
 
 <p>Tiramemsu stores facts with their own ids, so a fact can carry a confidence, a source or a belief about it, layer on layer. Every statement also has two clocks: when the database knew it, and when it was true in the world. Nothing is ever deleted.</p>
 <p>Each of these ideas is old and well studied: reification and RDF-star for the first, temporal databases for the second, Datomic for the third. What happens when all three meet in one statement is less well charted. Corrections have to carry annotations along. A snapshot of the past can contain a confidence score whose fact is missing. A container can be retracted while its contents stay. We wrote a paper that gives this combination a precise meaning and proves what the operations guarantee. This article is the version without the proofs.</p>
@@ -72,12 +72,12 @@
   <li><strong>A layer on a dropped membership.</strong> A correction drops the fact's memberships in outside graphs. A layer on such a membership, such as who added the fact to a session, is still replayed, and its copy points at an id that was never written.</li>
 </ul>
 <p>The fixes come from the same operator. A correction should replay γ of what it keeps, so the layers of a dropped membership are dropped with it. User writes should follow the live-reference discipline, with predicates that point into the past declared as lineage. Annotating a fact <em>after</em> it was retracted, to record why it was wrong, is a legitimate thing to do. Declaring it makes the intent explicit. Until the fixes land, γ(view) is always a grounded reading.</p>
-<div class="note"><strong>Since then.</strong> Revision 4 of the paper reports a fourth gap, the order of transaction dates, and describes repairs for all four. Those repairs shipped in tiramemsu 0.4.0 (with the date guards as storage format 4), so this section describes 0.3.0 and earlier. See <a href="../paper/">the paper page</a>.</div>
+<div class="note"><strong>Since then.</strong> Revision 4 of the paper reports a fourth gap, the order of transaction dates, and describes repairs for all four. Those repairs shipped in tiramemsu 0.4.0 (with the date guards as storage format 4), so this section describes 0.3.0 and earlier. See <a href="../paper/layered-bitemporal-graphs.html">the paper page</a>.</div>
 
 <h2>Read the paper</h2>
 <p>The paper, <em>Layered Bitemporal Graphs: Statement Identity, Two Clocks, and Metagraphs as Tags</em>, has the definitions, every theorem with its proof, and a related-work section. It covers bitemporal databases, temporal graphs, statement-level identity, metagraphs, truth maintenance and agent memory. It is a draft preprint under CC BY 4.0.</p>
-<p><a class="btn primary" href="../paper/layered-bitemporal-graphs-v4.pdf">Download the PDF</a> <a class="btn" href="../paper/">About the paper</a> <a class="btn" href="https://github.com/Volland/tiramemsu/tree/main/paper">LaTeX source</a></p>
-<p><a href="metagraphs.html">Related: metagraphs from one row shape →</a></p>
+<p><a class="btn primary" href="../paper/layered-bitemporal-graphs-v4.pdf">Download the PDF</a> <a class="btn" href="../paper/layered-bitemporal-graphs.html">About the paper</a> <a class="btn" href="https://doi.org/10.5281/zenodo.23139228">DOI 10.5281/zenodo.23139228</a></p>
+<p><a href="metagraphs.html">Related: metagraphs from one row shape →</a> · <a href="exact-metagraph-encodings.html">Next paper: cheap to write, careful to read →</a></p>
 </article>
 
 <footer><div class="wrap">

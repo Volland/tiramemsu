@@ -11,7 +11,7 @@
 <body>
 <header class="top"><div class="wrap">
   <a class="brand" href="../"><img src="../assets/logo.svg" alt="">Tiramemsu</a>
-  <nav class="menu"><a href="../#features">Features</a><a href="../#start">Quick start</a><a href="./" aria-current="page">Articles</a><a href="../paper/">Paper</a><a href="https://github.com/Volland/tiramemsu">GitHub</a></nav>
+  <nav class="menu"><a href="../#features">Features</a><a href="../#start">Quick start</a><a href="./" aria-current="page">Articles</a><a href="../paper/">Papers</a><a href="https://github.com/Volland/tiramemsu">GitHub</a></nav>
 </div></header>
 
 <article class="post">
@@ -406,7 +406,7 @@ db.call(<span class="s">"sparql"</span>, JSON.stringify({ view: { kind: <span cl
 <p><strong>Limits.</strong> The browser package is built from the repository; it is not on npm yet. The runtime has no WAL and no shared memory, so the host uses a rollback journal and one connection, and asking for WAL fails at open instead of quietly falling back. STAT4 is not compiled in, so opening a non-empty file runs a full <code>ANALYZE</code>. Query budgets and bulk import sessions are refused in the browser. The <code>.wasm</code> file is about 11 MB before <code>wasm-opt</code>.</p>
 
 <h2>Since 0.3: version 0.4.0</h2>
-<p>0.4.0 adds the integrity repairs described in <a href="../paper/">the paper</a>. Writes that point at a retracted or never-allocated statement are refused. A correction no longer replays the layers of memberships it drops. Triggers in the file check that every statement date names the transaction that is writing it. Those triggers are storage format 4. A file opened by 0.4.0 migrates to format 4 without rewriting any history, and 0.3.0 cannot open it afterwards. Nothing else in this page changes.</p>
+<p>0.4.0 adds the integrity repairs described in <a href="../paper/layered-bitemporal-graphs.html">the paper</a>. Writes that point at a retracted or never-allocated statement are refused. A correction no longer replays the layers of memberships it drops. Triggers in the file check that every statement date names the transaction that is writing it. Those triggers are storage format 4. A file opened by 0.4.0 migrates to format 4 without rewriting any history, and 0.3.0 cannot open it afterwards. Nothing else in this page changes.</p>
 
 <h2>Still to come</h2>
 <p>The crates are on crates.io and the Python package is on PyPI. The Node.js package and the browser package are built and tested but not on npm yet. Vector search, crypto-shredding and a network server are on the <a href="https://github.com/Volland/tiramemsu/blob/main/lat.md/roadmap.md">roadmap</a>.</p>

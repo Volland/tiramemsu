@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>One record, three questions: tiramemsu</title>
+<meta name="description" content="The three tiramemsu papers in one page, with one running example: does memory stay grounded (Layered Bitemporal Graphs), can structure be read back (Metagraph Encodings), and what can leave the store intact (Export Boundaries).">
+<link rel="icon" href="../assets/logo.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+<header class="top"><div class="wrap">
+  <a class="brand" href="../"><img src="../assets/logo.svg" alt="">Tiramemsu</a>
+  <nav class="menu"><a href="../#features">Features</a><a href="../#start">Quick start</a><a href="./" aria-current="page">Articles</a><a href="../paper/">Papers</a><a href="https://github.com/Volland/tiramemsu">GitHub</a></nav>
+</div></header>
+
+<article class="post">
+<h1>One record, three questions</h1>
+<p class="meta">Tiramemsu articles · 13 October 2026 · a guide to <a href="../paper/">the three papers</a></p>
+
+<p>Tiramemsu rests on one design decision: a statement is a record with its own id and two clocks.</p>
+<pre><code>(e, s, p, o, a, d, v1, v2)   <span class="c"># id · triple · [a, d) when we knew it · [v1, v2) when it was true</span></code></pre>
+<p>Because <code>s</code> and <code>o</code> can be ids, statements can talk about statements: a confidence on a fact, a source for that confidence, a membership of a fact in a conversation. Because nothing is deleted and both clocks are kept, the past can be read back exactly as it was. Three papers each ask one question about this record. This page follows one small example through all three.</p>
+
+<h2>The example</h2>
+<pre><code>e1 = (:FRA, :route, :LHR)          <span class="c"># a fact</span>
+e2 = (e1, :distance, 655)          <span class="c"># a layer on the fact</span>
+m  = (e1, sys:inGraph, trip42)     <span class="c"># the fact belongs to a conversation</span>
+c  = (m, :confidence, 0.7)         <span class="c"># how sure we are that it belongs there</span></code></pre>
+<p>Later the route's valid time turns out to be wrong, and an agent corrects it.</p>
+
+<h2>1. Does memory stay grounded?</h2>
+<p><a href="../paper/layered-bitemporal-graphs.html"><em>Layered Bitemporal Graphs</em></a> asks what happens to <code>e2</code>, <code>m</code> and <code>c</code> when <code>e1</code> is retracted, corrected or read in the past. Its answer is one operator, the <strong>ground core</strong>: the largest part of any view in which every statement can find what it points at.</p>
+<ul>
+  <li><strong>Retraction.</strong> Retracting <code>e1</code> must take <code>e2</code>, <code>m</code> and <code>c</code> with it. The cascade is the least retraction that leaves memory grounded.</li>
+  <li><strong>Time travel.</strong> Every as-of view is grounded exactly when lifetimes nest along layers. The engine guarantees this by letting a write point only at live statements.</li>
+  <li><strong>Correction.</strong> The correction replays <code>e1</code> and its layers under new ids. The copy has the same structure, and a <code>sys:supersedes</code> record links the new version to the old.</li>
+</ul>
+<p>Checking the engine against these hypotheses found four gaps, all repaired in 0.4.0. Plain-language version: <a href="grounded-memory.html">memory that stays grounded</a>.</p>
+
+<h2>2. Can the structure be read back?</h2>
+<p><a href="../paper/metagraph-encodings.html"><em>Metagraph Encodings over Identified Triples</em></a> takes the same record and builds richer structures on it: hyperedges, edges between edges, containers like <code>trip42</code>. Writing them is one row per clause. Reading them back needs an <strong>exact image</strong>, a list of conditions such as "every edge has an input" or "no two edges have the same ends". Each condition is shown to be necessary, with a store that breaks only that one.</p>
+<p>The example shows why identity matters here. <code>c</code> is a confidence on the <em>membership</em> <code>m</code>, not on the fact <code>e1</code>. It has reference rank 2, where a confidence on <code>e1</code> would have rank 1. They are different claims and stay apart. The paper also shows that a dispute of <code>m</code> can be valid years after <code>e1</code> stopped being true, if snapshots keep the referents of what they assert. It shows that reference rank sets the number of bulk-load batches and bounds the rounds of a retraction cascade. Plain-language version: <a href="exact-metagraph-encodings.html">cheap to write, careful to read</a>.</p>
+
+<h2>3. What can leave the store intact?</h2>
+<p><a href="../paper/export-boundaries.html"><em>When Is a Temporal Statement Store a Statement Graph?</em></a> asks the reverse question: which records can be exported to OneGraph's Statement Graphs or RDF-star without inventing or renaming an occurrence. The answer is <strong>closed and acyclic</strong> sets, and every set has a greatest such part, the <strong>export kernel</strong>.</p>
+<p>After the correction, the current snapshot holds the new <code>e1'</code>, its layers and the lineage record pointing at the retracted <code>e1</code>. Because of that dangling lineage, the snapshot is not exportable as a whole. The full history is, because records are never deleted. Export the history, assert the snapshot, quote the rest, and both clocks travel into RDF-star losslessly. Had the correction's patch named <code>e2</code>, it would have created a two-record cycle. A check on the replay batch can reject that before anything is written. Plain-language version: <a href="statement-store-export.html">what leaves the store intact</a>.</p>
+
+<h2>How the three fit</h2>
+<table>
+  <thead><tr><th></th><th>Question</th><th>Key object</th><th>Engine consequence</th></tr></thead>
+  <tbody>
+    <tr><td>Paper 1</td><td>Is a view consistent?</td><td>Ground core</td><td>Live endpoints, cascade, closed retention, date guards (0.4.0)</td></tr>
+    <tr><td>Paper 2</td><td>Does a structure decode?</td><td>Exact image</td><td>What a validator must check; not enforced by the engine</td></tr>
+    <tr><td>Paper 3</td><td>Does a set export?</td><td>Export kernel</td><td>One bit per record and an acyclic-replay rule; not yet in the engine</td></tr>
+  </tbody>
+</table>
+<p>All three use the same graph fact in different guises. A statement is only as good as what it points at: grounded in paper 1, of bounded rank in paper 2, in the kernel in paper 3. Each paper says plainly what it does not show. None reports performance numbers, and none has been peer reviewed.</p>
+
+<h2>Read them</h2>
+<ul>
+  <li><a href="../paper/layered-bitemporal-graphs.html">Layered Bitemporal Graphs</a>, revision 4 · <a href="https://doi.org/10.5281/zenodo.23139228">doi:10.5281/zenodo.23139228</a></li>
+  <li><a href="../paper/metagraph-encodings.html">Metagraph Encodings over Identified Triples</a>, revision 2 · <a href="https://doi.org/10.5281/zenodo.23167938">doi:10.5281/zenodo.23167938</a></li>
+  <li><a href="../paper/export-boundaries.html">When Is a Temporal Statement Store a Statement Graph?</a>, revision 4 · <a href="https://doi.org/10.5281/zenodo.23335652">doi:10.5281/zenodo.23335652</a></li>
+</ul>
+<p><a class="btn primary" href="../paper/">All papers</a></p>
+</article>
+
+<footer><div class="wrap">
+  <span>Tiramemsu · MIT OR Apache-2.0 · <a href="https://github.com/Volland/tiramemsu">github.com/Volland/tiramemsu</a></span>
+  <span><a href="../">Home</a> · <a href="./">All articles</a></span>
+  <span><a href="../impressum.html">Impressum</a> · <a href="../datenschutz.html">Datenschutz</a> · <a href="../agb.html">AGB</a></span>
+</div></footer>
+</body>
+</html>

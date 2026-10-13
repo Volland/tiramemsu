@@ -11,7 +11,7 @@
 <body>
 <header class="top"><div class="wrap">
   <a class="brand" href="./"><img src="assets/logo.svg" alt="">Tiramemsu</a>
-  <nav class="menu"><a href="#new">New in 0.6</a><a href="#why">Why</a><a href="#features">Features</a><a href="#start">Quick start</a><a href="articles/">Articles</a><a href="paper/">Paper</a><a href="https://github.com/Volland/tiramemsu">GitHub</a></nav>
+  <nav class="menu"><a href="#new">New in 0.6</a><a href="#why">Why</a><a href="#features">Features</a><a href="#start">Quick start</a><a href="articles/">Articles</a><a href="paper/">Papers</a><a href="https://github.com/Volland/tiramemsu">GitHub</a></nav>
 </div></header>
 
 <main>
@@ -20,7 +20,7 @@
     <p class="slogan">Your agent’s brain loves Tiramemsu.</p>
     <h1>Memory that has <em>layers</em>, travels in time, and never forgets.</h1>
     <p class="lead">Tiramemsu is an embedded graph database on SQLite for agent memory. Every fact has its own id, so it can carry a confidence, a source or a belief, layer on layer. Every change is kept with when it was learned and when it was true. And an agent can recall by words and by meaning, today or as of any moment in the past, from one file.</p>
-    <div class="btns"><a class="btn primary" href="#start">Quick start</a><a class="btn" href="articles/vector-memory.html">Vector memory that remembers when</a><a class="btn" href="articles/vector-cookbook.html">Vector cookbook</a><a class="btn" href="articles/hybrid-recall.html">Hybrid recall</a><a class="btn" href="paper/">Read the paper</a></div>
+    <div class="btns"><a class="btn primary" href="#start">Quick start</a><a class="btn" href="articles/vector-memory.html">Vector memory that remembers when</a><a class="btn" href="articles/vector-cookbook.html">Vector cookbook</a><a class="btn" href="articles/hybrid-recall.html">Hybrid recall</a><a class="btn" href="paper/">Read the papers</a></div>
   </div>
   <img src="assets/logo.svg" alt="A brain taking a bite out of a tiramisu whose layers are a graph">
 </div>
@@ -281,20 +281,22 @@ claude mcp add tiramemsu -- tiramemsu-mcp --db ./memory.db --text-index</code></
 </div></section>
 
 <section id="paper"><div class="wrap">
-  <h2>The paper</h2>
-  <p class="sub"><em>Layered Bitemporal Graphs: Statement Identity, Two Clocks, and Metagraphs as Tags.</em> The model behind tiramemsu, written down precisely and with proofs. Draft preprint, revision 4, CC BY 4.0.</p>
-  <div class="grid four">
-    <div class="card"><span class="tag">Grounded</span><h3>One operator</h3><p>The ground core keeps the statements whose whole support is present. It is the interior operator of a topology, and the other results follow from it.</p></div>
-    <div class="card"><span class="tag">Cascade</span><h3>Retraction is forced</h3><p>The cascade is the least retraction that leaves memory grounded. It takes everything it must and nothing more.</p></div>
-    <div class="card"><span class="tag">Two clocks</span><h3>Lifetimes nest</h3><p>Every as-of view is grounded exactly when lifetimes nest along layers. Valid time is a claim, so the reader takes its grounded slice through effective validity.</p></div>
-    <div class="card"><span class="tag">Metagraphs</span><h3>Bitemporal lifting</h3><p>For well-formed temporal metagraphs, taking a snapshot commutes with the encoding. Metagraphs get time travel without a temporal theory of their own.</p></div>
+  <h2>The papers</h2>
+  <p class="sub">Three preprints that write down the model behind tiramemsu and prove what it guarantees. CC BY 4.0, archived on Zenodo.</p>
+  <div class="grid">
+    <div class="card"><span class="tag">Paper 1 · consistency</span><h3><a href="paper/layered-bitemporal-graphs.html">Layered Bitemporal Graphs</a></h3><p>One operator, the ground core, explains why retraction cascades, why the past stays grounded and how corrections keep their layers. Repairs it found shipped in 0.4.0.</p></div>
+    <div class="card"><span class="tag">Paper 2 · representation</span><h3><a href="paper/metagraph-encodings.html">Metagraph Encodings over Identified Triples</a></h3><p>Metagraphs are cheap to write as identified triples. Reading them back needs exact image constraints, each one proved necessary.</p></div>
+    <div class="card"><span class="tag">Paper 3 · interoperability</span><h3><a href="paper/export-boundaries.html">When Is a Temporal Statement Store a Statement Graph?</a></h3><p>Closed, acyclic sets export to OneGraph losslessly. The export kernel is the most you can keep, and the full history loses only correction cycles.</p></div>
   </div>
-  <div class="btns" style="margin-top:18px"><a class="btn primary" href="paper/layered-bitemporal-graphs-v4.pdf">Download the PDF</a><a class="btn" href="paper/">About the paper</a><a class="btn" href="articles/grounded-memory.html">Read the companion article</a></div>
+  <div class="btns" style="margin-top:18px"><a class="btn primary" href="paper/">All papers</a><a class="btn" href="articles/three-papers.html">The series in one page</a><a class="btn" href="articles/">All articles</a></div>
 </div></section>
 
 <section id="articles"><div class="wrap">
   <h2>Articles</h2>
   <ul class="list-articles">
+    <li class="card"><h3><a href="articles/three-papers.html">One record, three questions</a></h3><p>The three papers in one page with one running example: does memory stay grounded, can structure be read back, and what can leave the store intact.</p></li>
+    <li class="card"><h3><a href="articles/statement-store-export.html">What leaves the store intact</a></h3><p>A plain-language companion to the export paper: the export kernel, why history exports when snapshots do not, and both clocks in RDF-star.</p></li>
+    <li class="card"><h3><a href="articles/exact-metagraph-encodings.html">Cheap to write, careful to read</a></h3><p>A plain-language companion to the metagraph paper: exact images, annotations that outlive their bearers, executable metapaths and what depth costs.</p></li>
     <li class="card"><h3><a href="articles/hybrid-recall.html">Words, meaning and evidence: hybrid recall</a></h3><p>Text and vector recall fused by reciprocal rank, ties broken by evidence, expansion to layers and subject facts with via, recall in the past, the same call in Rust, Python, SPARQL, Cypher and MCP, and measured numbers.</p></li>
     <li class="card"><h3><a href="articles/vector-memory.html">Vector memory that remembers when</a></h3><p>Recall by meaning in a memory that travels in time: why top-k-then-filter loses answers under as_of and valid_at, exact search over the visible statements, hybrid recall with text, and honest limits.</p></li>
     <li class="card"><h3><a href="articles/metagraphs.html">Metagraphs from one row shape</a></h3><p>Edges that are vertices, vertices and edges that hold subgraphs, nesting, n-ary edges, fold and unfold, all as statements with two clocks.</p></li>

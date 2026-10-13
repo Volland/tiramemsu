@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Metagraph Encodings over Identified Triples: tiramemsu papers</title>
+<meta name="description" content="Metagraph Encodings over Identified Triples: Exact Images, Temporal Integrity, and Structural Depth. When identified-triple encodings of metagraphs are invertible, with proofs. Revision 2 preprint (PDF, CC BY 4.0).">
+<link rel="icon" href="../assets/logo.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+<header class="top"><div class="wrap">
+  <a class="brand" href="../"><img src="../assets/logo.svg" alt="">Tiramemsu</a>
+  <nav class="menu"><a href="../#features">Features</a><a href="../#start">Quick start</a><a href="../articles/">Articles</a><a href="./" aria-current="page">Papers</a><a href="https://github.com/Volland/tiramemsu">GitHub</a></nav>
+</div></header>
+
+<article class="post">
+<h1>Metagraph Encodings over Identified Triples</h1>
+<p class="meta"><a href="./">Papers</a> · paper 2 of 3 · <em>Exact Images, Temporal Integrity, and Structural Depth</em> · Volodymyr Pavlyshyn · Revision 2, 5 October 2026 · Draft preprint, CC BY 4.0</p>
+
+<p>Hypergraphs, metagraphs, edges about edges and containers inside containers all fit on one shape of row: a triple with its own id. Writing them in is cheap. Reading them back out is a different matter. Some stores decode to the structure you meant, some decode to something else, and some to nothing at all. This paper states exactly which stores decode, and shows that every condition it imposes is needed.</p>
+
+<div class="btns">
+  <a class="btn primary" href="metagraph-encodings-r2.pdf">Download the PDF (revision 2, 19 pages)</a>
+  <a class="btn" href="../articles/exact-metagraph-encodings.html">Read the companion article</a>
+  <a class="btn" href="https://doi.org/10.5281/zenodo.23167938">Zenodo · DOI 10.5281/zenodo.23167938</a>
+  <a class="btn" href="https://github.com/Volland/tiramemsu/tree/main/paper/metagraphs-from-identified-triples">Source and checkers</a>
+</div>
+
+<h2>Abstract</h2>
+<p>Identified triples give statements identities that other statements can reference, so set-valued incidence, higher-order endpoints and containment fit on one carrier. We argue that this representation is cheap and that invertibility is a separate integrity obligation, and we state that obligation exactly. We cover finite directed hypergraphs, nonempty-end Basu–Blanning metagraphs, identified higher-order metagraphs, a well-founded ubergraph fragment and a finite attributed annotating presentation. For each we give source signatures and exact image constraints under which encoding and decoding are inverse up to renaming. The roundtrip proofs are short bookkeeping; the contribution is the constraint set, and we show that each constraint is necessary. Four results go beyond roundtrips. A temporal theorem separates asserted rows from retained referents, so an annotation may be valid outside its bearer's interval. A supersession relation records identity across versions. An executable-metapath recognizer decides in linear time whether an edge set can fire, and we characterize when it agrees with walk reachability. Reference rank gets operational consumers: the number of strata for referentially complete bulk loading and the depth of retraction cascades. Evidence is exhaustive bounded enumeration, seeded randomized property tests, executable SHACL validators and a Lean proof of the directed roundtrip. We report no performance or retrieval results.</p>
+
+<h2>The main results</h2>
+<div class="grid">
+  <div class="card"><span class="tag">Images</span><h3>Exact, and each condition needed</h3><p>For each family the paper says which stores decode, up to renaming of ids. For every constraint it gives a store that breaks only that one and does not decode.</p></div>
+  <div class="card"><span class="tag">Time</span><h3>Annotations outlive their bearers</h3><p>A snapshot can keep the referents of what it asserts. Then "this 2020 fact was disputed in 2025" is valid in 2025. Extensional images do not survive time.</p></div>
+  <div class="card"><span class="tag">Metapaths</span><h3>Reachable is not executable</h3><p>A linear-time check decides whether every edge in a set can fire when it needs all its inputs. Walks agree with firing when dependencies are acyclic or every edge has one input.</p></div>
+  <div class="card"><span class="tag">Rank</span><h3>Depth has a price</h3><p>Reference rank gives the minimum number of bulk-load batches and bounds the rounds of a retraction cascade. Anchored encodings stay at rank one however deep the nesting.</p></div>
+</div>
+
+<h2>Who it is for</h2>
+<p>Readers who model metagraphs, hypergraphs or nested contexts on a statement store, whether that is tiramemsu, RDF 1.2 reifiers or a property graph with edge ids, and want to know which integrity checks make the encoding safe to read back. If you want the ideas without the proofs, start with the <a href="../articles/exact-metagraph-encodings.html">companion article</a>. For the tiramemsu recipes it formalizes, see <a href="../articles/metagraphs.html">metagraphs from one row shape</a>.</p>
+
+<h2>Status</h2>
+<p>A draft preprint, archived on <a href="https://doi.org/10.5281/zenodo.23167938">Zenodo</a>. It has not been peer reviewed. The engine does not enforce the image constraints. The checkers, the SHACL and SPARQL validators and the Lean proof show what a validator would check. The Lean proof covers the directed, higher-order and extensional roundtrips under canonical naming only.</p>
+
+<h2>Cite</h2>
+<pre><code>@misc{pavlyshyn2026metagraphenc,
+  author = {Pavlyshyn, Volodymyr},
+  title  = {Metagraph Encodings over Identified Triples: Exact Images,
+            Temporal Integrity, and Structural Depth},
+  year   = {2026},
+  note   = {Draft preprint, revision 2. CC BY 4.0},
+  doi    = {10.5281/zenodo.23167938},
+  url    = {https://doi.org/10.5281/zenodo.23167938}
+}</code></pre>
+
+<p><a href="layered-bitemporal-graphs.html">← Paper 1: Layered Bitemporal Graphs</a> · <a href="export-boundaries.html">Paper 3: When Is a Temporal Statement Store a Statement Graph? →</a></p>
+</article>
+
+<footer><div class="wrap">
+  <span>Tiramemsu · MIT OR Apache-2.0 · Paper CC BY 4.0 · <a href="https://github.com/Volland/tiramemsu">github.com/Volland/tiramemsu</a></span>
+  <span><a href="../">Home</a> · <a href="./">All papers</a> · <a href="../articles/">All articles</a></span>
+  <span><a href="../impressum.html">Impressum</a> · <a href="../datenschutz.html">Datenschutz</a> · <a href="../agb.html">AGB</a></span>
+</div></footer>
+</body>
+</html>

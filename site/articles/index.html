@@ -4,18 +4,21 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Articles: tiramemsu</title>
-<meta name="description" content="Articles about tiramemsu: layered graphs, metagraphs, time travel, recipes, how it differs from oxilite and from statement graphs, what is new in 0.3, recall and review, vector memory, a vector cookbook, hybrid recall, MCP, journeys, budgets and bulk loads, and how it is built.">
+<meta name="description" content="Articles about tiramemsu: the three papers, exporting to Statement Graphs, exact metagraph encodings, layered graphs, metagraphs, time travel, recipes, how it differs from oxilite and from statement graphs, what is new in 0.3, recall and review, vector memory, a vector cookbook, hybrid recall, MCP, journeys, budgets and bulk loads, and how it is built.">
 <link rel="icon" href="../assets/logo.svg" type="image/svg+xml">
 <link rel="stylesheet" href="../style.css">
 </head>
 <body>
 <header class="top"><div class="wrap">
   <a class="brand" href="../"><img src="../assets/logo.svg" alt="">Tiramemsu</a>
-  <nav class="menu"><a href="../#features">Features</a><a href="../#start">Quick start</a><a href="./" aria-current="page">Articles</a><a href="../paper/">Paper</a><a href="https://github.com/Volland/tiramemsu">GitHub</a></nav>
+  <nav class="menu"><a href="../#features">Features</a><a href="../#start">Quick start</a><a href="./" aria-current="page">Articles</a><a href="../paper/">Papers</a><a href="https://github.com/Volland/tiramemsu">GitHub</a></nav>
 </div></header>
 <article class="post">
 <h1>Articles</h1>
 <ul class="list-articles">
+  <li class="card"><h3><a href="three-papers.html">One record, three questions</a></h3><p>The three papers in one page with one running example: does memory stay grounded, can structure be read back, and what can leave the store intact.</p></li>
+  <li class="card"><h3><a href="statement-store-export.html">What leaves the store intact</a></h3><p>A plain-language companion to the export paper: closed and acyclic sets, the export kernel, why history exports when snapshots do not, both clocks in RDF-star, and RDF 1.2 and property graphs.</p></li>
+  <li class="card"><h3><a href="exact-metagraph-encodings.html">Cheap to write, careful to read</a></h3><p>A plain-language companion to the metagraph paper: exact images and why each condition is needed, annotations that outlive their bearers, executable metapaths, and what depth costs.</p></li>
   <li class="card"><h3><a href="vector-cookbook.html">Vector cookbook: indexes, embeddings and search in every language</a></h3><p>Copyable samples for 0.6: create and drop vector indexes, add embeddings and search them from Cypher, SPARQL, Rust, Python, Node.js and MCP, search in the past, backfill, and the rules and errors.</p></li>
   <li class="card"><h3><a href="hybrid-recall.html">Words, meaning and evidence: hybrid recall</a></h3><p>Text and vector recall fused by reciprocal rank, ties broken by evidence, expansion to layers and subject facts with via, recall in the past, the same call in Rust, Python, SPARQL, Cypher and MCP, and measured numbers.</p></li>
   <li class="card"><h3><a href="vector-memory.html">Vector memory that remembers when</a></h3><p>Recall by meaning in a memory that travels in time: why top-k-then-filter loses answers under as_of and valid_at, exact search over the visible statements, hybrid recall with text, and honest limits.</p></li>

@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>What leaves the store intact: tiramemsu</title>
+<meta name="description" content="A plain-language companion to the paper When Is a Temporal Statement Store a Statement Graph? Which part of a bitemporal statement store exports to OneGraph and RDF-star without losing identity, what is dropped, and how both clocks travel.">
+<link rel="icon" href="../assets/logo.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+<header class="top"><div class="wrap">
+  <a class="brand" href="../"><img src="../assets/logo.svg" alt="">Tiramemsu</a>
+  <nav class="menu"><a href="../#features">Features</a><a href="../#start">Quick start</a><a href="./" aria-current="page">Articles</a><a href="../paper/">Papers</a><a href="https://github.com/Volland/tiramemsu">GitHub</a></nav>
+</div></header>
+
+<article class="post">
+<h1>What leaves the store intact</h1>
+<p class="meta">Tiramemsu articles · 13 October 2026 · companion to the paper <a href="../paper/export-boundaries.html"><em>When Is a Temporal Statement Store a Statement Graph?</em></a></p>
+
+<p>Every tiramemsu record is <code>(e, s, p, o, a, d, v1, v2)</code>: an occurrence id, a triple, a transaction-time lifetime <code>[a, d)</code> and a valid-time interval <code>[v1, v2)</code>. The subject or object can be another record's id. Gelling, Fletcher and Schmidt's <strong>Statement Graphs</strong>, the formal model behind Amazon Neptune's OneGraph, have statement vertices with exactly three outgoing edges: subject, predicate and object. <a href="statement-graphs.html">Statement graphs and tiramemsu</a> argued that one record is one statement vertex.</p>
+<p>So is the store a Statement Graph? Sometimes. The paper says exactly when, and what an exporter should do in the other cases.</p>
+
+<h2>The rule: export, don't invent</h2>
+<p>An export is <strong>identity-preserving</strong> when it obeys two rules:</p>
+<ul>
+  <li>Every exported record becomes exactly one statement vertex, and there are no others.</li>
+  <li>A reference to record <code>x</code> becomes an edge to the vertex of <code>x</code>, and is never rewritten into something else.</li>
+</ul>
+<p>No new occurrences and no renamed ones. Under those rules the first theorem is short: <strong>a set of records exports exactly when it is closed and acyclic.</strong> Closed means every record it points at is in the set. Acyclic means no chain of references comes back to where it started, because a Statement Graph is a DAG. The export is then unique, and reading its role edges gives back every triple with its id.</p>
+<p>A tempting shortcut breaks the first rule. You can turn a dangling reference into a plain IRI leaf and still get a valid graph. But a consumer can no longer tell a reference to a missing occurrence from an ordinary term, so the shortcut is not allowed.</p>
+
+<h2>The running example</h2>
+<p>At transaction 1 we write a route and its distance:</p>
+<pre><code>e1 = (:FRA, :route, :LHR)
+e2 = (e1, :distance, 655)          <span class="c"># an annotation on e1</span></code></pre>
+<p>At transaction 2 we correct the route's valid time with <code>supersede</code>. The engine retracts <code>e1</code> and its dependent <code>e2</code>, replays them under fresh ids <code>e1'</code> and <code>e2'</code>, and records the lineage <code>ℓ = (e1', sys:supersedes, e1)</code>.</p>
+<ul>
+  <li>The <strong>current snapshot</strong> <code>{e1', e2', ℓ}</code> is <em>not</em> closed: <code>ℓ</code> points at the retracted <code>e1</code>.</li>
+  <li>The <strong>full history</strong> <code>{e1, e2, e1', e2', ℓ}</code> is closed and acyclic. It exports as is.</li>
+</ul>
+<p>A different correction, one whose patched object names the annotation <code>e2</code>, replays into <code>e1' = (:FRA, :route, e2')</code> and <code>e2' = (e1', :distance, 655)</code>. Neither record refers to itself, but together they form a two-cycle. Neither the snapshot nor the history can export it whole.</p>
+
+<h2>The kernel: the most you can export</h2>
+<p>When a set is not exportable, the exporter has to drop whole records. It cannot patch endpoints or invent referents. Which records should go? The paper's answer is the <strong>export kernel</strong>. Start from nothing and repeatedly add every record whose references are all already in. Records that reference nothing go in first, then the records that point only at those, and so on, until nothing changes.</p>
+<p>The kernel is the <strong>unique greatest</strong> closed, acyclic subset, so no other choice exports more. It drops exactly the records that reach a problem: a missing target, or a cycle. Unrelated facts stay. It is Kahn's topological sort, so a peel computes it in linear time and outputs records in an order where every record comes after its targets. That is the order a streaming RDF-star writer needs. In the cyclic example, the history kernel keeps <code>e1</code>, <code>e2</code> and any unrelated fact. The snapshot kernel keeps only the unrelated fact, because <code>ℓ</code> also dangles there.</p>
+<p>The kernel has one weakness: it costs provenance. In the first example it exports <code>{e1', e2'}</code> from the snapshot and silently drops the lineage <code>ℓ</code>. The paper's dual, the <strong>reference closure</strong>, goes the other way. It keeps every selected record and adds the historical records they point at, marked as retracted. That exports <code>{e1, e1', e2', ℓ}</code> whole. Either way, an exporter should <strong>report every omitted record with a reason</strong>: missing target <code>x</code>, on a cycle, or depends on omitted <code>y</code>.</p>
+
+<h2>Export the history, not the present</h2>
+<p>A temporal store has a property most graph stores lack: records are immutable and never deleted, and a write may point only at records that already exist. The paper proves that under these rules the <strong>full history is always closed</strong>. Snapshots can dangle, but history cannot. The only cycles history can contain are the ones a single correction creates inside its own replay batch.</p>
+<p>Two practical consequences follow:</p>
+<ul>
+  <li><strong>One bit per record.</strong> When a transaction commits, run the peel over just its new records, treating references to older records as resolved if their bit is set. The bit then marks the history kernel exactly, and it never changes later. Full-history export becomes a filter scan.</li>
+  <li><strong>A rule that removes the last loss.</strong> Before a correction writes anything, peel its replay batch. If something is left over, abort with the offending member as the reason. This rejects exactly the patches that name a member of the correction's own cascade. Under this <em>acyclic-replay rule</em> the history is always closed and acyclic, and all of it exports.</li>
+</ul>
+<div class="note"><strong>Engine status.</strong> Tiramemsu does not apply the acyclic-replay rule today. A correction can still create the two-cycle above, and a regression test pins that behaviour. The engine's own invariants (live endpoints, cascade, immutability) hold for such a cycle; export is the first consumer that needs a DAG. Nor is the kernel an engine API yet. The paper recommends the rule for stores that export.</div>
+
+<h2>Both clocks, into RDF-star</h2>
+<p>RDF-star's branch of OneGraph needs one more thing: a statement nothing points at must be <em>asserted</em> by a membership statement <code>(e, in, G)</code>. The paper's temporal encoding adds, for each record:</p>
+<ul>
+  <li>time statements <code>(e, τa, a)</code>, <code>(e, τd, d)</code>, <code>(e, τ1, v1)</code> and <code>(e, τ2, v2)</code>, leaving out a clock that is open;</li>
+  <li>a membership for each time statement;</li>
+  <li>a membership for the record itself, but only if you want to present it as asserted.</li>
+</ul>
+<p>The roundtrip is <strong>lossless</strong>: decoding returns the same records with all eight fields, and the same asserted set. Asserting only the current snapshot and quoting the rest is a natural choice. A time-unaware RDF-star consumer then sees exactly the snapshot, and the history hangs off it as statements about quoted triples.</p>
+<p>Queries come with one condition. A conjunctive query over the asserted part returns the same answers as the store, up to quoting, when no two records share the same triple. That condition is not idle. A valid-time correction creates a new occurrence with the old content, so in RDF-star <code>e1</code> and <code>e1'</code> quote to the same triple. A join can then merge annotations the store keeps apart.</p>
+
+<h2>Where the boundary moves</h2>
+<table>
+  <thead><tr><th>Target</th><th>What exports</th><th>What it costs</th></tr></thead>
+  <tbody>
+    <tr><td>Statement Graph / RDF-star</td><td>The kernel: closed and acyclic records</td><td>Equal contents merge on quoting</td></tr>
+    <tr><td>RDF 1.2 reifiers</td><td>Every store, cycles and dangling references included</td><td>Assertion is per triple, not per occurrence</td></tr>
+    <tr><td>Property-graph branch</td><td>Only edges, labels and properties nothing points at</td><td>Reference depth at most one; both clocks for edges only</td></tr>
+  </tbody>
+</table>
+<p>RDF 1.2 names an occurrence with a reifier IRI instead of nesting it, so a reference is just a name. Closure and acyclicity become checks for consumers that dereference, not conditions of the format. In exchange, an asserted triple cannot say which occurrence it asserts when two share content, so the asserted set has to come from the clocks.</p>
+
+<h2>Evidence and limits</h2>
+<ul>
+  <li><strong>Lean.</strong> The PDF's proofs are by hand. A Lean 4 development in the validation archive re-proves the criterion, the kernel and its obstructions, the reference closure, the history results, the acyclic-replay rule, the exportable bit, the temporal roundtrip, the query view and the reifier roundtrip. The property-graph result and the cost bounds are not mechanized.</li>
+  <li><strong>Validator.</strong> A standard-library Python validator checks 217 625 exhaustive stores, 72 567 four-record reference structures, 20 000 random stores and 3 000 random protocol histories. It compares three kernel implementations with an exhaustive oracle.</li>
+  <li><strong>Engine traces.</strong> Both counterexamples were traced through the engine and recomputed independently.</li>
+</ul>
+<p>No performance claims are made.</p>
+
+<h2>Read the paper</h2>
+<p><em>When Is a Temporal Statement Store a Statement Graph? Export Boundaries for Occurrence Records with Two Clocks</em> has every definition, theorem and proof, the encodings, the query view and the comparison with RDF 1.2 and property graphs. It is a draft preprint under CC BY 4.0, archived on Zenodo with its validation archive.</p>
+<p><a class="btn primary" href="../paper/export-boundaries-r4.pdf">Download the PDF</a> <a class="btn" href="../paper/export-boundaries.html">About the paper</a> <a class="btn" href="https://doi.org/10.5281/zenodo.23335652">DOI 10.5281/zenodo.23335652</a></p>
+<p><a href="three-papers.html">The series in one page →</a> · <a href="exact-metagraph-encodings.html">← Previous: cheap to write, careful to read</a></p>
+</article>
+
+<footer><div class="wrap">
+  <span>Tiramemsu · MIT OR Apache-2.0 · <a href="https://github.com/Volland/tiramemsu">github.com/Volland/tiramemsu</a></span>
+  <span><a href="../">Home</a> · <a href="./">All articles</a></span>
+  <span><a href="../impressum.html">Impressum</a> · <a href="../datenschutz.html">Datenschutz</a> · <a href="../agb.html">AGB</a></span>
+</div></footer>
+</body>
+</html>

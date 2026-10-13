@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cheap to write, careful to read: tiramemsu</title>
+<meta name="description" content="A plain-language companion to the paper Metagraph Encodings over Identified Triples: why storing metagraphs as identified triples is easy, why reading them back needs exact image constraints, and what time, metapaths and rank add.">
+<link rel="icon" href="../assets/logo.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+<header class="top"><div class="wrap">
+  <a class="brand" href="../"><img src="../assets/logo.svg" alt="">Tiramemsu</a>
+  <nav class="menu"><a href="../#features">Features</a><a href="../#start">Quick start</a><a href="./" aria-current="page">Articles</a><a href="../paper/">Papers</a><a href="https://github.com/Volland/tiramemsu">GitHub</a></nav>
+</div></header>
+
+<article class="post">
+<h1>Cheap to write, careful to read</h1>
+<p class="meta">Tiramemsu articles · 13 October 2026 · companion to the paper <a href="../paper/metagraph-encodings.html"><em>Metagraph Encodings over Identified Triples</em></a></p>
+
+<p>An identified triple is a row <code>(e, s, p, o)</code> whose id <code>e</code> can stand where a node stands in another row. With that one shape you can store a hyperedge, an edge between edges, a container that holds facts, and a confidence on the fact that something belongs to a container. <a href="metagraphs.html">Metagraphs from one row shape</a> shows the recipes. The paper behind this article asks the question the recipes skip: once the rows are in, can you always get the structure back out?</p>
+<p>The short answer is no. The useful answer is a precise list of what you have to check, and a proof that nothing on the list is optional.</p>
+
+<h2>Writing is one row per clause</h2>
+<p>Take a directed hypergraph: vertices, and edges that go from a set of vertices to a set of vertices. Encode each vertex and each edge as an <em>anchor</em> row that gives the atom a type. Then add one role row for each incidence:</p>
+<pre><code>(n_e, rdf:type, mg:Edge)     <span class="c"># the edge e exists</span>
+(n_e, mg:in,  n_a)           <span class="c"># a is an input of e</span>
+(n_e, mg:in,  n_b)           <span class="c"># b is an input of e</span>
+(n_e, mg:out, n_c)           <span class="c"># c is an output of e</span></code></pre>
+<p>That is all. The size is exact: one row per vertex, one per edge and one per endpoint. Higher-order metagraphs, where an edge's end can be another edge, use the same rows with a looser type on the object. Nested containers use member rows. Annotated presentations add attribute and annotation rows. Every encoding in the paper is one row per source clause. This is the sense in which statement identity is <strong>cheap</strong>.</p>
+
+<h2>Reading needs an exact image</h2>
+<p>A store is just a set of rows, and nothing stops a store from containing rows that no hypergraph would produce:</p>
+<ul>
+  <li>an edge with outputs and no inputs;</li>
+  <li>a role row whose subject is a vertex;</li>
+  <li>an extra annotation the decoder does not know what to do with;</li>
+  <li>two copies of the same role.</li>
+</ul>
+<p>Decode such a store and you get something outside the source domain, or a different structure from the one you meant. Typing the rows does not help, because the problem is often not a row at all.</p>
+<p>The paper separates a <strong>row language</strong>, which only says which shapes are allowed, from an <strong>exact image</strong>, which says which stores decode to a valid source. For directed hypergraphs the image is six conditions:</p>
+<table>
+  <thead><tr><th></th><th>Condition</th><th>Kind</th></tr></thead>
+  <tbody>
+    <tr><td>D1</td><td>Role subjects are edge anchors</td><td>per row</td></tr>
+    <tr><td>D2</td><td>Role objects are vertex anchors</td><td>per row</td></tr>
+    <tr><td>D3</td><td>Each edge has at least one <code>in</code> role</td><td>cardinality</td></tr>
+    <tr><td>D4</td><td>Each edge has at least one <code>out</code> role</td><td>cardinality</td></tr>
+    <tr><td>D5</td><td>No other rows</td><td>vocabulary</td></tr>
+    <tr><td>D6</td><td>No two roles with equal content</td><td>distinctness</td></tr>
+  </tbody>
+</table>
+<p>Higher-order metagraphs let role objects be edges too, and forbid an edge from naming itself. Basu–Blanning metagraphs add <strong>extensionality</strong>: no two edges may have the same inputs and the same outputs. That condition is about a group of rows, not a single row. Nested containers add <strong>well-foundedness</strong>, a condition about the whole member graph.</p>
+<p>On an exact image, encoding and decoding are inverse up to renaming of ids. The paper is candid that this part is bookkeeping. The interesting part is that <strong>every condition is necessary</strong>. For each one there is a store that breaks only that condition, passes all the others, and does not decode to a valid source. A checker runs the validator with that one condition removed and confirms that the witness then slips through. So the list cannot be shortened, and a system that checks only row types is checking less than it needs to.</p>
+<p class="note">Tiramemsu does not enforce these images. It stores whatever rows you write. The paper's checkers, and its SHACL and SPARQL validators, show what an application or a validator should check before it decodes a store as a metagraph.</p>
+
+<h2>Time: an annotation can outlive what it is about</h2>
+<p>Give every component two clocks, as tiramemsu does. Classical temporal referential integrity requires a row's valid time to sit inside the valid time of everything it references. For structure that is right: an edge cannot be valid while one of its ends is not. For opinions it is wrong. "This 2020–2021 fact was disputed in 2025" is valid in 2025, outside its bearer's interval.</p>
+<p>The paper gives two snapshot policies:</p>
+<ul>
+  <li><strong>Policy S (containment).</strong> Both clocks nest along references, and a snapshot is what is asserted at that moment.</li>
+  <li><strong>Policy R (retained referents).</strong> Only transaction time must nest. A snapshot is what is asserted plus everything it references, filtered by transaction time alone.</li>
+</ul>
+<p>Under Policy R the dispute appears in the 2025 snapshot together with the fact it disputes. The fact's own stored interval tells a reader that it is context, not a 2025 claim. The snapshot theorem says that under either policy, taking a snapshot commutes with encoding: snapshot the store and decode, or decode and snapshot the source, and you get the same structure.</p>
+<p>One family does not survive time. Extensionality is a property of each snapshot, not of any row. Two edges with equal ends, valid <code>[0,5)</code> and <code>[3,8)</code>, are fine row by row, but the snapshot at 4 contains both. Practical systems should prefer the identified images, where two edges may share their ends.</p>
+<p>Revisions need one more relation. When an edge's target is corrected, the new edge is a new atom. A <code>supersedes</code> row between the two, with lifetimes that are ordered and disjoint, makes versions a set of chains. Each chain has at most one live member at a time, and naming atoms by their chain lets you compare snapshots across time.</p>
+
+<h2>Reachable is not the same as executable</h2>
+<p>A metagraph often describes processes: an edge consumes its inputs and produces its outputs. A metapath from <code>B</code> to <code>C</code> is a set of edges that connects them. The usual definition asks only that every edge lie on a walk. But a process edge needs <em>all</em> its inputs before it can fire. Here is a two-edge example:</p>
+<pre><code>e1 : {b, a} → {d}
+e2 : {d}    → {a, c}</code></pre>
+<p>Both edges lie on a walk from <code>b</code> to <code>c</code>, so this is a metapath. Neither edge can ever fire. <code>e1</code> needs <code>a</code>, which only <code>e2</code> makes, and <code>e2</code> needs <code>d</code>, which only <code>e1</code> makes.</p>
+<p>The paper gives a linear-time check, forward chaining with a counter per edge, that decides whether a metapath is <strong>executable</strong>. It also proves when the two notions agree: when the dependency graph between edges is acyclic, or when every edge has exactly one input. A SPARQL property path follows walks, so it answers the weaker question.</p>
+
+<h2>What depth costs</h2>
+<p>The <em>rank</em> of a row is how deep its references go: a row that references nothing has rank 0, and a row that references a rank-<em>k</em> row has rank at least <em>k</em>+1. Rank pays for itself in two operations:</p>
+<ul>
+  <li><strong>Bulk loading.</strong> If no row may be inserted before the rows it references, a load needs exactly 1 + (maximum rank) batches.</li>
+  <li><strong>Retraction.</strong> A cascade from a row of rank <em>r</em> finishes within (maximum rank − <em>r</em>) rounds after the first.</li>
+</ul>
+<p>Anchored encodings keep every structural row at rank 1, however deeply edges nest, so the structure loads in two batches. Annotations on structure add depth. A compact encoding that stores a binary edge as one triple makes rank equal endpoint depth instead. It is smaller, but it costs more batches when edges reference edges.</p>
+<p>The paper's memory example shows why the distinction matters for agents. A confidence of 0.9 on the fact "Sarah announced a new job" has rank 1. A confidence of 0.7 that this fact belongs to a particular conversation has rank 2, because it sits on the membership row. These are two different claims, and identified triples keep them apart.</p>
+
+<h2>Evidence and limits</h2>
+<ul>
+  <li><strong>Checkers.</strong> Exhaustive bounded enumeration and seeded randomized property tests check every roundtrip and every necessity witness.</li>
+  <li><strong>Validators.</strong> SHACL shapes and SPARQL queries express the image constraints and are tested for agreement with the Python validators.</li>
+  <li><strong>Lean.</strong> A Lean 4 proof covers the directed, higher-order and extensional roundtrips under canonical naming.</li>
+</ul>
+<p>The paper reports no performance or retrieval results. It does not claim identified triples are a minimal universal primitive, or that these encodings beat relational or graph alternatives. The engine enforces none of the images.</p>
+
+<h2>Read the paper</h2>
+<p><em>Metagraph Encodings over Identified Triples: Exact Images, Temporal Integrity, and Structural Depth</em> has the source signatures, all image constraints with their necessity witnesses, the temporal theorem, the metapath results and the rank consumers. It is a draft preprint under CC BY 4.0, archived on Zenodo.</p>
+<p><a class="btn primary" href="../paper/metagraph-encodings-r2.pdf">Download the PDF</a> <a class="btn" href="../paper/metagraph-encodings.html">About the paper</a> <a class="btn" href="https://doi.org/10.5281/zenodo.23167938">DOI 10.5281/zenodo.23167938</a></p>
+<p><a href="three-papers.html">The series in one page →</a> · <a href="statement-store-export.html">Next: what leaves the store →</a></p>
+</article>
+
+<footer><div class="wrap">
+  <span>Tiramemsu · MIT OR Apache-2.0 · <a href="https://github.com/Volland/tiramemsu">github.com/Volland/tiramemsu</a></span>
+  <span><a href="../">Home</a> · <a href="./">All articles</a></span>
+  <span><a href="../impressum.html">Impressum</a> · <a href="../datenschutz.html">Datenschutz</a> · <a href="../agb.html">AGB</a></span>
+</div></footer>
+</body>
+</html>
