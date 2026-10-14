@@ -16,3 +16,4 @@ This directory defines the high-level concepts, business logic, and architecture
 - [[project-review]] — Measured architecture review, resource-safety findings, and proposed feature priorities
 
 - [[paper]] — Research manuscript artifacts and the isolated arXiv source-package workflow.
+- [[code-ontology]] — shared vocabulary of intent types and typed edges between intent and code
