@@ -51,7 +51,7 @@ fn from(ms: i64) -> Patch {
     }
 }
 
-// @lat: [[tests#Operations#Supersede Replays Layers]]
+// @tg: verifies:: [[tests#Operations#Supersede Replays Layers]] {since: "2026-09-29", level: unit}
 host_test! {
     fn supersede_replays_layers(db) {
         let l = layers(db, Valid::ALWAYS);

@@ -105,7 +105,7 @@ fn api_arrivals(
 const TR: &str = "urn:tiramemsu:tm:timeRespecting";
 
 // "Reverse valid-time order"
-// @lat: [[tests#Temporal Path Syntax#Reverse Order Does Not Match]]
+// @tg: verifies:: [[tests#Temporal Path Syntax#Reverse Order Does Not Match]] {since: "2026-10-03", level: unit}
 #[test]
 fn reverse_valid_time_order_does_not_match() {
     let t = T::new();
@@ -155,7 +155,7 @@ fn reverse_valid_time_order_does_not_match() {
 }
 
 // "Virtual layer hop"
-// @lat: [[tests#Temporal Path Syntax#Virtual Hop Keeps The Arrival]]
+// @tg: verifies:: [[tests#Temporal Path Syntax#Virtual Hop Keeps The Arrival]] {since: "2026-10-03", level: unit}
 #[test]
 fn virtual_layer_hop_keeps_the_arrival() {
     let t = T::new();
@@ -205,7 +205,7 @@ fn virtual_layer_hop_keeps_the_arrival() {
 }
 
 // "Multiple journeys"
-// @lat: [[tests#Temporal Path Syntax#Earliest Arrival Over Journeys]]
+// @tg: verifies:: [[tests#Temporal Path Syntax#Earliest Arrival Over Journeys]] {since: "2026-10-03", level: unit}
 #[test]
 fn earliest_arrival_over_several_journeys() {
     let t = T::new();
@@ -252,7 +252,7 @@ fn earliest_arrival_over_several_journeys() {
 }
 
 // "Parameterized start"
-// @lat: [[tests#Temporal Path Syntax#Parameterized Start Matches The API]]
+// @tg: verifies:: [[tests#Temporal Path Syntax#Parameterized Start Matches The API]] {since: "2026-10-03", level: unit}
 #[test]
 fn parameterized_start_matches_the_rust_api() {
     let t = T::new();
@@ -329,7 +329,7 @@ fn params_of(start: i64) -> Params {
 }
 
 // "Earliest arrival binding" with an unbounded initial instant
-// @lat: [[tests#Temporal Path Syntax#Unbounded Arrival Is Unbound]]
+// @tg: verifies:: [[tests#Temporal Path Syntax#Unbounded Arrival Is Unbound]] {since: "2026-10-03", level: unit}
 #[test]
 fn unbounded_arrival_is_unbound() {
     let t = T::new();
@@ -363,7 +363,7 @@ fn unbounded_arrival_is_unbound() {
 }
 
 // Shared causal journey semantics: the selected transaction and graph view
-// @lat: [[tests#Temporal Path Syntax#Uses The Graph Scope And Snapshot]]
+// @tg: verifies:: [[tests#Temporal Path Syntax#Uses The Graph Scope And Snapshot]] {since: "2026-10-03", level: unit}
 #[test]
 fn uses_the_graph_scope_and_snapshot() {
     let t = T::new();
@@ -427,7 +427,7 @@ fn uses_the_graph_scope_and_snapshot() {
 }
 
 // Ordinary row shapes are unchanged unless the arrival is requested
-// @lat: [[tests#Temporal Path Syntax#Row Shapes Are Unchanged]]
+// @tg: verifies:: [[tests#Temporal Path Syntax#Row Shapes Are Unchanged]] {since: "2026-10-03", level: unit}
 #[test]
 fn row_shapes_are_unchanged() {
     let t = T::new();
@@ -477,7 +477,7 @@ fn tm_core_null() -> tiramemsu::SqlValue {
 }
 
 // "Configured cap": an explicit bound against the configured hop cap
-// @lat: [[tests#Temporal Path Syntax#Completeness Tells Bound From Cap]]
+// @tg: verifies:: [[tests#Temporal Path Syntax#Completeness Tells Bound From Cap]] {since: "2026-10-03", level: unit}
 #[test]
 fn completeness_tells_an_explicit_bound_from_the_cap() {
     let dir = tempfile::tempdir().unwrap();
@@ -594,7 +594,7 @@ fn completeness_tells_an_explicit_bound_from_the_cap() {
 }
 
 // "State guard"
-// @lat: [[tests#Temporal Path Syntax#State Guard Still Fails]]
+// @tg: verifies:: [[tests#Temporal Path Syntax#State Guard Still Fails]] {since: "2026-10-03", level: unit}
 #[test]
 fn state_guard_still_fails() {
     let dir = tempfile::tempdir().unwrap();
@@ -648,7 +648,7 @@ fn state_guard_still_fails() {
 }
 
 // Grammar errors of both extensions
-// @lat: [[tests#Temporal Path Syntax#Grammar Errors]]
+// @tg: verifies:: [[tests#Temporal Path Syntax#Grammar Errors]] {since: "2026-10-03", level: unit}
 #[test]
 fn grammar_errors() {
     let t = T::new();

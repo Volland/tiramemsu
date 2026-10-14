@@ -25,7 +25,7 @@ const ASSERT: &str = r#"{"ops":[
   {"op":"assert","s":{"iri":"urn:tiramemsu:v:bob"},"p":{"iri":"urn:tiramemsu:v:knows"},"o":{"iri":"urn:tiramemsu:v:carol"}}
 ]}"#;
 
-// @lat: [[tests#WASM SQLite Host#JavaScript API]]
+// @tg: verifies:: [[tests#WASM SQLite Host#JavaScript API]] {since: "2026-10-03", level: unit}
 #[wasm_bindgen_test]
 async fn database_open_call_export_import_close() {
     let info: serde_json::Value = serde_json::from_str(&runtime_info()).unwrap();
@@ -70,7 +70,7 @@ async fn database_open_call_export_import_close() {
     assert!(r.contains(r#""t":2"#), "{r}");
 }
 
-// @lat: [[tests#WASM SQLite Host#JavaScript journal errors]]
+// @tg: verifies:: [[tests#WASM SQLite Host#JavaScript journal errors]] {since: "2026-10-03", level: unit}
 #[wasm_bindgen_test]
 async fn wal_and_opfs_fail_at_open() {
     let e = message(

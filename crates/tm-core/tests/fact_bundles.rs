@@ -77,7 +77,7 @@ fn memory(db: &mut TestDb) -> Memory {
     out.unwrap()
 }
 
-// @lat: [[tests#Fact Bundles#Bundle Collects Layers And Evidence]]
+// @tg: verifies:: [[tests#Fact Bundles#Bundle Collects Layers And Evidence]] {since: "2026-09-30", level: unit}
 host_test! {
     fn members_order_and_stability(db) {
         let mem = memory(db);
@@ -122,7 +122,7 @@ host_test! {
     }
 }
 
-// @lat: [[tests#Fact Bundles#Bundle Leaves Out Local Statements]]
+// @tg: verifies:: [[tests#Fact Bundles#Bundle Leaves Out Local Statements]] {since: "2026-09-30", level: unit}
 host_test! {
     fn exclusions(db) {
         // a confirmation and a layer on it; transaction metadata
@@ -174,7 +174,7 @@ host_test! {
     }
 }
 
-// @lat: [[tests#Fact Bundles#Bundle Round Trip Between Databases]]
+// @tg: verifies:: [[tests#Fact Bundles#Bundle Round Trip Between Databases]] {since: "2026-09-30", level: unit}
 host_test! {
     fn round_trip(db) {
         let mem = memory(db);
@@ -200,7 +200,7 @@ host_test! {
     }
 }
 
-// @lat: [[tests#Fact Bundles#Import Is Idempotent]]
+// @tg: verifies:: [[tests#Fact Bundles#Import Is Idempotent]] {since: "2026-09-30", level: unit}
 host_test! {
     fn second_import_changes_nothing(db) {
         let mem = memory(db);
@@ -225,7 +225,7 @@ host_test! {
     }
 }
 
-// @lat: [[tests#Fact Bundles#Import Attaches To An Existing Root]]
+// @tg: verifies:: [[tests#Fact Bundles#Import Attaches To An Existing Root]] {since: "2026-09-30", level: unit}
 host_test! {
     fn existing_root_fact(db) {
         let mem = memory(db);
@@ -246,7 +246,7 @@ host_test! {
     }
 }
 
-// @lat: [[tests#Fact Bundles#Anonymous Nodes Stay Distinct]]
+// @tg: verifies:: [[tests#Fact Bundles#Anonymous Nodes Stay Distinct]] {since: "2026-09-30", level: unit}
 host_test! {
     fn anonymous_nodes(db) {
         let mut root = None;
@@ -286,7 +286,7 @@ host_test! {
     }
 }
 
-// @lat: [[tests#Fact Bundles#Import Rejects Cycles And Malformed Bundles]]
+// @tg: verifies:: [[tests#Fact Bundles#Import Rejects Cycles And Malformed Bundles]] {since: "2026-09-30", level: unit}
 host_test! {
     fn cycles_and_malformed(db) {
         let e7 = db
@@ -331,7 +331,7 @@ host_test! {
     }
 }
 
-// @lat: [[tests#Fact Bundles#Import Fails Atomically On Schema]]
+// @tg: verifies:: [[tests#Fact Bundles#Import Fails Atomically On Schema]] {since: "2026-09-30", level: unit}
 host_test! {
     fn schema_violation_is_atomic(db) {
         let root = db
@@ -354,7 +354,7 @@ host_test! {
     }
 }
 
-// @lat: [[tests#Fact Bundles#Bundle Of The Past]]
+// @tg: verifies:: [[tests#Fact Bundles#Bundle Of The Past]] {since: "2026-09-30", level: unit}
 host_test! {
     fn as_of_bundle_of_a_retracted_structure(db) {
         let mem = memory(db);
@@ -467,7 +467,7 @@ mod random {
 
     // Export, import into an empty file, export again: the same bundle; and a
     // second import is a no-op.
-    // @lat: [[tests#Fact Bundles#Bundles Round Trip On Random Graphs]]
+    // @tg: verifies:: [[tests#Fact Bundles#Bundles Round Trip On Random Graphs]] {since: "2026-09-30", level: unit}
     #[test]
     fn prop_bundles_round_trip() {
         let cfg = ProptestConfig::with_cases(proptest_cases(24));

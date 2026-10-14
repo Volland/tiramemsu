@@ -79,7 +79,7 @@ fn read_story(db: &Db) -> Vec<String> {
 
 // optional-query-frontends "Core operations": a build asserts and reads a fact with
 // the same persisted format and temporal semantics, whatever its features
-// @lat: [[tests#Optional Query Frontends#Core Operations In Every Build]]
+// @tg: verifies:: [[tests#Optional Query Frontends#Core Operations In Every Build]] {since: "2026-10-03", level: unit}
 #[test]
 fn core_operations_work_in_every_build() {
     let dir = tempfile::tempdir().unwrap();
@@ -127,7 +127,7 @@ fn core_operations_work_in_every_build() {
 
 // optional-query-frontends "Core-only dependency graph": bundle JSON and N-Triples
 // need no query front end
-// @lat: [[tests#Optional Query Frontends#Bundle Formats Without A Parser]]
+// @tg: verifies:: [[tests#Optional Query Frontends#Bundle Formats Without A Parser]] {since: "2026-10-03", level: unit}
 #[test]
 fn bundle_formats_without_a_parser() {
     let dir = tempfile::tempdir().unwrap();
@@ -169,7 +169,7 @@ fn bundle_formats_without_a_parser() {
 
 // The recent core features stay in the core tier: text recall, conflict review,
 // bulk import and operation budgets.
-// @lat: [[tests#Optional Query Frontends#Recent Core Features In Every Build]]
+// @tg: verifies:: [[tests#Optional Query Frontends#Recent Core Features In Every Build]] {since: "2026-10-03", level: unit}
 #[test]
 fn recent_core_features_in_every_build() {
     let dir = tempfile::tempdir().unwrap();
@@ -237,7 +237,7 @@ fn recent_core_features_in_every_build() {
 // A file is shared between builds: `scripts/feature-matrix.sh handoff` writes it
 // with the core build and reads it with the default build (and the reverse). Only
 // runs when `TIRAMEMSU_HANDOFF` names the file.
-// @lat: [[tests#Optional Query Frontends#One File Across Builds]]
+// @tg: verifies:: [[tests#Optional Query Frontends#One File Across Builds]] {since: "2026-10-03", level: unit}
 #[test]
 fn handoff_file_across_builds() {
     let Some(p) = std::env::var_os("TIRAMEMSU_HANDOFF") else {
@@ -266,7 +266,7 @@ fn handoff_file_across_builds() {
 
 // optional-query-frontends "Single frontend" and the execution-only build: the
 // shared engine evaluates paths and IR without either parser
-// @lat: [[tests#Optional Query Frontends#Shared Execution Without A Parser]]
+// @tg: verifies:: [[tests#Optional Query Frontends#Shared Execution Without A Parser]] {since: "2026-10-03", level: unit}
 #[test]
 #[cfg(feature = "exec")]
 fn shared_execution_without_a_parser() {
@@ -312,7 +312,7 @@ fn shared_execution_without_a_parser() {
 
 // optional-query-frontends "Single frontend": SPARQL with shared execution, and
 // no Cypher parser linked (the dependency side is checked by the script)
-// @lat: [[tests#Optional Query Frontends#SPARQL Only]]
+// @tg: verifies:: [[tests#Optional Query Frontends#SPARQL Only]] {since: "2026-10-03", level: unit}
 #[test]
 #[cfg(feature = "sparql")]
 fn sparql_frontend_runs_on_its_own() {
@@ -333,7 +333,7 @@ fn sparql_frontend_runs_on_its_own() {
 }
 
 // optional-query-frontends "Single frontend" for Cypher
-// @lat: [[tests#Optional Query Frontends#Cypher Only]]
+// @tg: verifies:: [[tests#Optional Query Frontends#Cypher Only]] {since: "2026-10-03", level: unit}
 #[test]
 #[cfg(feature = "cypher")]
 fn cypher_frontend_runs_on_its_own() {
@@ -362,7 +362,7 @@ fn cypher_frontend_runs_on_its_own() {
 
 // optional-query-frontends "Default application": the default build keeps both
 // front ends, paths and saved answers
-// @lat: [[tests#Optional Query Frontends#Default Surface]]
+// @tg: verifies:: [[tests#Optional Query Frontends#Default Surface]] {since: "2026-10-03", level: unit}
 #[test]
 #[cfg(all(feature = "sparql", feature = "cypher"))]
 fn default_surface_keeps_every_frontend() {

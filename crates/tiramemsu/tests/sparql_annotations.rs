@@ -276,7 +276,7 @@ fn cascaded_annotation_visible_as_of_before_retraction() {
 }
 
 // sparql-rdf12-annotations "Same eid across dialects and the API": API eid equals SPARQL reifier
-// @lat: [[tests#Query#Dual View Binds Same Eid]]
+// @tg: verifies:: [[tests#Query#Dual View Binds Same Eid]] {since: "2026-09-30", level: unit}
 #[test]
 fn api_eid_equals_sparql_reifier() {
     let t = T::new();

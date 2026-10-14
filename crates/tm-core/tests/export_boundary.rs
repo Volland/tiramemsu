@@ -95,7 +95,7 @@ fn correction_cycle(db: &mut TestDb) -> (Rows, Rows) {
     (by_eid(db.history_all()), by_eid(db.now(None, None, None)))
 }
 
-// @lat: [[tests#Export Boundary#Full History Is Closed]]
+// @tg: verifies:: [[tests#Export Boundary#Full History Is Closed]] {since: "2026-10-11", level: unit}
 host_test! {
     fn full_history_is_closed(db) {
         let (history, now) = lineage(db);
@@ -105,7 +105,7 @@ host_test! {
     }
 }
 
-// @lat: [[tests#Export Boundary#Snapshot Kernel Drops Dangling Lineage]]
+// @tg: verifies:: [[tests#Export Boundary#Snapshot Kernel Drops Dangling Lineage]] {since: "2026-10-11", level: unit}
 host_test! {
     fn snapshot_kernel_drops_dangling_lineage(db) {
         let (_, now) = lineage(db);
@@ -117,7 +117,7 @@ host_test! {
     }
 }
 
-// @lat: [[tests#Export Boundary#History Kernel Drops Only Replay Cycles]]
+// @tg: verifies:: [[tests#Export Boundary#History Kernel Drops Only Replay Cycles]] {since: "2026-10-11", level: unit}
 host_test! {
     fn history_kernel_drops_only_replay_cycles(db) {
         let (history, now) = correction_cycle(db);

@@ -441,7 +441,7 @@ fn deviations() -> BTreeMap<String, String> {
     out
 }
 
-// @lat: [[tests#Query#SPARQL W3C Subset]]
+// @tg: verifies:: [[tests#Query#SPARQL W3C Subset]] {since: "2026-09-30", level: unit}
 #[test]
 fn w3c_subset() {
     let expected = deviations();

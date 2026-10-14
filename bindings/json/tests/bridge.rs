@@ -70,7 +70,7 @@ fn a_transaction_reports_and_resolves_named_refs() {
     assert_eq!(r["refs"]["job"], r["results"][0]["eid"]);
 }
 
-// @lat: [[tests#Review Fixes#Bridge Resolves New Node Refs]]
+// @tg: verifies:: [[tests#Review Fixes#Bridge Resolves New Node Refs]] {since: "2026-10-11", level: unit}
 #[test]
 fn a_new_node_ref_resolves_in_later_ops() {
     let (_d, db) = open();
@@ -442,7 +442,7 @@ fn errors_carry_a_code_and_bad_arguments_are_told_apart() {
 }
 
 // json-bridge "Subject type violation"
-// @lat: [[tests#Typed Layers#Bridge Reports Subject Type Mismatch]]
+// @tg: verifies:: [[tests#Typed Layers#Bridge Reports Subject Type Mismatch]] {since: "2026-09-30", level: unit}
 #[test]
 fn subject_type_mismatch_has_its_own_code() {
     let (_d, db) = open();
@@ -494,7 +494,7 @@ fn open_options_are_checked() {
 }
 
 // json-bridge "Query results": SPARQL rows with provenance
-// @lat: [[tests#Query Provenance#Bridge Returns Provenance]]
+// @tg: verifies:: [[tests#Query Provenance#Bridge Returns Provenance]] {since: "2026-09-30", level: unit}
 #[test]
 fn sparql_rows_can_carry_provenance() {
     let (_d, db) = open();
@@ -527,7 +527,7 @@ fn sparql_rows_can_carry_provenance() {
 }
 
 // add-mcp-adapter "Incomplete provenance" and query-only text on the bridge
-// @lat: [[tests#Query Provenance#Bridge Reports Provenance Gaps And Query Only]]
+// @tg: verifies:: [[tests#Query Provenance#Bridge Reports Provenance Gaps And Query Only]] {since: "2026-10-03", level: unit}
 #[test]
 fn sparql_reports_provenance_gaps_and_refuses_updates_when_query_only() {
     let (_d, db) = open();
@@ -610,7 +610,7 @@ fn dependents_preview_a_retraction_on_any_view() {
     assert_eq!(e.code(), "InvalidArgument");
 }
 
-// @lat: [[tests#Fact Bundles#Bundles Cross The JSON Bridge]]
+// @tg: verifies:: [[tests#Fact Bundles#Bundles Cross The JSON Bridge]] {since: "2026-09-30", level: unit}
 #[test]
 fn a_bundle_moves_between_bridge_databases() {
     let (_d, a) = open();
@@ -669,7 +669,7 @@ fn a_bundle_moves_between_bridge_databases() {
     assert_eq!(e.code(), "InvalidTerm");
 }
 
-// @lat: [[tests#Memory Conflict Review#Bridge Conflicts And Previews]]
+// @tg: verifies:: [[tests#Memory Conflict Review#Bridge Conflicts And Previews]] {since: "2026-10-03", level: unit}
 #[test]
 fn the_bridge_reports_conflicts_and_previews_bundles() {
     let (_d, db) = open();
@@ -821,7 +821,7 @@ fn seed(db: &Database, n: usize) {
 const CROSS: &str = "SELECT (COUNT(*) AS ?c) WHERE { ?a v:p ?x . ?b v:p ?y . ?c2 v:p ?z }";
 
 // query-budgets: the bridge's `budget` argument, `readerTimeoutMs` and error codes
-// @lat: [[tests#Query Budgets#Bridge Budgets And Error Codes]]
+// @tg: verifies:: [[tests#Query Budgets#Bridge Budgets And Error Codes]] {since: "2026-10-03", level: unit}
 #[test]
 fn budgets_bound_bridge_calls_with_typed_codes() {
     let (_d, db) = open();
@@ -927,7 +927,7 @@ fn budgets_bound_bridge_calls_with_typed_codes() {
 }
 
 // query-budgets: `cancel` from another thread stops a running call
-// @lat: [[tests#Query Budgets#Bridge Cancels A Running Call]]
+// @tg: verifies:: [[tests#Query Budgets#Bridge Cancels A Running Call]] {since: "2026-10-03", level: unit}
 #[test]
 fn cancel_stops_a_running_call_from_another_thread() {
     let (_d, db) = open();
@@ -975,7 +975,7 @@ fn chunk_ops(c: usize, n: usize) -> J {
     )
 }
 
-// @lat: [[tests#Bulk Import#Bridge Import Sessions]]
+// @tg: verifies:: [[tests#Bulk Import#Bridge Import Sessions]] {since: "2026-10-03", level: unit}
 #[test]
 fn bulk_import_sessions_cross_the_bridge() {
     let (_d, db) = open();
@@ -1059,7 +1059,7 @@ fn bulk_import_sessions_cross_the_bridge() {
     );
 }
 
-// @lat: [[tests#Text Retrieval#Bridge Text Recall]]
+// @tg: verifies:: [[tests#Text Retrieval#Bridge Text Recall]] {since: "2026-10-03", level: unit}
 #[test]
 fn text_recall_crosses_the_bridge_with_evidence_and_error_codes() {
     let dir = tempfile::tempdir().unwrap();
@@ -1167,7 +1167,7 @@ fn text_recall_crosses_the_bridge_with_evidence_and_error_codes() {
     );
 }
 
-// @lat: [[tests#Saved Answers#Bridge Saved Answers]]
+// @tg: verifies:: [[tests#Saved Answers#Bridge Saved Answers]] {since: "2026-10-03", level: unit}
 #[test]
 fn saved_answers_cross_the_bridge() {
     let (_d, db) = open();
@@ -1288,7 +1288,7 @@ fn saved_answers_cross_the_bridge() {
 
 // temporal-language-paths: SPARQL and Cypher temporal syntax with a parameterized
 // start, and completeness reporting, through the bridge
-// @lat: [[tests#Temporal Path Syntax#Bridge Temporal Paths And Completeness]]
+// @tg: verifies:: [[tests#Temporal Path Syntax#Bridge Temporal Paths And Completeness]] {since: "2026-10-03", level: unit}
 #[test]
 fn temporal_path_syntax_and_completeness_cross_the_bridge() {
     let dir = tempfile::tempdir().unwrap();
@@ -1416,7 +1416,7 @@ fn temporal_path_syntax_and_completeness_cross_the_bridge() {
 
 // cyclic-join-execution over the bridge: `lftj` opts in, `explainSparql` names the
 // native route or the fallback reason, and both routes return the same rows
-// @lat: [[tests#Cyclic Joins#Bridge Exposes LFTJ Routing]]
+// @tg: verifies:: [[tests#Cyclic Joins#Bridge Exposes LFTJ Routing]] {since: "2026-10-03", level: unit}
 #[test]
 fn lftj_option_and_explain_over_the_bridge() {
     let dir = tempfile::tempdir().unwrap();
@@ -1489,7 +1489,7 @@ fn lftj_option_and_explain_over_the_bridge() {
     assert_eq!(e.code(), "Unsupported");
 }
 
-// @lat: [[tests#Vector Recall#Bridge Vector Recall]]
+// @tg: verifies:: [[tests#Vector Recall#Bridge Vector Recall]] {since: "2026-10-11", level: unit}
 #[test]
 fn vectors_through_the_bridge() {
     let dir = tempfile::tempdir().unwrap();
@@ -1553,7 +1553,7 @@ fn vectors_through_the_bridge() {
     assert_eq!(e.code(), "InvalidQuery");
 }
 
-// @lat: [[tests#Vector Recall#Every Surface Returns The Same Hits]]
+// @tg: verifies:: [[tests#Vector Recall#Every Surface Returns The Same Hits]] {since: "2026-10-11", level: unit}
 #[test]
 fn every_bridge_surface_returns_the_same_vector_hits() {
     let (_d, db) = open();

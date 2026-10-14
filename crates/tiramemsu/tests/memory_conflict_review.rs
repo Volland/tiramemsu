@@ -24,7 +24,7 @@ fn footprint(db: &Db) -> (usize, usize, usize) {
     )
 }
 
-// @lat: [[tests#Memory Conflict Review#Disjoint Valid Times Are Not Conflicts]]
+// @tg: verifies:: [[tests#Memory Conflict Review#Disjoint Valid Times Are Not Conflicts]] {since: "2026-10-03", level: unit}
 #[test]
 fn disjoint_valid_times_are_not_reported_and_overlaps_are() {
     let dir = tempfile::tempdir().unwrap();
@@ -77,7 +77,7 @@ fn disjoint_valid_times_are_not_reported_and_overlaps_are() {
     assert!(at(45).is_empty());
 }
 
-// @lat: [[tests#Memory Conflict Review#Parallel Equal Objects Are Support]]
+// @tg: verifies:: [[tests#Memory Conflict Review#Parallel Equal Objects Are Support]] {since: "2026-10-03", level: unit}
 #[test]
 fn parallel_statements_with_the_same_object_are_support() {
     let dir = tempfile::tempdir().unwrap();
@@ -121,7 +121,7 @@ fn parallel_statements_with_the_same_object_are_support() {
     assert_eq!(c[0].values[1].statements[0].eid, r2.asserted[0]);
 }
 
-// @lat: [[tests#Memory Conflict Review#Conflict Evidence Is Attributed]]
+// @tg: verifies:: [[tests#Memory Conflict Review#Conflict Evidence Is Attributed]] {since: "2026-10-03", level: unit}
 #[test]
 fn every_value_carries_attributed_evidence_and_no_invented_score() {
     let dir = tempfile::tempdir().unwrap();
@@ -194,7 +194,7 @@ fn every_value_carries_attributed_evidence_and_no_invented_score() {
     assert_eq!(e.source_layer.len(), 2);
 }
 
-// @lat: [[tests#Memory Conflict Review#Conflicts Follow The View And Filters]]
+// @tg: verifies:: [[tests#Memory Conflict Review#Conflicts Follow The View And Filters]] {since: "2026-10-03", level: unit}
 #[test]
 fn conflicts_follow_the_view_filters_and_declared_cardinality() {
     let dir = tempfile::tempdir().unwrap();
@@ -299,7 +299,7 @@ fn conflicts_follow_the_view_filters_and_declared_cardinality() {
     ));
 }
 
-// @lat: [[tests#Memory Conflict Review#Inspection Never Writes]]
+// @tg: verifies:: [[tests#Memory Conflict Review#Inspection Never Writes]] {since: "2026-10-03", level: unit}
 #[test]
 fn conflict_inspection_never_retracts_supersedes_or_confirms() {
     let dir = tempfile::tempdir().unwrap();
@@ -371,7 +371,7 @@ fn unique_email(db: &Db) -> TxReport {
     .unwrap()
 }
 
-// @lat: [[tests#Memory Conflict Review#Preview Reports Schema Violations]]
+// @tg: verifies:: [[tests#Memory Conflict Review#Preview Reports Schema Violations]] {since: "2026-10-03", level: unit}
 #[test]
 fn a_preview_reports_a_schema_violation_and_writes_no_graph_rows() {
     let dir = tempfile::tempdir().unwrap();
@@ -398,7 +398,7 @@ fn a_preview_reports_a_schema_violation_and_writes_no_graph_rows() {
     assert_eq!(footprint(&db), before);
 }
 
-// @lat: [[tests#Memory Conflict Review#Preview Refuses Malformed Bundles]]
+// @tg: verifies:: [[tests#Memory Conflict Review#Preview Refuses Malformed Bundles]] {since: "2026-10-03", level: unit}
 #[test]
 fn a_preview_refuses_malformed_and_cyclic_bundles() {
     let dir = tempfile::tempdir().unwrap();
@@ -432,7 +432,7 @@ fn a_preview_refuses_malformed_and_cyclic_bundles() {
     assert_eq!(footprint(&db), (0, 0, 0));
 }
 
-// @lat: [[tests#Memory Conflict Review#Successful Preview Changes Nothing]]
+// @tg: verifies:: [[tests#Memory Conflict Review#Successful Preview Changes Nothing]] {since: "2026-10-03", level: unit}
 #[test]
 fn a_successful_preview_shows_proposed_and_reused_facts_and_changes_nothing() {
     let dir = tempfile::tempdir().unwrap();
@@ -491,7 +491,7 @@ fn a_successful_preview_shows_proposed_and_reused_facts_and_changes_nothing() {
     assert_eq!(next.t, TxId(held.t.0 + 1)); // no transaction number was consumed
 }
 
-// @lat: [[tests#Memory Conflict Review#Application Revalidates]]
+// @tg: verifies:: [[tests#Memory Conflict Review#Application Revalidates]] {since: "2026-10-03", level: unit}
 #[test]
 fn applying_after_a_change_revalidates_and_commits_or_fails_atomically() {
     let dir = tempfile::tempdir().unwrap();

@@ -32,7 +32,7 @@ fn opfs(journal: Journal) -> WasmHost {
     WasmHost::new(Storage::Opfs, journal)
 }
 
-// @lat: [[tests#WASM SQLite Host#OPFS in a worker]]
+// @tg: verifies:: [[tests#WASM SQLite Host#OPFS in a worker]] {since: "2026-10-03", level: unit}
 #[wasm_bindgen_test]
 async fn opfs_keeps_commits_and_refuses_wal() {
     installed().await;

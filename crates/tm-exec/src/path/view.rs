@@ -175,7 +175,7 @@ mod tests {
         assert!(parse_view("timeRespecting").is_err());
     }
 
-    // @lat: [[tests#Query#Time Respecting View Text]]
+    // @tg: verifies:: [[tests#Query#Time Respecting View Text]] {since: "2026-09-30", level: unit}
     #[test]
     fn time_respecting_view_parts() {
         let tr = |after| Some(TimeRespecting { after });

@@ -65,7 +65,7 @@ fn chunk_of(tx: &mut Tx<'_>, chunk: usize, n: i64) -> Result<()> {
     Ok(())
 }
 
-// @lat: [[tests#Bulk Import#Later Chunk Fails]]
+// @tg: verifies:: [[tests#Bulk Import#Later Chunk Fails]] {since: "2026-10-03", level: unit}
 #[test]
 fn later_chunk_fails_alone() {
     let (_d, p) = tmp();
@@ -132,7 +132,7 @@ fn later_chunk_fails_alone() {
     assert_eq!(db.now().triples(None, Some(email), None).unwrap().len(), 3);
 }
 
-// @lat: [[tests#Bulk Import#Retry An Assertion Chunk]]
+// @tg: verifies:: [[tests#Bulk Import#Retry An Assertion Chunk]] {since: "2026-10-03", level: unit}
 #[test]
 fn retried_assertion_chunk_reuses_facts() {
     let (_d, p) = tmp();
@@ -151,7 +151,7 @@ fn retried_assertion_chunk_reuses_facts() {
     assert_eq!(db.now().triples(None, None, None).unwrap().len(), 5);
 }
 
-// @lat: [[tests#Bulk Import#Finalize Many Chunks]]
+// @tg: verifies:: [[tests#Bulk Import#Finalize Many Chunks]] {since: "2026-10-03", level: unit}
 #[test]
 fn finalize_runs_one_analysis_after_twenty_chunks() {
     let (_d, p) = tmp();
@@ -185,7 +185,7 @@ fn finalize_runs_one_analysis_after_twenty_chunks() {
     assert_eq!(db.optimize_runs().unwrap(), 1);
 }
 
-// @lat: [[tests#Bulk Import#Analysis Failure]]
+// @tg: verifies:: [[tests#Bulk Import#Analysis Failure]] {since: "2026-10-03", level: unit}
 #[test]
 fn failed_final_analysis_keeps_committed_chunks() {
     let (_d, p) = tmp();
@@ -215,7 +215,7 @@ fn failed_final_analysis_keeps_committed_chunks() {
     assert!(!db.statistics_due().unwrap());
 }
 
-// @lat: [[tests#Bulk Import#Cancel Between Chunks]]
+// @tg: verifies:: [[tests#Bulk Import#Cancel Between Chunks]] {since: "2026-10-03", level: unit}
 #[test]
 fn cancel_between_chunks_keeps_history_and_frees_writes() {
     let (_d, p) = tmp();
@@ -253,7 +253,7 @@ fn cancel_between_chunks_keeps_history_and_frees_writes() {
     assert_eq!(db.history().triples(None, None, None).unwrap().len(), 22);
 }
 
-// @lat: [[tests#Bulk Import#Read While Importing]]
+// @tg: verifies:: [[tests#Bulk Import#Read While Importing]] {since: "2026-10-03", level: unit}
 #[test]
 fn reader_sees_last_committed_chunk() {
     let (_d, p) = tmp();
@@ -283,7 +283,7 @@ fn reader_sees_last_committed_chunk() {
     import.finish();
 }
 
-// @lat: [[tests#Bulk Import#Exclusive Write Lease]]
+// @tg: verifies:: [[tests#Bulk Import#Exclusive Write Lease]] {since: "2026-10-03", level: unit}
 #[test]
 fn session_holds_the_write_lease() {
     let (_d, p) = tmp();
@@ -324,7 +324,7 @@ fn session_holds_the_write_lease() {
     assert!(nested.is_ok());
 }
 
-// @lat: [[tests#Bulk Import#Budgeted Chunk]]
+// @tg: verifies:: [[tests#Bulk Import#Budgeted Chunk]] {since: "2026-10-03", level: unit}
 #[test]
 fn budgeted_chunk_is_rejected_without_trace() {
     let (_d, p) = tmp();

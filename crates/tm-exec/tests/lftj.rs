@@ -117,7 +117,7 @@ fn join(ps: Vec<TriplePattern>) -> Op {
 
 // cyclic-join-execution "Parallel statements": set and bag modes each match their
 // SQL baseline
-// @lat: [[tests#Cyclic Joins#Parallel Statements Match SQL]]
+// @tg: verifies:: [[tests#Cyclic Joins#Parallel Statements Match SQL]] {since: "2026-10-03", level: unit}
 #[test]
 fn parallel_statements_set_and_bag_match_sql() {
     let p = pair();
@@ -148,7 +148,7 @@ fn parallel_statements_set_and_bag_match_sql() {
 }
 
 // Cypher semantics: bag of eids plus relationship isomorphism inside the region
-// @lat: [[tests#Cyclic Joins#Cypher Bag Of Eids Matches SQL]]
+// @tg: verifies:: [[tests#Cyclic Joins#Cypher Bag Of Eids Matches SQL]] {since: "2026-10-03", level: unit}
 #[test]
 fn cypher_bag_and_isomorphism_match_sql() {
     let p = pair();
@@ -200,7 +200,7 @@ fn cypher_bag_and_isomorphism_match_sql() {
 
 // cyclic-join-execution "Mixed temporal views": each pattern applies its own view
 // predicates
-// @lat: [[tests#Cyclic Joins#Mixed Temporal Views Match SQL]]
+// @tg: verifies:: [[tests#Cyclic Joins#Mixed Temporal Views Match SQL]] {since: "2026-10-03", level: unit}
 #[test]
 fn mixed_temporal_views_match_sql() {
     let p = pair();
@@ -255,7 +255,7 @@ fn mixed_temporal_views_match_sql() {
 }
 
 // each access path carries its graph-membership constraint in its own view
-// @lat: [[tests#Cyclic Joins#Graph Membership Matches SQL]]
+// @tg: verifies:: [[tests#Cyclic Joins#Graph Membership Matches SQL]] {since: "2026-10-03", level: unit}
 #[test]
 fn graph_membership_matches_sql() {
     let p = pair();
@@ -289,7 +289,7 @@ fn graph_membership_matches_sql() {
 }
 
 // SPARQL text: explain names the native route, provenance bindings agree
-// @lat: [[tests#Cyclic Joins#Provenance Matches SQL]]
+// @tg: verifies:: [[tests#Cyclic Joins#Provenance Matches SQL]] {since: "2026-10-03", level: unit}
 #[test]
 fn sparql_text_and_provenance_match_sql() {
     let p = pair();
@@ -332,7 +332,7 @@ fn sparql_text_and_provenance_match_sql() {
 
 // cyclic-join-execution "No installed operator": enabled, but no operator is
 // registered, so the region remains SQL and explain identifies the fallback
-// @lat: [[tests#Cyclic Joins#No Installed Operator Falls Back]]
+// @tg: verifies:: [[tests#Cyclic Joins#No Installed Operator Falls Back]] {since: "2026-10-03", level: unit}
 #[test]
 fn enabled_without_operator_stays_sql() {
     let t = TestDb::new();
@@ -364,7 +364,7 @@ fn enabled_without_operator_stays_sql() {
 
 // cyclic-join-execution "Unsupported region": optional algebra and non-triple
 // inputs keep SQL with the reason
-// @lat: [[tests#Cyclic Joins#Unsupported Region Stays SQL]]
+// @tg: verifies:: [[tests#Cyclic Joins#Unsupported Region Stays SQL]] {since: "2026-10-03", level: unit}
 #[test]
 fn unsupported_regions_stay_sql() {
     let p = pair();
@@ -417,7 +417,7 @@ fn unsupported_regions_stay_sql() {
 }
 
 // a pure cycle inside OPTIONAL is its own region: native, composed by SQL
-// @lat: [[tests#Cyclic Joins#Optional Side Composes]]
+// @tg: verifies:: [[tests#Cyclic Joins#Optional Side Composes]] {since: "2026-10-03", level: unit}
 #[test]
 fn native_region_composes_inside_optional() {
     let p = pair();
@@ -441,7 +441,7 @@ fn native_region_composes_inside_optional() {
 }
 
 // routing needs the documented estimate policy to agree
-// @lat: [[tests#Cyclic Joins#Estimate Policy Gates Routing]]
+// @tg: verifies:: [[tests#Cyclic Joins#Estimate Policy Gates Routing]] {since: "2026-10-03", level: unit}
 #[test]
 fn estimate_policy_gates_routing() {
     let t = TestDb::new();
@@ -474,7 +474,7 @@ fn estimate_policy_gates_routing() {
 }
 
 // opt-in: the default options never route natively, nor install the operator
-// @lat: [[tests#Cyclic Joins#Disabled By Default]]
+// @tg: verifies:: [[tests#Cyclic Joins#Disabled By Default]] {since: "2026-10-03", level: unit}
 #[test]
 fn disabled_by_default() {
     assert!(!OpenOptions::default().planner.lftj.enabled);
@@ -491,7 +491,7 @@ fn disabled_by_default() {
 
 // cyclic-join-execution "Cancellation": resources are released and no partial
 // successful result is returned
-// @lat: [[tests#Cyclic Joins#Cancellation Returns No Rows]]
+// @tg: verifies:: [[tests#Cyclic Joins#Cancellation Returns No Rows]] {since: "2026-10-03", level: unit}
 #[test]
 fn cancelled_native_join_returns_nothing() {
     let p = pair();
@@ -532,7 +532,7 @@ fn cancelled_native_join_returns_nothing() {
 }
 
 // row and byte budgets apply to native rows, with no partial result
-// @lat: [[tests#Cyclic Joins#Result Limits Apply]]
+// @tg: verifies:: [[tests#Cyclic Joins#Result Limits Apply]] {since: "2026-10-03", level: unit}
 #[test]
 fn result_limits_apply_to_native_rows() {
     let p = pair();
@@ -608,7 +608,7 @@ proptest! {
 
     // random histories with parallel statements, retractions and two predicates:
     // every view mix, in set, bag and isomorphism modes, matches SQL
-    // @lat: [[tests#Cyclic Joins#Random Histories Match SQL]]
+    // @tg: verifies:: [[tests#Cyclic Joins#Random Histories Match SQL]] {since: "2026-10-03", level: unit}
     #[test]
     fn random_histories_match_sql(txs in steps(), mix in prop::collection::vec(0usize..4, 3)) {
         let p = pair();

@@ -43,7 +43,7 @@ fn evidence_fixture() -> (T, Eid, Eid, u64) {
     (t, e0, e1, t1)
 }
 
-// @lat: [[tests#Recipes#Evidence Chains Travel In Time]]
+// @tg: verifies:: [[tests#Recipes#Evidence Chains Travel In Time]] {since: "2026-09-30", level: unit}
 #[test]
 fn evidence_chain_as_of_an_earlier_transaction() {
     let (t, e0, e1, t1) = evidence_fixture();
@@ -70,7 +70,7 @@ fn evidence_chain_as_of_an_earlier_transaction() {
     );
 }
 
-// @lat: [[tests#Recipes#Provenance From Transaction Metadata]]
+// @tg: verifies:: [[tests#Recipes#Provenance From Transaction Metadata]] {since: "2026-09-30", level: unit}
 #[test]
 fn facts_by_author_and_reasons_for_retraction() {
     let t = T::new();
@@ -108,7 +108,7 @@ fn facts_by_author_and_reasons_for_retraction() {
     );
 }
 
-// @lat: [[tests#Recipes#Edit Lineage Follows Supersedes]]
+// @tg: verifies:: [[tests#Recipes#Edit Lineage Follows Supersedes]] {since: "2026-09-30", level: unit}
 #[test]
 fn lineage_of_a_corrected_fact() {
     let t = T::new();
@@ -161,7 +161,7 @@ fn lineage_of_a_corrected_fact() {
     assert_eq!(t.col(&q, "old"), some(&[Value::Stmt(e1), Value::Stmt(e2)]));
 }
 
-// @lat: [[tests#Recipes#Contradictions Between Sources]]
+// @tg: verifies:: [[tests#Recipes#Contradictions Between Sources]] {since: "2026-09-30", level: unit}
 #[test]
 fn contradictions_between_authors_with_overlapping_valid_time() {
     let t = T::new();
@@ -221,7 +221,7 @@ fn contradictions_between_authors_with_overlapping_valid_time() {
     );
 }
 
-// @lat: [[tests#Recipes#Metagraph Containers Nesting And Fold]]
+// @tg: verifies:: [[tests#Recipes#Metagraph Containers Nesting And Fold]] {since: "2026-10-01", level: unit}
 #[test]
 fn metagraph_containers_nesting_and_fold() {
     let t = T::new();

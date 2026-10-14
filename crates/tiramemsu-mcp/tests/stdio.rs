@@ -8,7 +8,7 @@ use serde_json::{json, Value as J};
 const BIN: &str = env!("CARGO_BIN_EXE_tiramemsu-mcp");
 
 // a whole session: handshake, write, read, an error, and a clean exit at EOF
-// @lat: [[tests#MCP Adapter#Stdio Session End To End]]
+// @tg: verifies:: [[tests#MCP Adapter#Stdio Session End To End]] {since: "2026-10-03", level: unit}
 #[test]
 fn stdio_session_end_to_end() {
     let dir = tempfile::tempdir().unwrap();

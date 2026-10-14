@@ -3,7 +3,7 @@ mod common;
 use common::*;
 use tm_core::*;
 
-// @lat: [[tests#Conformance Repairs#Statement Endpoints Must Be Live]]
+// @tg: verifies:: [[tests#Conformance Repairs#Statement Endpoints Must Be Live]] {since: "2026-10-04", level: unit}
 host_test! {
     fn statement_endpoints_must_be_live(db) {
         let root = db
@@ -30,7 +30,7 @@ host_test! {
     }
 }
 
-// @lat: [[tests#Conformance Repairs#Dropped Membership Layers Are Not Replayed]]
+// @tg: verifies:: [[tests#Conformance Repairs#Dropped Membership Layers Are Not Replayed]] {since: "2026-10-04", level: unit}
 host_test! {
     fn dropped_membership_layers_are_not_replayed(db) {
         let mut ids = None;
@@ -69,7 +69,7 @@ host_test! {
     }
 }
 
-// @lat: [[tests#Conformance Repairs#Direct SQL Cannot Backdate Statements]]
+// @tg: verifies:: [[tests#Conformance Repairs#Direct SQL Cannot Backdate Statements]] {since: "2026-10-04", level: unit}
 host_test! {
     fn direct_sql_cannot_backdate_statements(db) {
         let root = db
@@ -131,7 +131,7 @@ host_test! {
     }
 }
 
-// @lat: [[tests#Conformance Repairs#Correction Remaps Patched References]]
+// @tg: verifies:: [[tests#Conformance Repairs#Correction Remaps Patched References]] {since: "2026-10-04", level: unit}
 host_test! {
     fn correction_remaps_patched_references(db) {
         let mut ids = None;
@@ -156,7 +156,7 @@ host_test! {
     }
 }
 
-// @lat: [[tests#Conformance Repairs#Invalid Correction Endpoints Roll Back]]
+// @tg: verifies:: [[tests#Conformance Repairs#Invalid Correction Endpoints Roll Back]] {since: "2026-10-04", level: unit}
 host_test! {
     fn invalid_correction_endpoints_roll_back(db) {
         let mut ids = None;
@@ -188,7 +188,7 @@ host_test! {
     }
 }
 
-// @lat: [[tests#Conformance Repairs#Format Three Migrates Date Guards]]
+// @tg: verifies:: [[tests#Conformance Repairs#Format Three Migrates Date Guards]] {since: "2026-10-04", level: unit}
 host_test! {
     fn format_two_migrates_date_guards(db) {
         let root = db
@@ -224,7 +224,7 @@ host_test! {
     }
 }
 
-// @lat: [[tests#Conformance Repairs#Cardinality Cannot Retract A New Endpoint]]
+// @tg: verifies:: [[tests#Conformance Repairs#Cardinality Cannot Retract A New Endpoint]] {since: "2026-10-04", level: unit}
 host_test! {
     fn cardinality_cannot_retract_a_new_endpoint(db) {
         let mut ids = None;

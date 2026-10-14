@@ -49,7 +49,7 @@ fn count(db: &Db, sql: &str) -> i64 {
     db.read_sql(sql).unwrap()[0][0].as_i64().unwrap()
 }
 
-// @lat: [[tests#Text Retrieval#Inline Text Is Recalled Without A Dictionary Row]]
+// @tg: verifies:: [[tests#Text Retrieval#Inline Text Is Recalled Without A Dictionary Row]] {since: "2026-10-03", level: unit}
 #[test]
 fn inline_short_strings_are_recalled_without_a_dictionary_row() {
     let (_d, p) = tmp();
@@ -88,7 +88,7 @@ fn inline_short_strings_are_recalled_without_a_dictionary_row() {
     assert_eq!(count(&db, &key), 1);
 }
 
-// @lat: [[tests#Text Retrieval#Language Tagged Text Keeps Its Tag]]
+// @tg: verifies:: [[tests#Text Retrieval#Language Tagged Text Keeps Its Tag]] {since: "2026-10-03", level: unit}
 #[test]
 fn language_tagged_strings_keep_their_tag_and_typed_literals_are_not_searchable() {
     let (_d, p) = tmp();
@@ -150,7 +150,7 @@ fn language_tagged_strings_keep_their_tag_and_typed_literals_are_not_searchable(
     ));
 }
 
-// @lat: [[tests#Text Retrieval#Retracted Text Leaves Now Recall]]
+// @tg: verifies:: [[tests#Text Retrieval#Retracted Text Leaves Now Recall]] {since: "2026-10-03", level: unit}
 #[test]
 fn retracted_text_is_absent_now_and_present_as_of_before_the_retraction() {
     let (_d, p) = tmp();
@@ -188,7 +188,7 @@ fn retracted_text_is_absent_now_and_present_as_of_before_the_retraction() {
     assert_eq!(eids(&at), vec![e]);
 }
 
-// @lat: [[tests#Text Retrieval#Recall Honors Graph And Valid Time]]
+// @tg: verifies:: [[tests#Text Retrieval#Recall Honors Graph And Valid Time]] {since: "2026-10-03", level: unit}
 #[test]
 fn every_hit_satisfies_the_graph_and_the_valid_instant() {
     let (_d, p) = tmp();
@@ -265,7 +265,7 @@ fn every_hit_satisfies_the_graph_and_the_valid_instant() {
     assert_eq!(db.now().text_search(&by_note).unwrap().len(), 5);
 }
 
-// @lat: [[tests#Text Retrieval#Absent Confidence Is Reported As Absent]]
+// @tg: verifies:: [[tests#Text Retrieval#Absent Confidence Is Reported As Absent]] {since: "2026-10-03", level: unit}
 #[test]
 fn a_hit_without_a_confidence_layer_reports_it_as_absent() {
     let (_d, p) = tmp();
@@ -333,7 +333,7 @@ fn a_hit_without_a_confidence_layer_reports_it_as_absent() {
     assert_eq!(hit.evidence.authors, 1);
 }
 
-// @lat: [[tests#Text Retrieval#Equal Hits Keep Their Order]]
+// @tg: verifies:: [[tests#Text Retrieval#Equal Hits Keep Their Order]] {since: "2026-10-03", level: unit}
 #[test]
 fn equal_hits_come_back_in_the_same_order_with_the_eid_as_tie_break() {
     let (_d, p) = tmp();
@@ -435,7 +435,7 @@ fn open_no_fts(p: &Path) -> Db {
     Db::open_with_host(NoFts(RusqliteHost::new()), p, indexed()).unwrap()
 }
 
-// @lat: [[tests#Text Retrieval#Host Without FTS5 Rejects Recall]]
+// @tg: verifies:: [[tests#Text Retrieval#Host Without FTS5 Rejects Recall]] {since: "2026-10-03", level: unit}
 #[test]
 fn a_host_without_fts5_rejects_recall_and_keeps_ordinary_lookups() {
     let (_d, p) = tmp();
@@ -491,7 +491,7 @@ fn a_host_without_fts5_rejects_recall_and_keeps_ordinary_lookups() {
     );
 }
 
-// @lat: [[tests#Text Retrieval#Writes Without FTS5 Are Caught Up]]
+// @tg: verifies:: [[tests#Text Retrieval#Writes Without FTS5 Are Caught Up]] {since: "2026-10-03", level: unit}
 #[test]
 fn strings_written_without_fts5_are_indexed_by_the_next_host_with_it() {
     let (_d, p) = tmp();
@@ -538,7 +538,7 @@ fn strings_written_without_fts5_are_indexed_by_the_next_host_with_it() {
     assert!(eids(&hits).contains(&stale_eid));
 }
 
-// @lat: [[tests#Text Retrieval#Stale Index Is Refused]]
+// @tg: verifies:: [[tests#Text Retrieval#Stale Index Is Refused]] {since: "2026-10-03", level: unit}
 #[test]
 fn a_stale_or_missing_index_is_refused_with_text_index_unavailable() {
     let (_d, p) = tmp();
@@ -604,7 +604,7 @@ fn a_stale_or_missing_index_is_refused_with_text_index_unavailable() {
     );
 }
 
-// @lat: [[tests#Text Retrieval#Rebuild Restores Recall Without Touching History]]
+// @tg: verifies:: [[tests#Text Retrieval#Rebuild Restores Recall Without Touching History]] {since: "2026-10-03", level: unit}
 #[test]
 fn rebuild_restores_recall_and_leaves_history_untouched() {
     let (_d, p) = tmp();
@@ -658,7 +658,7 @@ fn rebuild_restores_recall_and_leaves_history_untouched() {
     assert_eq!(db.now().text_search(&q).unwrap(), before.0);
 }
 
-// @lat: [[tests#Text Retrieval#Migration To Format 2 Keeps Every Row]]
+// @tg: verifies:: [[tests#Text Retrieval#Migration To Format 2 Keeps Every Row]] {since: "2026-10-03", level: unit}
 #[test]
 fn migrating_a_format_1_file_keeps_every_term_statement_and_transaction() {
     use tm_core::storage;
@@ -744,7 +744,7 @@ fn migrating_a_format_1_file_keeps_every_term_statement_and_transaction() {
     ));
 }
 
-// @lat: [[tests#Text Retrieval#Recall Sees Speculative Strings]]
+// @tg: verifies:: [[tests#Text Retrieval#Recall Sees Speculative Strings]] {since: "2026-10-03", level: unit}
 #[test]
 fn recall_inside_a_speculation_sees_its_strings_and_leaves_no_trace() {
     let (_d, p) = tmp();
@@ -803,7 +803,7 @@ fn recall_inside_a_speculation_sees_its_strings_and_leaves_no_trace() {
     assert_eq!(count(&db, "SELECT count(*) FROM term_fts"), 1);
 }
 
-// @lat: [[tests#Text Retrieval#Recall Honors Budgets]]
+// @tg: verifies:: [[tests#Text Retrieval#Recall Honors Budgets]] {since: "2026-10-03", level: unit}
 #[test]
 fn recall_is_one_budgeted_operation() {
     let (_d, p) = tmp();
@@ -862,7 +862,7 @@ fn stmt_iri(e: Eid) -> String {
     format!("urn:tiramemsu:stmt:{}", e.n())
 }
 
-// @lat: [[tests#Text Retrieval#SPARQL And Cypher Share The Recall]]
+// @tg: verifies:: [[tests#Text Retrieval#SPARQL And Cypher Share The Recall]] {since: "2026-10-03", level: unit}
 #[test]
 fn sparql_and_cypher_run_the_same_recall_as_the_rust_api() {
     let (_d, p) = tmp();

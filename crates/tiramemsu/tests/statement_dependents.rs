@@ -108,7 +108,7 @@ fn apply(db: &Db, op: &GenOp, known: &[Eid]) -> Result<TxReport> {
 
 // Three ways to ask "what stands on e": the read, the dry-run retraction and the
 // path engine's inverse layer hops. They must agree on every live statement.
-// @lat: [[tests#Dependents#Dependents Match Cascade And Path]]
+// @tg: verifies:: [[tests#Dependents#Dependents Match Cascade And Path]] {since: "2026-09-30", level: unit}
 #[test]
 #[cfg(feature = "exec")] // compares with `View::path`
 fn prop_dependents_match_cascade_and_path() {
@@ -156,7 +156,7 @@ fn prop_dependents_match_cascade_and_path() {
     });
 }
 
-// @lat: [[tests#Dependents#Dependents Reproduce The Past]]
+// @tg: verifies:: [[tests#Dependents#Dependents Reproduce The Past]] {since: "2026-09-30", level: unit}
 #[test]
 fn as_of_reproduces_a_retracted_structure() {
     let dir = tempfile::tempdir().unwrap();

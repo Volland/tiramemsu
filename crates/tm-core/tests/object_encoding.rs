@@ -60,7 +60,7 @@ host_test! {
 // Reserved SEALED tag and the reserved sys:sensitive flag (tasks 9.11 and
 // object-encoding "Reserved SEALED tag is rejected", predicate-schema
 // "Sensitive flag is reserved").
-// @lat: [[tests#ObjectId#Reserved Tag Is Rejected]]
+// @tg: verifies:: [[tests#ObjectId#Reserved Tag Is Rejected]] {since: "2026-09-29", level: unit}
 host_test! {
     fn reserved_tag_and_sensitive_flag_are_rejected(db) {
         db.tx(|tx| tx.assert(iri("a"), iri("p"), iri("b"), Valid::ALWAYS).map(|_| ()));
@@ -116,7 +116,7 @@ host_test! {
 
 // object-encoding "Foreign origin is rejected": a NODE, BNODE, STMT or TX id with
 // a non-zero origin is refused on every input and by every write, leaving no trace.
-// @lat: [[tests#ObjectId#Foreign Origin Is Rejected]]
+// @tg: verifies:: [[tests#ObjectId#Foreign Origin Is Rejected]] {since: "2026-10-01", level: unit}
 host_test! {
     fn foreign_origin_is_rejected(db) {
         let local = db
@@ -228,7 +228,7 @@ host_test! {
     }
 }
 
-// @lat: [[tests#ObjectId#DateTime Keeps Its Offset]]
+// @tg: verifies:: [[tests#ObjectId#DateTime Keeps Its Offset]] {since: "2026-09-29", level: unit}
 host_test! {
     fn datetime_offsets_are_two_terms(db) {
         let a = intern(db, &Value::literal("2026-03-01T12:00:00+02:00", Some(XSD_DATETIME), None));
@@ -389,7 +389,7 @@ fn value_strategy() -> impl Strategy<Value = Value> {
     ]
 }
 
-// @lat: [[tests#ObjectId#Canonical Round Trip]]
+// @tg: verifies:: [[tests#ObjectId#Canonical Round Trip]] {since: "2026-09-29", level: unit}
 #[test]
 fn prop_canonical_round_trip() {
     for kind in [HostKind::Rusqlite, HostKind::Minimal] {
@@ -450,7 +450,7 @@ fn oid(v: &Value) -> ObjectId {
     }
 }
 
-// @lat: [[tests#ObjectId#Order Within Tag]]
+// @tg: verifies:: [[tests#ObjectId#Order Within Tag]] {since: "2026-09-29", level: unit}
 #[test]
 fn prop_order_within_tag() {
     let conn = rusqlite::Connection::open_in_memory().unwrap();

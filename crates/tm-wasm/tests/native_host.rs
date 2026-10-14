@@ -45,7 +45,7 @@ fn core_only() -> Capabilities {
     }
 }
 
-// @lat: [[tests#WASM SQLite Host#Probed capabilities]]
+// @tg: verifies:: [[tests#WASM SQLite Host#Probed capabilities]] {since: "2026-10-03", level: unit}
 #[test]
 fn probe_reports_what_the_runtime_does() {
     let info = tm_wasm::runtime_info();
@@ -63,7 +63,7 @@ fn probe_reports_what_the_runtime_does() {
     assert_eq!(db.reader_count(), 0);
 }
 
-// @lat: [[tests#WASM SQLite Host#Core-only runtime]]
+// @tg: verifies:: [[tests#WASM SQLite Host#Core-only runtime]] {since: "2026-10-03", level: unit}
 #[test]
 fn core_only_runtime_refuses_the_query_engine() {
     let (_d, p) = tmp();
@@ -89,7 +89,7 @@ fn core_only_runtime_refuses_the_query_engine() {
     assert!(store.executor().registry().is_none());
 }
 
-// @lat: [[tests#WASM SQLite Host#Native operator support]]
+// @tg: verifies:: [[tests#WASM SQLite Host#Native operator support]] {since: "2026-10-03", level: unit}
 #[test]
 fn query_engine_registers_every_operator_on_the_connection() {
     let (_d, p) = tmp();
@@ -98,7 +98,7 @@ fn query_engine_registers_every_operator_on_the_connection() {
     check_operators(&db);
 }
 
-// @lat: [[tests#WASM SQLite Host#Unsupported journal]]
+// @tg: verifies:: [[tests#WASM SQLite Host#Unsupported journal]] {since: "2026-10-03", level: unit}
 #[test]
 fn unsupported_journal_fails_explicitly() {
     // a database the runtime cannot put in WAL mode (an in-memory one keeps
@@ -141,7 +141,7 @@ fn unsupported_journal_fails_explicitly() {
     assert_eq!(&bytes[18..20], &[1, 1], "rollback-journal file header");
 }
 
-// @lat: [[tests#WASM SQLite Host#Native interchange]]
+// @tg: verifies:: [[tests#WASM SQLite Host#Native interchange]] {since: "2026-10-03", level: unit}
 #[test]
 fn wasm_host_file_opens_natively_and_back() {
     let (_d, p) = tmp();
@@ -169,7 +169,7 @@ fn wasm_host_file_opens_natively_and_back() {
     continue_history(&db, 4);
 }
 
-// @lat: [[tests#WASM SQLite Host#Byte export and import]]
+// @tg: verifies:: [[tests#WASM SQLite Host#Byte export and import]] {since: "2026-10-03", level: unit}
 #[test]
 fn export_and_import_preserve_the_file() {
     let (d, p) = tmp();
@@ -212,7 +212,7 @@ fn crash_child(path: &Path) -> ! {
     unreachable!("the transaction aborts the process");
 }
 
-// @lat: [[tests#WASM SQLite Host#Interrupted write]]
+// @tg: verifies:: [[tests#WASM SQLite Host#Interrupted write]] {since: "2026-10-03", level: unit}
 #[test]
 fn interrupted_write_recovers_the_last_commit() {
     if let Ok(path) = std::env::var("TM_WASM_CRASH_CHILD") {
@@ -253,7 +253,7 @@ fn check_fixture_after_continue(db: &Db) {
     assert_eq!(txs[0][0], SqlValue::Integer(4));
 }
 
-// @lat: [[tests#WASM SQLite Host#Restart]]
+// @tg: verifies:: [[tests#WASM SQLite Host#Restart]] {since: "2026-10-03", level: unit}
 #[test]
 fn restart_sees_the_commit_and_continues_numbering() {
     let (_d, p) = tmp();
@@ -280,7 +280,7 @@ fn restart_sees_the_commit_and_continues_numbering() {
 
 /// Writes the native half of the cross-target handoff into
 /// `$TM_WASM_INTEROP_DIR/native.db` (`scripts/wasm-interop.sh`).
-// @lat: [[tests#WASM SQLite Host#Cross-target handoff]]
+// @tg: verifies:: [[tests#WASM SQLite Host#Cross-target handoff]] {since: "2026-10-03", level: unit}
 #[test]
 #[ignore = "run by scripts/wasm-interop.sh"]
 fn interop_native_side() {
@@ -307,7 +307,7 @@ fn interop_native_side() {
     }
 }
 
-// @lat: [[tests#Vector Recall#Same Results On Every Host]]
+// @tg: verifies:: [[tests#Vector Recall#Same Results On Every Host]] {since: "2026-10-11", level: unit}
 #[test]
 fn vector_recall_matches_brute_force_on_the_wasm_host_logic_and_on_rusqlite() {
     let (_d, p) = tmp();

@@ -227,7 +227,7 @@ fn constant_objects() {
 // retractedAt" / "Retraction instant in history" / "Later retraction visible under
 // AsOf" / "Constant instant with another offset" / "Instant of no transaction" /
 // "Wrong object kind for an instant"
-// @lat: [[tests#Query#Statement Instants Come From The Tx Table]]
+// @tg: verifies:: [[tests#Query#Statement Instants Come From The Tx Table]] {since: "2026-09-30", level: unit}
 #[test]
 fn statement_instants() {
     const DAY: i64 = 86_400_000;
@@ -298,7 +298,7 @@ fn statement_instants() {
 
 // virtual-predicates "Statement instants come from the transaction table": values
 // compare with other date-times by instant in filters
-// @lat: [[tests#Query#Statement Instants Filter By Instant]]
+// @tg: verifies:: [[tests#Query#Statement Instants Filter By Instant]] {since: "2026-09-30", level: unit}
 #[test]
 fn statement_instants_in_filters() {
     let d10 = 1_773_100_800_000i64;

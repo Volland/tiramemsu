@@ -106,7 +106,7 @@ fn layer_graph() -> (G, Vec<Eid>) {
     (g, e)
 }
 
-// @lat: [[tests#Query#Paths Cross Layers]]
+// @tg: verifies:: [[tests#Query#Paths Cross Layers]] {since: "2026-09-30", level: unit}
 // layer-hops "From a belief through a statement to its entities" / "From an entity to the
 // beliefs that rely on its facts" / "Arbitrary layer depth" / "Mixed recursive layer walk"
 #[test]

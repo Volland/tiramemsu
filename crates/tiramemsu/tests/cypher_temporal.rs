@@ -399,7 +399,7 @@ fn instants() -> (T, Eid) {
 // cypher-temporal-clauses "Commit instants of a relationship" / "Retraction instant in
 // history" / "Same metadata on the node form" / "Time metadata not listed as keys" /
 // "Shadowed user property reachable by CURIE" / "addedAt is read-only"
-// @lat: [[tests#Query#Cypher Statement Instants]]
+// @tg: verifies:: [[tests#Query#Cypher Statement Instants]] {since: "2026-09-30", level: unit}
 #[test]
 fn statement_instants() {
     let (t, e1) = instants();
@@ -446,7 +446,7 @@ fn statement_instants() {
 
 // cypher-temporal-clauses "Learned late by more than N days" / "Recorded after it
 // stopped being true in Cypher"
-// @lat: [[tests#Query#Bitemporal Recipes In Cypher]]
+// @tg: verifies:: [[tests#Query#Bitemporal Recipes In Cypher]] {since: "2026-09-30", level: unit}
 #[test]
 fn learned_late_and_recorded_after_the_fact() {
     let t = T::new();
@@ -488,7 +488,7 @@ fn learned_late_and_recorded_after_the_fact() {
     assert_eq!(short(&after.rows[0][0]), "carol");
 }
 
-// @lat: [[tests#Named Graphs#Cypher Keeps One Graph]]
+// @tg: verifies:: [[tests#Named Graphs#Cypher Keeps One Graph]] {since: "2026-09-30", level: unit}
 #[test]
 fn use_graph_is_unsupported() {
     let t = job_change();

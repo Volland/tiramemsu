@@ -120,7 +120,7 @@ fn every_kind() -> Bundle {
     }
 }
 
-// @lat: [[tests#Fact Bundles#Bundle JSON Round Trip]]
+// @tg: verifies:: [[tests#Fact Bundles#Bundle JSON Round Trip]] {since: "2026-09-30", level: unit}
 #[test]
 fn json_round_trip_is_exact_and_stable() {
     let b = every_kind();
@@ -158,7 +158,7 @@ fn json_round_trip_is_exact_and_stable() {
     }
 }
 
-// @lat: [[tests#Fact Bundles#Bundle N-Triples Is RDF 1.2]]
+// @tg: verifies:: [[tests#Fact Bundles#Bundle N-Triples Is RDF 1.2]] {since: "2026-09-30", level: unit}
 #[test]
 fn ntriples_parse_as_rdf12() {
     let b = every_kind();
@@ -183,7 +183,7 @@ fn ntriples_parse_as_rdf12() {
     assert!(!text.contains("urn:tiramemsu:node:"));
 }
 
-// @lat: [[tests#Fact Bundles#Bundle Travels As JSON Text]]
+// @tg: verifies:: [[tests#Fact Bundles#Bundle Travels As JSON Text]] {since: "2026-09-30", level: unit}
 #[test]
 fn a_belief_travels_between_databases_as_json() {
     let dir = tempfile::tempdir().unwrap();

@@ -66,7 +66,7 @@ fn check(t: &TestDb, patterns: &[(&str, &str, &str)], selective: usize, project:
     assert!(!baseline.unwrap().is_empty(), "the golden BGP has results");
 }
 
-// @lat: [[tests#Query#Skewed Joins Start Selective]]
+// @tg: verifies:: [[tests#Query#Skewed Joins Start Selective]] {since: "2026-09-30", level: unit}
 #[test]
 fn skewed_joins_start_selective() {
     let t = skewed();

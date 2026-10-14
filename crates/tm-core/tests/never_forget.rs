@@ -34,7 +34,7 @@ fn err_msg(r: rusqlite::Result<usize>) -> String {
     r.expect_err("must fail").to_string()
 }
 
-// @lat: [[tests#Storage Invariants#Triggers Block Deletion]]
+// @tg: verifies:: [[tests#Storage Invariants#Triggers Block Deletion]] {since: "2026-09-29", level: unit}
 host_test! {
     fn raw_delete_of_one_statement(db) {
         let (e1, _, _) = seed(db);

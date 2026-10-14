@@ -1,10 +1,11 @@
 ---
+type: Scenario
 lat:
   require-code-mention: true
 ---
 # Tests
 
-Test specifications for the invariants the design depends on. Each leaf is one test or one property test, and implementation code references it with an `@lat:` comment.
+Test specifications for the invariants the design depends on. Each leaf is one test or one property test, and implementation code references it with an `@tg: verifies::` comment.
 
 Every leaf is referenced by exactly one `@lat:` comment in test code, and `lat check` enforces it (`require-code-mention`). The Query leaves belong to the query engine crates (`tm-exec`, `tm-sparql`, `tm-cypher`) and the facade.
 

@@ -155,7 +155,7 @@ fn ir_with(text: &str, params: &CypherParams) -> String {
 // temporal-language-paths: `MATCH TIME RESPECTING` marks the variable-length
 // region of the clause with the shared IR's TemporalPath; an unbounded `*` carries
 // the configured cap as a cap
-// @lat: [[tests#Temporal Path Syntax#Cypher Modifier Lowers To The Shared IR]]
+// @tg: verifies:: [[tests#Temporal Path Syntax#Cypher Modifier Lowers To The Shared IR]] {since: "2026-10-03", level: unit}
 #[test]
 fn time_respecting_match_lowers_to_the_temporal_path_pattern() {
     let plain = ir_of("MATCH (a {id: 'a'})-[:met*]->(b) RETURN b");
@@ -204,7 +204,7 @@ fn time_respecting_match_lowers_to_the_temporal_path_pattern() {
     );
 }
 
-// @lat: [[tests#Temporal Path Syntax#Cypher Modifier Grammar]]
+// @tg: verifies:: [[tests#Temporal Path Syntax#Cypher Modifier Grammar]] {since: "2026-10-03", level: unit}
 #[test]
 fn time_respecting_match_grammar_errors() {
     let ctx = CompileCtx {

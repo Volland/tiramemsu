@@ -448,7 +448,7 @@ fn planning_does_not_write() {
 }
 
 // query-ir "Unknown IRI constant"
-// @lat: [[tests#Query#Unknown Constant Short Circuits]]
+// @tg: verifies:: [[tests#Query#Unknown Constant Short Circuits]] {since: "2026-09-30", level: unit}
 #[test]
 fn unknown_iri_short_circuits() {
     let (_d, db, host) = probe_db();

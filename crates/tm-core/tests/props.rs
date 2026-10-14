@@ -260,7 +260,7 @@ fn replay(db: &mut TestDb, upto: u64) -> BTreeSet<Eid> {
     live
 }
 
-// @lat: [[tests#Time Travel#AsOf Equals Replay]]
+// @tg: verifies:: [[tests#Time Travel#AsOf Equals Replay]] {since: "2026-09-29", level: unit}
 #[test]
 fn prop_as_of_equals_replay() {
     let cfg = ProptestConfig::with_cases(proptest_cases(64));
@@ -281,7 +281,7 @@ fn prop_as_of_equals_replay() {
     });
 }
 
-// @lat: [[tests#Time Travel#Historical Reads Are Stable]]
+// @tg: verifies:: [[tests#Time Travel#Historical Reads Are Stable]] {since: "2026-09-29", level: unit}
 #[test]
 fn prop_historical_reads_are_stable() {
     let cfg = ProptestConfig::with_cases(proptest_cases(64));
@@ -309,7 +309,7 @@ fn prop_historical_reads_are_stable() {
 
 // Spec never-forget "Engine operations under the triggers": no trigger ever fires
 // and the dictionary never holds duplicate (tag, lex, dt, lang) terms.
-// @lat: [[tests#Storage Invariants#Engine Never Fires A Trigger]]
+// @tg: verifies:: [[tests#Storage Invariants#Engine Never Fires A Trigger]] {since: "2026-09-29", level: unit}
 #[test]
 fn prop_no_trigger_fires_and_terms_stay_unique() {
     let cfg = ProptestConfig::with_cases(proptest_cases(64));

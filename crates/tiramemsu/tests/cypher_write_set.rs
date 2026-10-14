@@ -283,7 +283,7 @@ fn detach_delete() {
 }
 
 // predicate-schema "Rejected through Cypher"
-// @lat: [[tests#Typed Layers#Cypher Respects Typed Layers]]
+// @tg: verifies:: [[tests#Typed Layers#Cypher Respects Typed Layers]] {since: "2026-09-30", level: unit}
 #[test]
 fn typed_layer_rejects_a_node_subject() {
     let t = T::new();

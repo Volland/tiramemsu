@@ -67,7 +67,7 @@ fn seed(server: &Server) -> u64 {
 }
 
 // mcp-memory-adapter "Read-only mutation"
-// @lat: [[tests#MCP Adapter#Read Only Refuses Writes Before A Transaction]]
+// @tg: verifies:: [[tests#MCP Adapter#Read Only Refuses Writes Before A Transaction]] {since: "2026-10-03", level: unit}
 #[test]
 fn read_only_refuses_writes_before_a_transaction() {
     let dir = tempfile::tempdir().unwrap();
@@ -123,7 +123,7 @@ fn read_only_refuses_writes_before_a_transaction() {
 }
 
 // mcp-memory-adapter "Path injection"
-// @lat: [[tests#MCP Adapter#Requests Cannot Name Another Database]]
+// @tg: verifies:: [[tests#MCP Adapter#Requests Cannot Name Another Database]] {since: "2026-10-03", level: unit}
 #[test]
 fn requests_cannot_name_another_database() {
     let dir = tempfile::tempdir().unwrap();
@@ -167,7 +167,7 @@ fn requests_cannot_name_another_database() {
 }
 
 // mcp-memory-adapter "Repeated assertion"
-// @lat: [[tests#MCP Adapter#Repeated Assert Returns The Existing Statement]]
+// @tg: verifies:: [[tests#MCP Adapter#Repeated Assert Returns The Existing Statement]] {since: "2026-10-03", level: unit}
 #[test]
 fn repeated_assert_returns_the_existing_statement() {
     let dir = tempfile::tempdir().unwrap();
@@ -231,7 +231,7 @@ fn repeated_assert_returns_the_existing_statement() {
 }
 
 // mcp-memory-adapter "Invalid bundle"
-// @lat: [[tests#MCP Adapter#Malformed Bundle Commits Nothing]]
+// @tg: verifies:: [[tests#MCP Adapter#Malformed Bundle Commits Nothing]] {since: "2026-10-03", level: unit}
 #[test]
 fn malformed_bundle_commits_nothing() {
     let dir = tempfile::tempdir().unwrap();
@@ -267,7 +267,7 @@ fn malformed_bundle_commits_nothing() {
 }
 
 // mcp-memory-adapter "Incomplete provenance"
-// @lat: [[tests#MCP Adapter#Query Reports View And Provenance Coverage]]
+// @tg: verifies:: [[tests#MCP Adapter#Query Reports View And Provenance Coverage]] {since: "2026-10-03", level: unit}
 #[test]
 fn query_reports_view_and_provenance_coverage() {
     let dir = tempfile::tempdir().unwrap();
@@ -327,7 +327,7 @@ fn query_reports_view_and_provenance_coverage() {
 }
 
 // queries only read: a SPARQL update or a Cypher write is refused
-// @lat: [[tests#MCP Adapter#Queries Cannot Write]]
+// @tg: verifies:: [[tests#MCP Adapter#Queries Cannot Write]] {since: "2026-10-03", level: unit}
 #[test]
 fn queries_cannot_write() {
     let dir = tempfile::tempdir().unwrap();
@@ -348,7 +348,7 @@ fn queries_cannot_write() {
 }
 
 // mcp-memory-adapter "Limit exceeded"
-// @lat: [[tests#MCP Adapter#Budget Errors Leave The Server Serving]]
+// @tg: verifies:: [[tests#MCP Adapter#Budget Errors Leave The Server Serving]] {since: "2026-10-03", level: unit}
 #[test]
 fn budget_errors_leave_the_server_serving() {
     let dir = tempfile::tempdir().unwrap();
@@ -463,7 +463,7 @@ fn text_search_returns_ranked_hits_with_evidence() {
 }
 
 // the JSON-RPC layer: handshake, negotiation, ping, listing and protocol errors
-// @lat: [[tests#MCP Adapter#Protocol Handshake And Errors]]
+// @tg: verifies:: [[tests#MCP Adapter#Protocol Handshake And Errors]] {since: "2026-10-03", level: unit}
 #[test]
 fn protocol_handshake_and_errors() {
     let dir = tempfile::tempdir().unwrap();
@@ -558,7 +558,7 @@ fn protocol_handshake_and_errors() {
     );
 }
 
-// @lat: [[tests#Saved Answers#MCP Saved Answer Tools]]
+// @tg: verifies:: [[tests#Saved Answers#MCP Saved Answer Tools]] {since: "2026-10-03", level: unit}
 #[test]
 fn saved_answer_tools_mark_and_refresh() {
     let dir = tempfile::tempdir().unwrap();
@@ -605,7 +605,7 @@ fn saved_answer_tools_mark_and_refresh() {
     assert_eq!(missing.unwrap_err().code, "SavedAnswerNotFound");
 }
 
-// @lat: [[tests#Memory Conflict Review#MCP Conflict And Preview Tools]]
+// @tg: verifies:: [[tests#Memory Conflict Review#MCP Conflict And Preview Tools]] {since: "2026-10-03", level: unit}
 #[test]
 fn conflict_and_preview_tools_read_without_writing() {
     let dir = tempfile::tempdir().unwrap();
@@ -678,7 +678,7 @@ fn conflict_and_preview_tools_read_without_writing() {
     assert_eq!(counters(&ro), before);
 }
 
-// @lat: [[tests#Vector Recall#MCP Vector Tools]]
+// @tg: verifies:: [[tests#Vector Recall#MCP Vector Tools]] {since: "2026-10-11", level: unit}
 #[test]
 fn vector_tools_store_and_recall_embeddings() {
     let dir = tempfile::tempdir().unwrap();
@@ -736,7 +736,7 @@ fn vector_tools_store_and_recall_embeddings() {
     assert!(!eids.contains(&lisbon));
 }
 
-// @lat: [[tests#Vector Recall#MCP Tools Agree With Queries]]
+// @tg: verifies:: [[tests#Vector Recall#MCP Tools Agree With Queries]] {since: "2026-10-11", level: unit}
 #[test]
 fn vector_tool_agrees_with_a_sparql_query() {
     let dir = tempfile::tempdir().unwrap();

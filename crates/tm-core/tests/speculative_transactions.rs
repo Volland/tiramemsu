@@ -52,7 +52,7 @@ fn counters(db: &mut TestDb) -> [i64; 4] {
     ["next_stmt", "next_node", "next_bnode", "next_term"].map(|k| db.meta(k))
 }
 
-// @lat: [[tests#Storage Invariants#Speculation Leaves No Trace]]
+// @tg: verifies:: [[tests#Storage Invariants#Speculation Leaves No Trace]] {since: "2026-09-29", level: unit}
 host_test! {
     fn tables_unchanged_after_speculation(db) {
         let mut e1 = None;

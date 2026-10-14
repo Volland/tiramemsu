@@ -371,7 +371,7 @@ fn load_allowlist() -> BTreeMap<String, String> {
     out
 }
 
-// @lat: [[tests#Query#openCypher TCK]]
+// @tg: verifies:: [[tests#Query#openCypher TCK]] {since: "2026-09-30", level: unit}
 #[test]
 fn opencypher_tck() {
     let run = std::thread::Builder::new()

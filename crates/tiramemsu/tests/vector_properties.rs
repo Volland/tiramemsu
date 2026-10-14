@@ -121,7 +121,7 @@ fn fixture(
 proptest! {
     #![proptest_config(ProptestConfig::with_cases(32))]
 
-    // @lat: [[tests#Vector Recall#Exact Search Equals Brute Force]]
+    // @tg: verifies:: [[tests#Vector Recall#Exact Search Equals Brute Force]] {since: "2026-10-11", level: unit}
     #[test]
     fn exact_search_equals_brute_force(
         (dims, vecs, q) in (2usize..10).prop_flat_map(|d| (
@@ -162,7 +162,7 @@ proptest! {
         }
     }
 
-    // @lat: [[tests#Vector Recall#Prefilter Hits Have Exact Similarities]]
+    // @tg: verifies:: [[tests#Vector Recall#Prefilter Hits Have Exact Similarities]] {since: "2026-10-11", level: unit}
     #[test]
     fn prefilter_hits_carry_exact_similarities(
         (dims, vecs, q) in (2usize..10).prop_flat_map(|d| (
@@ -219,7 +219,7 @@ const WORDS: [&str; 6] = ["lisbon", "tram", "offsite", "june", "budget", "hotel"
 proptest! {
     #![proptest_config(ProptestConfig::with_cases(24))]
 
-    // @lat: [[tests#Vector Recall#Fusion Recomputes From The Channels]]
+    // @tg: verifies:: [[tests#Vector Recall#Fusion Recomputes From The Channels]] {since: "2026-10-11", level: unit}
     #[test]
     fn fusion_recomputes_from_the_standalone_channels(
         items in prop::collection::vec(
@@ -288,7 +288,7 @@ proptest! {
     }
 }
 
-// @lat: [[tests#Vector Recall#Hybrid Recall Honours Views And Graphs]]
+// @tg: verifies:: [[tests#Vector Recall#Hybrid Recall Honours Views And Graphs]] {since: "2026-10-11", level: unit}
 #[test]
 fn hybrid_recall_honours_views_and_graphs() {
     let dir = tempfile::tempdir().unwrap();
@@ -429,7 +429,7 @@ mod no_fts {
     }
 }
 
-// @lat: [[tests#Vector Recall#Channel Failures Are Typed]]
+// @tg: verifies:: [[tests#Vector Recall#Channel Failures Are Typed]] {since: "2026-10-11", level: unit}
 #[test]
 fn channel_failures_are_typed_and_vectors_need_no_fts5() {
     let dir = tempfile::tempdir().unwrap();
@@ -479,7 +479,7 @@ fn channel_failures_are_typed_and_vectors_need_no_fts5() {
     assert!(matches!(r, Err(Error::InvalidQuery { .. })), "{r:?}");
 }
 
-// @lat: [[tests#Vector Recall#SPARQL And Cypher Share The Recall]]
+// @tg: verifies:: [[tests#Vector Recall#SPARQL And Cypher Share The Recall]] {since: "2026-10-11", level: unit}
 #[test]
 fn sparql_and_cypher_run_the_same_recall_and_predicate_filters() {
     let dir = tempfile::tempdir().unwrap();
@@ -594,7 +594,7 @@ fn sparql_and_cypher_run_the_same_recall_and_predicate_filters() {
     assert_eq!(s.solutions().unwrap().rows.len(), 1);
 }
 
-// @lat: [[tests#Vector Recall#Hybrid Expansion Is Capped And Budgeted]]
+// @tg: verifies:: [[tests#Vector Recall#Hybrid Expansion Is Capped And Budgeted]] {since: "2026-10-11", level: unit}
 #[test]
 fn hybrid_expansion_is_capped_and_a_budget_bounds_recall() {
     let dir = tempfile::tempdir().unwrap();

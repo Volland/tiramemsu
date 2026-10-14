@@ -80,7 +80,7 @@ fn within<T: Send + 'static>(f: impl FnOnce() -> T + Send + 'static) -> T {
         .expect("the read finished: the reader was returned")
 }
 
-// @lat: [[tests#Query Budgets#Pool Exhaustion Times Out]]
+// @tg: verifies:: [[tests#Query Budgets#Pool Exhaustion Times Out]] {since: "2026-10-03", level: unit}
 #[test]
 fn pool_exhaustion_times_out_and_a_later_read_succeeds() {
     let (_d, p) = tmp();
@@ -141,7 +141,7 @@ fn pool_exhaustion_times_out_and_a_later_read_succeeds() {
     }
 }
 
-// @lat: [[tests#Query Budgets#Default Reader Timeout]]
+// @tg: verifies:: [[tests#Query Budgets#Default Reader Timeout]] {since: "2026-10-03", level: unit}
 #[test]
 fn open_options_reader_timeout_bounds_every_read() {
     let (_d, p) = tmp();
@@ -214,7 +214,7 @@ fn open_options_reader_timeout_bounds_every_read() {
     );
 }
 
-// @lat: [[tests#Query Budgets#Reader Freed Before The Deadline]]
+// @tg: verifies:: [[tests#Query Budgets#Reader Freed Before The Deadline]] {since: "2026-10-03", level: unit}
 #[test]
 fn a_reader_freed_before_the_deadline_runs_in_one_snapshot() {
     let (_d, p) = tmp();
@@ -249,7 +249,7 @@ fn a_reader_freed_before_the_deadline_runs_in_one_snapshot() {
     db.set_query_hook(None);
 }
 
-// @lat: [[tests#Query Budgets#Cancel A Path]]
+// @tg: verifies:: [[tests#Query Budgets#Cancel A Path]] {since: "2026-10-03", level: unit}
 #[test]
 fn cancelling_a_native_path_stops_frontier_expansion_and_frees_the_reader() {
     let (_d, p) = tmp();
@@ -386,7 +386,7 @@ impl Host for NoInterruptHost {
     }
 }
 
-// @lat: [[tests#Query Budgets#Native Checks Without Host Interrupts]]
+// @tg: verifies:: [[tests#Query Budgets#Native Checks Without Host Interrupts]] {since: "2026-10-03", level: unit}
 #[test]
 fn native_path_checks_stop_a_search_on_a_host_that_cannot_interrupt() {
     let (_d, p) = tmp();
@@ -446,7 +446,7 @@ fn native_path_checks_stop_a_search_on_a_host_that_cannot_interrupt() {
     );
 }
 
-// @lat: [[tests#Query Budgets#Cancel SQL Execution]]
+// @tg: verifies:: [[tests#Query Budgets#Cancel SQL Execution]] {since: "2026-10-03", level: unit}
 #[test]
 fn deadlines_and_cancellation_interrupt_sql_and_release_the_reader() {
     let (_d, p) = tmp();
@@ -519,7 +519,7 @@ fn triple_count(db: &Db) -> i64 {
         .unwrap()
 }
 
-// @lat: [[tests#Query Budgets#Cancel A Write]]
+// @tg: verifies:: [[tests#Query Budgets#Cancel A Write]] {since: "2026-10-03", level: unit}
 #[test]
 fn an_interrupted_write_commits_nothing() {
     let (_d, p) = tmp();
@@ -604,7 +604,7 @@ fn an_interrupted_write_commits_nothing() {
     assert_eq!(report.t, TxId(t0 as u64 + 2));
 }
 
-// @lat: [[tests#Query Budgets#Result Overflow Fails]]
+// @tg: verifies:: [[tests#Query Budgets#Result Overflow Fails]] {since: "2026-10-03", level: unit}
 #[test]
 fn exceeding_a_result_budget_fails_instead_of_truncating() {
     let (_d, p) = tmp();
@@ -714,7 +714,7 @@ fn exceeding_a_result_budget_fails_instead_of_truncating() {
     assert_eq!(triple_count(&db), before);
 }
 
-// @lat: [[tests#Query Budgets#Composite Operations Share One Budget]]
+// @tg: verifies:: [[tests#Query Budgets#Composite Operations Share One Budget]] {since: "2026-10-03", level: unit}
 #[test]
 fn provenance_lookups_draw_on_the_same_operation_budget() {
     let (_d, p) = tmp();
@@ -787,7 +787,7 @@ fn provenance_lookups_draw_on_the_same_operation_budget() {
     assert_eq!(r.unwrap().rows.len(), 2);
 }
 
-// @lat: [[tests#Query Budgets#Default Budget Changes Nothing]]
+// @tg: verifies:: [[tests#Query Budgets#Default Budget Changes Nothing]] {since: "2026-10-03", level: unit}
 #[test]
 fn an_empty_budget_changes_nothing() {
     let (_d, p) = tmp();

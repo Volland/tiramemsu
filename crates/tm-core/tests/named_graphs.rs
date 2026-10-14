@@ -28,7 +28,7 @@ fn members(db: &mut TestDb, spec: ViewSpec, graph: &Value) -> Vec<Eid> {
     db.read(|e| read::graph_members(e, &spec, id))
 }
 
-// @lat: [[tests#Named Graphs#Membership Is Engine Owned]]
+// @tg: verifies:: [[tests#Named Graphs#Membership Is Engine Owned]] {since: "2026-09-30", level: unit}
 host_test! {
     fn membership_is_engine_owned(db) {
         let e = add(db, "x");
@@ -51,7 +51,7 @@ host_test! {
     }
 }
 
-// @lat: [[tests#Named Graphs#Graph Names Are Validated]]
+// @tg: verifies:: [[tests#Named Graphs#Graph Names Are Validated]] {since: "2026-09-30", level: unit}
 host_test! {
     fn graph_names_are_validated(db) {
         let e = add(db, "x");
@@ -76,7 +76,7 @@ host_test! {
     }
 }
 
-// @lat: [[tests#Named Graphs#Error Messages Name The Term]]
+// @tg: verifies:: [[tests#Named Graphs#Error Messages Name The Term]] {since: "2026-09-30", level: unit}
 #[test]
 fn error_messages_name_the_term() {
     let a = Error::InvalidGraphName {
@@ -114,7 +114,7 @@ host_test! {
     }
 }
 
-// @lat: [[tests#Named Graphs#Statement Can Be In Many Graphs]]
+// @tg: verifies:: [[tests#Named Graphs#Statement Can Be In Many Graphs]] {since: "2026-09-30", level: unit}
 host_test! {
     fn tags_not_containers(db) {
         let e = add(db, "x");
@@ -151,7 +151,7 @@ host_test! {
     }
 }
 
-// @lat: [[tests#Named Graphs#Remove And Clear Keep Statements]]
+// @tg: verifies:: [[tests#Named Graphs#Remove And Clear Keep Statements]] {since: "2026-09-30", level: unit}
 host_test! {
     fn remove_and_clear_keep_statements(db) {
         let e = add(db, "x");
@@ -203,7 +203,7 @@ host_test! {
     }
 }
 
-// @lat: [[tests#Named Graphs#Views Apply To Membership]]
+// @tg: verifies:: [[tests#Named Graphs#Views Apply To Membership]] {since: "2026-09-30", level: unit}
 host_test! {
     fn views_apply_to_membership(db) {
         let e = add(db, "x"); // t1
@@ -233,7 +233,7 @@ host_test! {
     }
 }
 
-// @lat: [[tests#Named Graphs#Cascade And Supersede Drop Memberships]]
+// @tg: verifies:: [[tests#Named Graphs#Cascade And Supersede Drop Memberships]] {since: "2026-09-30", level: unit}
 host_test! {
     fn cascade_and_supersede_drop_memberships(db) {
         let e = add(db, "x");
@@ -289,7 +289,7 @@ fn plan_of(db: &mut TestDb, sql: &str, params: &[SqlValue]) -> String {
         .join(" | ")
 }
 
-// @lat: [[tests#Named Graphs#Membership Lookups Use Live Indexes]]
+// @tg: verifies:: [[tests#Named Graphs#Membership Lookups Use Live Indexes]] {since: "2026-09-30", level: unit}
 host_test! {
     /// Task 1.2: both membership lookups are index seeks on the existing indexes.
     /// With no retracted history the (p, o) seek may use `hist_pos` (equal cost);
@@ -362,7 +362,7 @@ fn put(db: &mut TestDb, s: &str, p: &str, o: &str) -> Eid {
     e.unwrap()
 }
 
-// @lat: [[tests#Named Graphs#A Statement Holds A Subgraph]]
+// @tg: verifies:: [[tests#Named Graphs#A Statement Holds A Subgraph]] {since: "2026-10-01", level: unit}
 host_test! {
     fn a_statement_holds_a_subgraph(db) {
         let edge = put(db, "p7", "enrolledIn", "trial3");
@@ -392,7 +392,7 @@ host_test! {
     }
 }
 
-// @lat: [[tests#Named Graphs#Retracting A Statement Graph Keeps Its Members]]
+// @tg: verifies:: [[tests#Named Graphs#Retracting A Statement Graph Keeps Its Members]] {since: "2026-10-01", level: unit}
 host_test! {
     fn retracting_a_statement_graph_keeps_its_members(db) {
         let edge = put(db, "p7", "enrolledIn", "trial3");
@@ -410,7 +410,7 @@ host_test! {
     }
 }
 
-// @lat: [[tests#Named Graphs#Supersede Carries The Contents Of A Statement Graph]]
+// @tg: verifies:: [[tests#Named Graphs#Supersede Carries The Contents Of A Statement Graph]] {since: "2026-10-01", level: unit}
 host_test! {
     fn supersede_carries_the_contents_of_a_statement_graph(db) {
         let edge = put(db, "p7", "enrolledIn", "trial3");

@@ -34,7 +34,7 @@ fn graph(n: u8) -> Value {
     iri(&format!("graph{n}"))
 }
 
-// @lat: [[tests#Named Graphs#Membership Matches A Model]]
+// @tg: verifies:: [[tests#Named Graphs#Membership Matches A Model]] {since: "2026-09-30", level: unit}
 proptest! {
     #![proptest_config(ProptestConfig::with_cases(
         std::env::var("PROPTEST_CASES").ok().and_then(|v| v.parse().ok()).unwrap_or(32)

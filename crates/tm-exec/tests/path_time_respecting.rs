@@ -197,7 +197,7 @@ fn nfa_of(text: &str) -> Nfa {
 proptest! {
     #![proptest_config(ProptestConfig::with_cases(256))]
 
-    // @lat: [[tests#Query#Time Respecting Paths Match Brute Force]]
+    // @tg: verifies:: [[tests#Query#Time Respecting Paths Match Brute Force]] {since: "2026-09-30", level: unit}
     #[test]
     fn time_respecting_paths_match_brute_force(
         edges in arb_edges(),
@@ -331,7 +331,7 @@ fn timed(g: &G, edges: &[(&str, &str, &str, Valid)]) -> Vec<Eid> {
     out
 }
 
-// @lat: [[tests#Query#Time Respecting Scenarios]]
+// @tg: verifies:: [[tests#Query#Time Respecting Scenarios]] {since: "2026-09-30", level: unit}
 #[test]
 fn time_respecting_scenarios() {
     // an infection chain: A met B in [1, 5), B met C in [3, 9)
@@ -502,7 +502,7 @@ fn time_respecting_scenarios() {
     assert_eq!(names, ["A", "C", "E", "D"]);
 }
 
-// @lat: [[tests#Query#Time Respecting Combines With Graphs And Layers]]
+// @tg: verifies:: [[tests#Query#Time Respecting Combines With Graphs And Layers]] {since: "2026-09-30", level: unit}
 #[test]
 fn time_respecting_combines_with_graphs_and_layers() {
     // virtual hops are structural: the supporting fact ended before the belief
@@ -582,7 +582,7 @@ fn q(g: &G, sql: &str) -> Vec<Vec<SqlValue>> {
         .unwrap_or_else(|e| panic!("{sql}: {e}"))
 }
 
-// @lat: [[tests#Query#tm_path Arrival Column]]
+// @tg: verifies:: [[tests#Query#tm_path Arrival Column]] {since: "2026-09-30", level: unit}
 #[test]
 fn tm_path_arrival_column() {
     let g = G::new();

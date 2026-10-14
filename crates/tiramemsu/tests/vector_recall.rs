@@ -51,7 +51,7 @@ fn objects(db: &Db, view: &View<'_>, q: &VectorQuery) -> Vec<Value> {
         .collect()
 }
 
-// @lat: [[tests#Vector Recall#Models Are Defined Once]]
+// @tg: verifies:: [[tests#Vector Recall#Models Are Defined Once]] {since: "2026-10-11", level: unit}
 #[test]
 fn models_are_defined_once() {
     let (_d, db) = open();
@@ -101,7 +101,7 @@ fn models_are_defined_once() {
     assert!(matches!(r, Err(Error::ReservedNamespace(_))), "{r:?}");
 }
 
-// @lat: [[tests#Vector Recall#Embeddings Are Checked And Append Only]]
+// @tg: verifies:: [[tests#Vector Recall#Embeddings Are Checked And Append Only]] {since: "2026-10-11", level: unit}
 #[test]
 fn embeddings_are_checked_and_append_only() {
     let (_d, db) = open();
@@ -152,7 +152,7 @@ fn embeddings_are_checked_and_append_only() {
     ));
 }
 
-// @lat: [[tests#Vector Recall#Nearest Statements Rank First]]
+// @tg: verifies:: [[tests#Vector Recall#Nearest Statements Rank First]] {since: "2026-10-11", level: unit}
 #[test]
 fn nearest_statements_rank_first_under_every_metric_and_encoding() {
     for (metric, encoding) in [
@@ -195,7 +195,7 @@ fn nearest_statements_rank_first_under_every_metric_and_encoding() {
     }
 }
 
-// @lat: [[tests#Vector Recall#Views Decide Visibility]]
+// @tg: verifies:: [[tests#Vector Recall#Views Decide Visibility]] {since: "2026-10-11", level: unit}
 #[test]
 fn views_decide_which_embeddings_are_visible() {
     let (_d, db) = open();
@@ -270,7 +270,7 @@ fn views_decide_which_embeddings_are_visible() {
     assert!(objects(&db, &db.now(), &none).is_empty());
 }
 
-// @lat: [[tests#Vector Recall#Writes Roll Back With The Transaction]]
+// @tg: verifies:: [[tests#Vector Recall#Writes Roll Back With The Transaction]] {since: "2026-10-11", level: unit}
 #[test]
 fn embedding_writes_roll_back_with_the_transaction() {
     let (_d, db) = open();
@@ -326,7 +326,7 @@ fn embedding_writes_roll_back_with_the_transaction() {
     assert_eq!(after.hits[0].eid, e);
 }
 
-// @lat: [[tests#Vector Recall#Supersede Leaves A Backlog]]
+// @tg: verifies:: [[tests#Vector Recall#Supersede Leaves A Backlog]] {since: "2026-10-11", level: unit}
 #[test]
 fn supersede_leaves_the_replacement_unembedded() {
     let (_d, db) = open();
@@ -365,7 +365,7 @@ fn supersede_leaves_the_replacement_unembedded() {
     assert_eq!(db.now().unembedded(mm, Some(1)).unwrap().len(), 1);
 }
 
-// @lat: [[tests#Vector Recall#Prefilter Reranks Exactly]]
+// @tg: verifies:: [[tests#Vector Recall#Prefilter Reranks Exactly]] {since: "2026-10-11", level: unit}
 #[test]
 fn the_prefilter_reranks_its_candidates_exactly() {
     let (_d, db) = open();
@@ -403,7 +403,7 @@ fn the_prefilter_reranks_its_candidates_exactly() {
     assert!(exact.exact);
 }
 
-// @lat: [[tests#Vector Recall#Ties Break On Evidence]]
+// @tg: verifies:: [[tests#Vector Recall#Ties Break On Evidence]] {since: "2026-10-11", level: unit}
 #[test]
 fn equal_similarities_break_on_evidence_then_eid() {
     let (_d, db) = open();
@@ -436,7 +436,7 @@ fn equal_similarities_break_on_evidence_then_eid() {
     assert_eq!(one.hits[0].eid, high);
 }
 
-// @lat: [[tests#Vector Recall#Embeddings Are Never Rewritten]]
+// @tg: verifies:: [[tests#Vector Recall#Embeddings Are Never Rewritten]] {since: "2026-10-11", level: unit}
 #[test]
 fn embeddings_cannot_be_rewritten_or_deleted_and_older_files_migrate() {
     let dir = tempfile::tempdir().unwrap();
@@ -476,7 +476,7 @@ fn embeddings_cannot_be_rewritten_or_deleted_and_older_files_migrate() {
         .is_empty());
 }
 
-// @lat: [[tests#Vector Recall#Hybrid Recall Fuses Both Channels]]
+// @tg: verifies:: [[tests#Vector Recall#Hybrid Recall Fuses Both Channels]] {since: "2026-10-11", level: unit}
 #[test]
 fn hybrid_recall_fuses_text_and_vectors_and_expands() {
     let dir = tempfile::tempdir().unwrap();
@@ -553,7 +553,7 @@ fn hybrid_recall_fuses_text_and_vectors_and_expands() {
     ));
 }
 
-// @lat: [[tests#Vector Recall#SPARQL And Cypher Share The Search]]
+// @tg: verifies:: [[tests#Vector Recall#SPARQL And Cypher Share The Search]] {since: "2026-10-11", level: unit}
 #[cfg(all(feature = "sparql", feature = "cypher"))]
 #[test]
 fn sparql_and_cypher_run_the_same_search_as_the_rust_api() {
@@ -670,7 +670,7 @@ fn sparql_and_cypher_run_the_same_search_as_the_rust_api() {
         .is_err());
 }
 
-// @lat: [[tests#Vector Recall#Past Views See Past Embeddings]]
+// @tg: verifies:: [[tests#Vector Recall#Past Views See Past Embeddings]] {since: "2026-10-11", level: unit}
 #[test]
 fn an_as_of_view_sees_only_the_embeddings_stored_by_then() {
     let (_d, db) = open();
@@ -700,7 +700,7 @@ fn an_as_of_view_sees_only_the_embeddings_stored_by_then() {
     assert!(!db.now().unembedded(m(&db), None).unwrap().contains(&e));
 }
 
-// @lat: [[tests#Vector Recall#Budgets Bound A Search]]
+// @tg: verifies:: [[tests#Vector Recall#Budgets Bound A Search]] {since: "2026-10-11", level: unit}
 #[test]
 fn a_budget_bounds_a_vector_search() {
     let (_d, db) = open();

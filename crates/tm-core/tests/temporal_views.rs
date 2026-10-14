@@ -264,7 +264,7 @@ fn plan(db: &mut TestDb, spec: ViewSpec, proj: &str, bound: &[(&str, ObjectId)])
         .join(" | ")
 }
 
-// @lat: [[tests#Storage Invariants#Views Use Covering Indexes]]
+// @tg: verifies:: [[tests#Storage Invariants#Views Use Covering Indexes]] {since: "2026-09-29", level: unit}
 host_test! {
     fn view_scans_use_covering_indexes(db) {
         db.tx(|tx| {

@@ -202,7 +202,7 @@ mod tests {
     use super::*;
 
     // add-mcp-adapter "Explicit local configuration": flags map to the config
-    // @lat: [[tests#MCP Adapter#Command Line Configures The Server]]
+    // @tg: verifies:: [[tests#MCP Adapter#Command Line Configures The Server]] {since: "2026-10-03", level: unit}
     #[test]
     fn flags_map_to_the_config() {
         let Command::Serve(c) = parse_args([

@@ -55,7 +55,7 @@ fn failure_leaves_no_trace() {
 }
 
 // predicate-schema "Rejected through SPARQL"
-// @lat: [[tests#Typed Layers#SPARQL Respects Typed Layers]]
+// @tg: verifies:: [[tests#Typed Layers#SPARQL Respects Typed Layers]] {since: "2026-09-30", level: unit}
 #[test]
 fn typed_layer_rejects_a_node_subject() {
     let t = T::new();

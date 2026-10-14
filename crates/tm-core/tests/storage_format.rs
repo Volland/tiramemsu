@@ -299,7 +299,7 @@ fn seed_meta(db: &TestDb, key: &str, value: i64) {
 
 // Engine metadata counters — Counter bound: the largest number ever allocated per
 // kind is 2^48 - 1; the next allocation fails with IdSpaceExhausted and leaves no trace.
-// @lat: [[tests#Storage Invariants#Id Counters Are Bounded]]
+// @tg: verifies:: [[tests#Storage Invariants#Id Counters Are Bounded]] {since: "2026-10-01", level: unit}
 host_test! {
     fn counter_bound(db) {
         const MAX: i64 = (1 << 48) - 1;

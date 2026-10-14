@@ -27,7 +27,7 @@ fn changed_fact() -> T {
 }
 
 // sparql-temporal-dataset "SERVICE scopes a group in time": Before and after values of a changed fact
-// @lat: [[tests#Query#Per Pattern Time Scopes]]
+// @tg: verifies:: [[tests#Query#Per Pattern Time Scopes]] {since: "2026-09-30", level: unit}
 #[test]
 fn before_and_after_values_of_a_changed_fact() {
     let t = changed_fact();

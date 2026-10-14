@@ -554,7 +554,7 @@ mod tests {
         assert!(is_invalid(op));
     }
 
-    // @lat: [[tests#Named Graphs#Graph Selector Text And Validation]]
+    // @tg: verifies:: [[tests#Named Graphs#Graph Selector Text And Validation]] {since: "2026-09-30", level: unit}
     #[test]
     fn graph_selector_text_and_validation() {
         use crate::op::GraphSel;
@@ -577,7 +577,7 @@ mod tests {
         assert!(!is_invalid(set(vec![TermOrVar::iri("urn:g1")])));
     }
 
-    // @lat: [[tests#Named Graphs#Path Graph Selector Text And Validation]]
+    // @tg: verifies:: [[tests#Named Graphs#Path Graph Selector Text And Validation]] {since: "2026-09-30", level: unit}
     #[test]
     fn path_graph_selector_text_and_validation() {
         use crate::op::GraphSel;

@@ -41,7 +41,7 @@ fn pad_to(db: &mut TestDb, t: u64) {
     }
 }
 
-// @lat: [[tests#Cascade#Cascades Subject And Object]]
+// @tg: verifies:: [[tests#Cascade#Cascades Subject And Object]] {since: "2026-09-29", level: unit}
 host_test! {
     fn annotation_and_reference_are_retracted(db) {
         let l = layers(db);
@@ -134,7 +134,7 @@ fn cycle(db: &mut TestDb) -> (Eid, Eid) {
     (e7, e8)
 }
 
-// @lat: [[tests#Cascade#Cascade Terminates On Cycles]]
+// @tg: verifies:: [[tests#Cascade#Cascade Terminates On Cycles]] {since: "2026-09-29", level: unit}
 host_test! {
     fn two_statements_referencing_each_other(db) {
         let (e7, e8) = cycle(db);
@@ -184,7 +184,7 @@ fn limit(n: usize) -> TxOptions {
     }
 }
 
-// @lat: [[tests#Cascade#Cascade Limit Aborts]]
+// @tg: verifies:: [[tests#Cascade#Cascade Limit Aborts]] {since: "2026-09-29", level: unit}
 host_test! {
     fn cascade_limit_exceeded(db) {
         let root = with_annotations(db, 5);
@@ -248,7 +248,7 @@ host_test! {
     }
 }
 
-// @lat: [[tests#Cascade#Dry Run Reports Without Commit]]
+// @tg: verifies:: [[tests#Cascade#Dry Run Reports Without Commit]] {since: "2026-09-29", level: unit}
 host_test! {
     fn dry_run_previews_a_cascade(db) {
         let mut root = None;

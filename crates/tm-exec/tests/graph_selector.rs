@@ -41,7 +41,7 @@ fn fixture() -> TestDb {
     t
 }
 
-// @lat: [[tests#Named Graphs#Graph Selector Lowers To Membership Join]]
+// @tg: verifies:: [[tests#Named Graphs#Graph Selector Lowers To Membership Join]] {since: "2026-09-30", level: unit}
 #[test]
 fn selector_lowers_to_membership_join() {
     let t = fixture();
@@ -98,7 +98,7 @@ fn snap(t: &TestDb, name: &str, q: &IrQuery) {
     });
 }
 
-// @lat: [[tests#Named Graphs#Graph Selector SQL Snapshots]]
+// @tg: verifies:: [[tests#Named Graphs#Graph Selector SQL Snapshots]] {since: "2026-09-30", level: unit}
 #[test]
 fn selector_sql_snapshots() {
     let t = fixture();
@@ -142,7 +142,7 @@ fn first_scan(plan: &[String]) -> String {
         .unwrap_or_else(|| panic!("no triple scan in {plan:?}"))
 }
 
-// @lat: [[tests#Named Graphs#Small Graph Seeks First]]
+// @tg: verifies:: [[tests#Named Graphs#Small Graph Seeks First]] {since: "2026-09-30", level: unit}
 #[test]
 fn small_graph_seeks_first() {
     let t = skewed();

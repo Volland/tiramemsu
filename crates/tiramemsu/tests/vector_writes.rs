@@ -46,7 +46,7 @@ fn embedded_fact(db: &Db, model: &Value, o: &str, vec: &[f32]) -> (Eid, TxId) {
     (eid.unwrap(), t)
 }
 
-// @lat: [[tests#Vector Recall#Dropping A Model Keeps Its Past]]
+// @tg: verifies:: [[tests#Vector Recall#Dropping A Model Keeps Its Past]] {since: "2026-10-12", level: unit}
 #[test]
 fn dropping_a_model_keeps_its_past() {
     let (_d, db) = open();
@@ -98,7 +98,7 @@ fn dropping_a_model_keeps_its_past() {
     assert_eq!(search(&db.now(), &m, &[1.0, 0.0]).unwrap(), vec![tea]);
 }
 
-// @lat: [[tests#Vector Recall#Definitions Are Read In The View]]
+// @tg: verifies:: [[tests#Vector Recall#Definitions Are Read In The View]] {since: "2026-10-12", level: unit}
 #[test]
 fn definitions_are_read_in_the_view() {
     let (_d, db) = open();
@@ -123,7 +123,7 @@ fn sparql_ok(db: &Db, q: &str) {
     db.now().sparql(q).unwrap_or_else(|e| panic!("{q}: {e}"));
 }
 
-// @lat: [[tests#Vector Recall#SPARQL Update Defines Embeds And Drops]]
+// @tg: verifies:: [[tests#Vector Recall#SPARQL Update Defines Embeds And Drops]] {since: "2026-10-12", level: unit}
 #[cfg(feature = "sparql")]
 #[test]
 fn sparql_update_defines_embeds_and_drops() {
@@ -218,7 +218,7 @@ fn cw(db: &Db, q: &str) -> Result<CypherResult> {
     db.cypher_write(TxOptions::default(), q, &CypherParams::default())
 }
 
-// @lat: [[tests#Vector Recall#Cypher Creates Embeds And Drops Indexes]]
+// @tg: verifies:: [[tests#Vector Recall#Cypher Creates Embeds And Drops Indexes]] {since: "2026-10-12", level: unit}
 #[cfg(feature = "cypher")]
 #[test]
 fn cypher_creates_embeds_and_drops_indexes() {
@@ -390,7 +390,7 @@ fn cypher_creates_embeds_and_drops_indexes() {
     ));
 }
 
-// @lat: [[tests#Vector Recall#SPARQL And Cypher Writes Agree]]
+// @tg: verifies:: [[tests#Vector Recall#SPARQL And Cypher Writes Agree]] {since: "2026-10-12", level: unit}
 #[cfg(all(feature = "sparql", feature = "cypher"))]
 #[test]
 fn sparql_and_cypher_writes_agree() {

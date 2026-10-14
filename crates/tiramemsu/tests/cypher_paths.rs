@@ -73,7 +73,7 @@ fn quantifier_forms() {
     );
 }
 
-// @lat: [[tests#Query#Unbounded Paths Are Capped]]
+// @tg: verifies:: [[tests#Query#Unbounded Paths Are Capped]] {since: "2026-09-30", level: unit}
 // "Unbounded pattern stops at the cap" (and the configured cap)
 #[test]
 fn unbounded_pattern_stops_at_the_cap() {

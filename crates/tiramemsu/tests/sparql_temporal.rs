@@ -266,7 +266,7 @@ fn recorded_on_march_10() -> T {
 }
 
 // virtual-predicates "Learned late" / "Recorded after it stopped being true"
-// @lat: [[tests#Query#Bitemporal Recipes In SPARQL]]
+// @tg: verifies:: [[tests#Query#Bitemporal Recipes In SPARQL]] {since: "2026-09-30", level: unit}
 #[test]
 fn learned_late_and_recorded_after_the_fact() {
     let t = recorded_on_march_10();

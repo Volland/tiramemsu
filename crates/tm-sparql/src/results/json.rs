@@ -219,7 +219,7 @@ mod tests {
     }
 
     // query-provenance "Provenance in SPARQL JSON": JSON member
-    // @lat: [[tests#Query Provenance#Provenance JSON Member]]
+    // @tg: verifies:: [[tests#Query Provenance#Provenance JSON Member]] {since: "2026-09-30", level: unit}
     #[test]
     fn provenance_member() {
         let mut sol = sample();

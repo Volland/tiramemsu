@@ -36,7 +36,7 @@ fn layers(db: &mut TestDb) -> [Eid; 4] {
     out.unwrap()
 }
 
-// @lat: [[tests#Dependents#Dependents Follow Layers]]
+// @tg: verifies:: [[tests#Dependents#Dependents Follow Layers]] {since: "2026-09-30", level: unit}
 host_test! {
     fn layers_and_references(db) {
         let [e1, e2, e7, e8] = layers(db);
@@ -53,7 +53,7 @@ host_test! {
     }
 }
 
-// @lat: [[tests#Dependents#Dependents Terminate On Cycles]]
+// @tg: verifies:: [[tests#Dependents#Dependents Terminate On Cycles]] {since: "2026-09-30", level: unit}
 host_test! {
     fn cycles_terminate(db) {
                 let mut ids = None;
@@ -73,7 +73,7 @@ host_test! {
     }
 }
 
-// @lat: [[tests#Dependents#Dependents Follow The View]]
+// @tg: verifies:: [[tests#Dependents#Dependents Follow The View]] {since: "2026-09-30", level: unit}
 host_test! {
     fn views_apply(db) {
         let [e1, e2, e7, e8] = layers(db);
@@ -121,7 +121,7 @@ host_test! {
     }
 }
 
-// @lat: [[tests#Dependents#Dependents Are Unbounded]]
+// @tg: verifies:: [[tests#Dependents#Dependents Are Unbounded]] {since: "2026-09-30", level: unit}
 host_test! {
     fn larger_than_the_cascade_limit(db) {
         let mut root = None;
@@ -247,7 +247,7 @@ fn apply(db: &mut TestDb, op: &GenOp, known: &[Eid]) -> Result<TxReport> {
     })
 }
 
-// @lat: [[tests#Dependents#Dependents Match The Dry Run]]
+// @tg: verifies:: [[tests#Dependents#Dependents Match The Dry Run]] {since: "2026-09-30", level: unit}
 #[test]
 fn prop_dependents_match_the_dry_run() {
     let cfg = ProptestConfig::with_cases(proptest_cases(48));

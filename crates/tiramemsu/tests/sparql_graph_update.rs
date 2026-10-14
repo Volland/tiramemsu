@@ -26,7 +26,7 @@ fn store() -> T {
     t
 }
 
-// @lat: [[tests#Named Graphs#SPARQL Insert Into A Graph]]
+// @tg: verifies:: [[tests#Named Graphs#SPARQL Insert Into A Graph]] {since: "2026-09-30", level: unit}
 #[test]
 fn insert_into_a_graph() {
     // a new graph: one statement, one membership, reported separately
@@ -79,7 +79,7 @@ fn insert_into_a_graph() {
     assert_eq!(t.last_t(), before);
 }
 
-// @lat: [[tests#Named Graphs#SPARQL Delete From A Graph]]
+// @tg: verifies:: [[tests#Named Graphs#SPARQL Delete From A Graph]] {since: "2026-09-30", level: unit}
 #[test]
 fn delete_from_a_graph() {
     let t = store();
@@ -106,7 +106,7 @@ fn delete_from_a_graph() {
     assert_eq!(members(&t, "2"), some(&[v("c")]));
 }
 
-// @lat: [[tests#Named Graphs#SPARQL WITH And USING]]
+// @tg: verifies:: [[tests#Named Graphs#SPARQL WITH And USING]] {since: "2026-09-30", level: unit}
 #[test]
 fn with_and_using() {
     // WITH sets the graph of a template
@@ -139,7 +139,7 @@ fn with_and_using() {
     assert!(msg.contains("SERVICE"), "{msg}");
 }
 
-// @lat: [[tests#Named Graphs#SPARQL Graph Management]]
+// @tg: verifies:: [[tests#Named Graphs#SPARQL Graph Management]] {since: "2026-09-30", level: unit}
 #[test]
 fn graph_management() {
     // CLEAR keeps the statements
@@ -199,7 +199,7 @@ fn graph_management() {
     assert_eq!(t.sel("SELECT ?s WHERE { ?s v:p ?o }").rows.len(), 3);
 }
 
-// @lat: [[tests#Named Graphs#Graph Updates Fail Atomically]]
+// @tg: verifies:: [[tests#Named Graphs#Graph Updates Fail Atomically]] {since: "2026-09-30", level: unit}
 #[test]
 fn graph_updates_fail_atomically() {
     let t = store();
@@ -232,7 +232,7 @@ fn graph_updates_fail_atomically() {
     assert_eq!(t.last_t(), before);
 }
 
-// @lat: [[tests#Named Graphs#SPARQL Membership Predicate Is Engine Owned]]
+// @tg: verifies:: [[tests#Named Graphs#SPARQL Membership Predicate Is Engine Owned]] {since: "2026-09-30", level: unit}
 #[test]
 fn membership_predicate_is_engine_owned() {
     let t = store();
@@ -261,7 +261,7 @@ fn membership_predicate_is_engine_owned() {
     assert_eq!(gs, some(&[g("1"), g("2")]));
 }
 
-// @lat: [[tests#Named Graphs#Cardinality One Drops Old Memberships]]
+// @tg: verifies:: [[tests#Named Graphs#Cardinality One Drops Old Memberships]] {since: "2026-09-30", level: unit}
 #[test]
 fn cardinality_one_drops_old_memberships() {
     let t = T::new();

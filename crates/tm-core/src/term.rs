@@ -481,7 +481,7 @@ impl TermReader {
 mod tests {
     use super::Slru;
 
-    // @lat: [[tests#Review Fixes#Term Cache Survives A Burst]]
+    // @tg: verifies:: [[tests#Review Fixes#Term Cache Survives A Burst]] {since: "2026-10-11", level: unit}
     #[test]
     fn slru_keeps_the_warm_set_through_a_burst() {
         let mut c: Slru<u32, u32> = Slru::new(100);

@@ -51,7 +51,7 @@ fn history(db: &Db) -> (Vec<Vec<SqlValue>>, Vec<Event>) {
 
 const EMPLOYER: &str = "SELECT ?o WHERE { v:alice v:worksAt ?o }";
 
-// @lat: [[tests#Saved Answers#Save A Parameterized Query]]
+// @tg: verifies:: [[tests#Saved Answers#Save A Parameterized Query]] {since: "2026-10-03", level: unit}
 #[test]
 fn a_saved_parameterized_query_recovers_its_parameters_and_view() {
     let (_d, p) = tmp();
@@ -122,7 +122,7 @@ fn a_saved_parameterized_query_recovers_its_parameters_and_view() {
     assert!(db.saved_answer("bad").unwrap().is_none());
 }
 
-// @lat: [[tests#Saved Answers#Negative Condition Requests Recheck]]
+// @tg: verifies:: [[tests#Saved Answers#Negative Condition Requests Recheck]] {since: "2026-10-03", level: unit}
 #[test]
 fn an_insert_matching_not_exists_requests_a_recheck() {
     let (_d, p) = tmp();
@@ -150,7 +150,7 @@ fn an_insert_matching_not_exists_requests_a_recheck() {
     assert!(a.solutions().unwrap().unwrap().rows.is_empty());
 }
 
-// @lat: [[tests#Saved Answers#Additional Matching Row Requests Recheck]]
+// @tg: verifies:: [[tests#Saved Answers#Additional Matching Row Requests Recheck]] {since: "2026-10-03", level: unit}
 #[test]
 fn a_new_matching_row_requests_a_recheck_with_live_support() {
     let (_d, p) = tmp();
@@ -192,7 +192,7 @@ fn a_new_matching_row_requests_a_recheck_with_live_support() {
     assert_eq!(a.checkpoint, TxId(2));
 }
 
-// @lat: [[tests#Saved Answers#Retracted Support Marks Stale]]
+// @tg: verifies:: [[tests#Saved Answers#Retracted Support Marks Stale]] {since: "2026-10-03", level: unit}
 #[test]
 fn retracting_or_superseding_support_marks_stale_with_the_event() {
     let (_d, p) = tmp();
@@ -252,7 +252,7 @@ fn retracting_or_superseding_support_marks_stale_with_the_event() {
     assert_eq!(city.invalidation.unwrap().event.unwrap().eid, acme);
 }
 
-// @lat: [[tests#Saved Answers#Restart Replays Without Duplicates]]
+// @tg: verifies:: [[tests#Saved Answers#Restart Replays Without Duplicates]] {since: "2026-10-03", level: unit}
 #[test]
 fn processing_resumes_from_the_saved_cursor_without_loss_or_duplicates() {
     let (d, p) = tmp();
@@ -302,7 +302,7 @@ fn processing_resumes_from_the_saved_cursor_without_loss_or_duplicates() {
     );
 }
 
-// @lat: [[tests#Saved Answers#Failed Refresh Keeps Stale]]
+// @tg: verifies:: [[tests#Saved Answers#Failed Refresh Keeps Stale]] {since: "2026-10-03", level: unit}
 #[test]
 fn a_failed_refresh_keeps_the_old_result_stale_and_the_checkpoint() {
     let (_d, p) = tmp();
@@ -349,7 +349,7 @@ fn a_failed_refresh_keeps_the_old_result_stale_and_the_checkpoint() {
     ));
 }
 
-// @lat: [[tests#Saved Answers#Fixed Historical Views Stay Fresh]]
+// @tg: verifies:: [[tests#Saved Answers#Fixed Historical Views Stay Fresh]] {since: "2026-10-03", level: unit}
 #[test]
 fn fixed_historical_views_stay_fresh_unless_they_read_the_clock() {
     let (_d, p) = tmp();
@@ -422,7 +422,7 @@ fn fixed_historical_views_stay_fresh_unless_they_read_the_clock() {
     }
 }
 
-// @lat: [[tests#Saved Answers#Coverage Reasons Are Explicit]]
+// @tg: verifies:: [[tests#Saved Answers#Coverage Reasons Are Explicit]] {since: "2026-10-03", level: unit}
 #[test]
 fn coverage_reasons_name_what_provenance_cannot_prove() {
     let (_d, p) = tmp();
@@ -504,7 +504,7 @@ fn coverage_reasons_name_what_provenance_cannot_prove() {
     ));
 }
 
-// @lat: [[tests#Saved Answers#Saved Answers Never Touch History]]
+// @tg: verifies:: [[tests#Saved Answers#Saved Answers Never Touch History]] {since: "2026-10-03", level: unit}
 #[test]
 fn saving_checking_and_refreshing_leave_graph_history_alone() {
     let (_d, p) = tmp();
@@ -547,7 +547,7 @@ fn saving_checking_and_refreshing_leave_graph_history_alone() {
     assert_eq!(db.check_saved_answers().unwrap().len(), 1);
 }
 
-// @lat: [[tests#Saved Answers#Migration To Format 3 Keeps Every Row]]
+// @tg: verifies:: [[tests#Saved Answers#Migration To Format 3 Keeps Every Row]] {since: "2026-10-03", level: unit}
 #[test]
 fn migrating_a_format_2_file_adds_the_tables_and_keeps_every_row() {
     use tm_core::storage;

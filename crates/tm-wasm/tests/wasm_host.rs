@@ -31,7 +31,7 @@ fn open(host: &WasmHost, path: &str, opts: OpenOptions) -> Db {
     Db::open_with_host(host.clone(), path, opts).unwrap()
 }
 
-// @lat: [[tests#WASM SQLite Host#WebAssembly capabilities]]
+// @tg: verifies:: [[tests#WASM SQLite Host#WebAssembly capabilities]] {since: "2026-10-03", level: unit}
 #[wasm_bindgen_test]
 fn runtime_capabilities_are_probed() {
     let info = tm_wasm::runtime_info();
@@ -63,7 +63,7 @@ fn runtime_capabilities_are_probed() {
     assert!(stat1[0][0].as_i64().unwrap() > 0);
 }
 
-// @lat: [[tests#WASM SQLite Host#WebAssembly core-only runtime]]
+// @tg: verifies:: [[tests#WASM SQLite Host#WebAssembly core-only runtime]] {since: "2026-10-03", level: unit}
 #[wasm_bindgen_test]
 fn core_only_runtime_refuses_the_query_engine() {
     let limited = memory().limit_capabilities(Capabilities {
@@ -81,7 +81,7 @@ fn core_only_runtime_refuses_the_query_engine() {
     check_fixture(&db);
 }
 
-// @lat: [[tests#WASM SQLite Host#WebAssembly operator support]]
+// @tg: verifies:: [[tests#WASM SQLite Host#WebAssembly operator support]] {since: "2026-10-03", level: unit}
 #[wasm_bindgen_test]
 fn query_engine_runs_in_webassembly() {
     let db = open(&memory(), &fresh("engine"), engine_options());
@@ -89,7 +89,7 @@ fn query_engine_runs_in_webassembly() {
     check_operators(&db);
 }
 
-// @lat: [[tests#WASM SQLite Host#WAL refused on the memory VFS]]
+// @tg: verifies:: [[tests#WASM SQLite Host#WAL refused on the memory VFS]] {since: "2026-10-03", level: unit}
 #[wasm_bindgen_test]
 fn wal_on_the_memory_vfs_fails_explicitly() {
     let host = WasmHost::new(Storage::Memory, Journal::Wal);
@@ -120,7 +120,7 @@ fn wal_on_the_memory_vfs_fails_explicitly() {
     assert!(matches!(err, Error::Unsupported { .. }), "{err:?}");
 }
 
-// @lat: [[tests#WASM SQLite Host#WebAssembly byte export and import]]
+// @tg: verifies:: [[tests#WASM SQLite Host#WebAssembly byte export and import]] {since: "2026-10-03", level: unit}
 #[wasm_bindgen_test]
 fn export_and_import_preserve_the_file() {
     let host = memory();
@@ -139,7 +139,7 @@ fn export_and_import_preserve_the_file() {
     continue_history(&db, 3);
 }
 
-// @lat: [[tests#WASM SQLite Host#WebAssembly interrupted write]]
+// @tg: verifies:: [[tests#WASM SQLite Host#WebAssembly interrupted write]] {since: "2026-10-03", level: unit}
 #[wasm_bindgen_test]
 fn interrupted_write_recovers_the_last_commit() {
     let host = memory();
@@ -164,7 +164,7 @@ fn interrupted_write_recovers_the_last_commit() {
     continue_history(&db, 3);
 }
 
-// @lat: [[tests#WASM SQLite Host#WebAssembly restart]]
+// @tg: verifies:: [[tests#WASM SQLite Host#WebAssembly restart]] {since: "2026-10-03", level: unit}
 #[wasm_bindgen_test]
 fn restart_sees_the_commit_and_continues_numbering() {
     let host = memory();
@@ -227,7 +227,7 @@ fn call(target: &JsValue, method: &str, args: &[JsValue]) -> JsValue {
 /// Step 2 of `scripts/wasm-interop.sh`: imports the native file, checks it
 /// against the native dump, adds a transaction and exports the result for the
 /// native side to open. Skipped unless `TM_WASM_INTEROP_DIR` is set.
-// @lat: [[tests#WASM SQLite Host#WebAssembly side of the handoff]]
+// @tg: verifies:: [[tests#WASM SQLite Host#WebAssembly side of the handoff]] {since: "2026-10-03", level: unit}
 #[wasm_bindgen_test]
 fn interop_wasm_side() {
     let Some(dir) = env("TM_WASM_INTEROP_DIR") else {

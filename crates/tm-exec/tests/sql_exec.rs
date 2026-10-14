@@ -195,7 +195,7 @@ fn knows_group(b: &IrBuilder) -> Op {
 
 // sql-execution "A self-loop cannot be traversed twice" / "Same pattern under
 // homomorphism" / "Parallel self-loops" / "Different match groups are not constrained"
-// @lat: [[tests#Query#Isomorphism Excludes Reused Eids]]
+// @tg: verifies:: [[tests#Query#Isomorphism Excludes Reused Eids]] {since: "2026-09-30", level: unit}
 #[test]
 fn relationship_isomorphism() {
     let t = TestDb::new();
@@ -247,7 +247,7 @@ fn relationship_isomorphism() {
 }
 
 // sql-execution "Parallel edges" / "Count under set semantics"
-// @lat: [[tests#Query#Set Semantics Dedupes Eids]]
+// @tg: verifies:: [[tests#Query#Set Semantics Dedupes Eids]] {since: "2026-09-30", level: unit}
 #[test]
 fn set_versus_bag_parallel_edges() {
     let t = TestDb::new();
@@ -277,7 +277,7 @@ fn set_versus_bag_parallel_edges() {
 
 // query-provenance "One SPARQL triple lists all its eids": a provenance eid binds
 // the canonical eid and keeps set semantics, a user eid does not
-// @lat: [[tests#Query Provenance#Provenance Eids Keep Set Semantics]]
+// @tg: verifies:: [[tests#Query Provenance#Provenance Eids Keep Set Semantics]] {since: "2026-09-30", level: unit}
 #[test]
 fn provenance_eid_keeps_set_semantics() {
     let t = TestDb::new();
@@ -718,7 +718,7 @@ fn ordered(vals: &[Value], desc: bool, sem: Semantics) -> Vec<String> {
 
 // sql-execution "Strings in and out of the dictionary" / "Doubles" / "Mixed integers
 // and doubles" / "Negative datetimes" / "Descending"
-// @lat: [[tests#Query#Order By Decoded Value]]
+// @tg: verifies:: [[tests#Query#Order By Decoded Value]] {since: "2026-09-30", level: unit}
 #[test]
 fn ordering_by_decoded_value() {
     let sp = Semantics::sparql();

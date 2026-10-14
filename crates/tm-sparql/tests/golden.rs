@@ -242,7 +242,7 @@ fn check_is_ordered(p: &Path) -> bool {
     fs::read_to_string(p).is_ok_and(|s| s.to_uppercase().contains("ORDER BY"))
 }
 
-// @lat: [[tests#Query#SPARQL Golden Cases]]
+// @tg: verifies:: [[tests#Query#SPARQL Golden Cases]] {since: "2026-09-30", level: unit}
 #[test]
 fn golden_cases() {
     let mut cases: Vec<PathBuf> = fs::read_dir(golden_dir())

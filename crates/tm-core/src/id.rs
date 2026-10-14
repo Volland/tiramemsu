@@ -404,7 +404,7 @@ mod tests {
         }
     }
 
-    // @lat: [[tests#ObjectId#Origin And Counter Split]]
+    // @tg: verifies:: [[tests#ObjectId#Origin And Counter Split]] {since: "2026-10-01", level: unit}
     #[test]
     fn origin_and_counter_split() {
         // local ids: origin 0, the counter is the whole payload, the id is unchanged

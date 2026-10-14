@@ -996,7 +996,7 @@ class TestSavedAnswers:
 
 
 class TestCyclicJoins:
-    # @lat: [[tests#Cyclic Joins#Python Exposes LFTJ Routing]]
+    # @tg: verifies:: [[tests#Cyclic Joins#Python Exposes LFTJ Routing]] {since: "2026-10-03", level: unit}
     def test_lftj_option_explain_and_identical_rows(self, tmp_path: Any) -> None:
         path = str(tmp_path / "t.db")
         tri = "SELECT ?x ?y ?z WHERE { ?x v:k ?y . ?y v:k ?z . ?z v:k ?x }"
@@ -1026,7 +1026,7 @@ class TestCyclicJoins:
 
 
 class TestConflictReview:
-    # @lat: [[tests#Memory Conflict Review#Python Exposes Conflict Review]]
+    # @tg: verifies:: [[tests#Memory Conflict Review#Python Exposes Conflict Review]] {since: "2026-10-03", level: unit}
     def test_conflicts_and_bundle_preview(self, tmp_path: Any) -> None:
         db = Database(str(tmp_path / "a.db"))
         sys_author = Iri("urn:tiramemsu:sys:author")
@@ -1081,7 +1081,7 @@ class TestConflictReview:
 
 
 class TestNewNodeRef:
-    # @lat: [[tests#Review Fixes#Bindings Return New Node Refs]]
+    # @tg: verifies:: [[tests#Review Fixes#Bindings Return New Node Refs]] {since: "2026-10-11", level: unit}
     def test_new_node_ref_resolves_in_later_ops(self, db: Database) -> None:
         with db.transact() as tx:
             n = tx.new_node()
@@ -1101,7 +1101,7 @@ class TestNewNodeRef:
 class TestVectorRecall:
     MODEL = "urn:example:models:toy"
 
-    # @lat: [[tests#Vector Recall#Bindings Store And Search Vectors]]
+    # @tg: verifies:: [[tests#Vector Recall#Bindings Store And Search Vectors]] {since: "2026-10-11", level: unit}
     def test_vectors_store_search_and_fuse(self, tmp_path: Any) -> None:
         db = Database(str(tmp_path / "v.db"), text_index=True)
         with db.transact() as tx:

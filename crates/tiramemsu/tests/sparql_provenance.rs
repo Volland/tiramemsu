@@ -75,7 +75,7 @@ fn put(tx: &mut Tx<'_>, s: impl IntoObject, p: Value, o: impl IntoObject) -> Res
 
 // query-provenance "Matched statements count": BGP, OPTIONAL, UNION, annotations
 // and fixed-length paths
-// @lat: [[tests#Query Provenance#Provenance Lists Matched Statements]]
+// @tg: verifies:: [[tests#Query Provenance#Provenance Lists Matched Statements]] {since: "2026-09-30", level: unit}
 #[test]
 fn matched_statements_are_listed() {
     let t = T::new();
@@ -142,7 +142,7 @@ fn matched_statements_are_listed() {
 
 // query-provenance "Matched statements count": tests, virtual predicates and
 // recursive paths add nothing
-// @lat: [[tests#Query Provenance#Tested Statements Are Not Cited]]
+// @tg: verifies:: [[tests#Query Provenance#Tested Statements Are Not Cited]] {since: "2026-09-30", level: unit}
 #[test]
 fn tested_statements_are_not_cited() {
     let t = T::new();
@@ -183,7 +183,7 @@ fn tested_statements_are_not_cited() {
 
 // add-mcp-adapter "Incomplete provenance": a recursive path is a gap the
 // solutions report, while fixed-length paths and text matches are cited
-// @lat: [[tests#Query Provenance#Provenance Reports Its Gaps]]
+// @tg: verifies:: [[tests#Query Provenance#Provenance Reports Its Gaps]] {since: "2026-10-03", level: unit}
 #[test]
 fn provenance_reports_its_gaps() {
     let t = T::new();
@@ -225,7 +225,7 @@ fn provenance_reports_its_gaps() {
 }
 
 // add-mcp-adapter "Read-only mutation": query-only text cannot write
-// @lat: [[tests#Query Provenance#Query Only Refuses Updates]]
+// @tg: verifies:: [[tests#Query Provenance#Query Only Refuses Updates]] {since: "2026-10-03", level: unit}
 #[test]
 fn query_only_refuses_updates() {
     let t = T::new();
@@ -258,7 +258,7 @@ fn query_only_refuses_updates() {
 
 // query-provenance "Modifiers, aggregates and subqueries": DISTINCT, LIMIT,
 // OFFSET and ORDER BY
-// @lat: [[tests#Query Provenance#Distinct Merges Provenance]]
+// @tg: verifies:: [[tests#Query Provenance#Distinct Merges Provenance]] {since: "2026-09-30", level: unit}
 #[test]
 fn distinct_merges_and_slices_stay_exact() {
     let t = T::new();
@@ -323,7 +323,7 @@ fn distinct_merges_and_slices_stay_exact() {
 }
 
 // query-provenance "Modifiers, aggregates and subqueries": groups and subqueries
-// @lat: [[tests#Query Provenance#Groups And Subqueries Union Provenance]]
+// @tg: verifies:: [[tests#Query Provenance#Groups And Subqueries Union Provenance]] {since: "2026-09-30", level: unit}
 #[test]
 fn groups_and_subqueries_union_provenance() {
     let t = T::new();
@@ -392,7 +392,7 @@ fn groups_and_subqueries_union_provenance() {
 }
 
 // query-provenance "One SPARQL triple lists all its eids"
-// @lat: [[tests#Query Provenance#One Triple Lists All Its Eids]]
+// @tg: verifies:: [[tests#Query Provenance#One Triple Lists All Its Eids]] {since: "2026-09-30", level: unit}
 #[test]
 fn one_triple_lists_all_its_eids() {
     let t = T::new();
@@ -436,7 +436,7 @@ fn one_triple_lists_all_its_eids() {
 }
 
 // query-provenance "Time scopes and graphs": GRAPH memberships and FROM graphs
-// @lat: [[tests#Query Provenance#Graphs Cite Memberships]]
+// @tg: verifies:: [[tests#Query Provenance#Graphs Cite Memberships]] {since: "2026-09-30", level: unit}
 #[test]
 fn graphs_cite_memberships() {
     let t = T::new();
@@ -479,7 +479,7 @@ fn graphs_cite_memberships() {
 }
 
 // query-provenance "Time scopes and graphs": a SERVICE scope cites past statements
-// @lat: [[tests#Query Provenance#Time Scopes Cite Past Statements]]
+// @tg: verifies:: [[tests#Query Provenance#Time Scopes Cite Past Statements]] {since: "2026-09-30", level: unit}
 #[test]
 fn time_scopes_cite_past_statements() {
     let t = T::new();
@@ -529,7 +529,7 @@ fn time_scopes_cite_past_statements() {
 
 // query-provenance "Provenance is requested per query" and "Unsupported
 // combinations fail before execution"
-// @lat: [[tests#Query Provenance#Provenance Is Off By Default]]
+// @tg: verifies:: [[tests#Query Provenance#Provenance Is Off By Default]] {since: "2026-09-30", level: unit}
 #[test]
 fn provenance_is_off_by_default() {
     let t = T::new();
@@ -580,7 +580,7 @@ fn provenance_is_off_by_default() {
 }
 
 // query-provenance "Stale answers can be detected"
-// @lat: [[tests#Query Provenance#Stale Answers Are Detectable]]
+// @tg: verifies:: [[tests#Query Provenance#Stale Answers Are Detectable]] {since: "2026-09-30", level: unit}
 #[test]
 fn stale_answers_are_detectable() {
     let t = T::new();
@@ -642,7 +642,7 @@ fn corpus_view<'a>(db: &'a Db, spec: &Option<String>) -> View<'a> {
 
 // query-provenance "Provenance is requested per query": Solutions do not change,
 // over every SELECT of the differential corpus
-// @lat: [[tests#Query Provenance#Provenance Keeps The Solutions]]
+// @tg: verifies:: [[tests#Query Provenance#Provenance Keeps The Solutions]] {since: "2026-09-30", level: unit}
 #[test]
 fn corpus_solutions_do_not_change() {
     let mut fixtures: std::collections::HashMap<String, differential::fixtures::Fx> =
@@ -717,7 +717,7 @@ proptest! {
 
     // query-provenance: provenance never changes the solutions, every cited eid is
     // visible in the view, and the cited statements alone reproduce the row
-    // @lat: [[tests#Query Provenance#Provenance Is Sound]]
+    // @tg: verifies:: [[tests#Query Provenance#Provenance Is Sound]] {since: "2026-09-30", level: unit}
     #[test]
     fn provenance_is_sound(data in arb_data(), bgp in arb_bgp()) {
         let t = T::new();

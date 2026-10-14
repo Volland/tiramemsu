@@ -17,7 +17,7 @@ fn v(s: &str) -> Value {
 /// More layers than one `IN` chunk (500), nested two deep.
 const NOTES: i64 = 1_200;
 
-// @lat: [[tests#Review Fixes#Batched Cascade Keeps Its Order]]
+// @tg: verifies:: [[tests#Review Fixes#Batched Cascade Keeps Its Order]] {since: "2026-10-11", level: unit}
 #[test]
 fn a_batched_cascade_replays_layers_in_their_original_order() {
     let dir = tempfile::tempdir().unwrap();
@@ -84,7 +84,7 @@ fn hold_writer(db: &Arc<Db>, hold: Duration) -> thread::JoinHandle<()> {
     h
 }
 
-// @lat: [[tests#Review Fixes#Bounded Writer Wait Wakes And Cancels]]
+// @tg: verifies:: [[tests#Review Fixes#Bounded Writer Wait Wakes And Cancels]] {since: "2026-10-11", level: unit}
 #[test]
 fn a_bounded_writer_wait_wakes_on_release_and_stops_on_cancel() {
     let dir = tempfile::tempdir().unwrap();
@@ -155,7 +155,7 @@ fn triangle_db(path: &std::path::Path, opts: OpenOptions) -> Db {
     db
 }
 
-// @lat: [[tests#Review Fixes#LFTJ Inputs Count Against The Byte Budget]]
+// @tg: verifies:: [[tests#Review Fixes#LFTJ Inputs Count Against The Byte Budget]] {since: "2026-10-11", level: unit}
 #[test]
 fn lftj_inputs_are_charged_to_the_byte_budget() {
     let dir = tempfile::tempdir().unwrap();

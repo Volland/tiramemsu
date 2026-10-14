@@ -7,7 +7,7 @@ use tm_core::Error;
 
 const TR: &str = "urn:tiramemsu:tm:timeRespecting";
 
-// @lat: [[tests#Temporal Path Syntax#SPARQL Scope Lowers To The Shared IR]]
+// @tg: verifies:: [[tests#Temporal Path Syntax#SPARQL Scope Lowers To The Shared IR]] {since: "2026-10-03", level: unit}
 #[test]
 fn the_scope_lowers_to_the_temporal_path_pattern() {
     // from −∞, no arrival: only the modifier
@@ -52,7 +52,7 @@ fn the_scope_lowers_to_the_temporal_path_pattern() {
     assert!(!s.contains("(path"), "{s}");
 }
 
-// @lat: [[tests#Temporal Path Syntax#SPARQL Scope Grammar]]
+// @tg: verifies:: [[tests#Temporal Path Syntax#SPARQL Scope Grammar]] {since: "2026-10-03", level: unit}
 #[test]
 fn malformed_scopes_are_parse_errors() {
     let parse = |q: &str| matches!(err(q), Error::Parse { .. });

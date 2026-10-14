@@ -14,7 +14,7 @@ fn sparql_on() -> bool {
 }
 
 // dialect-differential-testing "Simple pair passes" and the whole corpus
-// @lat: [[tests#Query#Differential SPARQL Cypher]]
+// @tg: verifies:: [[tests#Query#Differential SPARQL Cypher]] {since: "2026-09-30", level: unit}
 #[test]
 fn corpus_pairs_return_identical_results() {
     let pairs = corpus();

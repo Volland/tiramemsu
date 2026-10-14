@@ -52,7 +52,7 @@ fn instants(db: &mut TestDb) -> Vec<i64> {
 
 // Strictly increasing transaction instants — Clock moves backwards; also checks
 // that as_of(Instant) resolves to the right transaction.
-// @lat: [[tests#Time Travel#Instants Are Monotonic]]
+// @tg: verifies:: [[tests#Time Travel#Instants Are Monotonic]] {since: "2026-09-29", level: unit}
 host_test! {
     fn clock_moves_backwards(db) {
         db.clock.set(10_000);

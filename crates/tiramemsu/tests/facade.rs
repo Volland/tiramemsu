@@ -515,7 +515,7 @@ fn views_values_and_optimize() {
     );
 }
 
-// @lat: [[tests#Recovery#Transaction Panic]]
+// @tg: verifies:: [[tests#Recovery#Transaction Panic]] {since: "2026-10-03", level: unit}
 #[test]
 fn caught_transaction_panic_restores_writer_and_dictionary() {
     let (_d, p) = tmp();
@@ -545,7 +545,7 @@ fn caught_transaction_panic_restores_writer_and_dictionary() {
     assert_eq!(db.now().decode(triple.o).unwrap(), value);
 }
 
-// @lat: [[tests#Recovery#Speculative Panic]]
+// @tg: verifies:: [[tests#Recovery#Speculative Panic]] {since: "2026-10-03", level: unit}
 #[test]
 fn caught_speculative_panics_leave_no_trace_and_burn_ids() {
     for stage in ["dry_run", "operations", "query"] {
@@ -627,7 +627,7 @@ fn caught_speculative_panics_leave_no_trace_and_burn_ids() {
     }
 }
 
-// @lat: [[tests#Recovery#Read Panic]]
+// @tg: verifies:: [[tests#Recovery#Read Panic]] {since: "2026-10-03", level: unit}
 #[test]
 #[cfg(feature = "sparql")] // the panic is raised by a query hook
 fn caught_read_panics_preserve_reader_and_writer_reads() {
@@ -676,7 +676,7 @@ fn caught_read_panics_preserve_reader_and_writer_reads() {
     }
 }
 
-// @lat: [[tests#Recovery#Read Commit Failure]]
+// @tg: verifies:: [[tests#Recovery#Read Commit Failure]] {since: "2026-10-03", level: unit}
 #[test]
 fn failed_read_commit_rolls_back_before_reuse() {
     struct ReaderHost(minimal::MinimalHost);

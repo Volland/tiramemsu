@@ -63,7 +63,7 @@ fn ends_in(
         .collect()
 }
 
-// @lat: [[tests#Named Graphs#Graph Scoped Paths Follow Membership]]
+// @tg: verifies:: [[tests#Named Graphs#Graph Scoped Paths Follow Membership]] {since: "2026-09-30", level: unit}
 #[test]
 fn graph_scoped_paths_follow_membership() {
     let g = fixture();
@@ -136,7 +136,7 @@ fn graph_scoped_paths_follow_membership() {
     );
 }
 
-// @lat: [[tests#Named Graphs#Graph Scoped Virtual Hops]]
+// @tg: verifies:: [[tests#Named Graphs#Graph Scoped Virtual Hops]] {since: "2026-09-30", level: unit}
 #[test]
 fn virtual_hops_need_the_stepped_statement_in_the_graph() {
     for (fact_graph, want) in [("1", vec!["acme", "alice"]), ("2", vec![])] {
@@ -219,7 +219,7 @@ fn letters() -> Vec<(&'static str, RLetter)> {
     ]
 }
 
-// @lat: [[tests#Named Graphs#Graph Filter Fetch Uses An Index Seek]]
+// @tg: verifies:: [[tests#Named Graphs#Graph Filter Fetch Uses An Index Seek]] {since: "2026-09-30", level: unit}
 #[test]
 fn graph_filter_uses_an_index_seek() {
     let g = fixture();
@@ -339,7 +339,7 @@ fn err(g: &G, sql: &str) -> String {
     }
 }
 
-// @lat: [[tests#Named Graphs#tm_path Graphs Argument]]
+// @tg: verifies:: [[tests#Named Graphs#tm_path Graphs Argument]] {since: "2026-09-30", level: unit}
 #[test]
 fn tm_path_graphs_argument() {
     let g = fixture();
@@ -443,7 +443,7 @@ fn snap(g: &G, name: &str, q: &IrQuery) -> QueryResult {
     run(&g.t.db.now(), q)
 }
 
-// @lat: [[tests#Named Graphs#Path Graph Selector SQL Snapshots]]
+// @tg: verifies:: [[tests#Named Graphs#Path Graph Selector SQL Snapshots]] {since: "2026-09-30", level: unit}
 #[test]
 fn path_graph_selector_sql_snapshots() {
     let g = fixture();

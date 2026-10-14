@@ -10,7 +10,7 @@ use harness::*;
 
 // cyclic-join-execution "Triangle benchmark": SQL and native timing is compared
 // only after the harness verified identical counts
-// @lat: [[tests#Cyclic Joins#Triangle Harness Verifies Counts]]
+// @tg: verifies:: [[tests#Cyclic Joins#Triangle Harness Verifies Counts]] {since: "2026-10-03", level: unit}
 #[test]
 fn harness_verifies_counts_before_timing() {
     let dir = tempfile::tempdir().unwrap();

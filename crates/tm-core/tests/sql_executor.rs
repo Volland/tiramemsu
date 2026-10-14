@@ -167,7 +167,7 @@ fn rusqlite_host_declares_every_capability() {
 }
 
 // Requirement: A failed transaction leaves no trace on any host — Failed body.
-// @lat: [[tests#Storage Invariants#Failed Transactions Leave No Trace]]
+// @tg: verifies:: [[tests#Storage Invariants#Failed Transactions Leave No Trace]] {since: "2026-09-29", level: unit}
 host_test! {
     fn failed_body_leaves_no_trace(db) {
         db.tx(|tx| tx.assert(iri("a"), iri("p"), iri("b"), Valid::ALWAYS).map(|_| ()));
@@ -218,7 +218,7 @@ fn host_busy_error_leaves_no_trace() {
 
 // Requirement: The core runs on the required operations alone — No optional
 // feature in core SQL. (Every minimal-host test also checks its log on drop.)
-// @lat: [[tests#Storage Invariants#Core Runs On A Minimal Host]]
+// @tg: verifies:: [[tests#Storage Invariants#Core Runs On A Minimal Host]] {since: "2026-09-29", level: unit}
 #[test]
 fn core_sql_uses_no_optional_feature() {
     let mut db = TestDb::new(HostKind::Minimal);

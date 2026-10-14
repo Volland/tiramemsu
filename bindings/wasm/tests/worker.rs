@@ -30,7 +30,7 @@ fn code(e: &str) -> String {
         .to_string()
 }
 
-// @lat: [[tests#WASM SQLite Host#Worker binding]]
+// @tg: verifies:: [[tests#WASM SQLite Host#Worker binding]] {since: "2026-10-03", level: unit}
 #[test]
 fn worker_serves_the_json_bridge_on_the_wasm_host() {
     let dir = tempfile::tempdir().unwrap();
@@ -78,7 +78,7 @@ fn worker_serves_the_json_bridge_on_the_wasm_host() {
     assert!(r.contains(r#""t":2"#), "{r}");
 }
 
-// @lat: [[tests#WASM SQLite Host#Worker refusals]]
+// @tg: verifies:: [[tests#WASM SQLite Host#Worker refusals]] {since: "2026-10-03", level: unit}
 #[test]
 fn worker_refuses_what_cannot_run_in_webassembly() {
     let dir = tempfile::tempdir().unwrap();
@@ -111,7 +111,7 @@ fn worker_refuses_what_cannot_run_in_webassembly() {
     assert_eq!(e.code(), "MissingCapability");
 }
 
-// @lat: [[tests#WASM SQLite Host#Worker configuration]]
+// @tg: verifies:: [[tests#WASM SQLite Host#Worker configuration]] {since: "2026-10-03", level: unit}
 #[test]
 fn configuration_is_validated() {
     for bad in [

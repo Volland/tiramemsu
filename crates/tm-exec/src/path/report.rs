@@ -76,7 +76,7 @@ pub fn record(c: PathCompleteness) {
 mod tests {
     use super::*;
 
-    // @lat: [[tests#Temporal Path Syntax#Completeness Report Scopes]]
+    // @tg: verifies:: [[tests#Temporal Path Syntax#Completeness Report Scopes]] {since: "2026-10-03", level: unit}
     #[test]
     fn nested_scopes_merge_outward() {
         let (inner, outer) = collect(|| {

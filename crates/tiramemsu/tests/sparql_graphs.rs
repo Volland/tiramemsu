@@ -24,7 +24,7 @@ fn subjects(t: &T, q: &str) -> Vec<Option<Value>> {
     t.col(q, "s")
 }
 
-// @lat: [[tests#Named Graphs#GRAPH Selects By Membership]]
+// @tg: verifies:: [[tests#Named Graphs#GRAPH Selects By Membership]] {since: "2026-09-30", level: unit}
 #[test]
 fn graph_selects_by_membership() {
     let t = store();
@@ -76,7 +76,7 @@ fn graph_selects_by_membership() {
         .is_empty());
 }
 
-// @lat: [[tests#Named Graphs#Default Graph Is The Union]]
+// @tg: verifies:: [[tests#Named Graphs#Default Graph Is The Union]] {since: "2026-09-30", level: unit}
 #[test]
 fn default_graph_is_the_union() {
     let t = store();
@@ -107,7 +107,7 @@ fn add_then_remove(t: &T) {
     t.upd("DELETE DATA { GRAPH <urn:g:1> { v:a v:p v:b } }"); // tx 9
 }
 
-// @lat: [[tests#Named Graphs#Dataset Clauses]]
+// @tg: verifies:: [[tests#Named Graphs#Dataset Clauses]] {since: "2026-09-30", level: unit}
 #[test]
 fn dataset_clauses() {
     let t = store();
@@ -156,7 +156,7 @@ fn dataset_clauses() {
     assert!(at("10").is_empty());
 }
 
-// @lat: [[tests#Named Graphs#Graphs Combine With Service Scopes]]
+// @tg: verifies:: [[tests#Named Graphs#Graphs Combine With Service Scopes]] {since: "2026-09-30", level: unit}
 #[test]
 fn graphs_combine_with_service_scopes() {
     let t = T::new();
@@ -189,7 +189,7 @@ fn graphs_combine_with_service_scopes() {
     assert!(msg.contains("SERVICE"), "{msg}");
 }
 
-// @lat: [[tests#Named Graphs#Graph Metadata Is Ordinary Triples]]
+// @tg: verifies:: [[tests#Named Graphs#Graph Metadata Is Ordinary Triples]] {since: "2026-09-30", level: unit}
 #[test]
 fn graph_metadata_is_ordinary_triples() {
     let t = T::new();
@@ -208,7 +208,7 @@ fn graph_metadata_is_ordinary_triples() {
     );
 }
 
-// @lat: [[tests#Named Graphs#Membership Carries Layers]]
+// @tg: verifies:: [[tests#Named Graphs#Membership Carries Layers]] {since: "2026-09-30", level: unit}
 #[test]
 fn membership_carries_layers() {
     let t = T::new();
@@ -235,7 +235,7 @@ fn membership_carries_layers() {
     assert!(none.rows.is_empty());
 }
 
-// @lat: [[tests#Named Graphs#Duplicates Follow Memberships]]
+// @tg: verifies:: [[tests#Named Graphs#Duplicates Follow Memberships]] {since: "2026-09-30", level: unit}
 #[test]
 fn duplicates_follow_memberships() {
     let t = store();
@@ -279,7 +279,7 @@ fn duplicates_follow_memberships() {
     );
 }
 
-// @lat: [[tests#Named Graphs#Membership Is Bitemporal In SPARQL]]
+// @tg: verifies:: [[tests#Named Graphs#Membership Is Bitemporal In SPARQL]] {since: "2026-09-30", level: unit}
 #[test]
 fn membership_is_bitemporal_in_sparql() {
     let t = T::new();
@@ -368,7 +368,7 @@ fn sorted_col(t: &T, q: &str, var: &str) -> Vec<Option<Value>> {
     c
 }
 
-// @lat: [[tests#Named Graphs#Property Paths Run Inside Graphs]]
+// @tg: verifies:: [[tests#Named Graphs#Property Paths Run Inside Graphs]] {since: "2026-09-30", level: unit}
 #[test]
 fn property_paths_run_inside_graphs() {
     let t = knows();
@@ -456,7 +456,7 @@ fn property_paths_run_inside_graphs() {
     assert_eq!(r.asserted.len(), 2);
 }
 
-// @lat: [[tests#Named Graphs#Zero Length Paths Per Graph]]
+// @tg: verifies:: [[tests#Named Graphs#Zero Length Paths Per Graph]] {since: "2026-09-30", level: unit}
 #[test]
 fn zero_length_paths_per_graph() {
     let t = knows();
@@ -509,7 +509,7 @@ fn zero_length_paths_per_graph() {
         .is_empty());
 }
 
-// @lat: [[tests#Named Graphs#Graph Paths Under asOf]]
+// @tg: verifies:: [[tests#Named Graphs#Graph Paths Under asOf]] {since: "2026-09-30", level: unit}
 #[test]
 fn graph_paths_under_as_of() {
     let t = knows();
@@ -543,7 +543,7 @@ fn graph_paths_under_as_of() {
     );
 }
 
-// @lat: [[tests#Named Graphs#Paths Cross Layers Inside Graphs]]
+// @tg: verifies:: [[tests#Named Graphs#Paths Cross Layers Inside Graphs]] {since: "2026-09-30", level: unit}
 #[test]
 fn paths_cross_layers_inside_graphs() {
     let t = T::new();
@@ -606,7 +606,7 @@ fn paths_cross_layers_inside_graphs() {
         .is_empty());
 }
 
-// @lat: [[tests#Named Graphs#Graph Names Are Rejected When Invalid]]
+// @tg: verifies:: [[tests#Named Graphs#Graph Names Are Rejected When Invalid]] {since: "2026-09-30", level: unit}
 #[test]
 fn invalid_graph_names_are_rejected() {
     let t = store();
@@ -625,7 +625,7 @@ fn invalid_graph_names_are_rejected() {
     assert_eq!(t.last_t(), before);
 }
 
-// @lat: [[tests#Named Graphs#SPARQL Statement Graphs]]
+// @tg: verifies:: [[tests#Named Graphs#SPARQL Statement Graphs]] {since: "2026-10-01", level: unit}
 #[test]
 fn sparql_statement_graphs() {
     let t = T::new();

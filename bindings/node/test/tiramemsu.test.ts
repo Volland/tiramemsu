@@ -678,7 +678,7 @@ describe("saved answers", () => {
 // ---- native cyclic joins --------------------------------------------------------
 
 describe("native cyclic joins", () => {
-  // @lat: [[tests#Cyclic Joins#Bindings Expose LFTJ Routing]]
+  // @tg: verifies:: [[tests#Cyclic Joins#Bindings Expose LFTJ Routing]] {since: "2026-10-03", level: unit}
   it("opts in with lftj, explains the route and returns the SQL rows", () => {
     const dir = mkdtempSync(join(tmpdir(), "tiramemsu-test-"));
     try {
@@ -705,7 +705,7 @@ describe("native cyclic joins", () => {
 // ---- memory conflict review -----------------------------------------------------
 
 describe("memory conflict review", () => {
-  // @lat: [[tests#Memory Conflict Review#Node Exposes Conflict Review]]
+  // @tg: verifies:: [[tests#Memory Conflict Review#Node Exposes Conflict Review]] {since: "2026-10-03", level: unit}
   it("lists conflicts with evidence and previews a bundle without committing", () => {
     const a = tempDb();
     const b = tempDb();
@@ -771,7 +771,7 @@ describe("newNode", () => {
 // ---- vector recall -------------------------------------------------------
 
 describe("vector recall", () => {
-  // @lat: [[tests#Vector Recall#Node Stores And Searches Vectors]]
+  // @tg: verifies:: [[tests#Vector Recall#Node Stores And Searches Vectors]] {since: "2026-10-03", level: unit}
   it("stores embeddings, searches exactly and fuses with text", () => {
     const dir = mkdtempSync(join(tmpdir(), "tiramemsu-test-"));
     try {

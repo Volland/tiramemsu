@@ -649,7 +649,7 @@ mod tests {
     }
 
     // query-provenance "Matched statements count": hidden columns per pattern
-    // @lat: [[tests#Query Provenance#Instrumentation Binds Hidden Eids]]
+    // @tg: verifies:: [[tests#Query Provenance#Instrumentation Binds Hidden Eids]] {since: "2026-09-30", level: unit}
     #[test]
     fn hidden_columns_per_pattern() {
         let p = plan("SELECT ?o WHERE { v:a v:p ?o OPTIONAL { ?o v:q ?z } }").unwrap();

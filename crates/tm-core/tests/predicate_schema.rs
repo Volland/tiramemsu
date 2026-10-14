@@ -89,7 +89,7 @@ host_test! {
     }
 }
 
-// @lat: [[tests#Operations#Cardinality One Does Not Replay]]
+// @tg: verifies:: [[tests#Operations#Cardinality One Does Not Replay]] {since: "2026-09-29", level: unit}
 host_test! {
     fn cardinality_one_replaces_without_carrying_annotations(db) {
         flag(db, "age", "cardinality", sys("one"));
@@ -157,7 +157,7 @@ host_test! {
     }
 }
 
-// @lat: [[tests#Operations#Unique Rejects Second Subject]]
+// @tg: verifies:: [[tests#Operations#Unique Rejects Second Subject]] {since: "2026-09-29", level: unit}
 host_test! {
     fn unique_rejects_second_subject(db) {
         flag(db, "email", "unique", Value::Bool(true));
@@ -192,7 +192,7 @@ host_test! {
     }
 }
 
-// @lat: [[tests#Operations#Upsert Returns Existing Node]]
+// @tg: verifies:: [[tests#Operations#Upsert Returns Existing Node]] {since: "2026-09-29", level: unit}
 host_test! {
     fn upsert_returns_existing_or_new_node(db) {
         flag(db, "email", "unique", Value::Bool(true));
@@ -344,7 +344,7 @@ host_test! {
 // predicate-schema "Typed layer accepts a statement subject" / "Typed layer rejects a
 // node subject" / "Several values mean any-of" / "Subject type takes effect within its
 // transaction" / "Failed subject type prevents cardinality replacement"
-// @lat: [[tests#Typed Layers#Subject Type Constrains Subjects]]
+// @tg: verifies:: [[tests#Typed Layers#Subject Type Constrains Subjects]] {since: "2026-09-30", level: unit}
 host_test! {
     fn subject_type_constrains_subjects(db) {
         let e1 = put(db, "alice", "worksAt", iri("acme"), Valid::ALWAYS);
@@ -410,7 +410,7 @@ host_test! {
 
 // predicate-schema "Subject type that no subject can have" / "A second subject type is
 // added"
-// @lat: [[tests#Typed Layers#Subject Type Values Are Validated]]
+// @tg: verifies:: [[tests#Typed Layers#Subject Type Values Are Validated]] {since: "2026-09-30", level: unit}
 host_test! {
     fn subject_type_values_are_validated(db) {
         for ok in ["IRI", "NODE", "BNODE", "STMT", "TX"] {
@@ -430,7 +430,7 @@ host_test! {
 // predicate-schema "Subject type over node-level data" / "Retracting one of several
 // subject types narrows the set" / "Retracting the last subject type lifts the
 // constraint"
-// @lat: [[tests#Typed Layers#Subject Type Changes Are Checked Against Live Data]]
+// @tg: verifies:: [[tests#Typed Layers#Subject Type Changes Are Checked Against Live Data]] {since: "2026-09-30", level: unit}
 host_test! {
     fn subject_type_schema_changes(db) {
         let e1 = put(db, "alice", "worksAt", iri("acme"), Valid::ALWAYS);

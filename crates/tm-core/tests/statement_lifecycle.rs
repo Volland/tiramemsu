@@ -19,7 +19,7 @@ fn works(db: &mut TestDb, valid: Valid) -> Asserted {
     assert1(db, "alice", "worksAt", iri("acme"), valid)
 }
 
-// @lat: [[tests#Operations#Assert Is Idempotent]]
+// @tg: verifies:: [[tests#Operations#Assert Is Idempotent]] {since: "2026-09-29", level: unit}
 host_test! {
     fn same_fact_twice(db) {
         let first = works(db, Valid::ALWAYS);
@@ -63,7 +63,7 @@ host_test! {
     }
 }
 
-// @lat: [[tests#Operations#Non-Overlapping Episodes Coexist]]
+// @tg: verifies:: [[tests#Operations#Non-Overlapping Episodes Coexist]] {since: "2026-09-29", level: unit}
 host_test! {
     fn non_overlapping_episodes_coexist(db) {
         let a = works(db, Valid::between(day("2020-01-01"), day("2022-06-01")));
@@ -76,7 +76,7 @@ host_test! {
     }
 }
 
-// @lat: [[tests#Operations#Create Makes Parallel Edges]]
+// @tg: verifies:: [[tests#Operations#Create Makes Parallel Edges]] {since: "2026-09-29", level: unit}
 host_test! {
     fn create_makes_parallel_edges(db) {
         let mut ids = Vec::new();
@@ -314,7 +314,7 @@ host_test! {
     }
 }
 
-// @lat: [[tests#Operations#Retract Is Once]]
+// @tg: verifies:: [[tests#Operations#Retract Is Once]] {since: "2026-09-29", level: unit}
 host_test! {
     fn second_retraction_is_a_no_op(db) {
         let e1 = works(db, Valid::ALWAYS).eid();

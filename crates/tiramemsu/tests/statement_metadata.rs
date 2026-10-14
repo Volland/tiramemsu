@@ -126,7 +126,7 @@ fn row(r: &CypherResult) -> &[CypherValue] {
 
 // ---- SPARQL: valid-time writes --------------------------------------------------
 
-// @lat: [[tests#Statement Metadata#SPARQL Inserts A Fact With Its Valid Time]]
+// @tg: verifies:: [[tests#Statement Metadata#SPARQL Inserts A Fact With Its Valid Time]] {since: "2026-10-14", level: unit}
 #[test]
 fn sparql_inserts_a_fact_with_its_valid_time() {
     let t = T::new();
@@ -159,7 +159,7 @@ fn sparql_inserts_a_fact_with_its_valid_time() {
     assert_eq!(t.intervals("p")[0].1, Some(1000));
 }
 
-// @lat: [[tests#Statement Metadata#SPARQL Closes And Clears An Interval]]
+// @tg: verifies:: [[tests#Statement Metadata#SPARQL Closes And Clears An Interval]] {since: "2026-10-14", level: unit}
 #[test]
 fn sparql_closes_and_clears_an_interval() {
     let t = T::new();
@@ -204,7 +204,7 @@ fn sparql_closes_and_clears_an_interval() {
     assert!(r.superseded.is_empty() && r.asserted.is_empty());
 }
 
-// @lat: [[tests#Statement Metadata#SPARQL Replaces Both Bounds In One Supersede]]
+// @tg: verifies:: [[tests#Statement Metadata#SPARQL Replaces Both Bounds In One Supersede]] {since: "2026-10-14", level: unit}
 #[test]
 fn sparql_replaces_both_bounds_in_one_supersede() {
     let t = T::new();
@@ -222,7 +222,7 @@ fn sparql_replaces_both_bounds_in_one_supersede() {
     assert_eq!((from, to), (Some(18_048 * DAY), Some(19_358 * DAY)));
 }
 
-// @lat: [[tests#Statement Metadata#SPARQL Valid Time In A Graph Block]]
+// @tg: verifies:: [[tests#Statement Metadata#SPARQL Valid Time In A Graph Block]] {since: "2026-10-14", level: unit}
 #[test]
 fn sparql_valid_time_in_a_graph_block() {
     let t = T::new();
@@ -233,7 +233,7 @@ fn sparql_valid_time_in_a_graph_block() {
     assert_eq!(t.tm_triples(), 0);
 }
 
-// @lat: [[tests#Statement Metadata#SPARQL Valid Time Errors]]
+// @tg: verifies:: [[tests#Statement Metadata#SPARQL Valid Time Errors]] {since: "2026-10-14", level: unit}
 #[test]
 fn sparql_valid_time_errors() {
     let t = T::new();
@@ -266,7 +266,7 @@ fn sparql_valid_time_errors() {
     assert_eq!(t.intervals("worksAt")[0].2, None);
 }
 
-// @lat: [[tests#Statement Metadata#SPARQL Transaction Time Is Read-Only]]
+// @tg: verifies:: [[tests#Statement Metadata#SPARQL Transaction Time Is Read-Only]] {since: "2026-10-14", level: unit}
 #[test]
 fn sparql_transaction_time_is_read_only() {
     let t = T::new();
@@ -307,7 +307,7 @@ fn authored(t: &T) -> TxReport {
     })
 }
 
-// @lat: [[tests#Statement Metadata#SPARQL Reads Statement Id And Transaction]]
+// @tg: verifies:: [[tests#Statement Metadata#SPARQL Reads Statement Id And Transaction]] {since: "2026-10-14", level: unit}
 #[test]
 fn sparql_reads_statement_id_and_transaction() {
     let t = T::new();
@@ -332,7 +332,7 @@ fn sparql_reads_statement_id_and_transaction() {
 
 // ---- Cypher: statement id and transaction nodes -----------------------------------
 
-// @lat: [[tests#Statement Metadata#Cypher Statement Id And Transaction Node]]
+// @tg: verifies:: [[tests#Statement Metadata#Cypher Statement Id And Transaction Node]] {since: "2026-10-14", level: unit}
 #[test]
 fn cypher_statement_id_and_transaction_node() {
     let t = T::new();
@@ -380,7 +380,7 @@ fn cypher_statement_id_and_transaction_node() {
     );
 }
 
-// @lat: [[tests#Statement Metadata#Cypher Reads Why A Fact Was Retracted]]
+// @tg: verifies:: [[tests#Statement Metadata#Cypher Reads Why A Fact Was Retracted]] {since: "2026-10-14", level: unit}
 #[test]
 fn cypher_reads_why_a_fact_was_retracted() {
     let t = T::new();
@@ -403,7 +403,7 @@ fn cypher_reads_why_a_fact_was_retracted() {
     );
 }
 
-// @lat: [[tests#Statement Metadata#Cypher Transaction Nodes Are Read-Only]]
+// @tg: verifies:: [[tests#Statement Metadata#Cypher Transaction Nodes Are Read-Only]] {since: "2026-10-14", level: unit}
 #[test]
 fn cypher_transaction_nodes_are_read_only() {
     let t = T::new();
@@ -424,7 +424,7 @@ fn cypher_transaction_nodes_are_read_only() {
 
 // ---- both dialects ------------------------------------------------------------------
 
-// @lat: [[tests#Statement Metadata#Dialects Agree On Statement Metadata]]
+// @tg: verifies:: [[tests#Statement Metadata#Dialects Agree On Statement Metadata]] {since: "2026-10-14", level: unit}
 #[test]
 fn dialects_agree_on_statement_metadata() {
     let t = T::new();
