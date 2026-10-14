@@ -304,6 +304,9 @@ impl Exec<'_> {
         if matches!(subject, Value::Stmt(_)) {
             names.insert(0, "Statement".to_string());
         }
+        if matches!(subject, Value::Tx(_)) {
+            names.insert(0, "Transaction".to_string());
+        }
         Ok(names)
     }
 

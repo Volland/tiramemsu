@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Causal-temporal event graphs: tiramemsu</title>
-<meta name="description" content="Causal-temporal event graphs (CTEGs) for agent traces, built on statement ids, valid time and transaction time in Tiramemsu, checked and queried in SPARQL on the real trace of the agent that wrote this article.">
+<meta name="description" content="Causal-temporal event graphs (CTEGs) for agent traces, built on statement ids, valid time and transaction time in Tiramemsu, written and queried in SPARQL and Cypher on the real trace of the agent that wrote this article.">
 <link rel="icon" href="../assets/logo.svg" type="image/svg+xml">
 <link rel="stylesheet" href="../style.css">
 </head>
@@ -146,6 +146,26 @@ function record(e, { spanTo, latencyMs } = {}) {
   });
 }</code></pre>
 <p>The subagent’s own events are recorded as they happen, in its own session, with no edge to the parent. Until the graft transaction commits, nothing connects them to the parent’s tree.</p>
+<h3>The same recorder in SPARQL</h3>
+<p>Not every agent runs next to the database. A recorder that only speaks SPARQL can write the same statements, because SPARQL Update can now set valid time. A <code>tm:validFrom</code> or <code>tm:validTo</code> annotation on a triple is not stored as a triple; it becomes the valid time of the statement it annotates. Here is the call <code>ev-eb0a1af1</code> and its result from the real trace, with the latency on the causal edge, in one request:</p>
+<pre class="sparql"><code>INSERT DATA {
+  v:ev-a12e356f a v:ToolResult
+      {| tm:validFrom &quot;2026-10-13T11:31:57.279Z&quot;^^xsd:dateTime ;
+         tm:validTo   &quot;2026-10-13T11:31:57.280Z&quot;^^xsd:dateTime |} ;
+    v:inSession v:session-main .
+  v:ev-eb0a1af1 v:caused v:ev-a12e356f
+      {| tm:validFrom &quot;2026-10-13T11:31:57.279Z&quot;^^xsd:dateTime ;
+         tm:validTo   &quot;2026-10-13T11:31:57.280Z&quot;^^xsd:dateTime ;
+         v:latencyMs 4158 |} .
+}</code></pre>
+<p>The demo script records the whole trace this way when run with <code>RECORDER=sparql</code>. All twelve checks and queries below return the same answers as with the API recorder; only the transaction numbers and instants differ.</p>
+<p>Clocks are sometimes wrong, and a recorder has to fix a timestamp without losing the old one. With the statement bound in a <code>WHERE</code>, deleting and inserting its bounds is one correction, a supersede:</p>
+<pre class="sparql"><code>DELETE { ?e tm:validFrom ?f ; tm:validTo ?t }
+INSERT { ?e tm:validFrom &quot;2026-10-13T11:31:57.281Z&quot;^^xsd:dateTime ;
+            tm:validTo   &quot;2026-10-13T11:31:57.282Z&quot;^^xsd:dateTime }
+WHERE  { v:ev-eb0a1af1 v:caused v:ev-a12e356f ~ ?e .
+         ?e tm:validFrom ?f ; tm:validTo ?t }</code></pre>
+<p>The edge gets a new statement id with the corrected time, and its latency annotation moves with it. The old edge stays in history, retracted by the correcting transaction, so “what did the trace say before we fixed the clock?” is still an <code>asOf</code> query.</p>
 <h2>First question: is the log a CTEG at all?</h2>
 <p>We first loaded the transcript exactly as logged, with each record’s <code>parentUuid</code> as the parent (stored as <code>v:loggedBefore</code>), and asked how many links fail the paper’s rule, a child stamped no later than its parent. The SPARQL reads the time of each link and of its parent’s type statement through the reifier syntax <code>~ ?link</code> and the virtual predicate <code>tm:validFrom</code>:</p>
 <pre class="sparql"><code>SELECT (COUNT(*) AS ?backwards) WHERE {
@@ -294,8 +314,24 @@ SELECT (COUNT(?e) AS ?n) WHERE { v:ev-bf7a21b0 v:caused+ ?e . ?e v:agent &quot;f
      tm:validFrom ?validFrom ; tm:addedAt ?addedAt ; tm:txAdded ?tx .
 }</code></pre>
 <pre><code>call         | root         | validFrom     | addedAt       | tx
-ev-0efbe02c  | ev-c5847514  | 11:34:45.399  | 11:48:39.989  | 229</code></pre>
+ev-0efbe02c  | ev-c5847514  | 11:34:45.399  | 07:46:51.936  | 229</code></pre>
 <p>The edge is valid from the moment the subagent’s root event happened. It was added later. In this replay “later” is the time we ran the loader; with a live recorder, <code>addedAt</code> would be the moment the hand-back reached the parent. Either way the store can answer “what had the parent received when it took step X?” with <code>asOf</code>, which a timestamp column cannot.</p>
+<p>The transaction is more than a number. The recorder wrote a reason on it (<code>tx v:reason "graft … on return"</code>), and Cypher reaches it from the edge. <code>tiramemsu.statementId(g)</code> is the edge’s statement id, and <code>tiramemsu.transaction(g)</code> is the transaction that added it, as a node with the label <code>Transaction</code>. That node has its metadata as properties, plus its <code>number</code> and commit <code>instant</code>:</p>
+<pre class="cypher"><code>MATCH (call)-[g:caused]-&gt;(root)
+WHERE g.grafts IS NOT NULL
+WITH g, tiramemsu.transaction(g) AS tx
+RETURN tiramemsu.statementId(g) AS id, g.validFrom AS validFrom,
+       tx.number AS tx, tx.instant AS recordedAt, tx.reason AS why</code></pre>
+<pre><code>id   | validFrom                | tx  | recordedAt               | why
+1512 | 2026-10-13T11:34:45.399Z | 229 | 2026-10-14T07:46:51.936Z | graft fact-checker a12edfec trace on return</code></pre>
+<p>SPARQL reads the same edge and the same transaction, so the two dialects agree:</p>
+<pre class="sparql"><code>SELECT ?g ?tx ?why WHERE {
+  ?call v:caused ?root ~ ?g . ?g v:grafts ?name ; tm:txAdded ?tx .
+  ?tx v:reason ?why
+}</code></pre>
+<pre><code>g         | tx                   | why
+stmt:1512 | urn:tiramemsu:tx:229 | graft fact-checker a12edfec trace on return</code></pre>
+<p><code>tiramemsu.retraction(r)</code> does the same for the transaction that retracted a statement. That is where an agent’s reason for forgetting lives, because a retraction’s reason is written on its transaction, never on the retracted statement.</p>
 <h2>The prefix property, for free</h2>
 <p>Remark 3.15 says any prefix of a run is a valid CTEG. In Tiramemsu, every transaction commits atomically and the recorder writes one emission per transaction, so the state as of any transaction is a prefix of the run. If the agent crashes, the last committed transaction is a well-formed trace, and every query above works on it. The same check, as of transaction 228, mid-run:</p>
 <pre><code>events | backwards
@@ -335,7 +371,9 @@ ToolCall | Bash      | 1</code></pre>
 python3 extract-trace.py ~/.claude/projects/&lt;project&gt;/&lt;session&gt;.jsonl \
         ~/.claude/projects/&lt;project&gt;/&lt;session&gt;/subagents/*.jsonl &gt; trace.json
 # load it as a CTEG and run every query in this article
-node cteg-demo.mjs trace.json cteg.db</code></pre>
+node cteg-demo.mjs trace.json cteg.db
+# the same, recorded entirely through SPARQL Update
+RECORDER=sparql node cteg-demo.mjs trace.json cteg-sparql.db</code></pre>
 <p><code>trace.json</code> is the sanitized trace used here, and <code>queries.out.txt</code> is the full output of the run.</p>
 <p>Further reading:</p>
 <ul>

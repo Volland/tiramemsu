@@ -158,6 +158,37 @@ function graft(callId, subRoot, agentName) {
 
 The subagent's own events are recorded as they happen, in its own session, with no edge to the parent. Until the graft transaction commits, nothing connects them to the parent's tree.
 
+### The same recorder in SPARQL
+
+Not every agent runs next to the database. A recorder that only speaks SPARQL can write the same statements, because SPARQL Update can now set valid time. A `tm:validFrom` or `tm:validTo` annotation on a triple is not stored as a triple; it becomes the valid time of the statement it annotates. Here is the call `ev-eb0a1af1` and its result from the real trace, with the latency on the causal edge, in one request:
+
+```sparql
+INSERT DATA {
+  v:ev-a12e356f a v:ToolResult
+      {| tm:validFrom "2026-10-13T11:31:57.279Z"^^xsd:dateTime ;
+         tm:validTo   "2026-10-13T11:31:57.280Z"^^xsd:dateTime |} ;
+    v:inSession v:session-main .
+  v:ev-eb0a1af1 v:caused v:ev-a12e356f
+      {| tm:validFrom "2026-10-13T11:31:57.279Z"^^xsd:dateTime ;
+         tm:validTo   "2026-10-13T11:31:57.280Z"^^xsd:dateTime ;
+         v:latencyMs 4158 |} .
+}
+```
+
+The demo script records the whole trace this way when run with `RECORDER=sparql`. All twelve checks and queries below return the same answers as with the API recorder; only the transaction numbers and instants differ.
+
+Clocks are sometimes wrong, and a recorder has to fix a timestamp without losing the old one. With the statement bound in a `WHERE`, deleting and inserting its bounds is one correction, a supersede:
+
+```sparql
+DELETE { ?e tm:validFrom ?f ; tm:validTo ?t }
+INSERT { ?e tm:validFrom "2026-10-13T11:31:57.281Z"^^xsd:dateTime ;
+            tm:validTo   "2026-10-13T11:31:57.282Z"^^xsd:dateTime }
+WHERE  { v:ev-eb0a1af1 v:caused v:ev-a12e356f ~ ?e .
+         ?e tm:validFrom ?f ; tm:validTo ?t }
+```
+
+The edge gets a new statement id with the corrected time, and its latency annotation moves with it. The old edge stays in history, retracted by the correcting transaction, so "what did the trace say before we fixed the clock?" is still an `asOf` query.
+
 ## First question: is the log a CTEG at all?
 
 We first loaded the transcript exactly as logged, with each record's `parentUuid` as the parent (stored as `v:loggedBefore`), and asked how many links fail the paper's rule, a child stamped no later than its parent. The SPARQL reads the time of each link and of its parent's type statement through the reifier syntax `~ ?link` and the virtual predicate `tm:validFrom`:
@@ -403,10 +434,41 @@ SELECT ?call ?root ?validFrom ?addedAt ?tx WHERE {
 
 ```
 call         | root         | validFrom     | addedAt       | tx
-ev-0efbe02c  | ev-c5847514  | 11:34:45.399  | 11:48:39.989  | 229
+ev-0efbe02c  | ev-c5847514  | 11:34:45.399  | 07:46:51.936  | 229
 ```
 
 The edge is valid from the moment the subagent's root event happened. It was added later. In this replay "later" is the time we ran the loader; with a live recorder, `addedAt` would be the moment the hand-back reached the parent. Either way the store can answer "what had the parent received when it took step X?" with `asOf`, which a timestamp column cannot.
+
+The transaction is more than a number. The recorder wrote a reason on it (`tx v:reason "graft … on return"`), and Cypher reaches it from the edge. `tiramemsu.statementId(g)` is the edge's statement id, and `tiramemsu.transaction(g)` is the transaction that added it, as a node with the label `Transaction`. That node has its metadata as properties, plus its `number` and commit `instant`:
+
+```cypher
+MATCH (call)-[g:caused]->(root)
+WHERE g.grafts IS NOT NULL
+WITH g, tiramemsu.transaction(g) AS tx
+RETURN tiramemsu.statementId(g) AS id, g.validFrom AS validFrom,
+       tx.number AS tx, tx.instant AS recordedAt, tx.reason AS why
+```
+
+```
+id   | validFrom                | tx  | recordedAt               | why
+1512 | 2026-10-13T11:34:45.399Z | 229 | 2026-10-14T07:46:51.936Z | graft fact-checker a12edfec trace on return
+```
+
+SPARQL reads the same edge and the same transaction, so the two dialects agree:
+
+```sparql
+SELECT ?g ?tx ?why WHERE {
+  ?call v:caused ?root ~ ?g . ?g v:grafts ?name ; tm:txAdded ?tx .
+  ?tx v:reason ?why
+}
+```
+
+```
+g         | tx                   | why
+stmt:1512 | urn:tiramemsu:tx:229 | graft fact-checker a12edfec trace on return
+```
+
+`tiramemsu.retraction(r)` does the same for the transaction that retracted a statement. That is where an agent's reason for forgetting lives, because a retraction's reason is written on its transaction, never on the retracted statement.
 
 ## The prefix property, for free
 
@@ -466,6 +528,8 @@ python3 extract-trace.py ~/.claude/projects/<project>/<session>.jsonl \
         ~/.claude/projects/<project>/<session>/subagents/*.jsonl > trace.json
 # load it as a CTEG and run every query in this article
 node cteg-demo.mjs trace.json cteg.db
+# the same, recorded entirely through SPARQL Update
+RECORDER=sparql node cteg-demo.mjs trace.json cteg-sparql.db
 ```
 
 `trace.json` is the sanitized trace used here, and `queries.out.txt` is the full output of the run.

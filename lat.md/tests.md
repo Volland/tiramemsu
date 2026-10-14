@@ -1514,3 +1514,53 @@ Two models filled over the same statements, one through SPARQL Update and one th
 ### Hybrid Expansion Is Capped And Budgeted
 
 With five layers on a hit, `expand: n` adds exactly `min(n, 5)` of them after the fused hits with ranks continuing; a row budget smaller than the result fails with `ResultLimitExceeded` and a cancelled token with `Cancelled`.
+
+## Statement Metadata
+
+Valid-time writes from SPARQL Update, and statement ids and transactions read from a triple in both dialects. Tests are in `statement_metadata.rs`.
+
+### SPARQL Inserts A Fact With Its Valid Time
+
+`INSERT DATA` with a `{| tm:validFrom … ; tm:validTo … |}` annotation (date and dateTime) asserts one statement with that interval and stores no `tm:` triple.
+
+An overlapping re-insert returns it unchanged, and an `xsd:integer` bound is epoch milliseconds.
+
+### SPARQL Closes And Clears An Interval
+
+`INSERT { ?e tm:validTo … } WHERE { … ~ ?e }` supersedes the statement with the end set and moves its confidence annotation; `DELETE { ?e tm:validTo ?t }` clears it. A non-matching delete and an unchanged bound write nothing.
+
+### SPARQL Replaces Both Bounds In One Supersede
+
+A `DELETE/INSERT` that deletes the start and inserts a new start and end reports exactly one supersede, and the live interval is the inserted one.
+
+### SPARQL Valid Time In A Graph Block
+
+A valid-time annotation inside `GRAPH v:g { … }` sets the statement's bound; the report lists one membership, for the statement, and no `tm:` triple is stored.
+
+### SPARQL Valid Time Errors
+
+A non-statement subject, a string value and two values for one bound are `InvalidQuery`; an inverted interval is `InvalidPatch` on supersede and `InvalidInterval` on assert. No transaction commits.
+
+### SPARQL Transaction Time Is Read-Only
+
+`tm:txAdded`, `tm:txRetracted`, `tm:addedAt`, `tm:retractedAt` and `tm:retractKind` in an insert template are `Unsupported` naming the predicate; `sys:subject` stays `ReservedNamespace`.
+
+### SPARQL Reads Statement Id And Transaction
+
+`~ ?e` binds the statement, `?e tm:txAdded ?tx` its transaction, and `?tx sys:author` and `sys:reason` its metadata; `?e tm:txAdded <tx>` returns the three statements that transaction wrote.
+
+### Cypher Statement Id And Transaction Node
+
+`tiramemsu.statementId(r)` is the eid, and `tiramemsu.transaction(r)` a node with `number`, `` `sys:author` ``, label `Transaction`, the tx element id and `instant = r.addedAt`. A tx IRI in a map binds it; `null` maps to `null`.
+
+### Cypher Reads Why A Fact Was Retracted
+
+Under `USE HISTORY`, `tiramemsu.retraction(r).`sys:reason`` is the reason given by the retracting transaction, while `tiramemsu.transaction(r)` still reads the asserting one; `retraction` is `null` on a live statement.
+
+### Cypher Transaction Nodes Are Read-Only
+
+`SET`, `REMOVE`, `DETACH DELETE` on a transaction node and `CREATE` with it as the start node fail with `Unsupported`, and no transaction commits.
+
+### Dialects Agree On Statement Metadata
+
+Valid time written by SPARQL is read by Cypher and the reverse, and the statement and transaction IRIs from SPARQL equal `elementId(r)` and `elementId(tiramemsu.transaction(r))`.

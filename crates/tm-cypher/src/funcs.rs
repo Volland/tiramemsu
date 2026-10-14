@@ -100,6 +100,9 @@ pub const SCALARS: &[&str] = &[
     "datetime.fromepochmillis",
     "localdatetime.truncate",
     "isnan",
+    "tiramemsu.statementid",
+    "tiramemsu.transaction",
+    "tiramemsu.retraction",
 ];
 
 /// True for an aggregate function.

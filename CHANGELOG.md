@@ -9,6 +9,28 @@ OpenSpec changes in `openspec/changes/archive/`.
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-10-14
+
+Valid-time writes from SPARQL Update, and statement ids and transactions in Cypher (`openspec/changes/add-query-statement-metadata`).
+
+**Upgrade notes**
+
+- No storage format change.
+- SPARQL Update: `tm:validFrom` / `tm:validTo` triples on a statement now set its valid time instead of failing with `ReservedNamespace`. Transaction-time predicates (`tm:txAdded`, `tm:txRetracted`, `tm:addedAt`, `tm:retractedAt`, `tm:retractKind`) in an update template now fail with `Unsupported` before the transaction opens, instead of `ReservedNamespace`.
+- Cypher: a transaction term in node position (a transaction IRI in a `` {`@id`: …} `` map, or the object of `sys:confirmedBy`) is now a `Transaction` node instead of an Integer. `r.txAdded` and `r.txRetracted` are still Integers.
+
+### Added
+
+- SPARQL Update writes valid time:
+  - `INSERT DATA { v:a v:p v:b {| tm:validFrom "2020-01-01"^^xsd:date ; tm:validTo … |} }` asserts the statement with that interval.
+  - On a stored statement (a bound `?e`, a statement IRI, or a reifier), inserted and deleted bounds become one supersede per statement and operation, and annotations move to the new statement.
+  - `DELETE { ?e tm:validTo ?t }` clears a bound.
+  - Values are `xsd:dateTime`, `xsd:date` or `xsd:integer` epoch milliseconds.
+- Cypher functions:
+  - `tiramemsu.statementId(r)`: the statement id, as an Integer.
+  - `tiramemsu.transaction(r)` and `tiramemsu.retraction(r)`: the transaction that added or retracted a statement, as a read-only node with the label `Transaction`, its metadata as properties (`` t.`sys:author` ``, `t.reason`), and `number` and `instant`.
+- SPARQL statement id and transaction reads (`~ ?e`, `?e tm:txAdded ?tx`, `?tx sys:author ?a`) are now specified and tested as agreeing with Cypher.
+
 ## [0.6.0] - 2026-10-12
 
 Vector writes and vector index commands from SPARQL and Cypher (`openspec/changes/add-vector-query-writes`).
@@ -156,7 +178,8 @@ First release.
 - Named graphs: `Tx::add_to_graph`, `remove_from_graph`, `clear_graph`, `View::graphs`, `View::graph_members`. SPARQL gains `GRAPH`, `FROM NAMED` and graph management updates.
 - JSON bridge (`tiramemsu-json`), Node.js bindings (`@tiramemsu/node`) and Python bindings (`tiramemsu`), with release workflows for PyPI wheels and npm.
 
-[Unreleased]: https://github.com/Volland/tiramemsu/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/Volland/tiramemsu/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/Volland/tiramemsu/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/Volland/tiramemsu/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/Volland/tiramemsu/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/Volland/tiramemsu/compare/v0.3.0...v0.4.0

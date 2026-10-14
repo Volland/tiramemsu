@@ -45,6 +45,12 @@ pub trait Runner {
     /// Volatile entries `(key iri, value)` of subject `s`.
     fn volatile_of(&mut self, s: &Value) -> Result<Vec<(String, Value)>>;
 
+    /// The commit instant of transaction `t` in epoch milliseconds, `None` when
+    /// there is no such transaction (or the runner cannot read transactions).
+    fn tx_instant(&mut self, _t: u64) -> Result<Option<i64>> {
+        Ok(None)
+    }
+
     /// The hop cap of unbounded variable-length and shortest-path patterns
     /// (`OpenOptions::path_max_hops`).
     fn path_max_hops(&self) -> u32 {

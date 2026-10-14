@@ -153,7 +153,7 @@ Some predicates are computed from the triple row instead of stored, by [[crates/
 | `sys:subject`, `sys:object`, `sys:predicate` | `s`, `o`, `p` of the statement `eid` | Path hops through layers. See [[query#Physical Planning#Path Engine]] |
 | `tm:txAdded`, `tm:txRetracted` | `t_add`, `t_ret` as `TX` ids | SPARQL `?r tm:txAdded ?t`, Cypher `r.txAdded` |
 | `tm:addedAt`, `tm:retractedAt` | the `instant` of `t_add`, `t_ret` as `DATETIME` with offset `Z` | SPARQL `?r tm:addedAt ?when`, Cypher `r.addedAt` |
-| `tm:validFrom`, `tm:validTo` | `v_from`, `v_to` as `DATETIME` | SPARQL and Cypher |
+| `tm:validFrom`, `tm:validTo` | `v_from`, `v_to` as `DATETIME` | SPARQL and Cypher; writable in updates ([[query#Front Ends#SPARQL#Valid Time Writes]]) |
 | `tm:retractKind` | `ret_kind` | History queries |
 | volatile keys | `volatile.value` for `(s, key)` | Cypher `n.lastSeen` under `Now` only. See [[storage#Volatile Table]] |
 
@@ -465,6 +465,29 @@ With `SparqlOptions { provenance: true }`, each `SELECT` row carries the sorted 
 - **Output:** `Solutions::provenance(row)`. SPARQL JSON gains a non-standard `"provenance"` member between `head` and `results`, because streaming parsers reject anything after the bindings. The JSON bridge takes `provenance: true` on `sparql` and returns `"provenance"` and `"provenanceGaps"` beside `"rows"`.
 - **Query-only text:** `SparqlOptions { query_only: true }` refuses an update request with `Unsupported("update in a query-only call")` before anything runs; the bridge spells it `queryOnly`, and the MCP `query` tool always sets it ([[api#MCP Tools]]).
 
+#### Valid Time Writes
+
+SPARQL Update writes valid time: a `tm:validFrom` or `tm:validTo` triple on a statement sets that bound instead of being stored, as Cypher `SET r.validFrom` does. Transaction time stays read-only.
+
+The runner ([[crates/tm-sparql/src/update/run.rs#run]]) splits these triples out of each operation, like vector writes ([[query#Vector Recall#Writes From Query Languages]]):
+
+- **Subject:** a statement IRI, a variable bound to a statement, or a reifier (`~`, `{| … |}`, `rdf:reifies`) of a triple in the same request. Anything else is `InvalidQuery`.
+- **Value:** an `xsd:dateTime`, an `xsd:date` (midnight UTC) or an `xsd:integer` of epoch milliseconds; anything else is `InvalidQuery`.
+- **New statements:** a reified triple the request asserts is asserted with the bounds, so `INSERT DATA { v:a v:p v:b {| tm:validFrom "2020-01-01"^^xsd:date |} }` writes one statement. Idempotency then uses that interval: an overlapping live statement is returned unchanged, never widened.
+- **Stored statements:** every bound inserted or deleted for one statement in one operation becomes one `supersede` with the bounds patched ([[time-model#Operations#Supersede]]), after the operation's ordinary triples, so annotations written in the same operation move too. A patch that changes nothing writes nothing; two different values for one bound are `InvalidQuery`.
+- **Deletes:** `DELETE { ?e tm:validTo ?t }` clears the bound (unbounded) when `?t` is its current value; any other value matches nothing. An insert of the same bound in the same operation wins.
+- **Graphs:** inside a `GRAPH` block the bound still applies to the statement and writes no membership.
+- **Errors:** an inverted interval is `InvalidInterval` on assert and `InvalidPatch` on supersede, and nothing is written. `tm:txAdded`, `tm:txRetracted`, `tm:addedAt`, `tm:retractedAt` and `tm:retractKind` in any template are `Unsupported` at plan time; the hop predicates `sys:subject`, `sys:object` and `sys:predicate` stay `ReservedNamespace`.
+
+```sparql
+# she left at the end of 2023: close the interval of the matched statement
+DELETE { ?e tm:validTo ?old }
+INSERT { ?e tm:validTo "2024-01-01"^^xsd:date }
+WHERE  { v:alice v:worksAt v:acme ~ ?e . OPTIONAL { ?e tm:validTo ?old } }
+```
+
+Reading the other way needs no extension: `~ ?e` binds the statement (`urn:tiramemsu:stmt:<n>`), `?e tm:txAdded ?tx` its transaction (`urn:tiramemsu:tx:<t>`), triples with `?tx` as subject are the transaction's metadata, and `?e tm:txAdded <urn:tiramemsu:tx:3>` lists what transaction 3 wrote.
+
 ### Cypher
 
 Cypher parses an openCypher subset plus a few documented extensions and runs it over the same statements as SPARQL. The crate is `tm-cypher`; the parser is `open-cypher`, pinned behind an adapter.
@@ -484,6 +507,24 @@ Cypher parses an openCypher subset plus a few documented extensions and runs it 
 - **Deletes:** `DELETE n` retracts the node's properties and labels, and fails with `DeleteConnectedNode` if relationships remain at the end of the query. `CREATE (n)` with nothing attached writes nothing, because nodes exist only through statements.
 - **Volatile values:** under `Now` with valid time unfiltered, `n.key` also reads the volatile table, and a stored statement wins. Cypher never writes volatile values.
 - **Errors:** compile-time problems are `Parse` with the byte span in the original text (extensions included), constructs outside the subset are `Unsupported`, and runtime type errors, division by zero and unstorable values are `Eval`.
+
+#### Statement Ids And Transactions
+
+Three namespaced functions read a statement's id and transactions, and a transaction is a read-only node whose properties are its metadata. Implemented in [[crates/tm-cypher/src/exec/funcs.rs]].
+
+- **`tiramemsu.statementId(r)`:** the statement id as an Integer, the `n` of `elementId(r)` = `urn:tiramemsu:stmt:<n>`, which the bindings call `eid`. `id(r)` stays the raw ObjectId.
+- **`tiramemsu.transaction(r)`, `tiramemsu.retraction(r)`:** the transaction that added, or retracted, the statement, as a node; `retraction` is `null` when `r.txRetracted` is. Both take a relationship or a statement node, return `null` for `null` and fail with `Eval` otherwise.
+- **Transaction nodes:** label `Transaction`, element id `urn:tiramemsu:tx:<t>`, and one property per triple with the transaction as subject (`` t.`sys:author` ``, `` t.`sys:reason` ``, user predicates). `number` (Integer) and `instant` (the commit DateTime, read through `Runner::tx_instant` of [[crates/tm-cypher/src/runner.rs#Runner]]) are read-only and not listed by `keys()`.
+- **By IRI:** `` MATCH (t {`@id`: 'urn:tiramemsu:tx:3'}) `` binds the transaction node; a transaction term in any node position is a node, while `r.txAdded` and `r.txRetracted` stay Integers.
+- **Read-only:** `SET`, `REMOVE`, `DELETE` on a transaction node and `CREATE` with it as the start fail with `Unsupported` ([[crates/tm-cypher/src/exec/write.rs#refuse_tx]]). Transaction metadata is written with `tx.meta` in the API.
+
+```cypher
+// who wrote this fact, and why was it retracted?
+USE HISTORY MATCH (:Person)-[r:worksAt]->(:Company)
+RETURN tiramemsu.statementId(r) AS id,
+       tiramemsu.transaction(r).`sys:author` AS author,
+       tiramemsu.retraction(r).`sys:reason` AS why
+```
 
 ### Cypher Dual View
 
@@ -525,6 +566,8 @@ Time can be chosen from the API or inside queries in both dialects, either for t
 | History | `.history()` | `FROM <urn:tiramemsu:tm:history>` | `USE HISTORY` |
 | Per pattern | view per call | `SERVICE <urn:tiramemsu:tm:asOf/150> { … }` | `CALL { USE AS OF 150 MATCH … RETURN … }` |
 | Statement time | — | `?r tm:txAdded ?t`, `?r tm:addedAt ?when` | `r.txAdded`, `r.addedAt` |
+| Set valid time | `supersede(e, Patch)` | `INSERT { ?r tm:validTo … }`, `{\| tm:validFrom … \|}` | `SET r.validTo = …`, `CREATE … {validFrom: …}` |
+| Statement id, transaction | `Eid`, `Triple::t_add` | `~ ?r`, `?r tm:txAdded ?tx . ?tx sys:author ?a` | `tiramemsu.statementId(r)`, `tiramemsu.transaction(r)` |
 
 - The default, with no clause, is tx `Now` and valid time unfiltered. Valid-time filtering is always opt-in, because an implicit "valid now" would silently hide past facts.
 - The `tm:` IRIs are recognised only in `FROM` (whole query) and `SERVICE` (one group). Anywhere else they are ordinary IRIs. Nested `SERVICE` groups override per part, innermost first.

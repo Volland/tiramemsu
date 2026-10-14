@@ -47,6 +47,36 @@ function record(e, { spanTo, latencyMs } = {}) {
   });
 }
 
+// The same recorder in SPARQL Update. Valid time is an annotation on the
+// statement it bounds, so one INSERT DATA writes the event and its edge.
+const lit = (x) => (typeof x === "number" ? String(x) : JSON.stringify(x));
+function recordSparql(e, { spanTo, latencyMs } = {}) {
+  const ev_ = `v:ev-${e.id.slice(0, 8)}`;
+  const when = (from, to) => `{| tm:validFrom ${from} ; tm:validTo ${to} |}`;
+  const lines = [
+    `${ev_} a v:${e.type} ${when(e.t, spanTo ?? e.t + 1)} .`,
+    `${ev_} v:inSession v:session-${e.session} ; v:agent ${lit(e.agent)} .`,
+  ];
+  if (e.tool) lines.push(`${ev_} v:tool ${lit(e.tool)} .`);
+  if (e.label) lines.push(`${ev_} v:label ${lit(e.label)} .`);
+  if (e.parent) lines.push(`v:ev-${e.parent.slice(0, 8)} v:loggedBefore ${ev_} ${when(e.t, e.t + 1)} .`);
+  if (e.cause) {
+    const extra = latencyMs !== undefined ? ` ; v:latencyMs ${latencyMs}` : "";
+    lines.push(`v:ev-${e.cause.slice(0, 8)} v:caused ${ev_} {| tm:validFrom ${e.t} ; tm:validTo ${e.t + 1}${extra} |} .`);
+  }
+  for (const input of e.consumed ?? []) lines.push(`${ev_} v:consumed v:ev-${input.slice(0, 8)} .`);
+  return db.now().sparql(`INSERT DATA {\n${lines.join("\n")}\n}`).report;
+}
+
+function graftSparql(callId, subRoot, agentName) {
+  return db.now().sparql(`INSERT DATA {
+  v:ev-${callId.slice(0, 8)} v:caused v:ev-${subRoot.id.slice(0, 8)}
+    {| tm:validFrom ${subRoot.t} ; tm:validTo ${subRoot.t + 1} ; v:grafts ${lit(agentName)} |} .
+}`).report;
+}
+
+const SPARQL = process.env.RECORDER === "sparql";
+
 // Grafting a finished subagent trace: one edge from the invoking event to the
 // subagent's root, written when the result reaches the parent.
 function graft(callId, subRoot, agentName) {
@@ -99,7 +129,10 @@ steps.sort((a, b) => a.at - b.at);
 
 let graftTx = null;
 for (const s of steps) {
-  if (s.graft) { graftTx = graft(s.graft.callId, s.graft.root, s.graft.name).t; continue; }
+  if (s.graft) {
+    graftTx = (SPARQL ? graftSparql : graft)(s.graft.callId, s.graft.root, s.graft.name).t;
+    continue;
+  }
   const e = s.e;
   let opts = {};
   if (e.type === "ToolCall") {
@@ -112,7 +145,7 @@ for (const s of steps) {
     const call = all.find((c) => c.toolUseId === e.toolUseId && c.type !== "ToolResult");
     if (call && call.id === e.cause) opts.latencyMs = e.t - call.t;
   }
-  record(e, opts);
+  (SPARQL ? recordSparql : record)(e, opts);
 }
 
 // ---- queries ----------------------------------------------------------------
@@ -236,3 +269,24 @@ SELECT (COUNT(?e) AS ?events) (SUM(?bad) AS ?backwards) WHERE {
 
 run("12. Single parenthood holds: events with more than one cause", now, `
 SELECT ?e (COUNT(?p) AS ?parents) WHERE { ?p v:caused ?e } GROUP BY ?e HAVING (COUNT(?p) > 1)`);
+
+if (!SPARQL) {
+  const cy = (title, q) => {
+    const r = db.now().cypher(q);
+    console.log(`\n### ${title}\n${q.trim()}\n--`);
+    console.log(r.columns.join(" | "));
+    for (const row of r.rows) console.log(row.map(short).join(" | "));
+    console.log(`(${r.rows.length} rows)`);
+  };
+  cy("13. Cypher: the graft edge, its statement id and the transaction that wrote it", `
+MATCH (call)-[g:caused]->(root)
+WHERE g.grafts IS NOT NULL
+WITH g, tiramemsu.transaction(g) AS tx
+RETURN tiramemsu.statementId(g) AS id, g.validFrom AS validFrom,
+       tx.number AS tx, tx.instant AS recordedAt, tx.reason AS why`);
+  run("14. SPARQL: the same edge, the same transaction", now, `
+SELECT ?g ?tx ?why WHERE {
+  ?call v:caused ?root ~ ?g . ?g v:grafts ?name ; tm:txAdded ?tx .
+  ?tx v:reason ?why
+}`);
+}

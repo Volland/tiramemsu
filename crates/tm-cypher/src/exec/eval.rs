@@ -620,6 +620,19 @@ impl Exec<'_> {
             Val::Node(_) | Val::Rel(_) => {
                 self.check_not_deleted(base)?;
                 let view = self.view();
+                if let (Val::Node(Value::Tx(t)), false) = (base, key.text.contains(':')) {
+                    // engine-owned fields of a transaction node; the rest is metadata
+                    match key.text.as_str() {
+                        "number" => return Ok(Val::Int(t.0 as i64)),
+                        "instant" => {
+                            return Ok(match self.runner.tx_instant(t.0).map_err(super::core)? {
+                                Some(ms) => Val::DateTime { ms, tz: 0 },
+                                None => Val::Null,
+                            })
+                        }
+                        _ => {}
+                    }
+                }
                 if let Some(e) = stmt_of(base) {
                     if let Some(virt) = temporal_iri(&key.text).filter(|_| !key.text.contains(':'))
                     {

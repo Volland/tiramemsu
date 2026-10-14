@@ -4,7 +4,7 @@ use tm_core::{Eid, Error, ObjectId, Patch, Valid, Value};
 use tm_ir::{Expr as IrExpr, Func, Key, Op, TermOrVar, TriplePattern, View};
 
 use super::access::{is_sys, is_tx_time, tv, RDF_TYPE};
-use super::write::{oid, term_of};
+use super::write::{oid, refuse_tx, term_of};
 use super::{core, Exec, Row};
 use crate::ast::*;
 use crate::error::{CResult, CypherError};
@@ -156,6 +156,7 @@ impl Exec<'_> {
                         continue;
                     };
                     let val = self.eval(value, row)?;
+                    refuse_tx(&b)?;
                     let Some(term) = term_of(&b) else {
                         return Err(eval_err(format!(
                             "cannot set a property on a {}",
@@ -204,6 +205,7 @@ impl Exec<'_> {
                             )))
                         }
                     };
+                    refuse_tx(&b)?;
                     let Some(term) = term_of(&b) else {
                         return Err(eval_err(format!(
                             "cannot set properties on a {}",
@@ -230,6 +232,7 @@ impl Exec<'_> {
                     if b.is_null() {
                         continue;
                     }
+                    refuse_tx(&b)?;
                     let Some(term) = term_of(&b) else {
                         return Err(eval_err("cannot set a label on this value"));
                     };
@@ -303,6 +306,7 @@ impl Exec<'_> {
                     let Some((b, key)) = self.set_target(row, e)? else {
                         continue;
                     };
+                    refuse_tx(&b)?;
                     let Some(term) = term_of(&b) else {
                         return Err(eval_err("cannot remove a property from this value"));
                     };
@@ -329,6 +333,7 @@ impl Exec<'_> {
                     if b.is_null() {
                         continue;
                     }
+                    refuse_tx(&b)?;
                     let Some(term) = term_of(&b) else { continue };
                     let mut iris = Vec::new();
                     for l in labels {
@@ -359,6 +364,7 @@ impl Exec<'_> {
 
     /// `DELETE` / `DETACH DELETE` of one value.
     pub(crate) fn delete_value(&mut self, v: &Val, detach: bool) -> CResult<()> {
+        refuse_tx(v)?;
         match v {
             Val::Null => Ok(()),
             Val::Rel(e) | Val::Node(Value::Stmt(e)) => {

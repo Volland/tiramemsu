@@ -188,26 +188,29 @@ fn reserved_namespace_rejected() {
 fn valid_time_cannot_be_inserted_as_a_triple() {
     let t = T::new();
     t.assert(&[(v("alice"), v("worksAt"), v("acme"))]);
-    let n = t.last_t();
-    let e = t.err(
+    let r = t.upd(
         "INSERT { ?r tm:validFrom \"2020-01-01T00:00:00Z\"^^xsd:dateTime } WHERE { v:alice v:worksAt v:acme ~ ?r }",
     );
-    assert!(
-        matches!(&e, Error::ReservedNamespace(p) if p == "urn:tiramemsu:tm:validFrom"),
-        "{e:?}"
-    );
-    assert_eq!(t.last_t(), n);
-    // the virtual hop predicates are read-only too
-    for p in [
-        "sys:subject",
-        "sys:object",
-        "sys:predicate",
-        "tm:txAdded",
-        "tm:txRetracted",
-        "tm:validTo",
-        "tm:retractKind",
-    ] {
+    // the bound is set by superseding the statement; no tm: triple is stored
+    assert_eq!(r.superseded.len(), 1);
+    let live = t.db.now().triples(None, None, None).unwrap();
+    assert!(live.iter().any(|x| x.v_from == Some(1_577_836_800_000)));
+    assert!(t
+        .live()
+        .iter()
+        .all(|(_, p, _)| !matches!(p, Value::Iri(i) if i.starts_with("urn:tiramemsu:tm:"))));
+    let n = t.last_t();
+    // the virtual hop predicates stay reserved, transaction time is read-only,
+    // and valid time needs a statement subject
+    for p in ["sys:subject", "sys:object", "sys:predicate"] {
         let e = t.err(&format!("INSERT DATA {{ v:a {p} v:b }}"));
         assert!(matches!(e, Error::ReservedNamespace(_)), "{p}: {e:?}");
     }
+    for p in ["tm:txAdded", "tm:txRetracted", "tm:retractKind"] {
+        let e = t.err(&format!("INSERT DATA {{ v:a {p} v:b }}"));
+        assert!(matches!(e, Error::Unsupported { .. }), "{p}: {e:?}");
+    }
+    let e = t.err("INSERT DATA { v:a tm:validTo v:b }");
+    assert!(matches!(e, Error::InvalidQuery { .. }), "{e:?}");
+    assert_eq!(t.last_t(), n);
 }

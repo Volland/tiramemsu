@@ -12,20 +12,21 @@ It appears in two places: on Substack, from this folder, and on the website as `
 | `images/src/*.svg` | Their sources, in the site's tiramisu palette. `01`, `05`, `06` and `08` are generated; the rest are drawn by hand |
 | `code/extract-trace.py` | Turns a Claude Code transcript (and subagent transcripts) into a sanitized trace: ids, parents, times, types, tool names and short labels only |
 | `code/trace.json` | The sanitized trace used in the article: 205 main-agent records and 65 subagent records |
-| `code/cteg-demo.mjs` | Loads the trace into Tiramemsu as a CTEG through the Node binding and runs every query in the article |
+| `code/cteg-demo.mjs` | Loads the trace into Tiramemsu as a CTEG through the Node binding and runs every query in the article. `RECORDER=sparql` records it through SPARQL `INSERT DATA` with valid-time annotations instead; queries 1 to 12 give the same answers |
 | `code/queries.out.txt` | The output of the last run |
 | `code/gen-figures.py` | Draws the data figures from `trace.json` |
 | `build-preview.sh`, `../preview.css` | Rebuild the preview (needs `pandoc`) |
+| `build-site.py` | Rebuild the website page and copy the SVGs to `site/assets/cteg/` (needs `pandoc`) |
 
 ## Rebuilding
 
 ```sh
 cd article/cteg/code
-node cteg-demo.mjs trace.json /tmp/cteg.db > queries.out.txt      # needs the Node binding built in bindings/node
+node cteg-demo.mjs trace.json /tmp/cteg.db > queries.out.txt      # needs the Node binding built in bindings/node (0.6 + valid-time writes)
+RECORDER=sparql node cteg-demo.mjs trace.json /tmp/cteg-sparql.db  # the same trace written through SPARQL
 python3 gen-figures.py trace.json ../images/src
 cd ../images && for f in src/*.svg; do rsvg-convert -w 1456 "$f" -o "$(basename "$f" .svg).png"; done
-cd .. && ./build-preview.sh
-cp images/src/*.svg ../../site/assets/cteg/
+cd .. && ./build-preview.sh && python3 build-site.py
 ```
 
 Transaction numbers and `tm:addedAt` instants depend on when the loader runs; everything else (valid times, counts, causal structure) comes from the trace and is stable. If you re-run, update the graft transaction's `addedAt` quoted in the article.

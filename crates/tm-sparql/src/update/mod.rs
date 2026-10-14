@@ -320,6 +320,52 @@ fn check_vector_templates(templates: &[Template], delete: bool) -> Result<()> {
     Ok(())
 }
 
+/// The valid-time bound a `tm:` predicate writes in an update
+/// (`lat.md/query#Front Ends#SPARQL#Valid Time Writes`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Bound {
+    /// `tm:validFrom`: the inclusive start.
+    From,
+    /// `tm:validTo`: the exclusive end.
+    To,
+}
+
+/// The valid-time bound of predicate `p`, if it is `tm:validFrom` or `tm:validTo`.
+pub fn valid_bound(p: &str) -> Option<Bound> {
+    match p {
+        tm_ir::vocab::TM_VALID_FROM => Some(Bound::From),
+        tm_ir::vocab::TM_VALID_TO => Some(Bound::To),
+        _ => None,
+    }
+}
+
+/// Transaction time is engine-owned: a template naming it fails before the
+/// transaction opens.
+fn check_time_templates(templates: &[Template]) -> Result<()> {
+    use tm_ir::vocab as v;
+    for t in templates {
+        let NamedNodePattern::NamedNode(p) = &t.triple.predicate else {
+            continue;
+        };
+        let p = p.as_str();
+        if [
+            v::TM_TX_ADDED,
+            v::TM_TX_RETRACTED,
+            v::TM_ADDED_AT,
+            v::TM_RETRACTED_AT,
+            v::TM_RETRACT_KIND,
+        ]
+        .contains(&p)
+        {
+            let local = p.rsplit(':').next().unwrap_or(p);
+            return Err(unsupported(format!(
+                "tm:{local} in an update (transaction time is read-only)"
+            )));
+        }
+    }
+    Ok(())
+}
+
 /// Checks and lowers an update request. Nothing is executed: every unsupported
 /// operation and every invalid graph name fails here, before any transaction opens.
 pub fn plan_update(u: &Update, env: &Env, assoc: AssocHints) -> Result<UpdatePlan> {
@@ -332,11 +378,13 @@ pub fn plan_update(u: &Update, env: &Env, assoc: AssocHints) -> Result<UpdatePla
             GraphUpdateOperation::InsertData { data } => {
                 let ts: Vec<Template> = data.iter().map(insert_quad).collect::<Result<_>>()?;
                 check_vector_templates(&ts, false)?;
+                check_time_templates(&ts)?;
                 UpdateOp::InsertData(ts)
             }
             GraphUpdateOperation::DeleteData { data } => {
                 let ts: Vec<Template> = data.iter().map(delete_quad).collect::<Result<_>>()?;
                 check_vector_templates(&ts, true)?;
+                check_time_templates(&ts)?;
                 UpdateOp::DeleteData(ts)
             }
             GraphUpdateOperation::DeleteInsert {
@@ -351,6 +399,8 @@ pub fn plan_update(u: &Update, env: &Env, assoc: AssocHints) -> Result<UpdatePla
                     insert.iter().map(insert_template).collect::<Result<_>>()?;
                 check_vector_templates(&delete, true)?;
                 check_vector_templates(&insert, false)?;
+                check_time_templates(&delete)?;
+                check_time_templates(&insert)?;
                 let sc = ViewScope::from_dataset(using.as_ref())?;
                 let mut l = Lowerer::new(env);
                 l.assoc = assoc;

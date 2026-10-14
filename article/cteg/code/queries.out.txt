@@ -191,7 +191,7 @@ SELECT ?call ?root ?validFrom ?addedAt ?tx WHERE {
 }
 --
 call | root | validFrom | addedAt | tx
-ev-0efbe02c | ev-c5847514 | 11:34:45.399 | 11:48:39.989 | 229
+ev-0efbe02c | ev-c5847514 | 11:34:45.399 | 07:46:51.936 | 229
 (1 rows)
 
 ### 10. Beyond single parenthood: inputs a step consumed that are not its causal ancestors
@@ -225,3 +225,24 @@ SELECT ?e (COUNT(?p) AS ?parents) WHERE { ?p v:caused ?e } GROUP BY ?e HAVING (C
 --
 e | parents
 (0 rows)
+
+### 13. Cypher: the graft edge, its statement id and the transaction that wrote it
+MATCH (call)-[g:caused]->(root)
+WHERE g.grafts IS NOT NULL
+WITH g, tiramemsu.transaction(g) AS tx
+RETURN tiramemsu.statementId(g) AS id, g.validFrom AS validFrom,
+       tx.number AS tx, tx.instant AS recordedAt, tx.reason AS why
+--
+id | validFrom | tx | recordedAt | why
+1512 | 2026-10-13T11:34:45.399Z | 229 | 2026-10-14T07:46:51.936Z | graft fact-checker a12edfec trace on return
+(1 rows)
+
+### 14. SPARQL: the same edge, the same transaction
+SELECT ?g ?tx ?why WHERE {
+  ?call v:caused ?root ~ ?g . ?g v:grafts ?name ; tm:txAdded ?tx .
+  ?tx v:reason ?why
+}
+--
+g | tx | why
+stmt:1512 | 229 | graft fact-checker a12edfec trace on return
+(1 rows)

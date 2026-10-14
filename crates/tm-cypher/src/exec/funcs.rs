@@ -6,7 +6,7 @@ use tm_core::Value;
 use tm_ir::vocab as irv;
 use tm_ir::{Expr, Func, Op, TermOrVar, TriplePattern, View};
 
-use super::access::{is_sys, retract_kind_name, stmt_of, tv, RDF_TYPE};
+use super::access::{is_sys, retract_kind_name, stmt_of, tv, virtual_parts, RDF_TYPE};
 use super::Exec;
 use crate::ast::Expr as AstExpr;
 use crate::error::{CResult, CypherError};
@@ -184,6 +184,9 @@ impl Exec<'_> {
                     | "char_length"
                     | "character_length"
                     | "isnan"
+                    | "tiramemsu.statementid"
+                    | "tiramemsu.transaction"
+                    | "tiramemsu.retraction"
             ) {
                 return Ok(Val::Null);
             }
@@ -212,6 +215,33 @@ impl Exec<'_> {
                     o => return Err(bad(n, o)),
                 }
             }
+            "tiramemsu.statementid" => {
+                arity(n, &args, 1, 1)?;
+                match stmt_of(a0.unwrap()) {
+                    Some(e) if virtual_parts(e).is_none() => Val::Int(e.n() as i64),
+                    Some(_) => Val::Null,
+                    None => return Err(bad(n, a0.unwrap())),
+                }
+            }
+            "tiramemsu.transaction" | "tiramemsu.retraction" => {
+                arity(n, &args, 1, 1)?;
+                let Some(e) = stmt_of(a0.unwrap()) else {
+                    return Err(bad(n, a0.unwrap()));
+                };
+                if virtual_parts(e).is_some() {
+                    return Ok(Val::Null);
+                }
+                let virt = if n == "tiramemsu.transaction" {
+                    irv::TM_TX_ADDED
+                } else {
+                    irv::TM_TX_RETRACTED
+                };
+                let view = self.view();
+                match self.virtual_prop(e, virt, view)? {
+                    Val::Int(t) => Val::Node(Value::Tx(tm_core::TxId(t as u64))),
+                    _ => Val::Null,
+                }
+            }
             "elementid" => {
                 arity(n, &args, 1, 1)?;
                 match a0.unwrap() {
@@ -226,7 +256,11 @@ impl Exec<'_> {
                     Val::Node(t) => {
                         if matches!(
                             t,
-                            Value::Iri(_) | Value::Node(_) | Value::BNode(_) | Value::Stmt(_)
+                            Value::Iri(_)
+                                | Value::Node(_)
+                                | Value::BNode(_)
+                                | Value::Stmt(_)
+                                | Value::Tx(_)
                         ) {
                             let view = self.view();
                             Val::List(self.labels_of(t, view)?.into_iter().map(Val::Str).collect())

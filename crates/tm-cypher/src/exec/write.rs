@@ -40,6 +40,18 @@ pub(crate) fn term_of(v: &Val) -> Option<Value> {
     }
 }
 
+/// Transactions are engine-owned: a write whose subject is a transaction node
+/// fails with `Unsupported` (`lat.md/query#Front Ends#Cypher#Statement Ids And Transactions`).
+pub(crate) fn refuse_tx(v: &Val) -> CResult<()> {
+    if matches!(v, Val::Node(Value::Tx(_))) {
+        return Err(CypherError::unsupported(
+            "writing a transaction node (transactions are read-only)",
+            None,
+        ));
+    }
+    Ok(())
+}
+
 fn write_err(msg: impl Into<String>) -> CypherError {
     CypherError::eval(msg.into())
 }
@@ -293,6 +305,7 @@ impl Exec<'_> {
     }
 
     fn create_rel(&mut self, row: &mut Row, r: &RelPat, a: &Val, b: &Val) -> CResult<Val> {
+        refuse_tx(a)?;
         let (Some(s), Some(o)) = (term_of(a), term_of(b)) else {
             return Err(write_err(
                 "cannot create a relationship on a null or unstorable end",

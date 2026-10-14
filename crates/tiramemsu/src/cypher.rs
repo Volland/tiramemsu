@@ -82,6 +82,10 @@ impl Runner for ViewRunner<'_, '_> {
         self.view.exec(|e, _| volatile_entries(e, s))
     }
 
+    fn tx_instant(&mut self, t: u64) -> Result<Option<i64>> {
+        self.view.exec(|e, _| tm_core::read::tx_instant(e, t))
+    }
+
     fn path_max_hops(&self) -> u32 {
         self.view
             .engine()
@@ -135,6 +139,10 @@ impl Runner for TracingRunner<'_, '_, '_> {
         self.inner.volatile_of(s)
     }
 
+    fn tx_instant(&mut self, t: u64) -> Result<Option<i64>> {
+        self.inner.tx_instant(t)
+    }
+
     fn path_max_hops(&self) -> u32 {
         self.inner.path_max_hops()
     }
@@ -175,6 +183,10 @@ impl Runner for TxRunner<'_, '_> {
 
     fn volatile_of(&mut self, s: &Value) -> Result<Vec<(String, Value)>> {
         self.tx.read_with(|e| volatile_entries(e, s))
+    }
+
+    fn tx_instant(&mut self, t: u64) -> Result<Option<i64>> {
+        self.tx.read_with(|e| tm_core::read::tx_instant(e, t))
     }
 
     fn path_max_hops(&self) -> u32 {

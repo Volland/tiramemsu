@@ -374,6 +374,41 @@ statement:</p>
 <p>The subagent’s own events are recorded as they happen, in its own
 session, with no edge to the parent. Until the graft transaction
 commits, nothing connects them to the parent’s tree.</p>
+<h3 id="the-same-recorder-in-sparql">The same recorder in SPARQL</h3>
+<p>Not every agent runs next to the database. A recorder that only
+speaks SPARQL can write the same statements, because SPARQL Update can
+now set valid time. A <code>tm:validFrom</code> or
+<code>tm:validTo</code> annotation on a triple is not stored as a
+triple; it becomes the valid time of the statement it annotates. Here is
+the call <code>ev-eb0a1af1</code> and its result from the real trace,
+with the latency on the causal edge, in one request:</p>
+<pre class="sparql"><code>INSERT DATA {
+  v:ev-a12e356f a v:ToolResult
+      {| tm:validFrom &quot;2026-10-13T11:31:57.279Z&quot;^^xsd:dateTime ;
+         tm:validTo   &quot;2026-10-13T11:31:57.280Z&quot;^^xsd:dateTime |} ;
+    v:inSession v:session-main .
+  v:ev-eb0a1af1 v:caused v:ev-a12e356f
+      {| tm:validFrom &quot;2026-10-13T11:31:57.279Z&quot;^^xsd:dateTime ;
+         tm:validTo   &quot;2026-10-13T11:31:57.280Z&quot;^^xsd:dateTime ;
+         v:latencyMs 4158 |} .
+}</code></pre>
+<p>The demo script records the whole trace this way when run with
+<code>RECORDER=sparql</code>. All twelve checks and queries below return
+the same answers as with the API recorder; only the transaction numbers
+and instants differ.</p>
+<p>Clocks are sometimes wrong, and a recorder has to fix a timestamp
+without losing the old one. With the statement bound in a
+<code>WHERE</code>, deleting and inserting its bounds is one correction,
+a supersede:</p>
+<pre class="sparql"><code>DELETE { ?e tm:validFrom ?f ; tm:validTo ?t }
+INSERT { ?e tm:validFrom &quot;2026-10-13T11:31:57.281Z&quot;^^xsd:dateTime ;
+            tm:validTo   &quot;2026-10-13T11:31:57.282Z&quot;^^xsd:dateTime }
+WHERE  { v:ev-eb0a1af1 v:caused v:ev-a12e356f ~ ?e .
+         ?e tm:validFrom ?f ; tm:validTo ?t }</code></pre>
+<p>The edge gets a new statement id with the corrected time, and its
+latency annotation moves with it. The old edge stays in history,
+retracted by the correcting transaction, so “what did the trace say
+before we fixed the clock?” is still an <code>asOf</code> query.</p>
 <h2 id="first-question-is-the-log-a-cteg-at-all">First question: is the
 log a CTEG at all?</h2>
 <p>We first loaded the transcript exactly as logged, with each record’s
@@ -582,13 +617,39 @@ can. The graft edge shows both clocks side by side:</p>
      tm:validFrom ?validFrom ; tm:addedAt ?addedAt ; tm:txAdded ?tx .
 }</code></pre>
 <pre><code>call         | root         | validFrom     | addedAt       | tx
-ev-0efbe02c  | ev-c5847514  | 11:34:45.399  | 11:48:39.989  | 229</code></pre>
+ev-0efbe02c  | ev-c5847514  | 11:34:45.399  | 07:46:51.936  | 229</code></pre>
 <p>The edge is valid from the moment the subagent’s root event happened.
 It was added later. In this replay “later” is the time we ran the
 loader; with a live recorder, <code>addedAt</code> would be the moment
 the hand-back reached the parent. Either way the store can answer “what
 had the parent received when it took step X?” with <code>asOf</code>,
 which a timestamp column cannot.</p>
+<p>The transaction is more than a number. The recorder wrote a reason on
+it (<code>tx v:reason &quot;graft … on return&quot;</code>), and Cypher reaches it
+from the edge. <code>tiramemsu.statementId(g)</code> is the edge’s
+statement id, and <code>tiramemsu.transaction(g)</code> is the
+transaction that added it, as a node with the label
+<code>Transaction</code>. That node has its metadata as properties, plus
+its <code>number</code> and commit <code>instant</code>:</p>
+<pre class="cypher"><code>MATCH (call)-[g:caused]-&gt;(root)
+WHERE g.grafts IS NOT NULL
+WITH g, tiramemsu.transaction(g) AS tx
+RETURN tiramemsu.statementId(g) AS id, g.validFrom AS validFrom,
+       tx.number AS tx, tx.instant AS recordedAt, tx.reason AS why</code></pre>
+<pre><code>id   | validFrom                | tx  | recordedAt               | why
+1512 | 2026-10-13T11:34:45.399Z | 229 | 2026-10-14T07:46:51.936Z | graft fact-checker a12edfec trace on return</code></pre>
+<p>SPARQL reads the same edge and the same transaction, so the two
+dialects agree:</p>
+<pre class="sparql"><code>SELECT ?g ?tx ?why WHERE {
+  ?call v:caused ?root ~ ?g . ?g v:grafts ?name ; tm:txAdded ?tx .
+  ?tx v:reason ?why
+}</code></pre>
+<pre><code>g         | tx                   | why
+stmt:1512 | urn:tiramemsu:tx:229 | graft fact-checker a12edfec trace on return</code></pre>
+<p><code>tiramemsu.retraction(r)</code> does the same for the
+transaction that retracted a statement. That is where an agent’s reason
+for forgetting lives, because a retraction’s reason is written on its
+transaction, never on the retracted statement.</p>
 <h2 id="the-prefix-property-for-free">The prefix property, for free</h2>
 <p>Remark 3.15 says any prefix of a run is a valid CTEG. In Tiramemsu,
 every transaction commits atomically and the recorder writes one
@@ -658,12 +719,14 @@ in making the guarantees explicit.</li>
 <p>Everything for this article is in <code>article/cteg/</code> in the
 <a href="https://github.com/Volland/tiramemsu">Tiramemsu
 repository</a>:</p>
-<div class="sourceCode" id="cb29"><pre class="sourceCode sh"><code class="sourceCode bash"><span id="cb29-1"><a href="#cb29-1" aria-hidden="true" tabindex="-1"></a><span class="bu">cd</span> article/cteg/code</span>
-<span id="cb29-2"><a href="#cb29-2" aria-hidden="true" tabindex="-1"></a><span class="co"># turn a Claude Code transcript (and any subagent transcripts) into a sanitized trace</span></span>
-<span id="cb29-3"><a href="#cb29-3" aria-hidden="true" tabindex="-1"></a><span class="ex">python3</span> extract-trace.py ~/.claude/projects/<span class="op">&lt;</span>project<span class="op">&gt;</span>/<span class="op">&lt;</span>session<span class="op">&gt;</span>.jsonl <span class="dt">\</span></span>
-<span id="cb29-4"><a href="#cb29-4" aria-hidden="true" tabindex="-1"></a>        ~/.claude/projects/<span class="op">&lt;</span>project<span class="op">&gt;</span>/<span class="op">&lt;</span>session<span class="op">&gt;</span>/subagents/<span class="pp">*</span>.jsonl <span class="op">&gt;</span> trace.json</span>
-<span id="cb29-5"><a href="#cb29-5" aria-hidden="true" tabindex="-1"></a><span class="co"># load it as a CTEG and run every query in this article</span></span>
-<span id="cb29-6"><a href="#cb29-6" aria-hidden="true" tabindex="-1"></a><span class="ex">node</span> cteg-demo.mjs trace.json cteg.db</span></code></pre></div>
+<div class="sourceCode" id="cb35"><pre class="sourceCode sh"><code class="sourceCode bash"><span id="cb35-1"><a href="#cb35-1" aria-hidden="true" tabindex="-1"></a><span class="bu">cd</span> article/cteg/code</span>
+<span id="cb35-2"><a href="#cb35-2" aria-hidden="true" tabindex="-1"></a><span class="co"># turn a Claude Code transcript (and any subagent transcripts) into a sanitized trace</span></span>
+<span id="cb35-3"><a href="#cb35-3" aria-hidden="true" tabindex="-1"></a><span class="ex">python3</span> extract-trace.py ~/.claude/projects/<span class="op">&lt;</span>project<span class="op">&gt;</span>/<span class="op">&lt;</span>session<span class="op">&gt;</span>.jsonl <span class="dt">\</span></span>
+<span id="cb35-4"><a href="#cb35-4" aria-hidden="true" tabindex="-1"></a>        ~/.claude/projects/<span class="op">&lt;</span>project<span class="op">&gt;</span>/<span class="op">&lt;</span>session<span class="op">&gt;</span>/subagents/<span class="pp">*</span>.jsonl <span class="op">&gt;</span> trace.json</span>
+<span id="cb35-5"><a href="#cb35-5" aria-hidden="true" tabindex="-1"></a><span class="co"># load it as a CTEG and run every query in this article</span></span>
+<span id="cb35-6"><a href="#cb35-6" aria-hidden="true" tabindex="-1"></a><span class="ex">node</span> cteg-demo.mjs trace.json cteg.db</span>
+<span id="cb35-7"><a href="#cb35-7" aria-hidden="true" tabindex="-1"></a><span class="co"># the same, recorded entirely through SPARQL Update</span></span>
+<span id="cb35-8"><a href="#cb35-8" aria-hidden="true" tabindex="-1"></a><span class="va">RECORDER</span><span class="op">=</span>sparql <span class="ex">node</span> cteg-demo.mjs trace.json cteg-sparql.db</span></code></pre></div>
 <p><code>trace.json</code> is the sanitized trace used here, and
 <code>queries.out.txt</code> is the full output of the run.</p>
 <p>Further reading:</p>

@@ -99,7 +99,7 @@ impl Val {
     /// The entity for a node-position term.
     pub fn from_entity(v: &Value) -> Val {
         match v {
-            Value::Stmt(_) | Value::Iri(_) | Value::Node(_) | Value::BNode(_) => {
+            Value::Stmt(_) | Value::Iri(_) | Value::Node(_) | Value::BNode(_) | Value::Tx(_) => {
                 Val::Node(v.clone())
             }
             other => Val::from_literal(other),

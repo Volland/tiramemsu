@@ -1,13 +1,16 @@
 //! Running a checked update inside one transaction.
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 
 use tm_core::vector::{parse_vector, EmbeddingModel, Metric, VectorEncoding};
-use tm_core::{vocab, AssertOpts, Eid, Error, ObjectId, Result, SqlValue, Tx, Valid, Value};
+use tm_core::{vocab, AssertOpts, Eid, Error, ObjectId, Patch, Result, SqlValue, Tx, Valid, Value};
 use tm_ir::IrQuery;
 
 use super::inst::{instantiate, Node, Row, TripleN};
-use super::{vector_kind, GraphRef, GraphTarget, Template, UpdateOp, UpdatePlan, VectorKind};
+use super::{
+    valid_bound, vector_kind, Bound, GraphRef, GraphTarget, Template, UpdateOp, UpdatePlan,
+    VectorKind,
+};
 use crate::error::{unsupported, REIFIER_MANY, REIFIER_NOT_STATEMENT, REIFIES_WITHOUT_TRIPLE};
 use crate::results::Solutions;
 
@@ -27,11 +30,16 @@ pub fn run(plan: &UpdatePlan, tx: &mut Tx<'_>, select: &mut Select<'_>) -> Resul
         match op {
             UpdateOp::InsertData(templates) => {
                 let ts = instantiate_all(templates, None)?;
-                Inserter::new(tx).insert_all(ts)?;
+                let mut patches = Patches::default();
+                Inserter::new(tx).insert_all(ts, &mut patches)?;
+                patches.apply(tx)?;
             }
             UpdateOp::DeleteData(templates) => {
                 let ts = instantiate_all(templates, None)?;
+                let mut patches = Patches::default();
+                let ts = patches.take_deletes(tx, ts)?;
                 delete(tx, ts)?;
+                patches.apply(tx)?;
             }
             UpdateOp::DeleteInsert {
                 delete: del,
@@ -45,13 +53,17 @@ pub fn run(plan: &UpdatePlan, tx: &mut Tx<'_>, select: &mut Select<'_>) -> Resul
                     let r = Row { sol: &sol, row };
                     deletes.extend(instantiate_all(del, Some(r))?);
                 }
+                // valid-time bounds of every row become one supersede per statement
+                let mut patches = Patches::default();
+                let deletes = patches.take_deletes(tx, deletes)?;
                 delete(tx, deletes)?;
                 for row in 0..sol.rows.len() {
                     let r = Row { sol: &sol, row };
                     let ts = instantiate_all(insert, Some(r))?;
                     // blank nodes are fresh for each solution
-                    Inserter::new(tx).insert_all(ts)?;
+                    Inserter::new(tx).insert_all(ts, &mut patches)?;
                 }
+                patches.apply(tx)?;
             }
             UpdateOp::Create { graph, silent } => {
                 if declared(tx, graph)? {
@@ -199,10 +211,14 @@ impl<'a, 't> Inserter<'a, 't> {
     }
 
     fn assert_triple(&mut self, t: &TripleN) -> Result<Eid> {
+        self.assert_valid(t, Valid::ALWAYS)
+    }
+
+    fn assert_valid(&mut self, t: &TripleN, valid: Valid) -> Result<Eid> {
         let s = self.resolve(&t.s)?;
         let p = self.tx.encode(&t.p)?;
         let o = self.resolve(&t.o)?;
-        Ok(self.tx.assert(s, p, o, Valid::ALWAYS)?.eid())
+        Ok(self.tx.assert(s, p, o, valid)?.eid())
     }
 
     /// Adds statement `eid` to `graph` (a membership, idempotent).
@@ -216,10 +232,24 @@ impl<'a, 't> Inserter<'a, 't> {
     /// Inserts `all`: plain triples first (binding reifiers), then the model
     /// definitions and embeddings among them, which are engine operations rather
     /// than triples (`lat.md/query#Vector Recall#Writes From Query Languages`).
-    fn insert_all(&mut self, all: Vec<InGraph>) -> Result<()> {
+    ///
+    /// Valid-time triples (`tm:validFrom`, `tm:validTo`) are not stored either: on a
+    /// reifier of a triple asserted here they are part of that assert, and on a
+    /// stored statement they go to `patches`, applied once per operation.
+    fn insert_all(&mut self, all: Vec<InGraph>, patches: &mut Patches) -> Result<()> {
+        let (valid, all): (Vec<InGraph>, Vec<InGraph>) =
+            all.into_iter().partition(|(t, _)| bound_of(t).is_some());
         let (vectors, rest): (Vec<InGraph>, Vec<InGraph>) =
             all.into_iter().partition(|(t, _)| kind_of(t).is_some());
-        self.insert(rest)?;
+        self.insert(rest, &valid)?;
+        for (t, _) in &valid {
+            let b = bound_of(t).expect("partitioned on bound_of");
+            match &t.s {
+                Node::Blank(l) if self.sigma.contains_key(l) => {} // part of its assert
+                Node::Val(Value::Stmt(e)) => patches.insert(*e, b, ms_of(&t.o)?)?,
+                _ => return Err(not_a_statement()),
+            }
+        }
         for (subject, group) in groups(&vectors) {
             let kinds: Vec<VectorKind> = group.iter().filter_map(|t| kind_of(t)).collect();
             if kinds.contains(&VectorKind::Definition) && kinds.contains(&VectorKind::Embedding) {
@@ -321,7 +351,7 @@ impl<'a, 't> Inserter<'a, 't> {
         Ok(())
     }
 
-    fn insert(&mut self, all: Vec<InGraph>) -> Result<()> {
+    fn insert(&mut self, all: Vec<InGraph>, valid: &[InGraph]) -> Result<()> {
         let triples: Vec<&TripleN> = all.iter().map(|(t, _)| t).collect();
         // 1. reifiers: each maps to exactly one triple (and the graph of the pattern)
         let mut reifs: Vec<(Key, TripleN, Option<Value>)> = Vec::new();
@@ -338,7 +368,10 @@ impl<'a, 't> Inserter<'a, 't> {
         }
         // 2. assert the reified statements; bind blank reifiers to their eids
         for (key, triple, graph) in &reifs {
-            let asserted = self.assert_triple(triple)?;
+            let asserted = match key {
+                Key::Blank(l) => self.assert_valid(triple, bounds_on(valid, l)?)?,
+                Key::Stmt(_) => self.assert_triple(triple)?,
+            };
             self.add_member(asserted, graph)?;
             match key {
                 Key::Blank(l) => {
@@ -364,6 +397,161 @@ impl<'a, 't> Inserter<'a, 't> {
         let _ = triples;
         Ok(())
     }
+}
+
+fn bound_of(t: &TripleN) -> Option<Bound> {
+    match &t.p {
+        Value::Iri(p) => valid_bound(p),
+        _ => None,
+    }
+}
+
+fn not_a_statement() -> Error {
+    Error::invalid_query(
+        "the subject of tm:validFrom or tm:validTo must denote a statement \
+         (a statement IRI, a bound ?e, or a reifier of an inserted triple)",
+    )
+}
+
+/// Epoch milliseconds of a valid-time bound: an `xsd:dateTime`, an `xsd:date`
+/// (midnight UTC) or an `xsd:integer`.
+fn ms_of(n: &Node) -> Result<i64> {
+    match n {
+        Node::Val(Value::DateTime { ms, .. }) => Ok(*ms),
+        Node::Val(Value::Date(days)) => Ok(days * 86_400_000),
+        Node::Val(Value::Int(ms)) => Ok(*ms),
+        _ => Err(Error::invalid_query(
+            "tm:validFrom and tm:validTo need an xsd:dateTime, an xsd:date \
+             or an xsd:integer of epoch milliseconds",
+        )),
+    }
+}
+
+/// The interval the valid-time triples on blank reifier `label` give the
+/// statement it asserts; two different values for one bound are `InvalidQuery`.
+fn bounds_on(valid: &[InGraph], label: &str) -> Result<Valid> {
+    let mut v = Valid::ALWAYS;
+    for (t, _) in valid {
+        if !matches!(&t.s, Node::Blank(l) if l == label) {
+            continue;
+        }
+        let ms = ms_of(&t.o)?;
+        let slot = match bound_of(t) {
+            Some(Bound::From) => &mut v.from,
+            _ => &mut v.to,
+        };
+        if matches!(slot, Some(prev) if *prev != ms) {
+            return Err(conflicting_bounds());
+        }
+        *slot = Some(ms);
+    }
+    Ok(v)
+}
+
+fn conflicting_bounds() -> Error {
+    Error::invalid_query("two different values for one valid-time bound of one statement")
+}
+
+/// What an operation does to one bound of a stored statement.
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum Change {
+    /// Unbounded (a delete of the current value).
+    Clear,
+    /// A new value in epoch milliseconds.
+    Set(i64),
+}
+
+impl Change {
+    fn bound(self) -> Option<i64> {
+        match self {
+            Change::Clear => None,
+            Change::Set(ms) => Some(ms),
+        }
+    }
+}
+
+/// The valid-time changes of one operation, per stored statement, applied as one
+/// supersede each (`lat.md/query#Front Ends#SPARQL#Valid Time Writes`).
+#[derive(Default)]
+struct Patches {
+    by_eid: BTreeMap<u64, [Option<Change>; 2]>,
+}
+
+impl Patches {
+    fn slot(&mut self, e: Eid, b: Bound) -> &mut Option<Change> {
+        let entry = self.by_eid.entry(e.n()).or_default();
+        &mut entry[b as usize]
+    }
+
+    /// An inserted bound; it wins over a delete of the same bound.
+    fn insert(&mut self, e: Eid, b: Bound, ms: i64) -> Result<()> {
+        let slot = self.slot(e, b);
+        if matches!(slot, Some(Change::Set(prev)) if *prev != ms) {
+            return Err(conflicting_bounds());
+        }
+        *slot = Some(Change::Set(ms));
+        Ok(())
+    }
+
+    /// Takes the valid-time triples out of a delete: one that names the current
+    /// bound of a stored statement clears it, any other matches nothing.
+    fn take_deletes(&mut self, tx: &mut Tx<'_>, all: Vec<InGraph>) -> Result<Vec<InGraph>> {
+        let (valid, rest): (Vec<InGraph>, Vec<InGraph>) =
+            all.into_iter().partition(|(t, _)| bound_of(t).is_some());
+        for (t, _) in &valid {
+            let (Some(b), Node::Val(Value::Stmt(e))) = (bound_of(t), &t.s) else {
+                continue;
+            };
+            let Ok(ms) = ms_of(&t.o) else { continue };
+            let Some((from, to, _)) = interval(tx, *e)? else {
+                continue;
+            };
+            let current = if b == Bound::From { from } else { to };
+            let slot = self.slot(*e, b);
+            if current == Some(ms) && slot.is_none() {
+                *slot = Some(Change::Clear);
+            }
+        }
+        Ok(rest)
+    }
+
+    /// One supersede per statement whose interval changes, in eid order.
+    fn apply(self, tx: &mut Tx<'_>) -> Result<()> {
+        for (n, [from, to]) in self.by_eid {
+            let e = Eid::new(n);
+            if let Some((cf, ct, true)) = interval(tx, e)? {
+                let nf = from.map_or(cf, Change::bound);
+                let nt = to.map_or(ct, Change::bound);
+                if (nf, nt) == (cf, ct) {
+                    continue;
+                }
+            }
+            // a statement that is not live fails in supersede with `NotLive`
+            tx.supersede(
+                e,
+                Patch {
+                    o: None,
+                    v_from: from.map(Change::bound),
+                    v_to: to.map(Change::bound),
+                },
+            )?;
+        }
+        Ok(())
+    }
+}
+
+/// `(v_from, v_to, live)` of a stored statement.
+type Interval = (Option<i64>, Option<i64>, bool);
+
+fn interval(tx: &mut Tx<'_>, e: Eid) -> Result<Option<Interval>> {
+    tx.read_with(|exec| {
+        Ok(exec
+            .first_row(
+                "SELECT v_from, v_to, t_ret IS NULL FROM triple WHERE eid = ?1",
+                &[SqlValue::Integer(e.oid().raw())],
+            )?
+            .map(|r| (r[0].as_i64(), r[1].as_i64(), r[2].as_i64() == Some(1))))
+    })
 }
 
 fn kind_of(t: &TripleN) -> Option<VectorKind> {
