@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Rebuild the two redb-backend article pages in site/articles/ from the Markdown.
+"""Rebuild the redb-backend article pages in site/articles/ from the Markdown.
 
 Run from this folder: python3 build-site.py   (needs pandoc)
 """
@@ -16,7 +16,11 @@ PAGES = [
      ("wcoj-on-kv.html", "Next: worst-case-optimal joins on a key-value store →")),
     ("wcoj-on-kv.md", "wcoj-on-kv.html", "Worst-case-optimal joins on a key-value store",
      "How tiramemsu's native runner joins SPARQL and Cypher patterns over redb, what it borrows from RDF-3X, Kùzu "
-     "and Umbra, and the four performance bugs the benchmark found in it.",
+     "and Umbra, and the performance bugs the benchmark found in it.",
+     ("making-redb-faster.html", "Next: why the new engine was not faster, and what made it faster →")),
+    ("making-redb-faster.md", "making-redb-faster.html", "Why the new engine was not faster, and what made it faster",
+     "Profiling tiramemsu's redb engine against SQLite: values decoded a byte at a time, allocations per row, "
+     "a join order that started at the wrong end and filters that never reached their pattern.",
      ("two-engines.html", "Related: two engines, one memory →")),
 ]
 

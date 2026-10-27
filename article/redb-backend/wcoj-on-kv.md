@@ -1,6 +1,6 @@
 # Worst-case-optimal joins on a key-value store
 
-*How tiramemsu's native runner joins SPARQL and Cypher patterns over redb: what we borrowed from RDF-3X, Kùzu and Umbra, why cyclic patterns need a different join, and the four performance bugs the benchmark found in our own runner.*
+*How tiramemsu's native runner joins SPARQL and Cypher patterns over redb: what we borrowed from RDF-3X, Kùzu and Umbra, why cyclic patterns need a different join, and the performance bugs the benchmark found in our own runner, four at release and two more after it.*
 
 ---
 
@@ -21,8 +21,8 @@ Most agent-memory queries are not cycles, though. They are stars ("everything ab
 `tm-native` evaluates the same logical plan our SQL generator compiles, so SPARQL, Cypher, the planner, the path engine and result decoding are shared, and only execution differs:
 
 - **Storage:** six live permutations and three history permutations in redb, with exact per-predicate statistics (live statements, distinct subjects, distinct objects) maintained in the same write transaction.
-- **Order:** greedy, from those statistics, preferring patterns connected to variables already bound.
-- **Acyclic steps:** an index nested loop (one prefix scan per input row on the permutation that fits) or a hash join (one scan, hashed on the shared variables), whichever reads less by the estimate.
+- **Order:** greedy, from those statistics, preferring patterns connected to variables already bound, and tried from every pattern as the first one; the order with the fewest estimated intermediate rows wins.
+- **Acyclic steps:** an index nested loop (one prefix scan per input row on the permutation that fits) or a hash join (one scan, hashed on the shared variables), whichever reads less by the estimate. A step's rows live in one flat buffer, so extending a row allocates nothing.
 - **Cyclic cores:** a generic join over hash tries built once per pattern. Explain reports the keys it visited, and a test checks that count against the AGM bound of a hub-and-spoke fixture.
 - **Late decoding:** joins, id equality, graph membership and time filters work on 64-bit ids. Terms are decoded only for the columns a query returns. A `COUNT(*)` over a two-hop join reads no dictionary entry at all, and a test checks that.
 - **Parallel morsels:** a join step with more than 4,096 input rows is cut into morsels of 1,024 rows, run on scoped threads and concatenated in order, so results are identical either way.
@@ -42,19 +42,21 @@ We compared the runner with SQLite on the same data, and both with Oxigraph. The
 
 None of these was a design problem. Each was a gap between the design document and the code, and the benchmark found it because it compared every answer before timing it, then printed every loss, not only the wins.
 
+**Two more, found after the release.** When we profiled the joins that still lost, two of the causes were again ours. The join order always started from the smallest pattern, and on the snowflake F1 at a million statements that pattern sat at the far end of the chain from the selective one: the runner built 315,656 intermediate rows where SQLite held about 10,000. Trying every pattern as the start took F1 from 83 ms to 20 ms. And a pattern alone under filters, which is what Cypher's `{name: 'User 7'}` becomes, was scanned in full and filtered afterwards; now its conditions reach the join, and an equality with a constant binds the variable before the join so the pattern seeks on it. The Cypher two-hop went from 47 ms to 0.38 ms. The companion article "Why the new engine was not faster, and what made it faster" tells that story, with the byte-by-byte value decoding and the allocations we removed on the way.
+
 ## Where it stands
 
-At 10⁵ statements on an Apple M2 Max, after the fixes:
+At 10⁵ statements on an Apple M2 Max, after all six fixes:
 
-- **Cyclic patterns:** on the hub-and-spoke graph, a triangle takes 9.7 ms and a tailed triangle 12.6 ms on redb, against 262 ms and 290 ms on SQLite's own plan and 3.4 s on Oxigraph. Our SQLite LFTJ operator gets 7.2 ms and 8.8 ms, so on SQLite the same idea works once it is switched on.
-- **Chains and snowflakes:** redb matches or beats SQLite (L1, L3, F1).
-- **Lookups:** point and two-hop lookups take 44–51 µs in the now, as-of and valid-at views, slightly faster than SQLite's 62–71 µs and Oxigraph's 87–110 µs.
-- **Stars and aggregates with selective constants** are where redb still loses to SQLite: 2.1–3.8× on S1, S3, C1 and C2. Profiles show the time in B-tree seeks; a SQLite covering-index probe in C is simply cheaper than a redb range iterator. Batching probes (sorting the keys of a step so that consecutive seeks move forward) is the next step.
-- **Variable-length Cypher paths** are about 3× slower than on SQLite (476 ms against 151 ms for a shortest path) and are the other open item.
+- **Cyclic patterns:** on the hub-and-spoke graph, a triangle takes 4.7 ms and a tailed triangle 6.2 ms on redb, against 266 ms and 289 ms on SQLite's own plan and 3.4 s on Oxigraph. Our SQLite LFTJ operator gets 7.0 ms and 8.7 ms, so on SQLite the same idea works once it is switched on. On the uniform graph redb is now also the fastest engine, 1.3–1.9× ahead of LFTJ.
+- **Chains and snowflakes:** redb matches or beats SQLite (L1, L2, L3, F1); F1 takes 6.7 ms against 13.9 ms.
+- **Lookups:** point and two-hop lookups take 37–42 µs in the now, as-of and valid-at views, faster than SQLite's 45–58 µs and Oxigraph's 74–85 µs.
+- **Stars and aggregates with selective constants** are where redb still loses to SQLite: 1.4–1.8× on S1, S2, S3, C1, C2 and F2, down from 2.1–3.8× at release. A SQLite covering-index probe in C is simply cheaper than a redb range iterator. Batching probes (sorting the keys of a step so that consecutive seeks move forward) is the next step.
+- **Variable-length Cypher paths** are about 2.5× slower than on SQLite (365 ms against 147 ms for a shortest path) and are the other open item.
 
-At a million statements the cyclic advantage grows: a skewed triangle takes 45 ms on redb, 30 ms on SQLite with LFTJ, 5.1 s on SQLite's nested loops and 57 s on Oxigraph. So does one loss: the snowflake F1 takes 83 ms against 23 ms on SQLite, a probe-heavy plan where every seek counts.
+At a million statements the cyclic advantage grows: a skewed triangle takes 21 ms on redb, 29 ms on SQLite with LFTJ, 4.9 s on SQLite's nested loops and 55 s on Oxigraph. The snowflake F1, a 3.6× loss at release, takes 20 ms against 23 ms on SQLite.
 
-One more finding surprised us. On the dense parts of the skewed graph (diamonds and 4-cycles through the hubs), the generic join is no faster than SQLite's nested loops: all three take 4–7 s. Those queries return millions of matches, and no join order can produce millions of matches faster than it can write them. Worst-case optimality bounds the waste, not the output.
+One more finding surprised us. On the dense parts of the skewed graph (diamonds and 4-cycles through the hubs), the generic join is not dramatically faster than SQLite's nested loops: at 10⁵ statements redb takes 1.4–3.1 s against 4.3–5.8 s. Those queries return millions of matches, and no join order can produce millions of matches faster than it can write them. Worst-case optimality bounds the waste, not the output. At a million statements redb is the only engine that answers them within the 60-second cap on its checked run.
 
 ## What we would tell someone building the same
 

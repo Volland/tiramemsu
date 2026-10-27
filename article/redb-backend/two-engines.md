@@ -48,22 +48,26 @@ Correctness again comes from comparison, not hope. Every pair in our SPARQL–Cy
 
 We benchmarked both engines against each other and against [Oxigraph](https://github.com/oxigraph/oxigraph), the reference Rust RDF store on RocksDB. The harness generates a WatDiv-style e-commerce graph and the cyclic graphs of our triangle benchmark. It runs every query once on every engine and compares the results before timing anything; a mismatch stops the run. At 10⁵ statements on an Apple M2 Max, all three engines agreed on every query. Here is what the numbers say, with the full tables in `bench/backends/README.md`.
 
+*Updated on 27 October 2026: these are the numbers after we tuned the native runner, as told in "Why the new engine was not faster, and what made it faster". That article also gives the numbers this release first shipped with.*
+
 **Where redb is stronger than SQLite:**
 
-- Cyclic patterns on a skewed graph: a triangle through hubs takes 9.7 ms on redb against 262 ms on SQLite's own plan, 27× faster. SQLite catches up only with our LFTJ operator switched on.
-- Concurrent readers: 55,600 two-hop lookups per second on 16 threads against 16,800 for SQLite, whose reader pool tops out early.
-- Bulk load: 2.9 s against 7.3 s for 100,000 statements.
-- Lookups in time views: a two-hop lookup as of an earlier transaction takes 47 µs on redb and 67 µs on SQLite. Point lookups are about 25 % faster in every view.
+- Cyclic patterns: a triangle through hubs takes 4.7 ms on redb against 266 ms on SQLite's own plan, 57× faster, and 7.0 ms on SQLite with our LFTJ operator switched on. redb is now the fastest engine on every cyclic query we run, on a uniform graph as well.
+- Cypher lookups by property: a two-hop from `{name: 'User 7'}` takes 0.32 ms against 1.9 ms.
+- Concurrent readers: 50,400 two-hop lookups per second on 16 threads against 16,100 for SQLite, whose reader pool tops out early.
+- Bulk load: 2.9 s against 7.1 s for 100,000 statements.
+- Lookups in every view: a two-hop lookup as of an earlier transaction takes 37 µs on redb and 58 µs on SQLite, and point lookups are about 30 % faster in every view.
+- The snowflake F1 takes 6.7 ms against 13.9 ms.
 
 **Where redb is weaker than SQLite:**
 
-- Star and aggregate queries with selective constants: WatDiv S1 (1.2 ms against 0.6 ms), C1 (5.1 ms against 1.3 ms) and C2 (13 ms against 5 ms). Each index probe in redb is a B-tree seek through Rust iterators; SQLite's covering-index probe in C is cheaper, and on probe-heavy plans that adds up.
-- Variable-length paths through Cypher: a shortest path takes 476 ms against 151 ms.
+- Star and aggregate queries with selective constants: WatDiv S1 (0.77 ms against 0.50 ms), C1 (2.0 ms against 1.2 ms) and C2 (7.3 ms against 4.9 ms), 1.4–1.8× slower. Each index probe in redb is a B-tree seek through Rust iterators; SQLite's covering-index probe in C is cheaper, and on probe-heavy plans that adds up.
+- Variable-length paths through Cypher: a shortest path takes 365 ms against 147 ms.
 - Size: about 1,340 bytes per statement against 384 for SQLite. Six live and three history permutations of fixed-width keys cost space, and compaction only brings it to 1,056.
 
-**Against Oxigraph:** both of our engines are 2–37× faster on the WatDiv templates and 8–355× faster on cyclic patterns, where Oxigraph's evaluator has no worst-case-optimal join. Oxigraph is far ahead on raw writes: an insert takes 5 µs against about 120 µs for either of our engines. It loads 18–46× faster and stores data 5–17× smaller. On 16 reader threads it also scales better than redb (93,000 against 55,600 lookups per second).
+**Against Oxigraph:** our engines are 1.8–50× faster on the WatDiv templates and 8–740× faster on cyclic patterns, where Oxigraph's evaluator has no worst-case-optimal join. Oxigraph is far ahead on raw writes: an insert takes 5 µs against 110–120 µs for either of our engines. It loads 19–47× faster and stores data 5–17× smaller. On 16 reader threads it also scales better than redb (91,000 against 50,400 lookups per second).
 
-At a million statements the shape holds and the extremes sharpen. A triangle through hubs takes 45 ms on redb, 5.1 s on SQLite's own plan and 57 s on Oxigraph. redb is the fastest of the three for a single reader. One loss grows: the WatDiv snowflake F1 takes 83 ms on redb against 23 ms on SQLite. File size also needs care. Right after a bulk load redb holds 2,147 bytes per statement, because it grows its file in large steps while loading, and `tm compact` halves that. So compact after a big import.
+At a million statements the shape holds and the extremes sharpen. A triangle through hubs takes 21 ms on redb, 4.9 s on SQLite's own plan and 55 s on Oxigraph. redb is the fastest of the three for one and for four readers. The snowflake F1, a 3.6× loss when this release first shipped, now takes 20 ms on redb against 23 ms on SQLite. File size still needs care. Right after a bulk load redb holds 2,147 bytes per statement, because it grows its file in large steps while loading, and `tm compact` halves that. So compact after a big import.
 
 ## Why we accept the losses
 

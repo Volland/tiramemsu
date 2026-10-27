@@ -78,12 +78,12 @@ Measured on 2026-09-29 with DuckDB 1.5.6 against SQLite on the same 11 million s
 
 The reference Rust RDF store (MIT/Apache-2.0) on RocksDB, with quads in several permutations and its own SPARQL evaluator. It is the external baseline of the backend benchmark ([[roadmap#Benchmarks]]).
 
-Measured on 2026-10-27 at 10⁵ statements (`bench/backends/`, Apple M2 Max, Oxigraph 0.5.13):
+Measured on 2026-10-27 at 10⁵ statements (`bench/backends/`, Apple M2 Max, Oxigraph 0.5.13), after the native runner was tuned:
 
-- **Oxigraph is far ahead on writes and size:** a single insert takes 5 µs against about 120 µs for either tiramemsu engine, bulk load is 18–46× faster, and files are 5–17× smaller. Its writes add quads; ours are transactions with statement ids, history, schema checks and cascades ([[constraints]]).
-- **It falls behind on joins:** both tiramemsu engines are 2–37× faster on WatDiv-style templates and 8–355× faster on cyclic patterns, where its evaluator has no worst-case-optimal join; skewed diamonds and 4-cycles take it 48–50 s against 4–7 s.
-- **Readers:** it scales best on 16 threads (93 000 two-hop lookups per second against 55 600 on redb and 16 800 on SQLite).
-- **At 10⁶ statements** the same holds: a skewed triangle takes it 57 s against 45 ms on redb, it loads a million statements in 1.9 s against 55–94 s, and on a single reader thread redb overtakes it (15 800 against 11 500 lookups per second).
+- **Oxigraph is far ahead on writes and size:** a single insert takes 5 µs against 110–120 µs for either tiramemsu engine, bulk load is 19–47× faster, and files are 5–17× smaller. Its writes add quads; ours are transactions with statement ids, history, schema checks and cascades ([[constraints]]).
+- **It falls behind on joins:** the tiramemsu engines are 1.8–50× faster on WatDiv-style templates and 8–740× faster on cyclic patterns, where its evaluator has no worst-case-optimal join; skewed diamonds and 4-cycles take it 49–50 s against 1.4–5.8 s.
+- **Readers:** it scales best on 16 threads (91 000 two-hop lookups per second against 50 000 on redb and 16 000 on SQLite).
+- **At 10⁶ statements** the same holds: a skewed triangle takes it 55 s against 21 ms on redb, it loads a million statements in 2.0 s against 51–89 s, it passes the 60 s cap on the skewed diamond and 4-cycle, and on one or four reader threads redb overtakes it (18 700 against 11 700 lookups per second on one).
 - **Taken:** canonical term encoding and the `spargebra` parser ([[query#Front Ends#SPARQL]]).
 
 ## Kùzu

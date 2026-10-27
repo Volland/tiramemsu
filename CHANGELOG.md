@@ -9,6 +9,20 @@ OpenSpec changes in `openspec/changes/archive/`.
 
 ## [Unreleased]
 
+Faster native runner on redb (`openspec/changes/archive/2026-10-27-tune-native-runner/`). No file format, API or answer changes.
+
+### Changed
+
+- **redb reads:** fixed-width values are read in place (`&[u8; N]`, the same redb type name as before, so existing files open unchanged); key prefixes are built on the stack.
+- **Join engine:** join rows are kept flat in one buffer; hash joins sort their build rows by a fast hash of the shared variables; tries, grouping and merges use Fx hashing; merging with the unit relation no longer copies the other side. `tm-native` depends on `rustc-hash`.
+- **Join order:** every pattern is tried as the first access path and the order with the fewest estimated intermediate rows wins. WatDiv F1 at 10⁶ statements: 83 ms → 20 ms (SQLite 23 ms).
+- **Constant equalities seek:** a condition `?v = constant` that the evaluator compares by identity binds `?v` before the join, and a lone pattern under filters (an `EXISTS` body, a Cypher property map) is matched through the join. The Cypher two-hop from `{name: 'User 7'}` at 10⁶: 47 ms → 0.38 ms.
+- **Benchmarks:** `bench/backends/` rerun at 10⁵ and 10⁶ statements; C1, C2 and S3 1.6–1.7× and every cyclic query about 2× faster at 10⁶. `tm-bench` gains the `probe` example for tuning runs.
+
+### Added
+
+- **Article:** "Why the new engine was not faster, and what made it faster" (`article/redb-backend/making-redb-faster.md`, `site/articles/making-redb-faster.html`); the two redb articles carry the new numbers.
+
 ## [0.8.0] - 2026-10-27
 
 Two engines, one memory: an experimental redb backend with its own native query runner, the `tm` command line, and a backend benchmark against SQLite and Oxigraph (`openspec/changes/archive/2026-10-27-*`).
