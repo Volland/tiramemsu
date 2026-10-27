@@ -275,14 +275,13 @@ impl RedbStore {
 }
 
 fn sync_inner(inner: &Inner) -> Result<()> {
-    let mut w = inner
-        .db
-        .read()
-        .expect("redb database lock")
-        .begin_write()
-        .map_err(st)?;
+    // the lock is held until the commit, so `compact` (which takes it
+    // exclusively) never finds this transaction still open
+    let db = inner.db.read().expect("redb database lock");
+    let mut w = db.begin_write().map_err(st)?;
     w.set_durability(redb::Durability::Immediate).map_err(st)?;
     w.commit().map_err(st)?;
+    drop(db);
     inner.pending.store(0, Ordering::Release);
     *inner.last_durable.lock().expect("redb flush") = Instant::now();
     Ok(())

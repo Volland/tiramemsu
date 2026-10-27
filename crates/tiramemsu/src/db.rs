@@ -1284,7 +1284,8 @@ fn build_engine(opts: &OpenOptions) -> Option<Arc<Engine>> {
     ))
 }
 
-#[cfg(not(feature = "exec"))]
+/// Without the `exec` feature a redb database has no query engine.
+#[cfg(all(not(feature = "exec"), feature = "redb"))]
 fn build_engine(_opts: &OpenOptions) -> Option<Arc<Engine>> {
     None
 }
