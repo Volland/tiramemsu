@@ -1,3 +1,6 @@
+---
+openspec: [backend-benchmarks]
+---
 # Roadmap
 
 Milestones in dependency order. Each is an OpenSpec change under `openspec/changes/` with a proposal, specs, a design and tasks.
@@ -30,6 +33,8 @@ The releases after 0.4.0 are proposed in `docs/feature-roadmap.md` (see [[projec
 
 Eleven OpenSpec proposals (2026-10-10) cover the releases after 0.4.0 in `docs/feature-roadmap.md`. Vector and hybrid recall are implemented and archived (`openspec/changes/archive/2026-10-11-*`); libSQL is deferred (2026-10-11); the rest are open.
 
+Six more (2026-10-27) add the redb backend and its native runner ([[backends]]).
+
 | Release | Change | Delivers |
 |---|---|---|
 | 0.5 | `add-scale-benchmarks` | Scale ceiling (10⁷ statements, 1 000 versions per key), nightly benchmark gates, `Db::metrics()` |
@@ -43,6 +48,12 @@ Eleven OpenSpec proposals (2026-10-10) cover the releases after 0.4.0 in `docs/f
 | 0.8 | `add-crypto-shredding` (M6) | Sealed terms under per-subject keys and erase, per [[time-model#Erasure]] |
 | 0.8 | `add-signed-bundles` | Ed25519-signed bundles with a trust policy |
 | 0.9 | `add-memory-merge` | Merge across origins over the reserved origin bits ([[data-model#ObjectId#Origin Bits]]) |
+| 0.8 | `add-store-trait` | Typed storage trait, the shared transaction engine over it, an in-memory reference store, the SQLite engine as oracle ([[backends#Typed Storage Trait]]) |
+| 0.8 | `add-redb-backend` | redb storage with six live permutations, exact statistics, FTS5-compatible text index, detection, `Db::create`, `durability`, lossless `convert` ([[backends#Same Logical Database]]) |
+| 0.8 | `add-native-runner` | `tm-native`: the whole IR over the storage trait with hybrid and worst-case-optimal joins ([[backends#Hybrid Join Engine]]) |
+| 0.8 | `add-tm-cli` | The `tm` command-line tool ([[backends#Backend Detection and CLI]]) |
+| 0.8 | `add-backend-benchmarks` | redb vs SQLite vs Oxigraph, with an honest strengths-and-weaknesses report and two articles |
+| 0.9 | `move-sqlite-onto-store` | SQLite on the storage trait behind a 5 % regression gate ([[backends#One Engine In Two Phases]]) |
 
 ```plantuml
 @startuml milestones
@@ -83,6 +94,7 @@ The ten follow-up changes from the 2026-10-03 review (budgets, bulk import, text
 - **Point and 2-hop latency** at 10⁶ and 10⁷ statements, for the now, asOf and validAt views. The SPARQL variant (`crates/tiramemsu/benches/sparql.rs`) runs the same shapes through `View::sparql`; `SPARQL_BENCH_STATEMENTS` sets the size (default 10⁵).
 - **Triangles:** SQL nested loops versus the M4 threshold. This decided that LFTJ is built. See [[query#Physical Planning#LFTJ]]. First result (`bench/triangles/`): SQLite's plan matches an intersection join on a uniform graph (1.0×) but is 41× slower on a hub-and-spoke graph and 36–104× slower on layered graphs, growing with size. The threshold is met for skewed cyclic patterns, so M4 is justified for them. With M4 built, `cargo run --release -p tiramemsu --example triangles` compares both routes through tiramemsu on one file after checking equal counts; at the small scale the native route is 1.3× faster on a uniform graph, 12× on hub-and-spoke and 2–4× on layered graphs (results in `bench/triangles/README.md`).
 - **Paths:** all-endpoints shortest path and 3-hop trail latency, reachability over a chain and a small world, all-shortest paths on a grid, and the `rarray` chunk size (`crates/tiramemsu/benches/path.rs`; `PATH_BENCH_STATEMENTS` sets the size, default 10⁵). Trail errors fail the benchmark. Recorded results are in `crates/tiramemsu/benches/README.md`.
+- **Backends:** tiramemsu on SQLite (with and without LFTJ) and on redb against Oxigraph on RocksDB, through `crates/tm-bench` and `bench/backends/` (`tm bench` runs the SQLite-and-redb part). Every query is checked for equal results on every engine before it is timed, and a query that passes 60 s is recorded as a timeout. At 10⁵ statements redb wins cyclic joins (up to 27× over SQLite's own plan), concurrent readers (3.3× at 16 threads), bulk load and time-view lookups. It loses star and aggregate queries (2.1–3.8×), Cypher variable-length paths (about 3×) and size (3.5×). Oxigraph wins writes, load and size and loses joins. At 10⁶ the cyclic gap grows (a skewed triangle: 45 ms on redb, 5.1 s on SQLite without LFTJ, 57 s on Oxigraph), the snowflake F1 becomes a 3.6× redb loss, and a fresh bulk load leaves redb at 7.5× SQLite's size until `tm compact`. Report: `bench/backends/README.md`; decisions [[backends#Hybrid Join Engine]] and [[backends#Snapshot Readers]].
 - **Size:** bytes per statement, and index overhead against raw data. Baseline: about 153 bytes per statement, with indexes at 5.3× the table ([[storage#Measured Footprint]]). This benchmark also decides whether `hist_*` becomes partial.
 - **Supersede:** cost as a function of the cascade set size.
 - **Plan quality:** a skewed fixture (one huge class, one rare predicate, churned properties) run with bound parameters, with and without statistics. It guards [[query#Physical Planning#Join Ordering]] and decides whether the forced-order fallback is built.

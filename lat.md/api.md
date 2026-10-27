@@ -1,3 +1,6 @@
+---
+openspec: [tm-cli]
+---
 # API
 
 The `tiramemsu` facade crate exposes three handles: `Db` opens the file and runs transactions, `View` is an immutable time selection that runs queries, and `Tx` holds the write operations.
@@ -154,6 +157,10 @@ The error enum is `#[non_exhaustive]`. Each OpenSpec change adds the variants it
 | `path_max_states` | 1 000 000 | `add-path-engine` |
 | `reader_timeout` | `None` (wait for a reader without limit); past it a read fails with `PoolTimeout` | `add-query-budgets` |
 | `text_index` | false; true builds the derived text index at open (ignored without FTS5) | `add-text-retrieval` |
+| `backend` | `Auto` (detect existing files, create new ones on SQLite); `Sqlite` or `Redb` choose the backend of a new file and refuse a file of the other with `BackendMismatch` ([[backends#Backend Detection and CLI]]) | `add-redb-backend` |
+| `durability` | `Normal`; `Immediate` and `None` trade speed for how many of the newest commits a crash may lose ([[backends#Durability Modes]]) | `add-redb-backend` |
+| `flush_interval`, `flush_commits` | 50 ms, 1000; the redb group commit of `Normal` | `add-redb-backend` |
+| `parallel_threshold` | 4096 input rows; above it a native-runner join step runs in parallel morsels, `0` disables it ([[query#Native Runner#Parallel Morsels And Budgets]]) | `add-native-runner` |
 
 `planner`, `query_engine`, `path_max_hops` and `path_max_states` exist only with the facade's `exec` feature ([[architecture#Crates#Cargo Features]]), so options are built with `..OpenOptions::default()`.
 
@@ -168,6 +175,15 @@ Bindings wrap the facade crate one to one. Python, Node, WASM and the MCP server
 | WASM | `tiramemsu-wasm` (wasm-bindgen, on the `tm-wasm` host) | Done, not published. A Web Worker class `Database` over the JSON bridge; memory or OPFS storage with a rollback journal; single-threaded, reader = writer; no budgets or bulk import ([[bindings#WebAssembly]]) |
 | MCP | `tiramemsu-mcp` (stdio JSON-RPC server, binary of the same name) | Done. Tools: `assert`, `confirm`, `supersede`, `query`, `dependents`, `export_bundle`, `import_bundle`, `conflicts`, `preview_bundle`, `text_search`, `define_embedding_model`, `set_embedding`, `vector_search`, `recall`, `unembedded`, and the saved-answer tools; see [[api#MCP Tools]] |
 | SQLite extension | later | Only the `tm_path` table function and time helpers; no write API |
+
+## CLI
+
+`tiramemsu-cli` is the `tm` binary: the facade on the command line, with no engine logic of its own. A file's backend is chosen by `tm create --backend` and detected by every other command.
+
+- **Commands** ([[crates/tiramemsu-cli/src/main.rs#run]]): `create`, `info` ([[crates/tiramemsu/src/db.rs#Db#summary]]: backend, format version, live and total statements, dictionary terms, transactions, file size), `query` (SPARQL or Cypher, `--as-of`, `--as-of-instant`, `--history`, `--valid-at`, `--timeout`, `--explain`), `import`, `export`, `convert`, `compact` and `bench` (SQLite against redb on this machine through `tm-bench`; [[roadmap#Benchmarks]]).
+- **Formats:** `table`, SPARQL 1.1 `json`/`csv`/`tsv`, `ntriples` for `CONSTRUCT`; Cypher prints the bridge's JSON. Terms in tables are N-Triples ([[crates/tm-core/src/rdf.rs#write_term]]).
+- **Import and export** ([[crates/tiramemsu-cli/src/rdfio.rs]]): N-Triples, N-Quads, Turtle and TriG through `oxttl`, in bulk-import chunks ([[query#Bulk Import]]); blank-node labels are scoped to their file. Export writes the live statements, without the engine's `urn:tiramemsu:sys:` predicates, and each named-graph membership as a quad.
+- **Errors:** the typed error name and message on stderr and exit code 1 (`Parse: …`, `AlreadyExists: …`); usage errors exit with code 2. `--explain` covers SPARQL; Cypher has no explain entry point yet.
 
 ## MCP Tools
 

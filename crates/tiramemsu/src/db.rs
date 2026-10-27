@@ -9,7 +9,7 @@ use std::time::{Duration, Instant};
 
 use tm_core::{
     budget, storage, Capabilities, Clock, Error, Event, Executor, Host, HostOptions, Result, Store,
-    StoreOptions, SystemClock, TermReader, TimeRef, Tx, TxOptions, TxReport, ViewSpec,
+    StoreOptions, SystemClock, TermReader, TimeRef, TxHandle as Tx, TxOptions, TxReport, ViewSpec,
 };
 #[cfg(feature = "exec")]
 use tm_exec::{
@@ -17,7 +17,9 @@ use tm_exec::{
     PathOptions, PlannerOptions,
 };
 use tm_rusqlite::RusqliteHost;
+use tm_store::dict::TermCache;
 
+use crate::backend::{self, Backend, Durability};
 use crate::budget::QueryBudget;
 use crate::pool::ReaderPool;
 use crate::view::View;
@@ -36,6 +38,25 @@ impl Engine {
     fn install(&self, _: &mut dyn Executor) -> Result<()> {
         match *self {}
     }
+}
+
+/// What a database file holds ([`Db::summary`]).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Summary {
+    /// The backend that wrote the file.
+    pub backend: Backend,
+    /// The storage format version recorded in the file.
+    pub format_version: Option<i64>,
+    /// Statements not retracted.
+    pub live_statements: u64,
+    /// Every statement ever asserted, retracted ones included.
+    pub statements: u64,
+    /// Dictionary terms (inline values such as numbers are not counted).
+    pub terms: u64,
+    /// Committed transactions.
+    pub transactions: u64,
+    /// The size of the main file in bytes.
+    pub file_size: u64,
 }
 
 /// Per-database tuning knobs, passed to [`Db::open`].
@@ -103,6 +124,21 @@ pub struct OpenOptions {
     /// whatever this option says. Ignored on a host without FTS5, where text
     /// recall fails with `MissingCapability`. See [`Db::rebuild_text_index`].
     pub text_index: bool,
+    /// The storage backend of a new file (default `Auto`: SQLite). An existing
+    /// file is opened on the backend that wrote it; an explicit choice that
+    /// disagrees fails with `BackendMismatch`. See [`Backend`].
+    pub backend: Backend,
+    /// When commits become durable (default `Normal`). See [`Durability`].
+    pub durability: Durability,
+    /// redb only: the longest a `Normal` commit stays non-durable (default 50 ms).
+    pub flush_interval: Duration,
+    /// redb only: a `Normal` commit after this many non-durable ones is durable
+    /// (default 1000).
+    pub flush_commits: u64,
+    /// redb only: the input rows above which a join step of the native runner
+    /// runs in parallel morsels (default 4096); `0` disables parallelism.
+    #[cfg(feature = "exec")]
+    pub parallel_threshold: usize,
     /// Native operators registered on every connection (tests). A registered
     /// `Path` operator replaces the built-in `tm_path`.
     #[doc(hidden)]
@@ -139,6 +175,12 @@ impl Default for OpenOptions {
             path_max_states: 1_000_000,
             reader_timeout: None,
             text_index: false,
+            backend: Backend::Auto,
+            durability: Durability::Normal,
+            flush_interval: Duration::from_millis(50),
+            flush_commits: 1000,
+            #[cfg(feature = "exec")]
+            parallel_threshold: tm_exec::DEFAULT_PARALLEL_THRESHOLD,
             #[cfg(feature = "exec")]
             native_operators: Vec::new(),
         }
@@ -159,6 +201,8 @@ impl std::fmt::Debug for OpenOptions {
             .field("path_max_states", &self.path_max_states);
         d.field("reader_timeout", &self.reader_timeout)
             .field("text_index", &self.text_index)
+            .field("backend", &self.backend)
+            .field("durability", &self.durability)
             .finish()
     }
 }
@@ -196,6 +240,89 @@ impl Drop for HeldGuard {
     }
 }
 
+/// The single writer: the SQL engine on a SQLite connection, or the
+/// storage-trait engine on a key-value store.
+pub(crate) enum Writer {
+    Sql(Store),
+    #[cfg_attr(not(feature = "redb"), allow(dead_code))]
+    Kv(tm_store::Engine),
+}
+
+impl Writer {
+    /// The SQL store, or `MissingCapability("sql")` on a key-value backend.
+    pub(crate) fn sql(&mut self) -> Result<&mut Store> {
+        match self {
+            Writer::Sql(s) => Ok(s),
+            Writer::Kv(_) => Err(Error::MissingCapability {
+                capability: "sql".to_string(),
+            }),
+        }
+    }
+
+    fn optimize_runs(&self) -> u64 {
+        match self {
+            Writer::Sql(s) => s.optimize_runs(),
+            Writer::Kv(_) => 0,
+        }
+    }
+
+    fn optimize(&mut self) -> Result<()> {
+        match self {
+            Writer::Sql(s) => s.optimize(),
+            // redb keeps exact statistics in every write transaction
+            Writer::Kv(_) => Ok(()),
+        }
+    }
+
+    fn enable_text_index(&mut self) -> Result<bool> {
+        match self {
+            Writer::Sql(s) => s.enable_text_index(),
+            Writer::Kv(e) => e.enable_text_index(),
+        }
+    }
+
+    fn rebuild_text_index(&mut self) -> Result<u64> {
+        match self {
+            Writer::Sql(s) => s.rebuild_text_index(),
+            Writer::Kv(e) => e.rebuild_text_index(),
+        }
+    }
+
+    fn statistics_due(&self) -> bool {
+        match self {
+            Writer::Sql(s) => s.statistics_due(),
+            Writer::Kv(_) => false,
+        }
+    }
+
+    fn defer_statistics(&mut self, deferred: bool) {
+        if let Writer::Sql(s) = self {
+            s.defer_statistics(deferred);
+        }
+    }
+
+    /// One transaction whose body receives the backend-neutral handle.
+    fn transact(
+        &mut self,
+        opts: TxOptions,
+        f: impl FnOnce(&mut Tx<'_>) -> Result<()>,
+    ) -> Result<TxReport> {
+        match self {
+            Writer::Sql(s) => s.transact(opts, |tx| f(&mut Tx::new(tx))),
+            Writer::Kv(e) => e.transact(opts, |tx| f(&mut Tx::new(tx))),
+        }
+    }
+}
+
+/// The key-value side of a database: the backend handle for readers and the
+/// readers' shared term cache.
+pub(crate) struct Kv {
+    pub(crate) store: Arc<dyn tm_store::Backend>,
+    #[cfg(feature = "redb")]
+    pub(crate) redb: Arc<tm_redb::RedbStore>,
+    pub(crate) terms: TermCache,
+}
+
 /// An open database: one writer connection behind a mutex and, when the host
 /// declares `reader_pool`, a pool of read-only connections on the same WAL file.
 pub struct Db {
@@ -205,7 +332,10 @@ pub struct Db {
     /// write, so a closed database is one self-contained file (which the WASM
     /// host imports without its `-wal`).
     pool: Option<ReaderPool>,
-    writer: Mutex<Store>,
+    writer: Mutex<Writer>,
+    /// The key-value backend (`None` on SQLite).
+    kv: Option<Kv>,
+    backend: Backend,
     /// Release generation of `writer`, so a bounded wait sleeps until a release
     /// instead of polling.
     released: Released,
@@ -256,12 +386,12 @@ impl Released {
 
 /// The locked writer; releasing it wakes bounded waiters.
 pub(crate) struct WriterGuard<'a> {
-    guard: Option<MutexGuard<'a, Store>>,
+    guard: Option<MutexGuard<'a, Writer>>,
     released: &'a Released,
 }
 
 impl<'a> WriterGuard<'a> {
-    fn new(guard: MutexGuard<'a, Store>, released: &'a Released) -> Self {
+    fn new(guard: MutexGuard<'a, Writer>, released: &'a Released) -> Self {
         WriterGuard {
             guard: Some(guard),
             released,
@@ -270,14 +400,14 @@ impl<'a> WriterGuard<'a> {
 }
 
 impl std::ops::Deref for WriterGuard<'_> {
-    type Target = Store;
-    fn deref(&self) -> &Store {
+    type Target = Writer;
+    fn deref(&self) -> &Writer {
         self.guard.as_ref().expect("held until drop")
     }
 }
 
 impl std::ops::DerefMut for WriterGuard<'_> {
-    fn deref_mut(&mut self) -> &mut Store {
+    fn deref_mut(&mut self) -> &mut Writer {
         self.guard.as_mut().expect("held until drop")
     }
 }
@@ -315,7 +445,210 @@ impl Db {
     /// # Ok::<(), Error>(())
     /// ```
     pub fn open(path: impl AsRef<Path>, opts: OpenOptions) -> Result<Db> {
-        Db::open_with_host(RusqliteHost::new(), path, opts)
+        let path = path.as_ref();
+        match backend::resolve(path, opts.backend)? {
+            Backend::Redb => Db::open_redb(path, opts, false),
+            _ => Db::open_sqlite(RusqliteHost::new(), path, opts),
+        }
+    }
+
+    /// Creates a new database at `path` on `backend` (`Auto` means SQLite).
+    ///
+    /// # Errors
+    ///
+    /// `AlreadyExists` when `path` exists, `BackendNotCompiled` for a backend
+    /// this build lacks, and the errors of [`Db::open`].
+    ///
+    /// ```
+    /// # use tiramemsu::*;
+    /// # let dir = tempfile::tempdir().unwrap();
+    /// let path = dir.path().join("new.db");
+    /// let db = Db::create(&path, Backend::Sqlite, OpenOptions::default())?;
+    /// assert_eq!(db.backend(), Backend::Sqlite);
+    /// drop(db);
+    /// assert!(matches!(Db::create(&path, Backend::Sqlite, OpenOptions::default()), Err(Error::AlreadyExists(_))));
+    /// # Ok::<(), Error>(())
+    /// ```
+    // @tg: implements:: [[openspec:backend-selection#Creating a database]] {since: "2026-10-27"}
+    pub fn create(path: impl AsRef<Path>, backend: Backend, opts: OpenOptions) -> Result<Db> {
+        let path = path.as_ref();
+        if path.exists() {
+            return Err(Error::AlreadyExists(path.to_path_buf()));
+        }
+        match backend {
+            Backend::Redb => Db::open_redb(path, opts, true),
+            _ => Db::open_sqlite(RusqliteHost::new(), path, opts),
+        }
+    }
+
+    /// The backend this database runs on.
+    pub fn backend(&self) -> Backend {
+        self.backend
+    }
+
+    #[cfg(feature = "redb")]
+    fn open_redb(path: &Path, opts: OpenOptions, create: bool) -> Result<Db> {
+        let ropts = tm_redb::RedbOptions {
+            durability: match opts.durability {
+                Durability::Normal => tm_redb::Durability::Normal,
+                Durability::Immediate => tm_redb::Durability::Immediate,
+                Durability::None => tm_redb::Durability::None,
+            },
+            flush_interval: opts.flush_interval,
+            flush_commits: opts.flush_commits,
+            ..Default::default()
+        };
+        let redb = Arc::new(if create || !path.exists() {
+            tm_redb::RedbStore::create(path, ropts)?
+        } else {
+            tm_redb::RedbStore::open(path, ropts)?
+        });
+        let store: Arc<dyn tm_store::Backend> = redb.clone();
+        let query_engine = build_engine(&opts);
+        let mut engine = tm_store::Engine::open(
+            store.clone(),
+            tm_store::EngineOptions {
+                clock: opts.clock.clone(),
+                term_cache_capacity: opts.term_cache_capacity,
+            },
+        )?;
+        if opts.text_index {
+            engine.enable_text_index()?;
+        }
+        Ok(Db {
+            id: NEXT_DB_ID.fetch_add(1, Ordering::Relaxed),
+            writer: Mutex::new(Writer::Kv(engine)),
+            kv: Some(Kv {
+                store,
+                redb,
+                terms: TermCache::new(opts.term_cache_capacity),
+            }),
+            backend: Backend::Redb,
+            released: Released::default(),
+            pool: None,
+            terms: TermReader::new(1),
+            engine: query_engine,
+            caps: Capabilities {
+                fts5: true,
+                ..Capabilities::default()
+            },
+            #[cfg(feature = "exec")]
+            path_max_hops: opts.path_max_hops,
+            reader_timeout: opts.reader_timeout,
+            path: path.to_path_buf(),
+            clock: opts.clock.clone(),
+            import_lease: AtomicU64::new(0),
+        })
+    }
+
+    #[cfg(not(feature = "redb"))]
+    fn open_redb(_path: &Path, _opts: OpenOptions, _create: bool) -> Result<Db> {
+        Err(backend::not_compiled(Backend::Redb))
+    }
+
+    /// The key-value backend, if this database has one.
+    pub(crate) fn kv(&self) -> Option<&Kv> {
+        self.kv.as_ref()
+    }
+
+    /// The redb store behind a redb database (layout tests and `tm info`).
+    #[doc(hidden)]
+    #[cfg(feature = "redb")]
+    pub fn redb_store(&self) -> Option<&Arc<tm_redb::RedbStore>> {
+        self.kv.as_ref().map(|k| &k.redb)
+    }
+
+    /// The number of the last committed transaction (0 before the first).
+    ///
+    /// # Errors
+    ///
+    /// A storage error.
+    pub fn last_t(&self) -> Result<u64> {
+        match &self.kv {
+            Some(k) => tm_store::read::last_t(&*k.store.read()?),
+            None => self.read_committed(|e| tm_core::read::last_t(e)),
+        }
+    }
+
+    /// What the file holds: backend, format version, statement, term and
+    /// transaction counts and its size on disk (`tm info`).
+    ///
+    /// # Errors
+    ///
+    /// A storage error.
+    pub fn summary(&self) -> Result<Summary> {
+        let file_size = std::fs::metadata(&self.path).map_or(0, |m| m.len());
+        let transactions = self.last_t()?;
+        let (format_version, live_statements, statements, terms) = match &self.kv {
+            Some(k) => {
+                let s = k.store.read()?;
+                let all = tm_store::Pattern::new(None, None, None);
+                let terms = match s.term_count()? {
+                    Some(n) => n,
+                    None => return Err(Error::storage("the store cannot count its terms")),
+                };
+                (
+                    s.meta("format_version")?,
+                    s.count(all, tm_store::Scope::Live, u64::MAX)?,
+                    s.count(all, tm_store::Scope::All, u64::MAX)?,
+                    terms,
+                )
+            }
+            None => {
+                let rows = self.read_committed(|e| {
+                    e.rows(
+                        "SELECT (SELECT value FROM meta WHERE key = 'format_version'), \
+                         (SELECT count(*) FROM triple WHERE t_ret IS NULL), \
+                         (SELECT count(*) FROM triple), (SELECT count(*) FROM term)",
+                        &[],
+                    )
+                })?;
+                let n = |i: usize| rows[0][i].as_i64().unwrap_or(0).max(0) as u64;
+                (rows[0][0].as_i64(), n(1), n(2), n(3))
+            }
+        };
+        Ok(Summary {
+            backend: self.backend(),
+            format_version,
+            live_statements,
+            statements,
+            terms,
+            transactions,
+            file_size,
+        })
+    }
+
+    /// Makes every committed transaction durable: a durable commit on redb, a
+    /// full WAL checkpoint on SQLite.
+    ///
+    /// # Errors
+    ///
+    /// `Reentrant` inside a running transaction, or a storage error.
+    pub fn sync(&self) -> Result<()> {
+        let _held = HeldGuard::acquire(self.id)?;
+        #[cfg(feature = "redb")]
+        if let Some(kv) = &self.kv {
+            return kv.redb.sync();
+        }
+        let mut w = self.lock()?;
+        w.sql()?
+            .executor()
+            .execute_batch("PRAGMA wal_checkpoint(FULL);")
+    }
+
+    /// Reclaims free space in a redb file. A no-op returning false on SQLite.
+    ///
+    /// # Errors
+    ///
+    /// `Storage` while another view or transaction is open.
+    pub fn compact(&self) -> Result<bool> {
+        let _held = HeldGuard::acquire(self.id)?;
+        let _w = self.lock()?;
+        #[cfg(feature = "redb")]
+        if let Some(kv) = &self.kv {
+            return kv.redb.compact();
+        }
+        Ok(false)
     }
 
     /// Opens the database at `path` through any executor [`Host`], for embedding on
@@ -331,7 +664,10 @@ impl Db {
         path: impl AsRef<Path>,
         opts: OpenOptions,
     ) -> Result<Db> {
-        let path = path.as_ref();
+        Db::open_sqlite(host, path.as_ref(), opts)
+    }
+
+    fn open_sqlite(host: impl Host, path: &Path, opts: OpenOptions) -> Result<Db> {
         let engine = open_engine(&host, &opts)?;
 
         let mut store = Store::open(
@@ -345,6 +681,15 @@ impl Db {
             },
         )?;
         let caps = store.capabilities();
+        match opts.durability {
+            Durability::Normal => {}
+            Durability::Immediate => store
+                .executor()
+                .execute_batch("PRAGMA synchronous = FULL;")?,
+            Durability::None => store
+                .executor()
+                .execute_batch("PRAGMA synchronous = OFF;")?,
+        }
         if opts.text_index && caps.fts5 {
             store.enable_text_index()?;
         }
@@ -370,7 +715,9 @@ impl Db {
         };
         Ok(Db {
             id: NEXT_DB_ID.fetch_add(1, Ordering::Relaxed),
-            writer: Mutex::new(store),
+            writer: Mutex::new(Writer::Sql(store)),
+            kv: None,
+            backend: Backend::Sqlite,
             released: Released::default(),
             pool,
             terms: TermReader::new(opts.term_cache_capacity),
@@ -511,7 +858,7 @@ impl Db {
                     return Err(Error::Reentrant);
                 }
                 let _held = HeldGuard::acquire(self.id)?;
-                armed(&mut *self.lock_bounded(true)?, |store| store.read(f))
+                armed(&mut *self.lock_bounded(true)?, |store| store.sql()?.read(f))
             }
         }
     }
@@ -592,7 +939,7 @@ impl Db {
             return Err(Error::ImportInProgress);
         }
         armed(&mut *self.lock_bounded(false)?, |store| {
-            store.derived_write(f)
+            store.sql()?.derived_write(f)
         })
     }
 
@@ -725,10 +1072,12 @@ impl Db {
                     // the last point a budget stops the write; past it the
                     // bookkeeping and COMMIT run without the interrupt
                     budget::check()?;
-                    tx.read_with(|e| {
-                        e.set_interrupt(None);
-                        Ok(())
-                    })?;
+                    if !tx.on_store() {
+                        tx.read_with(|e| {
+                            e.set_interrupt(None);
+                            Ok(())
+                        })?;
+                    }
                 }
                 Ok(())
             })
@@ -808,11 +1157,24 @@ impl Db {
     {
         let _held = HeldGuard::acquire(self.id)?;
         let engine = self.engine.as_deref();
-        self.lock()?.speculate(ops, |exec| {
-            let cell: RefCell<&mut dyn Executor> = RefCell::new(exec);
-            let view = View::on_writer(&cell, ViewSpec::NOW, engine);
-            query(&view)
-        })
+        let mut w = self.lock()?;
+        match &mut *w {
+            Writer::Sql(store) => store.speculate(
+                |tx| ops(&mut Tx::new(tx)),
+                |exec| {
+                    let cell: RefCell<&mut dyn Executor> = RefCell::new(exec);
+                    let view = View::on_writer(&cell, ViewSpec::NOW, engine);
+                    query(&view)
+                },
+            ),
+            Writer::Kv(e) => e.speculate(
+                |tx| ops(&mut Tx::new(tx)),
+                |store| {
+                    let view = View::on_store(store, ViewSpec::NOW, engine);
+                    query(&view)
+                },
+            ),
+        }
     }
 
     /// The now view: live statements, valid time unfiltered. Views are cheap values;
@@ -855,13 +1217,20 @@ impl Db {
 /// Runs `f` on the writer with the current operation's stop conditions installed on
 /// its connection (when there are any), removing them afterwards, also when `f`
 /// panics.
-fn armed<R>(store: &mut Store, f: impl FnOnce(&mut Store) -> Result<R>) -> Result<R> {
+fn armed<R>(store: &mut Writer, f: impl FnOnce(&mut Writer) -> Result<R>) -> Result<R> {
     let Some(interrupt) = budget::interrupt() else {
         return f(store);
     };
-    store.executor().set_interrupt(Some(interrupt));
+    let Writer::Sql(sql) = store else {
+        // the storage-trait engine has no statement to interrupt; budgets stop
+        // it between operations
+        return f(store);
+    };
+    sql.executor().set_interrupt(Some(interrupt));
     let r = catch_unwind(AssertUnwindSafe(|| f(&mut *store)));
-    store.executor().set_interrupt(None);
+    if let Writer::Sql(sql) = store {
+        sql.executor().set_interrupt(None);
+    }
     match r {
         Ok(r) => r,
         Err(panic) => resume_unwind(panic),
@@ -879,6 +1248,16 @@ fn open_engine(host: &impl Host, opts: &OpenOptions) -> Result<Option<Arc<Engine
     // refuse before touching the file: no query is ever planned on a host
     // without `functions` and `vtab` (decision D22)
     tm_exec::host::check_capabilities(host.capabilities())?;
+    Ok(build_engine(opts))
+}
+
+/// The query engine of `opts` (`None` when `opts.query_engine` is off). On a
+/// key-value backend it prepares queries and the native runner executes them.
+#[cfg(feature = "exec")]
+fn build_engine(opts: &OpenOptions) -> Option<Arc<Engine>> {
+    if !opts.query_engine {
+        return None;
+    }
     let mut reg = OperatorRegistry::new();
     if !opts
         .native_operators
@@ -899,11 +1278,15 @@ fn open_engine(host: &impl Host, opts: &OpenOptions) -> Result<Option<Arc<Engine
     for op in &opts.native_operators {
         reg.add(op.clone());
     }
-    Ok(Some(Arc::new(Engine::new(
-        opts.planner,
-        reg,
-        opts.term_cache_capacity,
-    ))))
+    Some(Arc::new(
+        Engine::new(opts.planner, reg, opts.term_cache_capacity)
+            .with_parallel_threshold(opts.parallel_threshold),
+    ))
+}
+
+#[cfg(not(feature = "exec"))]
+fn build_engine(_opts: &OpenOptions) -> Option<Arc<Engine>> {
+    None
 }
 
 /// Without the `exec` feature no engine is ever installed.

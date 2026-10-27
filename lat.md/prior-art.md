@@ -74,11 +74,42 @@ Measured on 2026-09-29 with DuckDB 1.5.6 against SQLite on the same 11 million s
 - **Why it is slow per request:** a fixed cost per query (`SELECT 1` takes 66 µs, against 0.9 µs for SQLite, through the bindings), no multi-column index lookups, and compressed column storage that turns single-row writes into block rewrites. Its docs say that many small concurrent queries are not a design goal.
 - **Taken:** read-only analytics. DuckDB's `sqlite` extension can attach the tiramemsu file (`ATTACH '…' (TYPE sqlite, READ_ONLY)`), and it ran the whole-store aggregates in 207 ms and 167 ms, 3.5–14× faster than SQLite itself, with no change to storage. It runs as a separate tool, never inside the library, because DuckDB warns against linking two SQLite copies into one process.
 
+## Oxigraph
+
+The reference Rust RDF store (MIT/Apache-2.0) on RocksDB, with quads in several permutations and its own SPARQL evaluator. It is the external baseline of the backend benchmark ([[roadmap#Benchmarks]]).
+
+Measured on 2026-10-27 at 10⁵ statements (`bench/backends/`, Apple M2 Max, Oxigraph 0.5.13):
+
+- **Oxigraph is far ahead on writes and size:** a single insert takes 5 µs against about 120 µs for either tiramemsu engine, bulk load is 18–46× faster, and files are 5–17× smaller. Its writes add quads; ours are transactions with statement ids, history, schema checks and cascades ([[constraints]]).
+- **It falls behind on joins:** both tiramemsu engines are 2–37× faster on WatDiv-style templates and 8–355× faster on cyclic patterns, where its evaluator has no worst-case-optimal join; skewed diamonds and 4-cycles take it 48–50 s against 4–7 s.
+- **Readers:** it scales best on 16 threads (93 000 two-hop lookups per second against 55 600 on redb and 16 800 on SQLite).
+- **At 10⁶ statements** the same holds: a skewed triangle takes it 57 s against 45 ms on redb, it loads a million statements in 1.9 s against 55–94 s, and on a single reader thread redb overtakes it (15 800 against 11 500 lookups per second).
+- **Taken:** canonical term encoding and the `spargebra` parser ([[query#Front Ends#SPARQL]]).
+
+## Kùzu
+
+An embedded property-graph database (MIT) with columnar storage, CSR adjacency lists and a factorised, vectorised executor. It is the closest precedent for the native runner's join choice.
+
+- **Taken:** hash joins for acyclic parts and worst-case-optimal multiway joins for cyclic ones, chosen per query ([[backends#Hybrid Join Engine]], [[query#Native Runner#Join Strategy]]); morsel-driven parallelism ([[query#Native Runner#Parallel Morsels And Budgets]]).
+- **Not taken:** factorised intermediate results and columnar storage. The workload is many small requests with history, not analytics over a static graph.
+
+## Umbra
+
+A relational research system from TU Munich. Freitag et al. (VLDB 2020) add worst-case-optimal joins to it as hash tries built lazily inside an otherwise binary plan, used only where the optimizer detects a growing intermediate result.
+
+- **Taken:** hash tries for the generic join of a cyclic core, built once per pattern from one scan, inside a binary plan ([[crates/tm-native/src/bgp.rs]]).
+- **Not taken (yet):** the lazy trie expansion and the cost model that decides per join whether a binary plan would grow; cyclic detection is structural.
+
+## Free Join
+
+Wang et al. (SIGMOD 2023): one plan language that covers both binary hash joins and generic joins, with a column-oriented trie (COLT) built lazily. It shows that the two families are points of one space.
+
+- **Not taken:** it is recent research without a production precedent, so the native runner keeps the simpler split between binary steps and a generic join for cyclic cores. It is the obvious next step if the split loses on mixed shapes.
+
 ## Others
 
 Other systems were studied and informed smaller choices or gave warnings about what to avoid.
 
-- **Oxigraph:** canonical term encoding, the `spargebra` parser ([[query#Front Ends#SPARQL]]).
 - **Apache AGE:** Cypher → SQL translation plus a native variable-length operator ([[query#Physical Planning]]).
 - **XTDB v2:** bitemporal columns, and keeping current state separate from history.
 - **TerminusDB, Dolt:** git-style branching, deliberately not adopted ([[time-model#Speculative Transactions]]).

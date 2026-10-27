@@ -102,6 +102,8 @@ pub enum RegionKind {
     NativePath,
     /// The LFTJ operator, as the `tm_lftj` table-valued function.
     NativeLftj,
+    /// The native runner (`tm-native`): the whole query over the storage traits.
+    Native,
 }
 
 /// Why a region was routed the way it was.

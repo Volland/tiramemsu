@@ -232,7 +232,7 @@ pub fn run(view: &View<'_>, op: &str, args: &J) -> Res<J> {
 
 /// An explained plan: `{regions: [{kind, note, aliases, queryPlan}], sql,
 /// shortCircuit, queryPlan}` with camelCase kinds (`sql`, `nativePath`,
-/// `nativeLftj`) and route notes (`none`, `cyclicLftjDisabled`, `lftjUnavailable`,
+/// `nativeLftj`, `native` for the whole native runner on redb) and route notes (`none`, `cyclicLftjDisabled`, `lftjUnavailable`,
 /// `lftjUnsupportedShape`, `lftjBelowEstimate`, `lftjNative`, `pathForward`,
 /// `pathInverted`). Parameters are not included.
 // @lat: [[bindings#JSON Bridge#Explain]]
@@ -241,6 +241,7 @@ pub fn explain_json(ex: &Explain) -> J {
         RegionKind::Sql => "sql",
         RegionKind::NativePath => "nativePath",
         RegionKind::NativeLftj => "nativeLftj",
+        RegionKind::Native => "native",
     };
     let note = |n: RouteNote| match n {
         RouteNote::None => "none",

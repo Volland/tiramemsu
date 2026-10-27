@@ -15,8 +15,11 @@ rust-version.workspace = true
 [dependencies]
 tm-core = { workspace = true }
 tm-rusqlite = { workspace = true }
+tm-store = { workspace = true }
+tm-redb = { workspace = true, optional = true }
 tm-ir = { workspace = true, optional = true }
 tm-exec = { workspace = true, optional = true }
+tm-native = { workspace = true, optional = true }
 tm-sparql = { workspace = true, optional = true }
 tm-cypher = { workspace = true, optional = true }
 lru = "0.18"
@@ -87,13 +90,16 @@ required-features = ["exec"]
 default = ["sparql", "cypher"]
 # The shared query engine: the IR (`tm-ir`), the planner and executor (`tm-exec`),
 # the path engine (`View::path*`, `tm_path`) and the LFTJ operator.
-exec = ["dep:tm-ir", "dep:tm-exec"]
+exec = ["dep:tm-ir", "dep:tm-exec", "dep:tm-native"]
 # The SPARQL 1.1/1.2 front end (`View::sparql`, `tm-sparql`). Until 0.2 this name
 # only switched the SPARQL side of the differential suite on; it now selects the
 # front end itself, and the suite runs whenever both front ends are compiled.
 sparql = ["exec", "dep:tm-sparql"]
 # The openCypher front end (`View::cypher`, `Db::cypher_write`, `TxCypher`, `tm-cypher`).
 cypher = ["exec", "dep:tm-cypher"]
+# The redb storage backend (`Backend::Redb`, `tm-redb`): files are detected by
+# their header; without this feature opening a redb file is `BackendNotCompiled`.
+redb = ["dep:tm-redb"]
 
 [lints]
 workspace = true

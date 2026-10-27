@@ -1,0 +1,20 @@
+[package]
+name = "tm-bench-backends"
+description = "tiramemsu on SQLite and redb against Oxigraph: the full backend comparison"
+version = "0.8.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+publish = false
+
+# Oxigraph builds RocksDB (C++), so this crate is its own workspace and stays
+# out of the default build and CI tests.
+[workspace]
+
+[dependencies]
+tm-bench = { path = "../../crates/tm-bench" }
+# rdf-12: tiramemsu turns on RDF 1.2 in oxrdf and spargebra, which Oxigraph must match
+oxigraph = { version = "0.5", features = ["rdf-12"] }
+serde_json = "1"
+
+[profile.release]
+debug = false

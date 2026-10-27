@@ -1,3 +1,6 @@
+---
+openspec: [native-query-execution]
+---
 # Query
 
 SPARQL and Cypher compile to one logical IR. A planner routes each part of a plan to generated SQL, the native path operator, or an opt-in leapfrog-triejoin (LFTJ) operator. Time is a property of every triple pattern.
@@ -425,6 +428,54 @@ OP --> OP : materialised rows c0 … c31 to SQLite
 The operator polls the operation budget of [[query#Query Budgets]] while it scans and joins; cancellation or a deadline fails the statement with the typed error and returns no rows.
 
 Row and byte budgets count the rows the statement returns, as on the SQL route, and fail with `ResultLimitExceeded` before a partial result exists. The call materialises its output rows before SQLite reads them, so memory grows with the region's output, not just its inputs; a count over millions of triangles holds them all for the duration of the statement.
+
+## Native Runner
+
+On redb, `tm-native` runs the whole IR over the storage traits: the same planner and decoder as the SQL route, with its own join engine in place of generated SQL.
+
+It is the runner of [[backends#Hybrid Join Engine]] and reuses `tm-exec`'s planner through `PlanSource` ([[crates/tm-native/src/source.rs#StoreSource]]), the decoder through `TermLoad`, and the path engine through `PathSource`. The evaluator mirrors the SQL generator's semantics (domains, three-valued logic, the SQL helper functions), and the dialect corpus, the SPARQL and Cypher suites and a random-query property test check it against SQLite on the same history ([[crates/tiramemsu/tests/native_runner.rs]]).
+
+### Join Strategy
+
+How graph and RDF engines join, and what the native runner takes from each.
+
+| System | Storage | Join strategy |
+|---|---|---|
+| RDF-3X | six permutations plus aggregated indexes | merge joins, dynamic-programming order over exact statistics |
+| Jena TDB2, Oxigraph | B+tree / RocksDB permutations (3 to 9) | index nested loops, heuristic order |
+| MillenniumDB | B+tree permutations | leapfrog triejoin for every BGP |
+| Kùzu | columnar, CSR adjacency | hash joins, worst-case-optimal joins for cyclic parts, sideways information passing |
+| Umbra | relational | hybrid: binary hash joins, hash-trie multiway joins on cyclic cores (Freitag et al., VLDB 2020) |
+| Free Join | research (SIGMOD 2023) | one plan language unifying binary and generic joins |
+
+The native runner follows Kùzu and Umbra ([[crates/tm-native/src/bgp.rs]]):
+
+- **Order:** greedy, from exact per-predicate statistics (live statements, distinct subjects and objects) kept by redb, preferring patterns connected to bound variables. A pattern bound on its predicate only is estimated from those statistics in every view (history is never smaller than the live count); any other pattern by a range probe of at most 4 096 keys.
+- **Acyclic steps:** an index nested loop (one prefix scan on the permutation that fits the bound positions) or a hash join (one scan, hashed on the shared variables), whichever the estimate says reads less.
+- **Cyclic cores:** a generic join over hash tries built once per pattern, so the work is bounded by the AGM bound of the core, not by an intermediate binary result.
+- **Late decoding:** joins, equality, graph and time filters run on ObjectIds; terms are decoded only for projected columns and value expressions.
+
+### Filter Placement
+
+A filter over a join is split into conjuncts, and each is applied as early as the variables it reads allow, as SQLite does when it tests a `WHERE` term in the outermost loop that binds its columns.
+
+Patterns that the planner wraps in filters and a projection keeping all their variables (as Cypher relationships are) join as plain patterns, their filters becoming conjuncts. The patterns are grouped into connected components and each component is matched on its own, so a conjunct that reads one component cuts it before components are crossed. A conjunct that reads nothing a path binds is applied before the paths run, as SQLite tests it before calling `tm_path`. A conjunct is placed only on columns whose final value is already fixed (terms that are never null), never on a column a later merge may coalesce.
+
+- **Inside the join:** a conjunct over one component's variables is checked inside its pattern join, right after the step that binds its last variable.
+- **Semi-join seeds:** a positive `EXISTS` whose rows are few (at most 10 000) seeds the patterns it shares variables with, with its distinct values, as Cypher's `{name: 'Ada'}` property maps do; the `EXISTS` itself is still checked, by a hash probe.
+- **Path endpoints:** a path's end variable is its output only when no other input binds it; otherwise conjuncts on it run before the path, so a shortest path between two filtered nodes is one search, not one per node pair.
+
+### Parallel Morsels And Budgets
+
+Join steps over more input rows than `OpenOptions::parallel_threshold` (default 4096; `0` disables it) are cut into morsels of 1024 rows, run on scoped threads, and concatenated in input order, so results are identical either way.
+
+Workers inherit the caller's deadline and cancellation token; the first error in morsel order is returned and stops the others. Every join loop polls the budget per emitted row (the clock is read every 64 polls), so a deadline stops even a cross product promptly. Row and byte budgets are charged at decoding, as on SQLite.
+
+### Native Explain
+
+`explain_*` on redb runs the query under the view's budget and returns one `native` region whose plan lists each step: the pattern, its permutation (`pos live scan`), the join kind, the estimate and the rows it saw.
+
+Unlike SQLite's `EXPLAIN QUERY PLAN`, the native plan is decided while running (a step's join kind depends on the rows the previous one produced), so it cannot be read without executing.
 
 ## Front Ends
 

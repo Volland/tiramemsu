@@ -11,12 +11,54 @@ pub mod normalize;
 pub mod resolve;
 pub mod route;
 
-use tm_core::{ObjectId, Value};
+use tm_core::{Executor, ObjectId, Result, SqlValue, TermReader, Value};
 use tm_ir::{AggFunc, ArithOp, CmpOp, Func, LookupMode, Var};
 
 use crate::result::RouteNote;
 use crate::scan::ResolvedView;
 use crate::virtual_pred::VirtualPred;
+
+/// The data a planner reads: constant encoding, instant resolution and
+/// `pred_multi`. The SQL path reads them on the executing connection
+/// ([`ExecSource`]); the native runner reads them from a storage-trait snapshot.
+pub trait PlanSource {
+    /// The ObjectId of a value (lookup only, never inserts).
+    fn encode(&mut self, v: &Value) -> Result<Option<ObjectId>>;
+    /// The largest transaction number whose instant is at most `ms` (0: none).
+    fn instant_to_t(&mut self, ms: i64) -> Result<u64>;
+    /// True when `p` is recorded in `pred_multi`.
+    fn pred_multi(&mut self, p: ObjectId) -> Result<bool>;
+}
+
+/// A [`PlanSource`] on a SQL connection.
+pub struct ExecSource<'a>(pub &'a mut dyn Executor);
+
+impl PlanSource for ExecSource<'_> {
+    fn encode(&mut self, v: &Value) -> Result<Option<ObjectId>> {
+        TermReader::encode(self.0, v)
+    }
+
+    fn instant_to_t(&mut self, ms: i64) -> Result<u64> {
+        Ok(self
+            .0
+            .query_i64(
+                "SELECT coalesce(max(t), 0) FROM tx WHERE instant <= ?1",
+                &[SqlValue::Integer(ms)],
+            )?
+            .unwrap_or(0)
+            .max(0) as u64)
+    }
+
+    fn pred_multi(&mut self, p: ObjectId) -> Result<bool> {
+        Ok(self
+            .0
+            .query_i64(
+                "SELECT 1 FROM pred_multi WHERE p = ?1",
+                &[SqlValue::Integer(p.raw())],
+            )?
+            .is_some())
+    }
+}
 
 /// A pattern position after encoding.
 #[derive(Clone, Debug, PartialEq)]

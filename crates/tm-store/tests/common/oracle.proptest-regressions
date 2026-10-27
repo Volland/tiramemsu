@@ -1,0 +1,7 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc be2bc432e88ce455fc1e0696aebe0ce838152bea2ee374819b4dab6f7344a881 # shrinks to plans = [(TxPlan { ops: [Assert(0, 0, 0, 0)], dry_run: false, max_cascade: 10000 }, false), (TxPlan { ops: [AssertOnStmt(0, 0, 177), Prefix(0, 0)], dry_run: false, max_cascade: 10000 }, false)]

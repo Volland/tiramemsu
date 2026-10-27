@@ -11,8 +11,8 @@ use tm_ir::display::path_text_canonical;
 use tm_ir::{PathCompleteness, PathMode};
 
 use super::automaton::Dfa;
-use super::fetch::{Fetcher, DEFAULT_BATCH};
-use super::resolve::resolve;
+use super::fetch::{Fetcher, NeighbourFetch, DEFAULT_BATCH};
+use super::resolve::{resolve, Resolved};
 use super::row::PathRow;
 use super::search::{search, Ctx, Sink, StateBudget};
 use super::syntax::{self, VocabSource};
@@ -108,6 +108,71 @@ impl VocabSource for Lazy<'_> {
     }
 }
 
+/// The data a path search reads: the vocabulary for prefixed names, the
+/// dictionary for letters, the view's transaction, and the neighbours. The SQL
+/// route reads them on a connection ([`ExecPathSource`]); the native runner on a
+/// storage-trait snapshot.
+pub trait PathSource {
+    /// The current `@vocab` and prefix table.
+    fn vocab(&mut self) -> Result<Vocab>;
+    /// The ObjectId of an IRI (lookup only).
+    fn encode_iri(&mut self, iri: &str) -> Result<Option<ObjectId>>;
+    /// The view with its instant resolved; `None` before the first transaction.
+    fn resolve_view(&mut self, spec: ViewSpec) -> Result<Option<crate::scan::ResolvedView>>;
+    /// The neighbour fetcher of one search.
+    fn fetcher<'s>(
+        &'s mut self,
+        view: crate::scan::ResolvedView,
+        batch: usize,
+        graphs: Option<&[ObjectId]>,
+    ) -> Result<Box<dyn NeighbourFetch + 's>>;
+}
+
+/// [`PathSource`] on a SQL connection.
+pub struct ExecPathSource<'a>(pub &'a mut dyn Executor);
+
+impl PathSource for ExecPathSource<'_> {
+    fn vocab(&mut self) -> Result<Vocab> {
+        Vocab::load(self.0)
+    }
+
+    fn encode_iri(&mut self, iri: &str) -> Result<Option<ObjectId>> {
+        tm_core::TermReader::encode(self.0, &tm_core::Value::iri(iri))
+    }
+
+    fn resolve_view(&mut self, spec: ViewSpec) -> Result<Option<crate::scan::ResolvedView>> {
+        resolve_view(self.0, spec)
+    }
+
+    fn fetcher<'s>(
+        &'s mut self,
+        view: crate::scan::ResolvedView,
+        batch: usize,
+        graphs: Option<&[ObjectId]>,
+    ) -> Result<Box<dyn NeighbourFetch + 's>> {
+        Ok(Box::new(
+            Fetcher::new(&mut *self.0, view)
+                .with_batch(batch)
+                .with_graphs(graphs)?,
+        ))
+    }
+}
+
+/// A vocabulary read from a [`PathSource`] the first time a name needs it.
+struct LazySource<'e> {
+    src: &'e mut dyn PathSource,
+    vocab: Option<Vocab>,
+}
+
+impl VocabSource for LazySource<'_> {
+    fn vocab(&mut self) -> Result<&Vocab> {
+        if self.vocab.is_none() {
+            self.vocab = Some(self.src.vocab()?);
+        }
+        Ok(self.vocab.as_ref().expect("loaded"))
+    }
+}
+
 /// The path engine of one database: a breadth-first search over the product of a
 /// path automaton and the graph, shared by SPARQL paths, Cypher variable-length
 /// patterns, `tm_path` and `View::path`.
@@ -188,11 +253,45 @@ impl PathEngine {
         let mut fetch = Fetcher::new(exec, view)
             .with_batch(self.opts.batch)
             .with_graphs(req.graphs.as_deref())?;
+        self.search_with(&dfa, &res, &mut fetch, req, sink)
+    }
+
+    /// [`PathEngine::run`] reading through any [`PathSource`].
+    pub fn run_on(
+        &self,
+        src: &mut dyn PathSource,
+        req: &PathRequest<'_>,
+        sink: Sink<'_>,
+    ) -> Result<PathCompleteness> {
+        let expr = {
+            let mut lazy = LazySource {
+                src: &mut *src,
+                vocab: None,
+            };
+            syntax::parse(req.path, &mut lazy)?
+        };
+        let dfa = self.dfa(&expr)?;
+        let Some(view) = src.resolve_view(req.view)? else {
+            return Ok(PathCompleteness::Exhaustive);
+        };
+        let res = super::resolve::resolve_with(&mut |iri: &str| src.encode_iri(iri), &dfa)?;
+        let mut fetch = src.fetcher(view, self.opts.batch, req.graphs.as_deref())?;
+        self.search_with(&dfa, &res, &mut *fetch, req, sink)
+    }
+
+    fn search_with(
+        &self,
+        dfa: &Dfa,
+        res: &Resolved,
+        fetch: &mut dyn NeighbourFetch,
+        req: &PathRequest<'_>,
+        sink: Sink<'_>,
+    ) -> Result<PathCompleteness> {
         let mut budget = StateBudget::new(self.opts.max_states);
         let mut ctx = Ctx {
-            dfa: &dfa,
-            res: &res,
-            fetch: &mut fetch,
+            dfa,
+            res,
+            fetch,
             budget: &mut budget,
             max_hops: req.max_hops,
             end_filter: req.end,
@@ -208,6 +307,20 @@ impl PathEngine {
         };
         super::report::record(verdict);
         Ok(verdict)
+    }
+
+    /// [`PathEngine::eval_report`] reading through any [`PathSource`].
+    pub fn eval_report_on(
+        &self,
+        src: &mut dyn PathSource,
+        req: &PathRequest<'_>,
+    ) -> Result<(Vec<PathRow>, PathCompleteness)> {
+        let mut rows = Vec::new();
+        let verdict = self.run_on(src, req, &mut |r| {
+            rows.push(r);
+            Ok(true)
+        })?;
+        Ok((rows, verdict))
     }
 
     /// Runs a request and collects every row.

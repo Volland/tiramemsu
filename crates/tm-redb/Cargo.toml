@@ -1,0 +1,26 @@
+[package]
+name = "tm-redb"
+description = "Tiramemsu storage backend on redb: six live permutations, exact statistics and an FTS5-compatible text index"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+readme = "README.md"
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+tm-core = { workspace = true }
+tm-store = { workspace = true }
+redb = "4.4"
+
+[dev-dependencies]
+proptest = "1"
+tempfile = "3"
+tm-rusqlite = { path = "../tm-rusqlite" }
+
+[lints]
+workspace = true

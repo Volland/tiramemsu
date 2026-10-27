@@ -227,6 +227,10 @@ impl Lowerer<'_> {
             Function::HasLang => return Err(unsupported("hasLANG")),
             Function::HasLangDir => return Err(unsupported("hasLANGDIR")),
             Function::StrLangDir => return Err(unsupported("STRLANGDIR")),
+            // reachable only when another crate turns on spargebra's optional
+            // functions (`ADJUST`, `sep-0002`) in the same build
+            #[allow(unreachable_patterns)]
+            _ => return Err(unsupported("ADJUST")),
         })
     }
 }

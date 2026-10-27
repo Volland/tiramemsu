@@ -9,7 +9,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use tm_core::{Error, Result, Tx, TxId, TxOptions, TxReport};
+use tm_core::{Error, Result, TxHandle as Tx, TxId, TxOptions, TxReport};
 
 use crate::budget::QueryBudget;
 use crate::db::Db;

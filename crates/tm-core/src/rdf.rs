@@ -168,6 +168,13 @@ fn term(t: &RdfTerm, out: &mut String) {
     }
 }
 
+/// One term in N-Triples syntax (`<iri>`, `"lex"@lang`, `_:b`, `<<( … )>>`).
+pub fn write_term(t: &RdfTerm) -> String {
+    let mut out = String::new();
+    term(t, &mut out);
+    out
+}
+
 fn triple_body(t: &RdfTriple, out: &mut String) {
     term(&t.s, out);
     out.push(' ');

@@ -47,7 +47,18 @@ pub struct Resolved {
 
 /// Resolves every letter of `dfa` against the dictionary on `exec`.
 pub fn resolve(exec: &mut dyn Executor, dfa: &Dfa) -> Result<Resolved> {
-    let mut enc = |iri: &str| TermReader::encode(exec, &Value::iri(iri));
+    resolve_with(
+        &mut |iri: &str| TermReader::encode(exec, &Value::iri(iri)),
+        dfa,
+    )
+}
+
+/// [`resolve`] with any IRI lookup.
+pub fn resolve_with(
+    enc: &mut dyn FnMut(&str) -> Result<Option<ObjectId>>,
+    dfa: &Dfa,
+) -> Result<Resolved> {
+    let mut enc = |iri: &str| enc(iri);
     let mut letters = Vec::with_capacity(dfa.letters.len());
     let mut needs_rv = false;
     for l in &dfa.letters {

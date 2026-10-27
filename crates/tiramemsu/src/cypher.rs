@@ -3,7 +3,7 @@
 
 use std::sync::Arc;
 
-use tm_core::{Error, Executor, Result, SqlValue, TermReader, Tx, TxOptions, Value};
+use tm_core::{Error, Executor, Result, SqlValue, TermReader, TxHandle as Tx, TxOptions, Value};
 use tm_cypher::{CompileCtx, CypherParams, CypherResult, Rows, Runner, Vocab};
 use tm_exec::{CacheMode, QueryEngine, QueryResult};
 use tm_ir::{IrQuery, Params};
@@ -30,6 +30,33 @@ fn rows_of(r: &QueryResult) -> Result<Rows> {
         rows.push(out);
     }
     Ok(Rows { columns, rows })
+}
+
+/// [`volatile_entries`] on a storage-trait snapshot.
+fn volatile_entries_kv(
+    store: &dyn tm_core::store::ReadStore,
+    s: &Value,
+) -> Result<Vec<(String, Value)>> {
+    let Some(sid) = tm_store::dict::encode(store, s)? else {
+        return Ok(Vec::new());
+    };
+    let terms = tm_store::dict::TermCache::new(16);
+    let mut rows: Vec<(i64, i64)> = store
+        .volatile_all()?
+        .into_iter()
+        .filter(|(vs, _, _)| *vs == sid.raw())
+        .map(|(_, k, v)| (k, v.value))
+        .collect();
+    rows.sort_unstable();
+    let mut out = Vec::new();
+    for (k, v) in rows {
+        let key = terms.decode(store, tm_core::ObjectId::from_raw(k), false)?;
+        let val = terms.decode(store, tm_core::ObjectId::from_raw(v), false)?;
+        if let Value::Iri(k) = key {
+            out.push((k, val));
+        }
+    }
+    Ok(out)
 }
 
 fn volatile_entries(e: &mut dyn Executor, s: &Value) -> Result<Vec<(String, Value)>> {
@@ -79,11 +106,17 @@ impl Runner for ViewRunner<'_, '_> {
     }
 
     fn volatile_of(&mut self, s: &Value) -> Result<Vec<(String, Value)>> {
-        self.view.exec(|e, _| volatile_entries(e, s))
+        self.view.either(
+            |e, _| volatile_entries(e, s),
+            |st, _, _| volatile_entries_kv(st, s),
+        )
     }
 
     fn tx_instant(&mut self, t: u64) -> Result<Option<i64>> {
-        self.view.exec(|e, _| tm_core::read::tx_instant(e, t))
+        self.view.either(
+            |e, _| tm_core::read::tx_instant(e, t),
+            |st, _, _| st.tx_instant(t as i64),
+        )
     }
 
     fn path_max_hops(&self) -> u32 {
@@ -167,9 +200,15 @@ impl Runner for TxRunner<'_, '_> {
     fn run_ir(&mut self, q: &IrQuery, params: &Params) -> Result<Rows> {
         let p = self.engine.prepare(q, params)?;
         let engine = self.engine.clone();
-        let r = self
+        let r = match self
             .tx
-            .read_with(|e| engine.execute(e, CacheMode::Scoped, &p))?;
+            .read_store(|s| tm_native::execute(&engine, s, CacheMode::Scoped, &p))
+        {
+            Some(r) => r?,
+            None => self
+                .tx
+                .read_with(|e| engine.execute(e, CacheMode::Scoped, &p))?,
+        };
         rows_of(&r)
     }
 
@@ -182,11 +221,17 @@ impl Runner for TxRunner<'_, '_> {
     }
 
     fn volatile_of(&mut self, s: &Value) -> Result<Vec<(String, Value)>> {
-        self.tx.read_with(|e| volatile_entries(e, s))
+        match self.tx.read_store(|st| volatile_entries_kv(st, s)) {
+            Some(r) => r,
+            None => self.tx.read_with(|e| volatile_entries(e, s)),
+        }
     }
 
     fn tx_instant(&mut self, t: u64) -> Result<Option<i64>> {
-        self.tx.read_with(|e| tm_core::read::tx_instant(e, t))
+        match self.tx.read_store(|st| st.tx_instant(t as i64)) {
+            Some(r) => r,
+            None => self.tx.read_with(|e| tm_core::read::tx_instant(e, t)),
+        }
     }
 
     fn path_max_hops(&self) -> u32 {
@@ -239,7 +284,10 @@ impl View<'_> {
     /// ```
     pub fn cypher(&self, text: &str, params: &CypherParams) -> Result<CypherResult> {
         self.op(|| {
-            let vocab = vocab_of(self.exec(|e, _| read_settings(e))?);
+            let vocab = vocab_of(self.either(
+                |e, _| read_settings(e),
+                |s, _, _| tm_store::read::settings(s),
+            )?);
             let ctx = CompileCtx {
                 vocab,
                 view: self.descriptor(),
@@ -305,7 +353,10 @@ impl TxCypher for Tx<'_> {
         let engine = self.extension::<QueryEngine>().ok_or_else(|| {
             Error::unsupported("Cypher on a database opened without the query engine")
         })?;
-        let vocab = vocab_of(self.read_with(|e| read_settings(e))?);
+        let vocab = vocab_of(match self.read_store(tm_store::read::settings) {
+            Some(r) => r?,
+            None => self.read_with(|e| read_settings(e))?,
+        });
         let ctx = CompileCtx {
             vocab,
             view: tm_ir::View::NOW,

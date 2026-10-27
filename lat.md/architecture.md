@@ -1,3 +1,6 @@
+---
+openspec: [storage-trait]
+---
 # Architecture
 
 Tiramemsu is a stack of layers: two query front ends over one logical IR, a planner that routes to SQL or native operators, a temporal view layer, executor hosts, and one SQLite file.
@@ -116,6 +119,9 @@ The Rust workspace is split by layer so each front end compiles against the IR o
 | Crate | Responsibility | Depends on |
 |---|---|---|
 | `tm-core` | ObjectId codec, term dictionary, SQLite schema and migrations, tx engine, views, event log, volatile table, predicate schema, the `Executor` trait, the budget meter, text search and its FTS5 upkeep, conflict inspection, bundles | nothing SQLite-specific ([[architecture#Executor]]) |
+| `tm-store` | The typed storage traits `ReadStore`/`WriteStore`, the transaction engine and reads ported onto them, the in-memory reference store and the contract checks ([[architecture#Storage Backends]]) | `tm-core` |
+| `tm-redb` | The second backend: the storage traits on one redb file, six live and three history permutations, exact predicate statistics, the text index, durability modes ([[storage#redb Layout]]) | `tm-core`, `redb` |
+| `tm-native` | The native runner: the whole IR over the storage traits, with hybrid and worst-case-optimal joins ([[query#Native Runner]]) | `tm-exec`, `tm-store`, `tm-ir` |
 | `tm-rusqlite` | The first executor host: `rusqlite` with bundled SQLite, UDF and virtual-table registration | `rusqlite` (bundled), `tm-core` |
 | `tm-wasm` | The WebAssembly host: SQLite compiled to `wasm32-unknown-unknown`, memory or OPFS storage, verified journal mode, probed capabilities ([[architecture#WebAssembly Host]]) | `tm-rusqlite`, `rusqlite` → `sqlite-wasm-rs`, `sqlite-wasm-vfs` |
 | `tm-ir` | Logical algebra, semantic flags, view descriptors | `tm-core` (ids, views) |
@@ -125,6 +131,7 @@ The Rust workspace is split by layer so each front end compiles against the IR o
 | `tiramemsu` | Facade: `Db`, `View`, `Tx`, results, reader pool, budgets, bulk import, saved answers, conflict review and previews; the only crate bindings use | `tm-core`, `tm-rusqlite`; the others behind cargo features ([[architecture#Crates#Cargo Features]]) |
 | `tiramemsu-json` (`bindings/json`) | The JSON bridge: one `Database` with `call(op, args)`, shared by every binding ([[bindings#JSON Bridge]]) | `tiramemsu` with `sparql` and `cypher` |
 | `tiramemsu-mcp` | Local stdio MCP server with typed memory tools ([[api#MCP Tools]]) | `tiramemsu-json`, `tiramemsu` |
+| `tiramemsu-cli` | The `tm` binary: create, inspect, query, import, export, convert and compact files on either backend ([[api#CLI]]) | `tiramemsu` with `redb`, `tiramemsu-json`, `clap`, `oxttl` |
 
 Bindings (PyO3, napi-rs, WASM in `bindings/wasm`, MCP server) are separate crates on top of `tiramemsu`. The MCP server `tiramemsu-mcp` is a workspace crate under `crates/` built on the JSON bridge, so protocol code stays out of `tm-core` and the facade. See [[api#Bindings]].
 
@@ -136,6 +143,9 @@ skinparam componentStyle rectangle
 skinparam shadowing false
 
 [tm-core] as CORE
+[tm-store] as STORE
+[tm-redb] as REDB
+[tm-native] as NATIVE
 [tm-rusqlite] as RUSQ
 [tm-wasm] as WASM
 [tm-ir] as IR
@@ -145,12 +155,17 @@ skinparam shadowing false
 [tiramemsu] as FACADE
 [tiramemsu-json] as JSON
 [tiramemsu-mcp] as MCP
+[tiramemsu-cli] as CLI
 [tiramemsu-node] as NODE
 [tiramemsu-python] as PY
 [tiramemsu-wasm] as BWASM
 [rusqlite\n(bundled SQLite)] as RUSQLITE
 [sqlite-wasm-rs +\nsqlite-wasm-vfs] as SWASM
 
+STORE --> CORE
+REDB --> CORE
+NATIVE --> STORE
+NATIVE --> EXEC
 RUSQ --> CORE
 RUSQ --> RUSQLITE
 WASM --> RUSQ
@@ -164,6 +179,10 @@ FACADE --> RUSQ
 FACADE ..> EXEC : exec
 FACADE ..> SPARQL : sparql
 FACADE ..> CYPHER : cypher
+FACADE --> STORE
+FACADE ..> REDB : redb
+FACADE ..> NATIVE : exec
+CLI --> JSON
 JSON --> FACADE : sparql + cypher
 MCP --> JSON
 NODE --> JSON
@@ -182,9 +201,10 @@ The facade's query engine and front ends are optional dependencies (`add-optiona
 | Feature | Facade surface | Adds to the dependency tree |
 |---|---|---|
 | none | `Db`, transactions, speculation, views and `triples`, dependents, bundles and their JSON and N-Triples forms, previews, conflicts, text recall, bulk import, budgets | `tm-core`, `tm-rusqlite` |
-| `exec` | `execute_ir`, `explain_ir`, `View::path*`, LFTJ, the `ir` module and the engine open options | `tm-ir`, `tm-exec` |
+| `exec` | `execute_ir`, `explain_ir`, `View::path*`, LFTJ, the `ir` module and the engine open options; the native runner for redb files | `tm-ir`, `tm-exec`, `tm-native` |
 | `sparql` | `View::sparql*`, `SparqlResult`, `Solutions`; implies `exec` | `tm-sparql`, `spargebra`, `peg` |
 | `cypher` | `View::cypher`, `Db::cypher_write*`, `TxCypher`; implies `exec` | `tm-cypher`, `open-cypher` |
+| `redb` | `Backend::Redb`: create, open and convert redb files; queries on them need `exec` | `tm-redb`, `redb` |
 | `default` | `sparql` + `cypher`, and saved answers, which store queries of both languages | all |
 
 - **Serialisation is not parsing.** The RDF terms and the N-Triples writer moved from `tm-sparql` to [[crates/tm-core/src/rdf.rs#render]] and [[crates/tm-core/src/rdf.rs#write_ntriples]], which `tm-sparql` re-exports, so bundle N-Triples and JSON need no front end.
@@ -275,6 +295,45 @@ Writes check their violation first and return it in `Except`, leaving the state 
 The nine scan families (`liveSpo`, `livePos`, `liveOsp`, the three `hist*`, `validP`, `logAdd`, `logRet`) with their key columns and order, mirroring the SQLite index definitions.
 
 Keys append the rowid (`eid`), values compare as signed 64-bit integers, an absent value sorts first (SQLite NULL order), and the descending `t_add` of the history indexes is stored negated. See [[storage#Query Shapes]].
+
+## Storage Backends
+
+A second storage path beside SQLite: the typed traits of `tm-store`, one transaction engine over them, and backends that implement them. Decisions D37–D44 are in [[backends]].
+
+`ReadStore` (one snapshot) and `WriteStore` (one write transaction that reads its own writes) live in `tm_core::store` so that every crate can name them; they take ObjectId integers and plain rows, never SQL ([[crates/tm-core/src/store.rs#ReadStore]], [[crates/tm-core/src/store.rs#WriteStore]]). Their operations are the access shapes the engine needs:
+
+- point reads of a statement, a term (by id or key), a transaction instant, a meta counter, a volatile value, an embedding;
+- prefix scans over live or all statements with any bound positions (`Pattern`, `Scope`), in permutation order or eid order;
+- the log (`added_since`, `retracted_since`), `pred_multi`, and the text-index postings;
+- appends, the single retraction, the volatile upsert and delete. Nothing deletes or rewrites a statement, term or transaction, so never-forget holds by construction instead of by triggers ([[time-model#Never Forget]]).
+
+A `Backend` hands out snapshot readers and one writer; a `WriteTxn` commits or aborts. Rows hold the same integers as the SQLite file of the same history, which is what makes conversion lossless and differential tests exact.
+
+### Trait Engine
+
+`tm_store::Engine` and `tm_store::Tx` are a statement-by-statement port of the `tm-core` engine, with the same errors and reports ([[crates/tm-store/src/engine/mod.rs#Engine]]).
+
+It covers idempotent assert, create, confirm, cardinality and uniqueness, schema flags, cascade, supersede with dropped memberships, graphs, volatile state, bundles, embeddings and text upkeep.
+
+Speculation and dry runs abort their write transaction and then store the advanced id counters in a second one, so a backend needs no nested savepoints. Reads (views, `triples`, `values`, `events_since`, `dependents`, graphs, bundles, conflict inspection, evidence) are in `tm_store::read`, `conflict` and `evidence`; bundle export shares its algorithm with SQL through `tm_core::BundleSource`.
+
+Until `move-sqlite-onto-store`, the SQLite engine is the oracle: a property test runs random histories on both engines and requires identical reports, errors, rows, terms, counters, event logs, graphs, bundles, conflicts and views ([[crates/tm-store/tests/oracle.rs#random_histories_agree]]).
+
+### Write Handle
+
+A transaction body receives `tm_core::TxHandle`, exported by the facade as `Tx`: the same write API on every backend ([[crates/tm-core/src/handle.rs#TxHandle]]).
+
+Each engine's `Tx` implements the object-safe `TxOps` mirror of its write methods, so the handle erases which engine runs the transaction, and the SPARQL Update and Cypher write paths take the handle rather than the SQL engine's `Tx`. `TxHandle::read_with` reaches the SQL connection of a SQLite transaction and `TxHandle::read_store` the storage-trait state of a redb one. Positions are `IntoObject` values (ids, eids, transaction ids or values).
+
+### Reference Store
+
+`tm_store::mem::MemStore` keeps ordered maps behind one lock: the executable statement of the contract and the fast backend of property tests. A reader holds an `Arc` of the committed state; a writer copies it and swaps it in on commit.
+
+`tm_store::contract` holds the contract as checks any backend runs against itself (scans by every bound subset, eid order, scopes, refused duplicates and second retractions, engine behaviour, snapshot isolation).
+
+### Text Tokeniser
+
+The trait engine indexes string objects itself, with a tokeniser that follows FTS5's `unicode61 remove_diacritics 2`: letter, number and private-use runs, lower-cased, with diacritics removed from Latin letters only ([[crates/tm-store/src/text.rs#tokens]]).
 
 ## SQLite Boundary
 

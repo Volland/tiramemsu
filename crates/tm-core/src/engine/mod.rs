@@ -9,7 +9,8 @@ mod config;
 mod embedding;
 mod graph;
 mod ops;
-pub(crate) mod reserved;
+#[doc(hidden)]
+pub mod reserved;
 pub mod schema;
 mod supersede;
 mod volatile;

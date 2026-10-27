@@ -26,7 +26,15 @@
 </div>
 
 <section id="new" class="new"><div class="wrap">
-  <h2>New in 0.6: vector indexes in SPARQL and Cypher</h2>
+  <h2>New in 0.8: two engines, one memory</h2>
+  <p class="sub">Choose SQLite or redb when you create a memory; everything else detects it. redb is experimental in 0.8. <a href="articles/two-engines.html">Read why, with the benchmark →</a></p>
+  <ul class="hl">
+    <li><a href="articles/two-engines.html"><strong>redb backend</strong><span>A pure-Rust file with snapshot readers and no reader pool: the same ids, clocks and history as SQLite.</span></a></li>
+    <li><a href="articles/wcoj-on-kv.html"><strong>Native runner</strong><span>SPARQL and Cypher over redb with hybrid and worst-case-optimal joins: a hub triangle in 45 ms, not 5 s.</span></a></li>
+    <li><a href="articles/two-engines.html"><strong>The <code>tm</code> command</strong><span><code>tm create --backend redb</code>, <code>query</code>, <code>import</code>, <code>export</code>, <code>convert</code>, <code>compact</code>, <code>bench</code>.</span></a></li>
+    <li><a href="https://github.com/Volland/tiramemsu/blob/main/bench/backends/README.md"><strong>An honest benchmark</strong><span>Against SQLite and Oxigraph at a million statements, with every loss listed.</span></a></li>
+  </ul>
+  <h3 class="group">New in 0.6: vector indexes in SPARQL and Cypher</h3>
   <p class="sub">The whole vector loop now works from the query languages: create an index, add embeddings, search, drop. <a href="articles/vector-cookbook.html">See every sample →</a></p>
   <ul class="hl">
     <li><a href="articles/vector-cookbook.html#create"><strong>CREATE VECTOR INDEX</strong><span>Cypher index commands, Neo4j <code>indexConfig</code> included, plus <code>SHOW</code> and <code>DROP</code>.</span></a></li>

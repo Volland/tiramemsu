@@ -110,7 +110,7 @@ pub fn completeness(pairs: &[Pair]) -> Result<(), Vec<String>> {
     }
 }
 
-fn parse_view<'a>(db: &'a Db, spec: &Option<String>) -> View<'a> {
+pub fn parse_view<'a>(db: &'a Db, spec: &Option<String>) -> View<'a> {
     match spec.as_deref() {
         None | Some("now") => db.now(),
         Some("history") => db.history(),

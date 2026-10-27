@@ -888,7 +888,7 @@ class View:
 
         Returns ``{"regions": [{"kind", "note", "aliases", "queryPlan"}], "sql",
         "shortCircuit", "queryPlan"}``: where each region runs (``"sql"``,
-        ``"nativePath"`` or ``"nativeLftj"``) and why (``"lftjNative"``,
+        ``"nativePath"``, ``"nativeLftj"`` or ``"native"`` on redb) and why (``"lftjNative"``,
         ``"cyclicLftjDisabled"``, ``"lftjBelowEstimate"``, ...), the generated SQL and
         SQLite's ``EXPLAIN QUERY PLAN``.  Raises ``Unsupported`` for an update.
         """
@@ -929,8 +929,23 @@ class Database:
         text_index: Optional[bool] = None,
         lftj: Optional[bool] = None,
         lftj_min_rows: Optional[int] = None,
+        backend: Optional[str] = None,
+        durability: Optional[str] = None,
+        flush_interval_ms: Optional[int] = None,
+        flush_commits: Optional[int] = None,
+        create: bool = False,
     ) -> None:
         options: Dict[str, Any] = {}
+        if backend is not None:
+            options["backend"] = backend
+        if durability is not None:
+            options["durability"] = durability
+        if flush_interval_ms is not None:
+            options["flushIntervalMs"] = flush_interval_ms
+        if flush_commits is not None:
+            options["flushCommits"] = flush_commits
+        if create:
+            options["create"] = True
         if readers is not None:
             options["readers"] = readers
         if busy_timeout_ms is not None:
@@ -1204,6 +1219,20 @@ class Database:
     def optimize(self) -> None:
         """Refresh query-planner statistics after large imports."""
         _call(self._native, "optimize", "")
+
+    def sync(self) -> None:
+        """Make every committed transaction durable (a durable commit on redb, a
+        full WAL checkpoint on SQLite)."""
+        _call(self._native, "sync", "")
+
+    def compact(self) -> bool:
+        """Reclaim free space in a redb file; returns False on SQLite."""
+        return bool(json.loads(_call(self._native, "compact", ""))["compacted"])
+
+    @property
+    def backend(self) -> str:
+        """The storage backend of this database: ``"sqlite"`` or ``"redb"``."""
+        return str(self.info()["backend"])
 
     def info(self) -> Dict[str, Any]:
         """Return database information: path, reader count, path limits, whether an

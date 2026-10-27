@@ -12,6 +12,9 @@ use tm_exec::{CacheMode, Explain, PathRequest, PathRow, QueryResult, TimeRespect
 #[cfg(feature = "exec")]
 use tm_ir::{IrQuery, Params, PathCompleteness, PathMode};
 
+use tm_core::store::ReadStore;
+use tm_store::dict::TermCache;
+
 use crate::budget::QueryBudget;
 use crate::db::{Db, Engine};
 
@@ -37,6 +40,9 @@ enum Source<'a> {
     /// shared caches (`ConnSource::Speculative`).
     #[cfg_attr(not(all(feature = "sparql", feature = "cypher")), allow(dead_code))]
     Writer(&'a dyn WriterAccess, Option<&'a Engine>),
+    /// A key-value transaction's own state inside a speculation.
+    #[cfg_attr(not(feature = "redb"), allow(dead_code))]
+    Store(&'a dyn ReadStore, Option<&'a Engine>),
 }
 
 /// An immutable time selection: a transaction-time selector (now, as-of, history)
@@ -81,12 +87,45 @@ impl<'a> View<'a> {
         }
     }
 
+    pub(crate) fn on_store(
+        store: &'a dyn ReadStore,
+        spec: ViewSpec,
+        engine: Option<&'a Engine>,
+    ) -> View<'a> {
+        View {
+            spec,
+            src: Source::Store(store, engine),
+            budget: None,
+        }
+    }
+
     /// The database behind a view on committed state (`None` inside a speculation).
     #[cfg_attr(not(all(feature = "sparql", feature = "cypher")), allow(dead_code))]
     pub(crate) fn db(&self) -> Option<&'a Db> {
         match self.src {
             Source::Db(db) => Some(db),
-            Source::Writer(..) => None,
+            Source::Writer(..) | Source::Store(..) => None,
+        }
+    }
+
+    /// Runs a read on the backend of this view: `sql` on a SQLite connection,
+    /// `kv` on a storage-trait snapshot (with the term cache and whether it may
+    /// be used, which it may not on uncommitted state).
+    pub(crate) fn either<R>(
+        &self,
+        sql: impl FnOnce(&mut dyn Executor, Option<&TermReader>) -> Result<R>,
+        kv: impl FnOnce(&dyn ReadStore, &TermCache, bool) -> Result<R>,
+    ) -> Result<R> {
+        match self.src {
+            Source::Db(db) => match db.kv() {
+                Some(k) => {
+                    let r = k.store.read()?;
+                    kv(&*r, &k.terms, true)
+                }
+                None => self.exec(sql),
+            },
+            Source::Writer(..) => self.exec(sql),
+            Source::Store(store, _) => kv(store, &TermCache::new(64), false),
         }
     }
 
@@ -170,6 +209,9 @@ impl<'a> View<'a> {
                 })?;
                 Ok(out.expect("ran"))
             }
+            Source::Store(..) => Err(Error::MissingCapability {
+                capability: "sql".to_string(),
+            }),
         }
     }
 
@@ -203,7 +245,15 @@ impl<'a> View<'a> {
         o: Option<ObjectId>,
     ) -> Result<Vec<Triple>> {
         let spec = self.spec;
-        self.op(|| charged(self.exec(|e, _| read::triples(e, &spec, s, p, o))?, 7))
+        self.op(|| {
+            charged(
+                self.either(
+                    |e, _| read::triples(e, &spec, s, p, o),
+                    |r, _, _| tm_store::read::triples(r, &spec, s, p, o),
+                )?,
+                7,
+            )
+        })
     }
 
     /// The graphs of this view: every graph with at least one visible membership of a
@@ -228,7 +278,15 @@ impl<'a> View<'a> {
     // @lat: [[data-model#Named Graphs]]
     pub fn graphs(&self) -> Result<Vec<ObjectId>> {
         let spec = self.spec;
-        self.op(|| charged(self.exec(|e, _| read::graphs(e, &spec))?, 1))
+        self.op(|| {
+            charged(
+                self.either(
+                    |e, _| read::graphs(e, &spec),
+                    |r, _, _| tm_store::read::graphs(r, &spec),
+                )?,
+                1,
+            )
+        })
     }
 
     /// The eids of the statements that are members of `graph` in this view, ascending:
@@ -236,7 +294,15 @@ impl<'a> View<'a> {
     /// that no statement is in gives an empty list.
     pub fn graph_members(&self, graph: ObjectId) -> Result<Vec<Eid>> {
         let spec = self.spec;
-        self.op(|| charged(self.exec(|e, _| read::graph_members(e, &spec, graph))?, 1))
+        self.op(|| {
+            charged(
+                self.either(
+                    |e, _| read::graph_members(e, &spec, graph),
+                    |r, _, _| tm_store::read::graph_members(r, &spec, graph),
+                )?,
+                1,
+            )
+        })
     }
 
     /// The values of `(s, key)`: the objects of the statements the view selects,
@@ -244,23 +310,39 @@ impl<'a> View<'a> {
     /// value.
     pub fn values(&self, s: ObjectId, key: ObjectId) -> Result<Vec<ObjectId>> {
         let spec = self.spec;
-        self.op(|| charged(self.exec(|e, _| read::values(e, &spec, s, key))?, 1))
+        self.op(|| {
+            charged(
+                self.either(
+                    |e, _| read::values(e, &spec, s, key),
+                    |r, _, _| tm_store::read::values(r, &spec, s, key),
+                )?,
+                1,
+            )
+        })
     }
 
     /// Encodes a value for a lookup, so it can be passed to [`View::triples`],
     /// `View::path` (feature `exec`) or [`View::values`]. Never inserts: `None` when a dictionary value
     /// is not stored, so any pattern using it matches nothing.
     pub fn encode(&self, v: &Value) -> Result<Option<ObjectId>> {
-        self.op(|| self.exec(|e, _| TermReader::encode(e, v)))
+        self.op(|| {
+            self.either(
+                |e, _| TermReader::encode(e, v),
+                |r, _, _| tm_store::dict::encode(r, v),
+            )
+        })
     }
 
     /// Decodes an ObjectId into its value.
     pub fn decode(&self, id: ObjectId) -> Result<Value> {
         self.op(|| {
-            self.exec(|e, cache| match cache {
-                Some(r) => r.decode(e, id, true),
-                None => TermReader::new(1).decode(e, id, false),
-            })
+            self.either(
+                |e, cache| match cache {
+                    Some(r) => r.decode(e, id, true),
+                    None => TermReader::new(1).decode(e, id, false),
+                },
+                |r, terms, cache| terms.decode(r, id, cache),
+            )
         })
     }
 
@@ -271,11 +353,37 @@ impl<'a> View<'a> {
         self.spec.into()
     }
 
+    /// Runs a prepared query on this view's backend: SQL on SQLite, the native
+    /// runner on a key-value store.
+    #[cfg(feature = "exec")]
+    pub(crate) fn run_prepared(
+        &self,
+        engine: &Engine,
+        p: &tm_exec::Prepared,
+    ) -> Result<QueryResult> {
+        let mode = match self.src {
+            Source::Db(_) => CacheMode::Shared,
+            Source::Writer(..) | Source::Store(..) => CacheMode::Scoped,
+        };
+        self.either(
+            |e, _| engine.execute(e, mode, p),
+            |s, _, shared| {
+                let mode = if shared {
+                    CacheMode::Shared
+                } else {
+                    CacheMode::Scoped
+                };
+                tm_native::execute(engine, s, mode, p)
+            },
+        )
+    }
+
     #[cfg(feature = "exec")]
     pub(crate) fn engine(&self) -> Result<&'a Engine> {
         let e = match self.src {
             Source::Db(db) => db.engine(),
             Source::Writer(_, e) => e,
+            Source::Store(_, e) => e,
         };
         e.ok_or_else(|| Error::Unsupported {
             feature: "queries on a database opened without the query engine".to_string(),
@@ -290,22 +398,25 @@ impl<'a> View<'a> {
     pub fn execute_ir(&self, q: &IrQuery, params: &Params) -> Result<QueryResult> {
         let engine = self.engine()?;
         let p = engine.prepare(q, params)?;
-        let mode = match self.src {
-            Source::Db(_) => CacheMode::Shared,
-            Source::Writer(..) => CacheMode::Scoped,
-        };
         // rows and bytes are charged by the engine as it decodes
-        self.op(|| self.exec(|e, _| engine.execute(e, mode, &p)))
+        self.op(|| self.run_prepared(engine, &p))
     }
 
     #[cfg(feature = "exec")]
     /// Explains an IR query: regions, SQL, parameters and `EXPLAIN QUERY PLAN`
     /// (whole and per SQL region), with the real parameters bound. Never steps
-    /// the query.
+    /// the query on SQLite. On redb the native runner runs the query (under
+    /// this view's budget) and reports each step it took: the pattern, its
+    /// index permutation, the join kind, the estimate and the rows it saw.
     pub fn explain_ir(&self, q: &IrQuery, params: &Params) -> Result<Explain> {
         let engine = self.engine()?;
         let p = engine.prepare(q, params)?;
-        self.op(|| self.exec(|e, _| engine.explain(e, &p)))
+        self.op(|| {
+            self.either(
+                |e, _| engine.explain(e, &p),
+                |s, _, _| tm_native::explain(engine, s, &p),
+            )
+        })
     }
 
     #[cfg(feature = "exec")]
@@ -475,22 +586,21 @@ impl<'a> View<'a> {
             args.max_hops
         };
         self.op(|| {
-            let (rows, completeness) = self.exec(|e, _| {
-                engine.eval_report(
-                    e,
-                    &PathRequest {
-                        start,
-                        path,
-                        mode: args.mode,
-                        max_hops: Some(max_hops),
-                        hop_cap,
-                        view,
-                        end: None,
-                        graphs: args.graphs.clone(),
-                        time_respecting: args.time_respecting,
-                    },
-                )
-            })?;
+            let req = PathRequest {
+                start,
+                path,
+                mode: args.mode,
+                max_hops: Some(max_hops),
+                hop_cap,
+                view,
+                end: None,
+                graphs: args.graphs.clone(),
+                time_respecting: args.time_respecting,
+            };
+            let (rows, completeness) = self.either(
+                |e, _| engine.eval_report(e, &req),
+                |s, _, _| engine.eval_report_on(&mut tm_native::path::StorePathSource(s), &req),
+            )?;
             if budget::active() {
                 budget::charge_rows(rows.len() as u64)?;
                 let hops: u64 = rows
@@ -505,7 +615,15 @@ impl<'a> View<'a> {
 
     /// Events with `t > since` visible to this view's snapshot (the whole log).
     pub fn events_since(&self, since: u64) -> Result<Vec<Event>> {
-        self.op(|| charged(self.exec(|e, _| read::events_since(e, since))?, 8))
+        self.op(|| {
+            charged(
+                self.either(
+                    |e, _| read::events_since(e, since),
+                    |r, _, _| tm_store::read::events_since(r, since),
+                )?,
+                8,
+            )
+        })
     }
 }
 
@@ -544,7 +662,15 @@ impl View<'_> {
     // @lat: [[time-model#Cascade#Dependents]]
     pub fn dependents(&self, eid: Eid) -> Result<Vec<Eid>> {
         let spec = self.spec;
-        self.op(|| charged(self.exec(|e, _| read::dependents(e, &spec, eid))?, 1))
+        self.op(|| {
+            charged(
+                self.either(
+                    |e, _| read::dependents(e, &spec, eid),
+                    |r, _, _| tm_store::read::dependents(r, &spec, eid),
+                )?,
+                1,
+            )
+        })
     }
 
     /// The fact bundle of `root` in this view: the statements that stand on `root`
@@ -586,7 +712,10 @@ impl View<'_> {
     pub fn bundle(&self, root: Eid) -> Result<Bundle> {
         let spec = self.spec;
         self.op(|| {
-            let b = self.exec(|e, _| read::bundle(e, &spec, root))?;
+            let b = self.either(
+                |e, _| read::bundle(e, &spec, root),
+                |r, _, _| tm_store::read::bundle(r, &spec, root),
+            )?;
             charge(b.statements.len(), 5)?;
             Ok(b)
         })
@@ -644,10 +773,13 @@ impl View<'_> {
     pub fn text_search(&self, query: &TextQuery) -> Result<Vec<TextHit>> {
         let spec = self.spec;
         self.op(|| {
-            self.exec(|e, cache| match cache {
-                Some(r) => text::search(e, &spec, query, r, true),
-                None => text::search(e, &spec, query, &TermReader::new(64), false),
-            })
+            self.either(
+                |e, cache| match cache {
+                    Some(r) => text::search(e, &spec, query, r, true),
+                    None => text::search(e, &spec, query, &TermReader::new(64), false),
+                },
+                |r, terms, cache| tm_store::search::text_search(r, &spec, query, terms, cache),
+            )
         })
     }
 }
@@ -692,10 +824,13 @@ impl View<'_> {
     pub fn vector_search(&self, query: &VectorQuery) -> Result<VectorResult> {
         let spec = self.spec;
         self.op(|| {
-            self.exec(|e, cache| match cache {
-                Some(r) => vector::search(e, &spec, query, r, true),
-                None => vector::search(e, &spec, query, &TermReader::new(64), false),
-            })
+            self.either(
+                |e, cache| match cache {
+                    Some(r) => vector::search(e, &spec, query, r, true),
+                    None => vector::search(e, &spec, query, &TermReader::new(64), false),
+                },
+                |r, terms, cache| tm_store::search::vector_search(r, &spec, query, terms, cache),
+            )
         })
     }
 
@@ -703,7 +838,12 @@ impl View<'_> {
     /// order, at most `limit`: the backlog of an embedding job.
     pub fn unembedded(&self, model: ObjectId, limit: Option<usize>) -> Result<Vec<Eid>> {
         let spec = self.spec;
-        self.op(|| self.exec(|e, _| vector::unembedded(e, &spec, model, limit)))
+        self.op(|| {
+            self.either(
+                |e, _| vector::unembedded(e, &spec, model, limit),
+                |r, _, _| tm_store::search::unembedded(r, &spec, model, limit),
+            )
+        })
     }
 
     /// Hybrid recall: text and vector recall in this view, fused by reciprocal
@@ -718,10 +858,13 @@ impl View<'_> {
     pub fn recall(&self, query: &RecallQuery) -> Result<Vec<RecallHit>> {
         let spec = self.spec;
         self.op(|| {
-            self.exec(|e, cache| match cache {
-                Some(r) => recall::recall(e, &spec, query, r, true),
-                None => recall::recall(e, &spec, query, &TermReader::new(64), false),
-            })
+            self.either(
+                |e, cache| match cache {
+                    Some(r) => recall::recall(e, &spec, query, r, true),
+                    None => recall::recall(e, &spec, query, &TermReader::new(64), false),
+                },
+                |r, terms, cache| tm_store::search::recall(r, &spec, query, terms, cache),
+            )
         })
     }
 }

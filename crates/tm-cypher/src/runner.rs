@@ -2,7 +2,7 @@
 //! the store. The facade implements it over a view (reads) or a transaction
 //! (reads and writes), so `tm-cypher` stays free of `tm-exec` and SQLite.
 
-use tm_core::{Result, Tx, Value};
+use tm_core::{Result, TxHandle as Tx, Value};
 use tm_ir::{IrQuery, Params};
 
 /// The rows of an IR query: every cell is a term (`None` = missing).

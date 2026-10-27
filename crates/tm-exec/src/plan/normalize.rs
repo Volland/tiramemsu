@@ -13,7 +13,7 @@
 
 use std::collections::HashMap;
 
-use tm_core::{codec, Executor, ObjectId, Result, SqlValue, Tag, Value};
+use tm_core::{codec, Executor, ObjectId, Result, Tag, Value};
 use tm_ir::display::path_text_canonical;
 use tm_ir::validate::scope;
 use tm_ir::{
@@ -21,12 +21,12 @@ use tm_ir::{
     TriplePattern, TxSel, ValidSel, Var, VarSet, View,
 };
 
-use super::encode::{encode_value, position_ok, value_position_ok, Enc, Pos};
-use super::resolve::resolve;
+use super::encode::{position_ok, value_position_ok, Enc, Pos};
+use super::resolve::resolve_with;
 use super::route::{bound_before, bound_by_non_paths, orient, path_patterns, Orientation};
 use super::{
-    Cell, Node, PAgg, PConst, PExpr, PGraphs, PKey, PLookup, PObj, PPath, PRecall, PTerm, PText,
-    PTriple, PValues, PVector, PVirtual, PVolatile,
+    Cell, ExecSource, Node, PAgg, PConst, PExpr, PGraphs, PKey, PLookup, PObj, PPath, PRecall,
+    PTerm, PText, PTriple, PValues, PVector, PVirtual, PVolatile, PlanSource,
 };
 use crate::error::invalid;
 use crate::path::ast::nullable;
@@ -40,7 +40,7 @@ pub const SYNTHETIC_BASE: u64 = 1 << 58;
 
 /// Builds the plan tree of one query on the executing connection.
 pub struct Planner<'e> {
-    exec: &'e mut dyn Executor,
+    src: Box<dyn PlanSource + 'e>,
     sem: Semantics,
     views: HashMap<View, Option<ResolvedView>>,
     consts: HashMap<String, Enc>,
@@ -97,8 +97,13 @@ enum Ep {
 impl<'e> Planner<'e> {
     /// A planner for `q` reading through `exec`.
     pub fn new(exec: &'e mut dyn Executor, q: &IrQuery) -> Planner<'e> {
+        Planner::with_source(Box::new(ExecSource(exec)), q)
+    }
+
+    /// A planner for `q` reading through any [`PlanSource`].
+    pub fn with_source(src: Box<dyn PlanSource + 'e>, q: &IrQuery) -> Planner<'e> {
         Planner {
-            exec,
+            src,
             sem: q.semantics,
             views: HashMap::new(),
             consts: HashMap::new(),
@@ -114,7 +119,7 @@ impl<'e> Planner<'e> {
         if let Some(r) = self.views.get(v) {
             return Ok(*r);
         }
-        let r = resolve(&mut *self.exec, v)?;
+        let r = resolve_with(&mut *self.src, v)?;
         self.views.insert(*v, r);
         Ok(r)
     }
@@ -124,7 +129,10 @@ impl<'e> Planner<'e> {
         if let Some(e) = self.consts.get(&k) {
             return Ok(e.clone());
         }
-        let e = encode_value(&mut *self.exec, v)?;
+        let e = match self.src.encode(v)? {
+            Some(id) => Enc::Id(id),
+            None => Enc::Missing(v.canonical()),
+        };
         self.consts.insert(k, e.clone());
         Ok(e)
     }
@@ -146,13 +154,7 @@ impl<'e> Planner<'e> {
         if let Some(m) = self.pred_multi.get(&p.raw()) {
             return Ok(*m);
         }
-        let m = self
-            .exec
-            .query_i64(
-                "SELECT 1 FROM pred_multi WHERE p = ?1",
-                &[SqlValue::Integer(p.raw())],
-            )?
-            .is_some();
+        let m = self.src.pred_multi(p)?;
         self.pred_multi.insert(p.raw(), m);
         Ok(m)
     }

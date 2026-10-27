@@ -209,6 +209,10 @@ impl Lowerer<'_> {
             | GraphPattern::Distinct { .. }
             | GraphPattern::Reduced { .. }
             | GraphPattern::Slice { .. } => self.modifiers(gp, sc),
+            // reachable only when another crate turns on spargebra's optional
+            // syntax (`LATERAL`, `sep-0006`) in the same build
+            #[allow(unreachable_patterns)]
+            _ => Err(unsupported("LATERAL")),
         }
     }
 

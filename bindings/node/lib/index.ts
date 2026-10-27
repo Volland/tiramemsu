@@ -374,11 +374,21 @@ export interface OpenOptions {
   lftj?: boolean;
   /** The LFTJ estimate threshold: some pattern must match at least this many statements (default 100000; 0 = always). */
   lftjMinRows?: number;
+  /** The backend of a new file: "auto" (SQLite), "sqlite" or "redb". An existing file is detected from its header. */
+  backend?: "auto" | "sqlite" | "redb";
+  /** When commits become durable: "normal" (default), "immediate" or "none". */
+  durability?: "normal" | "immediate" | "none";
+  /** redb group commit: the longest a normal commit stays non-durable (default 50). */
+  flushIntervalMs?: number;
+  /** redb group commit: a normal commit after this many non-durable ones is durable (default 1000). */
+  flushCommits?: number;
+  /** Fail with `AlreadyExists` when the file exists (default: false). */
+  create?: boolean;
 }
 
 /** How one region of an explained query runs and why. */
 export interface ExplainRegion {
-  kind: "sql" | "nativePath" | "nativeLftj";
+  kind: "sql" | "nativePath" | "nativeLftj" | "native";
   note:
     | "none"
     | "cyclicLftjDisabled"
@@ -999,6 +1009,8 @@ function txArgs(args: Record<string, unknown>, options?: TxOptions): Record<stri
 /** Database metadata returned by `Database.info()`. */
 export interface DatabaseInfo {
   path: string;
+  /** The storage backend: "sqlite" or "redb". */
+  backend: "sqlite" | "redb";
   readers: number;
   pathMaxHops: number;
   importActive: boolean;
@@ -1412,6 +1424,19 @@ export class Database {
 
   /** Refreshes the query planner's statistics (run after large imports). */
   optimize(): void { callNative(this._db, "optimize", {}); }
+
+  /** Makes every committed transaction durable (a durable commit on redb, a WAL checkpoint on SQLite). */
+  sync(): void { callNative(this._db, "sync", {}); }
+
+  /** Reclaims free space in a redb file; returns false on SQLite. */
+  compact(): boolean {
+    return (callNative(this._db, "compact", {}) as { compacted: boolean }).compacted;
+  }
+
+  /** The storage backend of this database. */
+  get backend(): "sqlite" | "redb" {
+    return this.info().backend;
+  }
 
   /**
    * Returns database metadata: file path, reader count, pathMaxHops, whether an import

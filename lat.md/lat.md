@@ -17,3 +17,5 @@ This directory defines the high-level concepts, business logic, and architecture
 
 - [[paper]] — Research manuscript artifacts and the isolated arXiv source-package workflow.
 - [[code-ontology]] — shared vocabulary of intent types and typed edges between intent and code
+- [[backends]] — Decisions D37–D44: the typed storage trait, the redb backend, the native runner, durability modes and backend detection
+- [[constraints]] — Project-level constraints that bind several decisions, with their sources

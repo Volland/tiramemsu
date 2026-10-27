@@ -1604,3 +1604,44 @@ fn every_bridge_surface_returns_the_same_vector_hits() {
         assert_eq!(&crows[i][1], rank, "{cypher}");
     }
 }
+
+#[test]
+fn redb_backend_through_the_bridge() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("m.redb");
+    let p = path.to_str().unwrap();
+    let opts =
+        json!({ "backend": "redb", "durability": "immediate", "create": true, "textIndex": true });
+    let db = Database::open(p, &opts).unwrap();
+    assert_eq!(db.call("info", &J::Null).unwrap()["backend"], "redb");
+    db.call(
+        "transact",
+        &json!({ "ops": [
+            { "op": "assert", "s": v("alice"), "p": v("note"), "o": "met at the Lisbon offsite" }
+        ]}),
+    )
+    .unwrap();
+    let hits = db.call("textSearch", &json!({ "text": "lisbon" })).unwrap();
+    assert_eq!(hits.as_array().map_or(0, Vec::len), 1, "{hits}");
+    db.call("sync", &J::Null).unwrap();
+    // queries run on the native runner, and explain says so
+    let r = db
+        .call("sparql", &json!({ "text": "SELECT * WHERE { ?s ?p ?o }" }))
+        .unwrap();
+    assert_eq!(r["rows"].as_array().map_or(0, Vec::len), 1, "{r}");
+    let ex = db
+        .call(
+            "explainSparql",
+            &json!({ "text": "SELECT ?s WHERE { ?s v:note ?o }" }),
+        )
+        .unwrap();
+    assert_eq!(ex["regions"][0]["kind"], "native", "{ex}");
+    drop(db);
+    // `create` refuses an existing file; plain open detects the backend
+    let again = Database::open(p, &opts).unwrap_err();
+    assert_eq!(again.code(), "AlreadyExists");
+    let db = Database::open(p, &J::Null).unwrap();
+    assert_eq!(db.call("info", &J::Null).unwrap()["backend"], "redb");
+    let bad = Database::open(p, &json!({ "backend": "oracle" })).unwrap_err();
+    assert_eq!(bad.code(), "InvalidArgument");
+}

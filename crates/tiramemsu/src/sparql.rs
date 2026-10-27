@@ -130,7 +130,10 @@ impl View<'_> {
         };
         let (vocab_iri, prefixes) = match settings {
             Some(s) => s.clone(),
-            None => self.exec(|e, _| read_settings(e))?,
+            None => self.either(
+                |e, _| read_settings(e),
+                |s, _, _| tm_store::read::settings(s),
+            )?,
         };
         if let Some(v) = vocab_iri {
             env.vocab = v;
@@ -283,13 +286,22 @@ impl View<'_> {
         };
         let main = engine.prepare(&p.query, params)?;
         let (sol, paths) = tm_exec::path::report::collect(|| {
-            self.exec(|e, _| {
-                let raw = to_solutions(&engine.execute(&mut *e, mode, &main)?)?;
-                p.assemble(raw, &mut |q| {
-                    let lookup = engine.prepare(q, &Params::new())?;
-                    to_solutions(&engine.execute(&mut *e, mode, &lookup)?)
-                })
-            })
+            self.either(
+                |e, _| {
+                    let raw = to_solutions(&engine.execute(&mut *e, mode, &main)?)?;
+                    p.assemble(raw, &mut |q| {
+                        let lookup = engine.prepare(q, &Params::new())?;
+                        to_solutions(&engine.execute(&mut *e, mode, &lookup)?)
+                    })
+                },
+                |s, _, _| {
+                    let raw = to_solutions(&tm_native::execute(engine, s, mode, &main)?)?;
+                    p.assemble(raw, &mut |q| {
+                        let lookup = engine.prepare(q, &Params::new())?;
+                        to_solutions(&tm_native::execute(engine, s, mode, &lookup)?)
+                    })
+                },
+            )
         });
         let mut sol = sol?;
         sol.path_completeness = paths;
@@ -305,7 +317,11 @@ impl View<'_> {
         let report = db.transact(TxOptions::default(), |tx| {
             tm_sparql::update::run(plan, tx, &mut |tx, q| {
                 let p = engine.prepare(q, &Params::new())?;
-                let r = tx.read_with(|e| engine.execute(e, CacheMode::Scoped, &p))?;
+                let r =
+                    match tx.read_store(|s| tm_native::execute(engine, s, CacheMode::Scoped, &p)) {
+                        Some(r) => r?,
+                        None => tx.read_with(|e| engine.execute(e, CacheMode::Scoped, &p))?,
+                    };
                 to_solutions(&r)
             })
         })?;

@@ -217,10 +217,13 @@ impl View<'_> {
     pub fn conflicts(&self, q: &ConflictQuery) -> Result<Vec<Conflict>> {
         let spec = self.spec();
         self.op(|| {
-            self.exec(|e, cache| match cache {
-                Some(r) => conflict::inspect(e, &spec, q, r, true),
-                None => conflict::inspect(e, &spec, q, &TermReader::new(64), false),
-            })
+            self.either(
+                |e, cache| match cache {
+                    Some(r) => conflict::inspect(e, &spec, q, r, true),
+                    None => conflict::inspect(e, &spec, q, &TermReader::new(64), false),
+                },
+                |r, terms, cache| tm_store::conflict::inspect(r, &spec, q, terms, cache),
+            )
         })
     }
 }

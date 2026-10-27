@@ -1,0 +1,27 @@
+[package]
+name = "tm-store"
+description = "Tiramemsu storage trait: typed ReadStore/WriteStore, one transaction engine over it, and an in-memory reference store"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+readme = "README.md"
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+tm-core = { workspace = true }
+lru = "0.18"
+unicode-normalization = "0.1"
+
+[dev-dependencies]
+proptest = "1"
+tempfile = "3"
+tm-rusqlite = { path = "../tm-rusqlite" }
+rusqlite = { version = "0.40", features = ["bundled"] }
+
+[lints]
+workspace = true

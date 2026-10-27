@@ -129,7 +129,8 @@ impl EmbeddingModel {
         }
     }
 
-    pub(crate) fn check(&self) -> Result<()> {
+    #[doc(hidden)]
+    pub fn check(&self) -> Result<()> {
         if self.dimensions == 0 || self.dimensions > MAX_DIMENSIONS {
             return Err(Error::invalid_query(format!(
                 "an embedding model needs 1 to {MAX_DIMENSIONS} dimensions, got {}",
@@ -141,7 +142,8 @@ impl EmbeddingModel {
 
     /// Checks `v` against the model and returns the vector to store or compare:
     /// unit length for cosine.
-    pub(crate) fn prepare(&self, v: &[f32], what: &str) -> Result<Vec<f32>> {
+    #[doc(hidden)]
+    pub fn prepare(&self, v: &[f32], what: &str) -> Result<Vec<f32>> {
         if v.len() != self.dimensions as usize {
             return Err(Error::invalid_query(format!(
                 "{what} has {} components, the model has {} dimensions",
@@ -231,7 +233,8 @@ pub fn sign_bits(v: &[f32]) -> Vec<u8> {
     out
 }
 
-fn hamming(a: &[u8], b: &[u8]) -> u32 {
+#[doc(hidden)]
+pub fn hamming(a: &[u8], b: &[u8]) -> u32 {
     a.iter().zip(b).map(|(x, y)| (x ^ y).count_ones()).sum()
 }
 
@@ -303,7 +306,8 @@ pub fn f16_to_f32(h: u16) -> f32 {
     f32::from_bits(bits)
 }
 
-fn similarity(metric: Metric, q: &[f32], v: &[f32]) -> f64 {
+#[doc(hidden)]
+pub fn similarity(metric: Metric, q: &[f32], v: &[f32]) -> f64 {
     match metric {
         Metric::Cosine | Metric::Dot => {
             let mut acc = [0f32; 8];
@@ -828,7 +832,8 @@ pub fn compare(a: &VectorHit, b: &VectorHit) -> Ordering {
         .then_with(|| a.eid.cmp(&b.eid))
 }
 
-pub(crate) fn compare_by_evidence(a: (&TextEvidence, Eid), b: (&TextEvidence, Eid)) -> Ordering {
+#[doc(hidden)]
+pub fn compare_by_evidence(a: (&TextEvidence, Eid), b: (&TextEvidence, Eid)) -> Ordering {
     compare_evidence(a.0, b.0).then_with(|| a.1.cmp(&b.1))
 }
 

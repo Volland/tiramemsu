@@ -17,6 +17,20 @@ use crate::sqlgen::ParamAlloc;
 /// Default number of frontier nodes per `rarray` chunk.
 pub const DEFAULT_BATCH: usize = 256;
 
+/// The neighbours of a batch of nodes over one automaton letter, in one view: the
+/// path search reads the graph only through this. [`Fetcher`] answers it with
+/// SQL; the native runner with the store's permutations.
+pub trait NeighbourFetch {
+    /// The neighbours of each node, sorted by [`Nb::key`].
+    fn fetch(&mut self, letter: &RLetter, nodes: &[i64]) -> Result<HashMap<i64, Vec<Nb>>>;
+}
+
+impl NeighbourFetch for Fetcher<'_> {
+    fn fetch(&mut self, letter: &RLetter, nodes: &[i64]) -> Result<HashMap<i64, Vec<Nb>>> {
+        Fetcher::fetch(self, letter, nodes)
+    }
+}
+
 /// One neighbour: a hop from `from` to `to`.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct Nb {

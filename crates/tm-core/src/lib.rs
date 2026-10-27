@@ -11,13 +11,16 @@ pub mod engine;
 pub mod error;
 pub mod event;
 pub mod exec;
+pub mod handle;
 pub mod id;
 pub mod mapping;
 pub mod rdf;
 pub mod read;
 pub mod recall;
 pub mod report;
+pub mod sqlstore;
 pub mod storage;
+pub mod store;
 pub mod term;
 pub mod text;
 pub mod value;
@@ -26,7 +29,7 @@ pub mod view;
 pub mod vocab;
 
 pub use budget::{CancelToken, Interrupt, ResultLimit};
-pub use bundle::{BTerm, Bundle, BundleStatement, ImportReport, ImportedStatement};
+pub use bundle::{BTerm, Bundle, BundleSource, BundleStatement, ImportReport, ImportedStatement};
 pub use clock::{Clock, ManualClock, SystemClock};
 pub use conflict::{Conflict, ConflictEvidence, ConflictQuery, ConflictValue};
 pub use engine::{IntoObject, PredicateSchema, Store, StoreOptions, Tx};
@@ -36,6 +39,7 @@ pub use exec::{
     AggregateFunction, AggregateState, Capabilities, ConnTableFunction, ConnTableImpl, Executor,
     Host, HostOptions, HostRegistry, Params, ScalarFunction, SqlError, SqlValue, TableFunction,
 };
+pub use handle::{IntoObj, Obj, TxHandle, TxOps};
 pub use id::{Eid, ObjectId, Tag, TxId};
 pub use mapping::Vocab;
 pub use recall::{RecallHit, RecallQuery};

@@ -41,7 +41,9 @@ use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
-use tiramemsu::{BulkImport, CancelToken, Db, Error, OpenOptions, QueryBudget, TxOptions};
+use tiramemsu::{
+    Backend, BulkImport, CancelToken, Db, Durability, Error, OpenOptions, QueryBudget, TxOptions,
+};
 
 pub use value::{value_from_json, value_to_json};
 
@@ -124,6 +126,11 @@ impl BindError {
                 Error::ResultLimitExceeded { .. } => "ResultLimitExceeded",
                 Error::ForeignFile(_) => "ForeignFile",
                 Error::Sqlite(_) => "Sqlite",
+                Error::Storage { .. } => "Storage",
+                Error::UnknownFormat { .. } => "UnknownFormat",
+                Error::BackendMismatch { .. } => "BackendMismatch",
+                Error::AlreadyExists(_) => "AlreadyExists",
+                Error::BackendNotCompiled { .. } => "BackendNotCompiled",
                 Error::Custom(_) => "Custom",
                 _ => "Error",
             },
@@ -173,10 +180,27 @@ impl Database {
     /// `pathMaxHops`, `pathMaxStates`, `readerTimeoutMs`, `textIndex` (a
     /// boolean: build the text index at open), `lftj` (a boolean: route pure cyclic
     /// patterns to the native cyclic-join operator) and `lftjMinRows` (its
-    /// estimate threshold); anything else is rejected.
+    /// estimate threshold), `backend` (`"auto"`, `"sqlite"` or `"redb"`: the
+    /// backend of a new file; an existing file is detected), `durability`
+    /// (`"normal"`, `"immediate"` or `"none"`), `flushIntervalMs` and
+    /// `flushCommits` (redb group commit) and `create` (a boolean: fail with
+    /// `AlreadyExists` when the file exists); anything else is rejected.
     pub fn open(path: &str, options: &J) -> Res<Database> {
         let opts = Database::open_options(options)?;
-        Ok(Database::from_db(Db::open(path, opts)?))
+        let create = options
+            .get("create")
+            .map(|c| {
+                c.as_bool()
+                    .ok_or_else(|| arg("option create must be a boolean"))
+            })
+            .transpose()?
+            .unwrap_or(false);
+        let db = if create {
+            Db::create(path, opts.backend, opts)?
+        } else {
+            Db::open(path, opts)?
+        };
+        Ok(Database::from_db(db))
     }
 
     /// The [`OpenOptions`] of a JSON `options` object, as [`Database::open`] reads
@@ -190,6 +214,22 @@ impl Database {
                     opts.text_index = v
                         .as_bool()
                         .ok_or_else(|| arg("option textIndex must be a boolean"))?;
+                    continue;
+                }
+                if k == "create" {
+                    continue;
+                }
+                if k == "backend" {
+                    opts.backend = v.as_str().and_then(Backend::from_name).ok_or_else(|| {
+                        arg("option backend must be \"auto\", \"sqlite\" or \"redb\"")
+                    })?;
+                    continue;
+                }
+                if k == "durability" {
+                    opts.durability =
+                        v.as_str().and_then(Durability::from_name).ok_or_else(|| {
+                            arg("option durability must be \"normal\", \"immediate\" or \"none\"")
+                        })?;
                     continue;
                 }
                 if k == "lftj" {
@@ -210,6 +250,8 @@ impl Database {
                     "pathMaxStates" => opts.path_max_states = n as usize,
                     "readerTimeoutMs" => opts.reader_timeout = Some(Duration::from_millis(n)),
                     "lftjMinRows" => opts.planner.lftj.min_rows_estimate = n,
+                    "flushIntervalMs" => opts.flush_interval = Duration::from_millis(n),
+                    "flushCommits" => opts.flush_commits = n,
                     other => return Err(arg(format!("unknown option {other:?}"))),
                 }
             }
@@ -434,9 +476,15 @@ impl Database {
                 Ok(J::Null)
             }
             "rebuildTextIndex" => Ok(json!({ "values": self.db.rebuild_text_index()? })),
+            "sync" => {
+                self.db.sync()?;
+                Ok(J::Null)
+            }
+            "compact" => Ok(json!({ "compacted": self.db.compact()? })),
             "enableTextIndex" => Ok(json!({ "built": self.db.enable_text_index()? })),
             "info" => Ok(json!({
                 "path": self.db.path().display().to_string(),
+                "backend": self.db.backend().name(),
                 "readers": self.db.reader_count(),
                 "pathMaxHops": self.db.path_max_hops(),
                 "importActive": self.db.import_active(),

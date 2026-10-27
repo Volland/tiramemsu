@@ -94,6 +94,22 @@ pub enum CacheMode {
     Scoped,
 }
 
+/// Where a decoder reads dictionary terms: the SQL connection that ran the
+/// query, or a storage-trait snapshot (the native runner).
+pub trait TermLoad {
+    /// The term with this dictionary id.
+    fn load(&mut self, id: i64) -> Result<Option<tm_core::term::Term>>;
+}
+
+/// [`TermLoad`] on a SQL connection.
+pub struct ExecLoad<'a>(pub &'a mut dyn Executor);
+
+impl TermLoad for ExecLoad<'_> {
+    fn load(&mut self, id: i64) -> Result<Option<tm_core::term::Term>> {
+        load_term(self.0, id)
+    }
+}
+
 /// Decodes the cells of one query on the connection that ran it.
 pub struct Decoder<'a> {
     cache: &'a TermCache,
@@ -122,7 +138,7 @@ impl<'a> Decoder<'a> {
     }
 
     /// Decodes one ObjectId.
-    pub fn term(&mut self, exec: &mut dyn Executor, id: ObjectId) -> Result<Value> {
+    pub fn term(&mut self, exec: &mut dyn TermLoad, id: ObjectId) -> Result<Value> {
         if let Some(v) = codec::decode_inline(id)? {
             return Ok(v);
         }
@@ -141,7 +157,8 @@ impl<'a> Decoder<'a> {
         }
         let tag = id.tag()?;
         self.stats.dictionary_reads += 1;
-        let t = load_term(exec, id.unsigned_payload() as i64)?
+        let t = exec
+            .load(id.unsigned_payload() as i64)?
             .filter(|t| t.tag == tag)
             .ok_or_else(|| invalid(format!("unknown term id {id:?}")))?;
         let dt = match t.dt {
@@ -164,7 +181,7 @@ impl<'a> Decoder<'a> {
     /// Decodes one cell of static domain `dom`.
     pub fn cell(
         &mut self,
-        exec: &mut dyn Executor,
+        exec: &mut dyn TermLoad,
         v: &SqlValue,
         dom: &Dom,
     ) -> Result<Option<ResultValue>> {
@@ -198,7 +215,7 @@ impl<'a> Decoder<'a> {
     /// with nodes and statements in their lexical (skolem IRI) forms, virtual hops
     /// named by their `sys:` IRI, and the path read start to end of the pattern
     /// (`reversed` calls are flipped back).
-    fn path(&mut self, exec: &mut dyn Executor, text: &str, reversed: bool) -> Result<String> {
+    fn path(&mut self, exec: &mut dyn TermLoad, text: &str, reversed: bool) -> Result<String> {
         let mut p =
             Path::from_json(text).ok_or_else(|| invalid(format!("bad path_json {text:?}")))?;
         if reversed {
@@ -235,7 +252,7 @@ impl<'a> Decoder<'a> {
         Ok(out)
     }
 
-    fn list(&mut self, exec: &mut dyn Executor, text: &str, elem: &Dom) -> Result<ResultValue> {
+    fn list(&mut self, exec: &mut dyn TermLoad, text: &str, elem: &Dom) -> Result<ResultValue> {
         let json = parse_json(text).ok_or_else(|| invalid(format!("bad list {text:?}")))?;
         let Json::Arr(items) = json else {
             return Err(invalid(format!("not a list: {text:?}")));

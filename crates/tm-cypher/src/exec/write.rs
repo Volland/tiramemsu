@@ -2,7 +2,7 @@
 //! `write_set.rs` (design Decision 11). Every operation goes through the
 //! transaction handle, so schema checks and the reserved-namespace rule apply.
 
-use tm_core::{Eid, ObjectId, Tx, Valid, Value};
+use tm_core::{Eid, ObjectId, TxHandle as Tx, Valid, Value};
 
 use super::access::{RDF_TYPE, TEMPORAL};
 use super::{core, Exec, Row};
@@ -481,12 +481,7 @@ impl Exec<'_> {
         let (node, created) = self.tx_do(move |tx| {
             let p = tx.encode(Value::iri(key2.clone()))?;
             let o = oid(tx, &kterm2)?;
-            let found = tx.read_with(|e| {
-                e.query_i64(
-                    "SELECT s FROM triple WHERE p = ?1 AND o = ?2 AND t_ret IS NULL ORDER BY eid LIMIT 1",
-                    &[tm_core::SqlValue::Integer(p.raw()), tm_core::SqlValue::Integer(o.raw())],
-                )
-            })?;
+            let found = tx.live_rows(None, Some(p), Some(o))?.first().map(|r| r.s);
             let created = found.is_none();
             let node = tx.upsert(p, o)?;
             // the key statement is asserted idempotently so that it is reported

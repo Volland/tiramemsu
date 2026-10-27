@@ -88,6 +88,11 @@ pub const NAMES: [&str; 9] = [
 
 /// Loads the fixture `name` into a fresh database.
 pub fn load(name: &str) -> Fx {
+    load_on(name, Backend::Auto)
+}
+
+/// Loads the fixture `name` into a fresh database on `backend`.
+pub fn load_on(name: &str, backend: Backend) -> Fx {
     let dir = tempfile::tempdir().expect("tempdir");
     let clock = Arc::new(ManualClock::new(BASE));
     let db = Db::open(
@@ -95,6 +100,7 @@ pub fn load(name: &str) -> Fx {
         OpenOptions {
             clock: clock.clone(),
             readers: 0,
+            backend,
             ..OpenOptions::default()
         },
     )

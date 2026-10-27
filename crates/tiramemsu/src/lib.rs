@@ -15,6 +15,7 @@
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
 
+mod backend;
 mod budget;
 mod bundle;
 #[cfg(feature = "cypher")]
@@ -29,11 +30,12 @@ mod saved;
 mod sparql;
 mod view;
 
+pub use backend::{Backend, Durability};
 pub use budget::QueryBudget;
 pub use bundle::{BundleFormat, BUNDLE_FORMAT};
 #[cfg(feature = "cypher")]
 pub use cypher::TxCypher;
-pub use db::{Db, OpenOptions};
+pub use db::{Db, OpenOptions, Summary};
 pub use import::{BulkImport, ImportProgress, ImportSummary};
 pub use review::{BundlePreview, PreviewScope};
 #[cfg(all(feature = "sparql", feature = "cypher"))]
@@ -47,15 +49,21 @@ pub use view::View;
 #[cfg(feature = "exec")]
 pub use view::{PathArgs, PathReport};
 
+/// Lossless conversion between backends.
+pub use backend::convert;
 pub use tm_core::rdf::{RdfTerm, RdfTriple};
 pub use tm_core::text;
+/// Values accepted in statement positions of a [`Tx`]: ids or fresh values.
+pub use tm_core::IntoObj as IntoObject;
+pub use tm_core::Obj;
+/// The write handle a transaction body receives, on every backend.
+pub use tm_core::TxHandle as Tx;
 pub use tm_core::{
-    codec, conflict, read, value, vocab, AssertOpts, Asserted, CancelToken, Capabilities, Clock,
-    Dialect, Eid, Error, Event, Executor, Host, HostOptions, Interrupt, IntoObject, ManualClock,
+    codec, conflict, rdf, read, value, vocab, AssertOpts, Asserted, CancelToken, Capabilities,
+    Clock, Dialect, Eid, Error, Event, Executor, Host, HostOptions, Interrupt, ManualClock,
     ObjectId, OnExisting, Op, Patch, PatchField, Position, PredicateSchema, Result, ResultLimit,
     RetKind, Span, SqlError, SqlValue, SystemClock, Tag, TextEvidence, TextHit, TextMode,
-    TextQuery, TimeRef, Triple, Tx, TxId, TxOptions, TxReport, TxSel, Valid, ValidSel, Value,
-    ViewSpec,
+    TextQuery, TimeRef, Triple, TxId, TxOptions, TxReport, TxSel, Valid, ValidSel, Value, ViewSpec,
 };
 pub use tm_core::{recall, vector};
 pub use tm_core::{BTerm, Bundle, BundleStatement, IdUsage, ImportReport, ImportedStatement};

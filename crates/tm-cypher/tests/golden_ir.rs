@@ -1,7 +1,7 @@
 //! Golden IR snapshots of the pattern lowering (design Decision 5). A recording
 //! runner returns no rows and keeps the text of every IR query the program issues.
 
-use tm_core::{Result, Tx, Value};
+use tm_core::{Result, TxHandle as Tx, Value};
 use tm_cypher::{compile, CompileCtx, CypherParams, Rows, Runner, Vocab};
 use tm_ir::{IrQuery, Params};
 

@@ -9,6 +9,45 @@ OpenSpec changes in `openspec/changes/archive/`.
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-10-27
+
+Two engines, one memory: an experimental redb backend with its own native query runner, the `tm` command line, and a backend benchmark against SQLite and Oxigraph (`openspec/changes/archive/2026-10-27-*`).
+
+**Upgrade notes**
+
+- No storage format change for SQLite files; SQLite stays the default and keeps its SQL engine.
+- The facade's transaction handle is now `tm_core::TxHandle`, re-exported as `tiramemsu::Tx` as before. Code that names `tm_core::Tx` directly in a transaction body should use `tiramemsu::Tx`.
+- New error variants: `Storage`, `UnknownFormat`, `BackendMismatch`, `AlreadyExists`, `BackendNotCompiled`. The bindings report them by name.
+- `RegionKind::Native` is a new explain region kind (`"native"` in the bridge, Python and Node).
+
+### Added
+
+- **redb backend** (cargo feature `redb`, experimental):
+  - `Backend::{Auto, Sqlite, Redb}`, `Db::create`, and detection from the file header (`BackendMismatch` when an explicit choice disagrees).
+  - Six live and three history permutations, exact per-predicate statistics, and an FTS5-compatible text index.
+  - Durability `Normal` (group commit), `Immediate` or `None` on both backends; `Db::sync`, `Db::compact`.
+  - `tiramemsu::convert` replays a whole history into the other backend.
+  - Saved answers are not supported on redb yet.
+- **Storage traits** `ReadStore`/`WriteStore` (`tm_core::store`) and the transaction engine on them (`tm-store`), checked against the SQL engine by an oracle over random histories, on an in-memory store, on redb and on SQLite (`tm_core::sqlstore::SqlBackend`).
+- **Native runner** (`tm-native`): SPARQL, Cypher, `execute_ir`, paths and explain on redb, with:
+  - index nested loops, hash joins, and a worst-case-optimal generic join for cyclic cores;
+  - conditions applied inside the join and semi-join seeds from `EXISTS`;
+  - parallel morsels (`OpenOptions::parallel_threshold`) and budgets;
+  - explain that names each step's permutation.
+- **`tm` command line** (`tiramemsu-cli`): `create`, `info`, `query` (table, JSON, CSV, TSV, N-Triples; time views; `--explain`; `--timeout`), `import` (N-Triples, N-Quads, Turtle, TriG), `export`, `convert`, `compact` and `bench`. `Db::summary` backs `tm info`.
+- **Backend benchmark** (`tm-bench`, `bench/backends/`):
+  - WatDiv-style, cyclic, lookup, concurrency, write, Cypher, path and size workloads on SQLite, SQLite with LFTJ, redb and Oxigraph;
+  - results checked equal before timing, with a 60 s cap per query;
+  - an honest report and two articles: "Two engines, one memory" and "Worst-case-optimal joins on a key-value store".
+
+### Fixed
+
+- `tm-sparql` no longer fails to build when another crate turns on spargebra's optional `LATERAL` and `ADJUST` syntax; both are `Unsupported`.
+
+### Not done
+
+- Moving SQLite onto the trait engine (`move-sqlite-onto-store`) was measured and closed: the trait engine on SQLite writes the same rows but is 70–91 % slower on cardinality replacement and annotated retractions.
+
 ## [0.7.0] - 2026-10-14
 
 Valid-time writes from SPARQL Update, and statement ids and transactions in Cypher (`openspec/changes/add-query-statement-metadata`).
@@ -178,7 +217,8 @@ First release.
 - Named graphs: `Tx::add_to_graph`, `remove_from_graph`, `clear_graph`, `View::graphs`, `View::graph_members`. SPARQL gains `GRAPH`, `FROM NAMED` and graph management updates.
 - JSON bridge (`tiramemsu-json`), Node.js bindings (`@tiramemsu/node`) and Python bindings (`tiramemsu`), with release workflows for PyPI wheels and npm.
 
-[Unreleased]: https://github.com/Volland/tiramemsu/compare/v0.7.0...HEAD
+[Unreleased]: https://github.com/Volland/tiramemsu/compare/v0.8.0...HEAD
+[0.8.0]: https://github.com/Volland/tiramemsu/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/Volland/tiramemsu/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/Volland/tiramemsu/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/Volland/tiramemsu/compare/v0.4.0...v0.5.0

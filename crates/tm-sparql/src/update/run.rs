@@ -3,7 +3,9 @@
 use std::collections::{BTreeMap, HashMap};
 
 use tm_core::vector::{parse_vector, EmbeddingModel, Metric, VectorEncoding};
-use tm_core::{vocab, AssertOpts, Eid, Error, ObjectId, Patch, Result, SqlValue, Tx, Valid, Value};
+use tm_core::{
+    vocab, AssertOpts, Eid, Error, ObjectId, Patch, Result, TxHandle as Tx, Valid, Value,
+};
 use tm_ir::IrQuery;
 
 use super::inst::{instantiate, Node, Row, TripleN};
@@ -544,14 +546,7 @@ impl Patches {
 type Interval = (Option<i64>, Option<i64>, bool);
 
 fn interval(tx: &mut Tx<'_>, e: Eid) -> Result<Option<Interval>> {
-    tx.read_with(|exec| {
-        Ok(exec
-            .first_row(
-                "SELECT v_from, v_to, t_ret IS NULL FROM triple WHERE eid = ?1",
-                &[SqlValue::Integer(e.oid().raw())],
-            )?
-            .map(|r| (r[0].as_i64(), r[1].as_i64(), r[2].as_i64() == Some(1))))
-    })
+    Ok(tx.statement(e)?.map(|r| (r.v_from, r.v_to, r.live())))
 }
 
 fn kind_of(t: &TripleN) -> Option<VectorKind> {
@@ -617,32 +612,12 @@ fn drop_models(tx: &mut Tx<'_>, defs: &[InGraph]) -> Result<()> {
 
 /// The `(s, p, o)` ids of a stored statement, live or not.
 fn stored_content(tx: &mut Tx<'_>, e: Eid) -> Result<Option<[i64; 3]>> {
-    tx.read_with(|exec| {
-        Ok(exec
-            .first_row(
-                "SELECT s, p, o FROM triple WHERE eid = ?1",
-                &[SqlValue::Integer(e.oid().raw())],
-            )?
-            .and_then(|r| Some([r[0].as_i64()?, r[1].as_i64()?, r[2].as_i64()?])))
-    })
+    Ok(tx.statement(e)?.map(|r| [r.s, r.p, r.o]))
 }
 
 /// The live statements with content `(s, p, o)`.
 fn live_eids(tx: &mut Tx<'_>, s: ObjectId, p: ObjectId, o: ObjectId) -> Result<Vec<ObjectId>> {
-    tx.read_with(|exec| {
-        Ok(exec
-            .rows(
-                "SELECT eid FROM triple WHERE t_ret IS NULL AND s = ?1 AND p = ?2 AND o = ?3 ORDER BY eid",
-                &[
-                    SqlValue::Integer(s.raw()),
-                    SqlValue::Integer(p.raw()),
-                    SqlValue::Integer(o.raw()),
-                ],
-            )?
-            .into_iter()
-            .filter_map(|r| r[0].as_i64().map(ObjectId::from_raw))
-            .collect())
-    })
+    Ok(tx.live_eids(s, p, o)?.into_iter().map(Eid::oid).collect())
 }
 
 /// The ids a delete-template position can denote (none for an unknown value).

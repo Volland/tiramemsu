@@ -9,7 +9,7 @@ use crate::vocab;
 /// `sys:sensitive` is rejected with `Unsupported` (reserved for M6) before the
 /// allow-list, so the caller learns why.
 // @lat: [[data-model#Vocabulary Mapping#Reserved Namespaces]]
-pub(crate) fn check_predicate(p_iri: &str, s_tag: Tag) -> Result<()> {
+pub fn check_predicate(p_iri: &str, s_tag: Tag) -> Result<()> {
     if p_iri == vocab::SYS_SENSITIVE {
         return Err(Error::Unsupported {
             feature: vocab::SENSITIVE_FEATURE.to_string(),

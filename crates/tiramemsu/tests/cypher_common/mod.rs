@@ -128,11 +128,7 @@ impl T {
     }
 
     pub fn last_t(&self) -> u64 {
-        self.db
-            .read_sql("SELECT value FROM meta WHERE key = 'last_t'")
-            .unwrap()[0][0]
-            .as_i64()
-            .unwrap() as u64
+        self.db.last_t().unwrap()
     }
 
     /// Reads on the now view.

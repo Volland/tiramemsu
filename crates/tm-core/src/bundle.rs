@@ -191,7 +191,8 @@ impl Bundle {
 
     /// Positions in an order where every statement follows the statements it
     /// references (ties by position), or `None` on a reference cycle.
-    pub(crate) fn import_order(&self) -> Option<Vec<usize>> {
+    #[doc(hidden)]
+    pub fn import_order(&self) -> Option<Vec<usize>> {
         let pos: HashMap<u32, usize> = self
             .statements
             .iter()
@@ -283,6 +284,44 @@ fn load_row(exec: &mut dyn Executor, spec: &ViewSpec, eid: Eid) -> Result<Option
     }))
 }
 
+/// The data access bundle export needs, so that the same export runs on SQL and
+/// on the storage trait (`tm-store`). All reads are under one view.
+#[doc(hidden)]
+pub trait BundleSource {
+    /// True when `eid` is selected by the view.
+    fn visible(&mut self, eid: Eid) -> Result<bool>;
+    /// `(s, p, o, valid)` of `eid` when it is selected by the view.
+    fn row(&mut self, eid: Eid) -> Result<Option<(ObjectId, ObjectId, ObjectId, Valid)>>;
+    /// The dependents of `root` in the view ([`crate::read::dependents`]).
+    fn dependents(&mut self, root: Eid) -> Result<Vec<Eid>>;
+    /// Decodes an id.
+    fn decode(&mut self, id: ObjectId) -> Result<Value>;
+}
+
+struct SqlSource<'a> {
+    exec: &'a mut dyn Executor,
+    spec: &'a ViewSpec,
+    terms: TermReader,
+}
+
+impl BundleSource for SqlSource<'_> {
+    fn visible(&mut self, eid: Eid) -> Result<bool> {
+        visible(self.exec, self.spec, eid)
+    }
+
+    fn row(&mut self, eid: Eid) -> Result<Option<(ObjectId, ObjectId, ObjectId, Valid)>> {
+        Ok(load_row(self.exec, self.spec, eid)?.map(|r| (r.s, r.p, r.o, r.valid)))
+    }
+
+    fn dependents(&mut self, root: Eid) -> Result<Vec<Eid>> {
+        dependents(self.exec, self.spec, root)
+    }
+
+    fn decode(&mut self, id: ObjectId) -> Result<Value> {
+        self.terms.decode(self.exec, id, true)
+    }
+}
+
 /// Why a statement cannot travel in a bundle.
 #[derive(Clone, Debug)]
 enum Exclusion {
@@ -314,12 +353,24 @@ impl Exclusion {
 /// The bundle of `root` in `spec` (see [`crate::read::bundle`]).
 // @lat: [[data-model#Fact Bundles]]
 pub(crate) fn export(exec: &mut dyn Executor, spec: &ViewSpec, root: Eid) -> Result<Bundle> {
-    if !visible(exec, spec, root)? {
+    export_from(
+        &mut SqlSource {
+            exec,
+            spec,
+            terms: TermReader::new(256),
+        },
+        root,
+    )
+}
+
+/// The bundle of `root` read through `src` (see [`crate::read::bundle`]).
+#[doc(hidden)]
+pub fn export_from(src: &mut dyn BundleSource, root: Eid) -> Result<Bundle> {
+    if !src.visible(root)? {
         return Err(Error::NotLive(root));
     }
-    let terms = TermReader::new(256);
     // 1. candidates: the dependents, then the downward closure over every candidate
-    let mut order = dependents(exec, spec, root)?;
+    let mut order = src.dependents(root)?;
     let deps = order.len();
     let mut candidates: HashSet<Eid> = order.iter().copied().collect();
     let mut rows: HashMap<Eid, Row> = HashMap::new();
@@ -329,13 +380,14 @@ pub(crate) fn export(exec: &mut dyn Executor, spec: &ViewSpec, root: Eid) -> Res
         let e = order[i];
         i += 1;
         // every candidate was seen visible (by the walk or by the probe below)
-        let row = load_row(exec, spec, e)?.ok_or(Error::NotLive(e))?;
+        let (s, p, o, valid) = src.row(e)?.ok_or(Error::NotLive(e))?;
+        let row = Row { s, p, o, valid };
         rows.insert(e, row);
         for r in row.refs() {
             if candidates.contains(&r) || invisible.contains_key(&e) {
                 continue;
             }
-            if visible(exec, spec, r)? {
+            if src.visible(r)? {
                 candidates.insert(r);
                 order.push(r);
             } else {
@@ -351,7 +403,7 @@ pub(crate) fn export(exec: &mut dyn Executor, spec: &ViewSpec, root: Eid) -> Res
             excluded.insert(e, Exclusion::Transaction);
             continue;
         }
-        let p = match terms.decode(exec, row.p, true)? {
+        let p = match src.decode(row.p)? {
             Value::Iri(p) => p,
             other => other.to_string(),
         };
@@ -429,7 +481,7 @@ pub(crate) fn export(exec: &mut dyn Executor, spec: &ViewSpec, root: Eid) -> Res
                     let next = anon.len() as u32;
                     BTerm::Node(*anon.entry(id).or_insert(next))
                 }
-                _ => BTerm::Value(terms.decode(exec, id, true)?),
+                _ => BTerm::Value(src.decode(id)?),
             })
         };
         let s = term(row.s)?;
@@ -437,7 +489,7 @@ pub(crate) fn export(exec: &mut dyn Executor, spec: &ViewSpec, root: Eid) -> Res
         statements.push(BundleStatement {
             local: k as u32,
             s,
-            p: terms.decode(exec, row.p, true)?,
+            p: src.decode(row.p)?,
             o,
             valid: row.valid,
         });

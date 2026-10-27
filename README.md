@@ -9,7 +9,7 @@ An embedded graph database on SQLite. Every fact has an id, so facts can carry l
 
 <p align="center"><a href="site/articles/layered-graphs.html">Layered graphs, explained</a> · <a href="site/articles/tiramemsu-vs-oxilite.html">Tiramemsu vs oxilite</a> · <a href="site/articles/metagraphs.html">Metagraphs</a> · <a href="lat.md/">Design (lat.md)</a> · <a href="openspec/specs/">Specs (OpenSpec)</a></p>
 
-> **Status: new.** Designed and implemented in September and October 2026 as one Rust library, released as 0.7.0 on crates.io (`tiramemsu`, plus the `tiramemsu-mcp` server), PyPI (`tiramemsu`) and npm (`@tiramemsu/node`). There is no network server; it runs on rusqlite natively and on SQLite compiled to WebAssembly in the browser. What is measured and what is not is listed under [Status](#status).
+> **Status: new.** Designed and implemented in September and October 2026 as one Rust library, released as 0.8.0 on crates.io (`tiramemsu`, plus the `tiramemsu-mcp` server and the `tm` command line), PyPI (`tiramemsu`) and npm (`@tiramemsu/node`). There is no network server; it runs on rusqlite natively, on SQLite compiled to WebAssembly in the browser, and (experimental in 0.8) on redb. What is measured and what is not is listed under [Status](#status).
 
 ## Why
 
@@ -35,6 +35,7 @@ A knowledge graph stores facts. An agent also needs to say *how sure am I*, *whe
 - **Saved answers.** Save a SPARQL or Cypher query with its parameters, view and result, and let later events mark it: `stale` when a cited statement is retracted or superseded, `recheck` when any other write (or the clock) could have changed it. Each mark is reported once, survives restarts, and only a successful re-run clears it; answers on past views stay fresh.
 - **Conflict review.** `View::conflicts` lists subject/predicate pairs whose distinct objects hold at the same valid time, with the evidence behind each value (statement ids, authors, sources, confirmations, confidence when stated), never a made-up score and never a write. `Db::preview_bundle` runs an import as a dry run and shows proposed and reused facts, cardinality retractions and schema failures before anything is committed.
 - **MCP server.** `tiramemsu-mcp` serves one memory file to Claude Code, Claude Desktop or any MCP client over stdio (`claude mcp add tiramemsu -- tiramemsu-mcp --db ./memory.db`): typed `assert`, `confirm`, `supersede`, `query`, `dependents`, bundle, `conflicts`, `preview_bundle`, `text_search` and saved-answer tools, a read-only mode, per-call budgets, and query results that name their view and say whether their provenance is complete.
+- **Two engines (experimental in 0.8).** A memory lives in SQLite (the default) or in redb, a pure-Rust key-value file with snapshot readers, chosen at creation (`tm create --backend redb`, `OpenOptions::backend`) and detected from the file header after that. Both hold the same ids, clocks and history, and `tm convert` moves a file between them. On redb, SPARQL and Cypher run on a native runner with hybrid and worst-case-optimal joins. It is faster than SQLite on cyclic queries, many concurrent readers, time-travel lookups and loading, and slower on probe-heavy star queries, Cypher paths and file size. Saved answers are SQLite-only for now. See [the benchmark](bench/backends/README.md) and [Two engines, one memory](site/articles/two-engines.html).
 - **Embedded.** One SQLite file (WAL, STRICT). The core reaches SQLite through a small synchronous executor trait.
 - **In the browser.** The `tm-wasm` host runs the whole engine, query languages included, on SQLite compiled to WebAssembly in a Web Worker, with the database in memory or in OPFS; `bindings/wasm` serves the JSON bridge to JavaScript. Capabilities are probed from the running SQLite, a journal mode the browser VFS cannot keep fails at open, and the files open natively and back.
 - **Pay for what you use.** The query engine and the SPARQL and Cypher front ends are optional cargo features of the `tiramemsu` crate (`exec`, `sparql`, `cypher`; all on by default). `default-features = false` keeps transactions, views, bundles, text recall and conflict review and links no parser.
@@ -147,6 +148,19 @@ SELECT ?c ?s WHERE { v:alice v:worksAt v:acme {| v:confidence ?c ; v:source ?s |
 ```cypher
 MATCH (a)-[r:worksAt]->(c), (b:Belief)-[:supportedBy]->(r) RETURN a, c, r.confidence, b
 ```
+
+### From the command line
+
+The `tm` binary (`cargo install tiramemsu-cli`) creates files on either backend and detects the backend of every file it opens:
+
+```sh
+tm create memory.redb --backend redb
+tm import memory.redb people.ttl
+tm query memory.redb --sparql 'SELECT ?p ?o WHERE { <urn:alice> ?p ?o }'
+tm convert memory.redb memory.db --backend sqlite
+```
+
+See [`crates/tiramemsu-cli`](crates/tiramemsu-cli/README.md) for every command.
 
 ## Vectors
 

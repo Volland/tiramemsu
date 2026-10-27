@@ -97,7 +97,7 @@ Arguments are `text`, `mode`, `model`, `vector`, `limit`, `depth`, `expand`, `rr
 
 `explainSparql` explains SPARQL query text without running it, so a caller can see whether a cyclic pattern took the native cyclic-join route ([[query#Physical Planning#LFTJ]]) and why not.
 
-It returns `{"regions": [{"kind", "note", "aliases", "queryPlan"}], "sql", "shortCircuit", "queryPlan"}` from [[bindings/json/src/read.rs#explain_json]]. Kinds are `sql`, `nativePath` and `nativeLftj`; notes are `none`, `cyclicLftjDisabled`, `lftjUnavailable`, `lftjUnsupportedShape`, `lftjBelowEstimate`, `lftjNative`, `pathForward` and `pathInverted`. An update is `Unsupported`.
+It returns `{"regions": [{"kind", "note", "aliases", "queryPlan"}], "sql", "shortCircuit", "queryPlan"}` from [[bindings/json/src/read.rs#explain_json]]. Kinds are `sql`, `nativePath`, `nativeLftj` and `native` (the whole native runner on redb, whose `queryPlan` lists its steps); notes are `none`, `cyclicLftjDisabled`, `lftjUnavailable`, `lftjUnsupportedShape`, `lftjBelowEstimate`, `lftjNative`, `pathForward` and `pathInverted`. An update is `Unsupported`.
 
 The open options `lftj` (boolean) and `lftjMinRows` (non-negative integer) set `OpenOptions::planner.lftj`. Node exposes `Database.open(path, { lftj, lftjMinRows })` and `View.explainSparql(text)` with `Explain` and `ExplainRegion` types; Python `Database(path, lftj=, lftj_min_rows=)` and `View.explain_sparql(text)`, which returns the dictionary.
 

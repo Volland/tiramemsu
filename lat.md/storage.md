@@ -1,3 +1,6 @@
+---
+openspec: [redb-storage, durability-modes, backend-selection]
+---
 # Storage
 
 One SQLite file in WAL mode holds the term dictionary, transactions, the triple table with its indexes, volatile state and engine metadata. All tables are STRICT.
@@ -315,3 +318,35 @@ CREATE INDEX embedding_bits ON embedding(model, eid, bits);  -- covering index f
 - **Layout:** with f32 at 768 dimensions a row is about 3.2 KB, roughly one page; f16 halves `vec`. The covering index `embedding_bits` lets a prefilter scan read about 100 bytes per row from the index instead of a page per row.
 - **No capability:** plain tables, read with ordinary SQL on every host (rusqlite, WASM). The names `vec_*` stay reserved for an optional accelerator ([[query#Vector Recall#Future Tiers]]).
 - **Model definitions** are graph statements, not rows here: see [[query#Vector Recall#Embeddings And Models]].
+
+## redb Layout
+
+The second backend keeps the same logical rows in one redb file (layout 1, `tm-redb`): every integer is the one SQLite stores, encoded big-endian with the sign bit flipped so that byte order is numeric order.
+
+Keys and values are byte strings compared with `memcmp`, so redb can shorten the separators of its internal nodes. Decisions are in [[backends#Six Live Permutations]] and [[backends#Same Logical Database]]; the code is [[crates/tm-redb/src/store.rs#RedbStore]].
+
+| Table | Key | Value |
+|---|---|---|
+| `stmt` | eid | `s, p, o, t_add, t_ret, v_from, v_to, ret_kind` |
+| `l_spo`, `l_sop`, `l_pso`, `l_pos`, `l_osp`, `l_ops` | `(a, b, c, eid)` of live statements | `t_add, v_from, v_to` |
+| `h_spo`, `h_pos`, `h_osp` | `(a, b, c, MAX − t_add, eid)` of every statement | `t_ret, ret_kind, v_from, v_to` |
+| `log_add`, `log_ret` | `(t, eid)` | — |
+| `term`, `term_key` | id / encoded `(tag, dt, lang, lex)` | encoded term / id |
+| `tx`, `tx_instant` | t / instant | instant / t |
+| `meta`, `info` | counter or format key | value; `info` holds `engine = tiramemsu`, `layout = 1` |
+| `pred_multi`, `pred_stats` | predicate | — / live statements, distinct live subjects, distinct live objects |
+| `volatile`, `embedding` | `(s, key)` / `(model, eid)` | value / `t`, sign bits, vector |
+| `text_doc`, `text_token`, `text_post` | value / token / `token 0 value` | token count and language / document frequency / positions |
+
+- **Scans:** every combination of bound positions is a key prefix of one live permutation and one history permutation ([[crates/tm-redb/src/tables.rs#live_for]]); an unbound scan reads `stmt` in eid order. Live rows carry their valid time and `t_add`, so a live scan never looks up `stmt`.
+- **Writes:** an assert inserts the `stmt` row, six live keys, three history keys and the log entry; a retraction deletes the six live keys and rewrites the history values. About eleven B-tree writes per statement, the price of order freedom for joins.
+- **Statistics:** `pred_stats` changes in the same write transaction; a distinct count moves only when the `(p, s)` or `(p, o)` prefix of `l_pso` / `l_pos` becomes empty or non-empty.
+- **Text index:** postings with token positions, document lengths and frequencies in redb tables, written in the statement's transaction. Matching and `bm25()` follow FTS5 exactly ([[crates/tm-store/src/search.rs#match_values]]), so recall is identical on both backends.
+- **Readers:** a view is one redb read transaction; there is no pool and no wait for the writer. Compaction (`Db::compact`) needs no other open transaction.
+- **Durability:** `OpenOptions::durability` ([[backends#Durability Modes]]): `Normal` commits non-durably and a flusher makes the file durable within `flush_interval` (50 ms) or every `flush_commits` (1000) commits; `Immediate` fsyncs every commit; `None` only on `Db::sync` and close. A crash returns the file to its last durable commit.
+
+### Conversion
+
+`tiramemsu::convert(src, dst, backend)` copies a database between backends losslessly through the storage traits ([[crates/tiramemsu/src/backend.rs#convert]]).
+
+It replays the history in transaction order (terms, then per transaction its row, additions and retractions), so SQLite's date-guard triggers accept every write; counters with burned ids come last, and the destination rebuilds its text index. A SQLite file is read and written through `tm_core::sqlstore::SqlStore`.

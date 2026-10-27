@@ -20,6 +20,11 @@ pub fn instant_to_t(exec: &mut dyn Executor, ms: i64) -> Result<u64> {
 
 /// Resolves a pattern view; `None` when it selects a point before transaction 1.
 pub fn resolve(exec: &mut dyn Executor, v: &View) -> Result<Option<ResolvedView>> {
+    resolve_with(&mut super::ExecSource(exec), v)
+}
+
+/// [`resolve`] through any [`super::PlanSource`].
+pub fn resolve_with(src: &mut dyn super::PlanSource, v: &View) -> Result<Option<ResolvedView>> {
     let tx = match v.tx {
         TxSel::Now => ResolvedTx::Now,
         TxSel::History => ResolvedTx::History,
@@ -29,7 +34,7 @@ pub fn resolve(exec: &mut dyn Executor, v: &View) -> Result<Option<ResolvedView>
             }
             ResolvedTx::AsOf(t)
         }
-        TxSel::AsOf(TimeRef::Instant(ms)) => match instant_to_t(exec, ms)? {
+        TxSel::AsOf(TimeRef::Instant(ms)) => match src.instant_to_t(ms)? {
             0 => return Ok(None),
             t => ResolvedTx::AsOf(t),
         },

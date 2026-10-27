@@ -37,6 +37,9 @@ pub use result::{ExecStats, Explain, QueryResult, RegionInfo, RegionKind, Result
 
 type Hook = Arc<dyn Fn() + Send + Sync>;
 
+/// The default [`QueryEngine::parallel_threshold`]: input rows of a join step.
+pub const DEFAULT_PARALLEL_THRESHOLD: usize = 4096;
+
 /// The query engine of one database: native operators, planner options and the
 /// shared term cache.
 ///
@@ -67,6 +70,7 @@ pub struct QueryEngine {
     options: PlannerOptions,
     cache: TermCache,
     hook: Mutex<Option<Hook>>,
+    parallel_threshold: usize,
 }
 
 impl std::fmt::Debug for QueryEngine {
@@ -90,7 +94,23 @@ impl QueryEngine {
             options,
             cache: TermCache::new(term_cache_capacity),
             hook: Mutex::new(None),
+            parallel_threshold: DEFAULT_PARALLEL_THRESHOLD,
         }
+    }
+
+    /// This engine with another parallel threshold: the input rows above which
+    /// the native runner (over the storage traits) splits a join step into
+    /// morsels run on several threads; `0` disables parallelism. The SQL route
+    /// ignores it.
+    #[must_use]
+    pub fn with_parallel_threshold(mut self, rows: usize) -> QueryEngine {
+        self.parallel_threshold = rows;
+        self
+    }
+
+    /// The parallel threshold (see [`QueryEngine::with_parallel_threshold`]).
+    pub fn parallel_threshold(&self) -> usize {
+        self.parallel_threshold
     }
 
     /// Checks the host capabilities of a connection and registers the SQL helper
@@ -166,7 +186,9 @@ impl QueryEngine {
         *self.hook.lock().unwrap_or_else(|p| p.into_inner()) = f;
     }
 
-    pub(crate) fn run_hook(&self) {
+    /// Runs the test hook, if one is set (also called by other runners).
+    #[doc(hidden)]
+    pub fn run_hook(&self) {
         let h = self.hook.lock().unwrap_or_else(|p| p.into_inner()).clone();
         if let Some(h) = h {
             h();

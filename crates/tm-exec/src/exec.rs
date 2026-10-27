@@ -8,7 +8,7 @@ use std::collections::HashMap;
 use tm_core::{budget, Executor, Result, SqlValue, Value};
 use tm_ir::{IrQuery, Var};
 
-use crate::decode::{CacheMode, Decoder};
+use crate::decode::{CacheMode, Decoder, ExecLoad};
 use crate::lftj::LftjPattern;
 use crate::plan::analyze::Dom;
 use crate::plan::normalize::Planner;
@@ -75,9 +75,11 @@ fn constant_rows(node: &Node) -> Option<(PValues, Option<Vec<Var>>)> {
 }
 
 fn plan(engine: &QueryEngine, exec: &mut dyn Executor, p: &Prepared) -> Result<Planned> {
-    let mut planner = Planner::new(exec, &p.query);
-    let node = planner.plan(&p.query.root)?;
-    let synthetic = std::mem::take(&mut planner.synthetic);
+    let (node, synthetic) = {
+        let mut planner = Planner::new(&mut *exec, &p.query);
+        let node = planner.plan(&p.query.root)?;
+        (node, std::mem::take(&mut planner.synthetic))
+    };
     if let Node::Empty(_) = node {
         return Ok(Planned {
             body: Body::Empty,
@@ -127,7 +129,7 @@ pub fn run(engine: &QueryEngine, ctx: ExecContext<'_>, p: &Prepared) -> Result<Q
                         (Some(i), true) => match &r[i] {
                             None => None,
                             Some(Cell::Id(id)) => {
-                                Some(ResultValue::Term(dec.term(&mut *exec, *id)?))
+                                Some(ResultValue::Term(dec.term(&mut ExecLoad(&mut *exec), *id)?))
                             }
                             Some(Cell::Int(n)) => Some(ResultValue::Term(Value::Int(*n))),
                             Some(Cell::EmptyList) => Some(ResultValue::List(Vec::new())),
@@ -159,7 +161,7 @@ pub fn run(engine: &QueryEngine, ctx: ExecContext<'_>, p: &Prepared) -> Result<Q
             for r in raw {
                 let mut out = Vec::with_capacity(doms.len());
                 for (v, d) in r.iter().zip(doms) {
-                    out.push(dec.cell(&mut *exec, v, d)?);
+                    out.push(dec.cell(&mut ExecLoad(&mut *exec), v, d)?);
                 }
                 if metered {
                     charge_row(&out)?;

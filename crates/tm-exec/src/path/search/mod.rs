@@ -13,7 +13,7 @@ use tm_core::{Error, ObjectId, Result};
 use tm_ir::PathMode;
 
 use super::automaton::Dfa;
-use super::fetch::{Fetcher, Nb};
+use super::fetch::{Nb, NeighbourFetch};
 use super::resolve::Resolved;
 use super::row::{Hop, Path, PathRow};
 
@@ -49,7 +49,7 @@ pub struct Ctx<'a, 'b> {
     /// Its resolved alphabet.
     pub res: &'a Resolved,
     /// The neighbour fetcher.
-    pub fetch: &'a mut Fetcher<'b>,
+    pub fetch: &'a mut (dyn NeighbourFetch + 'b),
     /// The state budget.
     pub budget: &'a mut StateBudget,
     /// The hop bound (`None` = unbounded).

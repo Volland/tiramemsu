@@ -284,12 +284,45 @@ pub enum Error {
         /// The name that was looked up.
         name: String,
     },
+    /// A file that is neither a SQLite nor a redb database.
+    #[error("{path} is not a database file this build can open (neither SQLite nor redb)")]
+    UnknownFormat {
+        /// The file.
+        path: PathBuf,
+    },
+    /// An explicit backend choice that disagrees with the existing file.
+    #[error("{path} is a {found} database, but the {expected} backend was requested")]
+    BackendMismatch {
+        /// The file.
+        path: PathBuf,
+        /// The requested backend.
+        expected: String,
+        /// The backend of the file.
+        found: String,
+    },
+    /// `create` on a path that exists.
+    #[error("{0} already exists")]
+    AlreadyExists(PathBuf),
+    /// A backend this build was compiled without.
+    #[error("this build has no {backend} backend (enable the `{backend}` cargo feature)")]
+    BackendNotCompiled {
+        /// The backend.
+        backend: String,
+    },
     /// A SQLite file with user tables but no tiramemsu `meta` table.
     #[error("{0} is not a tiramemsu database")]
     ForeignFile(PathBuf),
     /// An error reported by the SQLite host.
     #[error("sqlite: {0}")]
     Sqlite(SqlError),
+    /// An error reported by a storage backend on the storage trait (redb, the
+    /// in-memory reference store): I/O, a damaged file, or a refused write such
+    /// as a duplicate key.
+    #[error("storage: {message}")]
+    Storage {
+        /// What failed.
+        message: String,
+    },
     /// The caller aborted the transaction body.
     #[error("{0}")]
     Custom(Box<dyn std::error::Error + Send + Sync>),
@@ -307,6 +340,13 @@ impl Error {
             dialect,
             span,
             msg: msg.into(),
+        }
+    }
+
+    /// An [`Error::Storage`] with `message`.
+    pub fn storage(message: impl Into<String>) -> Error {
+        Error::Storage {
+            message: message.into(),
         }
     }
 
