@@ -146,3 +146,11 @@ section > .wrap > p.sub.more { margin: 20px 0 0; }
 /* Diagrams drawn on white: keep them on a light card in both themes. */
 .diagram { background: #fff; border: 1px solid var(--line); border-radius: 14px; padding: 14px; }
 .diagram img { display: block; margin: 0 auto; }
+/* Benchmarks page: a page title outside the hero, and result tables with numbers right-aligned. */
+h1.page { font-size: clamp(30px, 4.6vw, 44px); line-height: 1.12; letter-spacing: -.02em; margin: 0 0 12px; }
+.muted { color: var(--muted); font-size: 13.5px; }
+table.bench { font-size: 14.5px; }
+table.bench th, table.bench td { padding: 6px 10px; }
+table.bench td:nth-child(n+3), table.bench th:nth-child(n+3) { text-align: right; white-space: nowrap; }
+table.bench td:first-child { min-width: 16em; }
+@media (max-width: 620px) { table.bench td:first-child { min-width: 10em; } table.bench .muted { display: none; } }

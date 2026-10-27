@@ -1,0 +1,244 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Benchmarks: SQLite, redb and Oxigraph · tiramemsu</title>
+<meta name="description" content="tiramemsu on SQLite (with and without its LFTJ operator) and on redb against Oxigraph on RocksDB, at 10⁵ and 10⁶ statements: joins, cycles, lookups, Cypher, paths, readers, writes and size, losses included.">
+<link rel="icon" href="assets/logo.svg" type="image/svg+xml">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="top"><div class="wrap">
+  <a class="brand" href="./"><img src="assets/logo.svg" alt="">Tiramemsu</a>
+  <nav class="menu"><a href="./#why">Why</a><a href="./#features">Features</a><a href="./#start">Quick start</a><a href="benchmarks.html" aria-current="page">Benchmarks</a><a href="articles/">Articles</a><a href="paper/">Papers</a><a href="https://github.com/Volland/tiramemsu">GitHub</a></nav>
+</div></header>
+
+<main>
+<section><div class="wrap">
+  <h1 class="page">Benchmarks: SQLite, redb and Oxigraph</h1>
+  <p class="sub">tiramemsu 0.8.1 on SQLite (with and without its LFTJ operator) and on redb, against <a href="https://github.com/oxigraph/oxigraph">Oxigraph</a> 0.5 on RocksDB, the reference Rust RDF store. Same generated data, same queries, every answer compared across engines before anything is timed. The losses are on this page too.</p>
+  <div class="grid">
+    <div class="card"><span class="tag">Cycles</span><h3>Worst-case-optimal joins</h3><p>A triangle through hubs at 10⁶ statements: <strong>20.76 ms</strong> on redb, 29.00 ms on SQLite with LFTJ, 4.87 s on SQLite's own plan and 55.35 s on Oxigraph.</p></div>
+    <div class="card"><span class="tag">Joins</span><h3>Chains, stars and Cypher</h3><p>The snowflake F1 at 10⁶: 20.22 ms on redb, 23.17 ms on SQLite, 179.34 ms on Oxigraph. A Cypher two-hop from a property map: 379 µs on redb, 14.44 ms on SQLite.</p></div>
+    <div class="card"><span class="tag">Readers</span><h3>Concurrent lookups</h3><p>Two-hop lookups per second on 16 threads at 10⁶: 67 577 on Oxigraph, 49 496 on redb, 15 897 on SQLite, whose reader pool tops out early.</p></div>
+    <div class="card"><span class="tag">Writes</span><h3>Transactions cost time</h3><p>One insert at 10⁵: 5 µs on Oxigraph against 111 µs on SQLite and 120 µs on redb. Bulk load of a million statements: 2.0 s, 51 s and 89 s.</p></div>
+  </div>
+</div></section>
+
+<section><div class="wrap">
+  <h2>Read these numbers with our priorities</h2>
+  <ul>
+    <li><strong>Transactions before speed.</strong> Every tiramemsu write is one ACID transaction with a statement id, a transaction number, schema checks, an event, full history and cascading retractions. The write columns compare different amounts of work.</li>
+    <li><strong>Durability:</strong> both tiramemsu engines run at <code>Normal</code> (SQLite <code>synchronous = NORMAL</code> with WAL; redb group commit within 50 ms or 1 000 commits); Oxigraph at its default, RocksDB with its write-ahead log.</li>
+    <li><strong>Correctness before timing:</strong> each query runs once on every engine and the results are compared (counts always, sorted rows up to 1 000); a mismatch stops the run. A query that passes <strong>60 s</strong> on its checked run is a timeout and takes no part in that comparison. The cap bounds the checked run only, so a timed median can exceed it.</li>
+    <li><strong>What each engine can answer:</strong> Oxigraph has no transaction or valid time, no statement ids and no Cypher, so it is left out of the time-view lookups, Cypher, Cypher paths, cascade and supersede (“—”).</li>
+  </ul>
+  <p class="note"><strong>Known caveats.</strong> At 10⁶ statements only redb answered the skewed diamond and 4-cycle, so those two answers were not cross-checked in this run; the differential tests check the same queries on small graphs. Concurrent readers moved −17 % (4 threads) at 10⁵ and +20 % at 10⁶ against the previous run with no change on their path; read differences of that size as noise between runs.</p>
+</div></section>
+
+<section><div class="wrap">
+  <h2>Results</h2>
+  <p class="sub">Medians; the fastest engine of each row is marked. Pick a scale.</p>
+  <div class="tabs">
+    <input type="radio" name="scale" id="scale-6" checked><label for="scale-6">10⁶ statements</label>
+    <input type="radio" name="scale" id="scale-5"><label for="scale-5">10⁵ statements</label>
+    <div class="panel">
+<p class="sub">1 004 143 statements in the WatDiv-style graph · 5 timed runs per query after one checked run · macos aarch64 · Apple M2 Max · 12 threads · measured 27 October 2026.</p>
+<h3>Bulk load</h3>
+<p class="sub">Time to load the WatDiv-style graph through each engine's bulk path. Lower is better.</p>
+<table class="bench">
+<tr><th>Query</th><th>Variant</th><th>Rows</th><th>SQLite</th><th>redb</th><th>Oxigraph</th></tr>
+<tr><td>bulk load</td><td>watdiv</td><td></td><td>89.07 s</td><td>51.09 s</td><td class="win">2.00 s</td></tr>
+</table>
+<h3>Size on disk</h3>
+<p class="sub">Bytes per statement. Lower is better; redb grows its file in large steps while loading, and <code>tm compact</code> reclaims it.</p>
+<table class="bench">
+<tr><th>Query</th><th>Variant</th><th>Rows</th><th>SQLite</th><th>redb</th><th>Oxigraph</th></tr>
+<tr><td>after load</td><td>watdiv</td><td></td><td>287 B</td><td>2 147 B</td><td class="win">78 B</td></tr>
+<tr><td>after churn</td><td>watdiv</td><td></td><td>288 B</td><td>2 147 B</td><td class="win">130 B</td></tr>
+<tr><td>after compaction</td><td>watdiv</td><td></td><td>—</td><td>1 051 B</td><td class="win">130 B</td></tr>
+</table>
+<h3>WatDiv-style templates</h3>
+<p class="sub">Linear (L), star (S), snowflake (F) and complex (C) SPARQL queries over a seeded e-commerce graph, with constants chosen to be selective at every scale.</p>
+<table class="bench">
+<tr><th>Query</th><th>Variant</th><th>Rows</th><th>SQLite</th><th>redb</th><th>Oxigraph</th></tr>
+<tr><td>L1 <span class="muted">users in the cities of one country</span></td><td>now</td><td>7320</td><td class="win">4.01 ms</td><td>4.77 ms</td><td>28.57 ms</td></tr>
+<tr><td>L2 <span class="muted">reviews of products sold in one city</span></td><td>now</td><td>0</td><td>63 µs</td><td class="win">41 µs</td><td>72 µs</td></tr>
+<tr><td>L3 <span class="muted">what one user&#x27;s followees like, with genre</span></td><td>now</td><td>9</td><td>69 µs</td><td class="win">58 µs</td><td>162 µs</td></tr>
+<tr><td>S1 <span class="muted">products of one genre under a price, with seller</span></td><td>now</td><td>1654</td><td class="win">5.67 ms</td><td>7.63 ms</td><td>37.04 ms</td></tr>
+<tr><td>S2 <span class="muted">users of one city with age and name</span></td><td>now</td><td>1138</td><td class="win">2.69 ms</td><td>2.70 ms</td><td>12.62 ms</td></tr>
+<tr><td>S3 <span class="muted">5-star reviews of one genre&#x27;s products, with reviewer</span></td><td>now</td><td>598</td><td class="win">2.23 ms</td><td>3.84 ms</td><td>195.98 ms</td></tr>
+<tr><td>F1 <span class="muted">snowflake: users in one city → likes → genre, seller → location</span></td><td>now</td><td>10581</td><td>23.17 ms</td><td class="win">20.22 ms</td><td>179.34 ms</td></tr>
+<tr><td>F2 <span class="muted">good reviews of expensive products in one genre, reviewer&#x27;s age</span></td><td>now</td><td>1935</td><td>14.48 ms</td><td class="win">14.29 ms</td><td>74.26 ms</td></tr>
+<tr><td>C1 <span class="muted">reviews per genre (aggregate)</span></td><td>now</td><td>19</td><td class="win">13.41 ms</td><td>20.72 ms</td><td>400.65 ms</td></tr>
+<tr><td>C2 <span class="muted">mutual follows in the same city (count)</span></td><td>now</td><td>1</td><td class="win">87.07 ms</td><td>96.17 ms</td><td>602.75 ms</td></tr>
+</table>
+<h3>Lookups in time views</h3>
+<p class="sub">A point lookup and a two-hop lookup in the current view, as of an earlier transaction and at a valid-time instant. Oxigraph has no time views.</p>
+<table class="bench">
+<tr><th>Query</th><th>Variant</th><th>Rows</th><th>SQLite</th><th>redb</th><th>Oxigraph</th></tr>
+<tr><td>point</td><td>now</td><td>10</td><td>59 µs</td><td class="win">47 µs</td><td>115 µs</td></tr>
+<tr><td>point</td><td>asOf</td><td>10</td><td>70 µs</td><td class="win">43 µs</td><td>—</td></tr>
+<tr><td>point</td><td>validAt</td><td>10</td><td>69 µs</td><td class="win">52 µs</td><td>—</td></tr>
+<tr><td>2-hop</td><td>now</td><td>9</td><td>52 µs</td><td class="win">48 µs</td><td>140 µs</td></tr>
+<tr><td>2-hop</td><td>asOf</td><td>9</td><td>73 µs</td><td class="win">46 µs</td><td>—</td></tr>
+<tr><td>2-hop</td><td>validAt</td><td>9</td><td>68 µs</td><td class="win">45 µs</td><td>—</td></tr>
+</table>
+<h3>Cypher</h3>
+<p class="sub">The same graph through openCypher. Oxigraph has no Cypher.</p>
+<table class="bench">
+<tr><th>Query</th><th>Variant</th><th>Rows</th><th>SQLite</th><th>redb</th></tr>
+<tr><td>2-hop</td><td>now</td><td>9</td><td>14.44 ms</td><td class="win">379 µs</td></tr>
+<tr><td>star</td><td>now</td><td>827</td><td>152.47 ms</td><td class="win">95.12 ms</td></tr>
+<tr><td>aggregate</td><td>now</td><td>19</td><td>389.70 ms</td><td class="win">372.44 ms</td></tr>
+</table>
+<h3>Paths</h3>
+<p class="sub">SPARQL reachability, and Cypher shortest path and trail.</p>
+<table class="bench">
+<tr><th>Query</th><th>Variant</th><th>Rows</th><th>SQLite</th><th>redb</th><th>Oxigraph</th></tr>
+<tr><td>reachability</td><td>now</td><td>1</td><td>34.15 ms</td><td class="win">33.33 ms</td><td>107.21 ms</td></tr>
+<tr><td>shortest</td><td>now</td><td>1</td><td class="win">1.61 s</td><td>3.87 s</td><td>—</td></tr>
+<tr><td>trail 1..3</td><td>now</td><td>1</td><td class="win">760.08 ms</td><td>1.92 s</td><td>—</td></tr>
+</table>
+<h3>Concurrent readers</h3>
+<p class="sub">Two-hop lookups per second from different users on 1, 4 and 16 threads. Higher is better.</p>
+<table class="bench">
+<tr><th>Query</th><th>Variant</th><th>Rows</th><th>SQLite</th><th>redb</th><th>Oxigraph</th></tr>
+<tr><td>2-hop</td><td>1 threads</td><td></td><td>14 724/s</td><td class="win">18 680/s</td><td>11 700/s</td></tr>
+<tr><td>2-hop</td><td>4 threads</td><td></td><td>13 934/s</td><td class="win">36 746/s</td><td>34 344/s</td></tr>
+<tr><td>2-hop</td><td>16 threads</td><td></td><td>15 897/s</td><td>49 496/s</td><td class="win">67 577/s</td></tr>
+</table>
+<h3>Writes</h3>
+<p class="sub">One write per transaction. A tiramemsu write allocates a statement id and a transaction number, checks schemas, records an event, keeps history and cascades; an Oxigraph insert adds a quad.</p>
+<table class="bench">
+<tr><th>Query</th><th>Variant</th><th>Rows</th><th>SQLite</th><th>redb</th><th>Oxigraph</th></tr>
+<tr><td>insert</td><td>watdiv</td><td></td><td>141 µs</td><td>146 µs</td><td class="win">6 µs</td></tr>
+<tr><td>replace (churn)</td><td>watdiv</td><td></td><td>187 µs</td><td>203 µs</td><td class="win">16 µs</td></tr>
+<tr><td>cascade</td><td>watdiv</td><td></td><td class="win">384 µs</td><td>538 µs</td><td>—</td></tr>
+<tr><td>supersede</td><td>watdiv</td><td></td><td class="win">253 µs</td><td>345 µs</td><td>—</td></tr>
+</table>
+<h3>Cyclic patterns</h3>
+<p class="sub">Subgraph counts on a uniform random graph and on a hub-and-spoke graph, where binary joins build large intermediate results. LFTJ is tiramemsu's worst-case-optimal operator for SQLite.</p>
+<table class="bench">
+<tr><th>Query</th><th>Variant</th><th>Rows</th><th>SQLite</th><th>SQLite + LFTJ</th><th>redb</th><th>Oxigraph</th></tr>
+<tr><td>triangle</td><td>uniform</td><td>1</td><td>923.85 ms</td><td>550.99 ms</td><td class="win">492.07 ms</td><td>7.58 s</td></tr>
+<tr><td>diamond</td><td>uniform</td><td>1</td><td>3.58 s</td><td>2.24 s</td><td class="win">1.24 s</td><td>36.98 s</td></tr>
+<tr><td>4-cycle</td><td>uniform</td><td>1</td><td>3.57 s</td><td>1.30 s</td><td class="win">1.14 s</td><td>38.81 s</td></tr>
+<tr><td>tailed triangle</td><td>uniform</td><td>1</td><td>882.28 ms</td><td>682.66 ms</td><td class="win">556.29 ms</td><td>7.17 s</td></tr>
+<tr><td>triangle</td><td>skewed</td><td>1</td><td>4.87 s</td><td>29.00 ms</td><td class="win">20.76 ms</td><td>55.35 s</td></tr>
+<tr><td>diamond</td><td>skewed</td><td>1</td><td>timeout</td><td>timeout</td><td>69.26 s</td><td>timeout</td></tr>
+<tr><td>4-cycle</td><td>skewed</td><td>1</td><td>timeout</td><td>timeout</td><td>37.62 s</td><td>timeout</td></tr>
+<tr><td>tailed triangle</td><td>skewed</td><td>1</td><td>5.52 s</td><td>35.90 ms</td><td class="win">27.97 ms</td><td>55.79 s</td></tr>
+</table>
+    </div>
+    <div class="panel">
+<p class="sub">100 352 statements in the WatDiv-style graph · 5 timed runs per query after one checked run · macos aarch64 · Apple M2 Max · 12 threads · measured 27 October 2026.</p>
+<h3>Bulk load</h3>
+<p class="sub">Time to load the WatDiv-style graph through each engine's bulk path. Lower is better.</p>
+<table class="bench">
+<tr><th>Query</th><th>Variant</th><th>Rows</th><th>SQLite</th><th>redb</th><th>Oxigraph</th></tr>
+<tr><td>bulk load</td><td>watdiv</td><td></td><td>7.10 s</td><td>2.85 s</td><td class="win">0.15 s</td></tr>
+</table>
+<h3>Size on disk</h3>
+<p class="sub">Bytes per statement. Lower is better; redb grows its file in large steps while loading, and <code>tm compact</code> reclaims it.</p>
+<table class="bench">
+<tr><th>Query</th><th>Variant</th><th>Rows</th><th>SQLite</th><th>redb</th><th>Oxigraph</th></tr>
+<tr><td>after load</td><td>watdiv</td><td></td><td>384 B</td><td>1 343 B</td><td class="win">79 B</td></tr>
+<tr><td>after churn</td><td>watdiv</td><td></td><td>388 B</td><td>1 343 B</td><td class="win">82 B</td></tr>
+<tr><td>after compaction</td><td>watdiv</td><td></td><td>—</td><td>1 056 B</td><td class="win">135 B</td></tr>
+</table>
+<h3>WatDiv-style templates</h3>
+<p class="sub">Linear (L), star (S), snowflake (F) and complex (C) SPARQL queries over a seeded e-commerce graph, with constants chosen to be selective at every scale.</p>
+<table class="bench">
+<tr><th>Query</th><th>Variant</th><th>Rows</th><th>SQLite</th><th>redb</th><th>Oxigraph</th></tr>
+<tr><td>L1 <span class="muted">users in the cities of one country</span></td><td>now</td><td>634</td><td class="win">402 µs</td><td>403 µs</td><td>1.63 ms</td></tr>
+<tr><td>L2 <span class="muted">reviews of products sold in one city</span></td><td>now</td><td>121</td><td>166 µs</td><td class="win">148 µs</td><td>481 µs</td></tr>
+<tr><td>L3 <span class="muted">what one user&#x27;s followees like, with genre</span></td><td>now</td><td>9</td><td>79 µs</td><td class="win">65 µs</td><td>140 µs</td></tr>
+<tr><td>S1 <span class="muted">products of one genre under a price, with seller</span></td><td>now</td><td>136</td><td class="win">503 µs</td><td>769 µs</td><td>2.19 ms</td></tr>
+<tr><td>S2 <span class="muted">users of one city with age and name</span></td><td>now</td><td>310</td><td class="win">490 µs</td><td>687 µs</td><td>2.19 ms</td></tr>
+<tr><td>S3 <span class="muted">5-star reviews of one genre&#x27;s products, with reviewer</span></td><td>now</td><td>51</td><td class="win">225 µs</td><td>372 µs</td><td>11.34 ms</td></tr>
+<tr><td>F1 <span class="muted">snowflake: users in one city → likes → genre, seller → location</span></td><td>now</td><td>3874</td><td>13.90 ms</td><td class="win">6.72 ms</td><td>42.15 ms</td></tr>
+<tr><td>F2 <span class="muted">good reviews of expensive products in one genre, reviewer&#x27;s age</span></td><td>now</td><td>208</td><td class="win">1.10 ms</td><td>1.50 ms</td><td>4.86 ms</td></tr>
+<tr><td>C1 <span class="muted">reviews per genre (aggregate)</span></td><td>now</td><td>20</td><td class="win">1.16 ms</td><td>2.04 ms</td><td>28.87 ms</td></tr>
+<tr><td>C2 <span class="muted">mutual follows in the same city (count)</span></td><td>now</td><td>1</td><td class="win">4.87 ms</td><td>7.33 ms</td><td>38.32 ms</td></tr>
+</table>
+<h3>Lookups in time views</h3>
+<p class="sub">A point lookup and a two-hop lookup in the current view, as of an earlier transaction and at a valid-time instant. Oxigraph has no time views.</p>
+<table class="bench">
+<tr><th>Query</th><th>Variant</th><th>Rows</th><th>SQLite</th><th>redb</th><th>Oxigraph</th></tr>
+<tr><td>point</td><td>now</td><td>10</td><td>54 µs</td><td class="win">39 µs</td><td>74 µs</td></tr>
+<tr><td>point</td><td>asOf</td><td>10</td><td>58 µs</td><td class="win">38 µs</td><td>—</td></tr>
+<tr><td>point</td><td>validAt</td><td>10</td><td>57 µs</td><td class="win">42 µs</td><td>—</td></tr>
+<tr><td>2-hop</td><td>now</td><td>8</td><td>45 µs</td><td class="win">38 µs</td><td>85 µs</td></tr>
+<tr><td>2-hop</td><td>asOf</td><td>8</td><td>58 µs</td><td class="win">37 µs</td><td>—</td></tr>
+<tr><td>2-hop</td><td>validAt</td><td>8</td><td>57 µs</td><td class="win">37 µs</td><td>—</td></tr>
+</table>
+<h3>Cypher</h3>
+<p class="sub">The same graph through openCypher. Oxigraph has no Cypher.</p>
+<table class="bench">
+<tr><th>Query</th><th>Variant</th><th>Rows</th><th>SQLite</th><th>redb</th></tr>
+<tr><td>2-hop</td><td>now</td><td>8</td><td>1.94 ms</td><td class="win">323 µs</td></tr>
+<tr><td>star</td><td>now</td><td>68</td><td>13.80 ms</td><td class="win">8.68 ms</td></tr>
+<tr><td>aggregate</td><td>now</td><td>20</td><td class="win">23.82 ms</td><td>27.36 ms</td></tr>
+</table>
+<h3>Paths</h3>
+<p class="sub">SPARQL reachability, and Cypher shortest path and trail.</p>
+<table class="bench">
+<tr><th>Query</th><th>Variant</th><th>Rows</th><th>SQLite</th><th>redb</th><th>Oxigraph</th></tr>
+<tr><td>reachability</td><td>now</td><td>1</td><td>2.74 ms</td><td class="win">2.51 ms</td><td>5.63 ms</td></tr>
+<tr><td>shortest</td><td>now</td><td>1</td><td class="win">146.97 ms</td><td>364.77 ms</td><td>—</td></tr>
+<tr><td>trail 1..3</td><td>now</td><td>1</td><td class="win">69.93 ms</td><td>183.83 ms</td><td>—</td></tr>
+</table>
+<h3>Concurrent readers</h3>
+<p class="sub">Two-hop lookups per second from different users on 1, 4 and 16 threads. Higher is better.</p>
+<table class="bench">
+<tr><th>Query</th><th>Variant</th><th>Rows</th><th>SQLite</th><th>redb</th><th>Oxigraph</th></tr>
+<tr><td>2-hop</td><td>1 threads</td><td></td><td>17 568/s</td><td class="win">19 668/s</td><td>18 414/s</td></tr>
+<tr><td>2-hop</td><td>4 threads</td><td></td><td>16 686/s</td><td>34 883/s</td><td class="win">43 311/s</td></tr>
+<tr><td>2-hop</td><td>16 threads</td><td></td><td>16 109/s</td><td>50 397/s</td><td class="win">91 192/s</td></tr>
+</table>
+<h3>Writes</h3>
+<p class="sub">One write per transaction. A tiramemsu write allocates a statement id and a transaction number, checks schemas, records an event, keeps history and cascades; an Oxigraph insert adds a quad.</p>
+<table class="bench">
+<tr><th>Query</th><th>Variant</th><th>Rows</th><th>SQLite</th><th>redb</th><th>Oxigraph</th></tr>
+<tr><td>insert</td><td>watdiv</td><td></td><td>111 µs</td><td>120 µs</td><td class="win">5 µs</td></tr>
+<tr><td>replace (churn)</td><td>watdiv</td><td></td><td>119 µs</td><td>167 µs</td><td class="win">17 µs</td></tr>
+<tr><td>cascade</td><td>watdiv</td><td></td><td class="win">409 µs</td><td>461 µs</td><td>—</td></tr>
+<tr><td>supersede</td><td>watdiv</td><td></td><td class="win">278 µs</td><td>291 µs</td><td>—</td></tr>
+</table>
+<h3>Cyclic patterns</h3>
+<p class="sub">Subgraph counts on a uniform random graph and on a hub-and-spoke graph, where binary joins build large intermediate results. LFTJ is tiramemsu's worst-case-optimal operator for SQLite.</p>
+<table class="bench">
+<tr><th>Query</th><th>Variant</th><th>Rows</th><th>SQLite</th><th>SQLite + LFTJ</th><th>redb</th><th>Oxigraph</th></tr>
+<tr><td>triangle</td><td>uniform</td><td>1</td><td>65.61 ms</td><td>45.00 ms</td><td class="win">31.63 ms</td><td>683.14 ms</td></tr>
+<tr><td>diamond</td><td>uniform</td><td>1</td><td>368.48 ms</td><td>185.54 ms</td><td class="win">96.19 ms</td><td>3.36 s</td></tr>
+<tr><td>4-cycle</td><td>uniform</td><td>1</td><td>366.68 ms</td><td>99.63 ms</td><td class="win">76.95 ms</td><td>3.65 s</td></tr>
+<tr><td>tailed triangle</td><td>uniform</td><td>1</td><td>74.58 ms</td><td>57.71 ms</td><td class="win">45.73 ms</td><td>695.19 ms</td></tr>
+<tr><td>triangle</td><td>skewed</td><td>1</td><td>265.82 ms</td><td>7.04 ms</td><td class="win">4.67 ms</td><td>3.44 s</td></tr>
+<tr><td>diamond</td><td>skewed</td><td>1</td><td>5.77 s</td><td>7.13 s</td><td class="win">3.13 s</td><td>48.89 s</td></tr>
+<tr><td>4-cycle</td><td>skewed</td><td>1</td><td>4.30 s</td><td>5.83 s</td><td class="win">1.41 s</td><td>50.31 s</td></tr>
+<tr><td>tailed triangle</td><td>skewed</td><td>1</td><td>289.21 ms</td><td>8.66 ms</td><td class="win">6.17 ms</td><td>3.47 s</td></tr>
+</table>
+    </div>
+  </div>
+</div></section>
+
+<section><div class="wrap">
+  <h2>Reproduce it, and read more</h2>
+  <ul>
+    <li><code>cd bench/backends &amp;&amp; cargo run --release -- run --scale 1000000 --reps 5 --out results-1000000.json</code> (Oxigraph builds RocksDB; <code>tm bench</code> runs the SQLite and redb part without it). The raw results are <a href="https://github.com/Volland/tiramemsu/blob/main/bench/backends/results-1000000.json">results-1000000.json</a> and <a href="https://github.com/Volland/tiramemsu/blob/main/bench/backends/results-100000.json">results-100000.json</a>; the full report with p95 and derived ratios is <a href="https://github.com/Volland/tiramemsu/blob/main/bench/backends/README.md">bench/backends/README.md</a>.</li>
+    <li><a href="articles/two-engines.html">Two engines, one memory</a>: which engine to choose, and why we accept the losses.</li>
+    <li><a href="articles/wcoj-on-kv.html">Worst-case-optimal joins on a key-value store</a>: how the native runner joins.</li>
+    <li><a href="articles/making-redb-faster.html">Why the new engine was not faster, and what made it faster</a>: the profiling behind these numbers.</li>
+  </ul>
+</div></section>
+</main>
+
+<footer><div class="wrap">
+  <span>Tiramemsu · MIT OR Apache-2.0 · <a href="https://github.com/Volland/tiramemsu">github.com/Volland/tiramemsu</a></span>
+  <span><a href="impressum.html">Impressum</a> · <a href="datenschutz.html">Datenschutz</a> · <a href="agb.html">AGB</a></span>
+  <span>Generated from <code>bench/backends/results-*.json</code> by <code>bench/backends/build-site.py</code>.</span>
+</div></footer>
+</body>
+</html>

@@ -16,6 +16,7 @@ tiramemsu prefers **transactional guarantees and security over raw speed**, and 
 cargo run --release -- run --scale 100000 --reps 5 --out results-100000.json
 cargo run --release -- report results-100000.json
 tm bench --scale 100000 --reps 5          # SQLite and redb only, no RocksDB build
+python3 build-site.py                      # regenerate site/benchmarks.html from both results files
 ```
 
 This crate is its own workspace, because Oxigraph builds RocksDB (C++). The workloads, generators and checks live in `crates/tm-bench`.
