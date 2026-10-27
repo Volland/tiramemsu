@@ -213,7 +213,8 @@ impl<'e, 'a> Bgp<'e, 'a> {
         })
     }
 
-    /// Sets the conjuncts to check during the join (see [`Bgp::filters`]).
+    /// Sets the conjuncts to check during the join, each as soon as the slots it
+    /// reads are bound.
     pub fn set_filters(&mut self, filters: &[PExpr]) {
         let names: Vec<String> = self.vars.iter().map(|v| format!("{v:?}")).collect();
         self.filters = filters
