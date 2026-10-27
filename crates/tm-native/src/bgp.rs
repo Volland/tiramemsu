@@ -39,7 +39,7 @@ const PROBE_CAP: u64 = 4_096;
 /// row allocates nothing. The count is kept apart because a pattern set without
 /// variables still has one (empty) row per match.
 #[derive(Clone, Debug, Default)]
-pub struct Rows {
+pub(crate) struct Rows {
     w: usize,
     n: usize,
     data: Vec<i64>,
@@ -506,7 +506,18 @@ impl<'e, 'a> Bgp<'e, 'a> {
 
     /// Joins every pattern, starting from `seed` rows (values of the seed
     /// variables, all terms); returns rows over [`Bgp::vars`].
-    pub fn run(&mut self, seed: Vec<Vec<i64>>) -> Result<Rows> {
+    pub fn run(&mut self, seed: Vec<Vec<i64>>) -> Result<Vec<Vec<i64>>> {
+        let nv = self.vars.len();
+        Ok(self
+            .run_rows(seed)?
+            .iter()
+            .map(|r| r[..nv].to_vec())
+            .collect())
+    }
+
+    /// [`Bgp::run`] on flat rows, which keep the hidden isomorphism slots
+    /// after the variables.
+    fn run_rows(&mut self, seed: Vec<Vec<i64>>) -> Result<Rows> {
         let mut seeded: Vec<bool> = (0..self.nslots)
             .map(|s| seed.first().is_some_and(|r| s < r.len()))
             .collect();
@@ -908,7 +919,7 @@ pub fn eval(
     };
     let mut bgp = Bgp::new(ex, pats, &seed_vars)?;
     bgp.set_filters(filters);
-    let rows = bgp.run(seed_rows)?;
+    let rows = bgp.run_rows(seed_rows)?;
     let vars = bgp.vars().to_vec();
     let vars_len = vars.len();
     let mut rel = Rel {

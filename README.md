@@ -9,7 +9,7 @@ An embedded graph database on SQLite. Every fact has an id, so facts can carry l
 
 <p align="center"><a href="site/articles/layered-graphs.html">Layered graphs, explained</a> · <a href="site/articles/tiramemsu-vs-oxilite.html">Tiramemsu vs oxilite</a> · <a href="site/articles/metagraphs.html">Metagraphs</a> · <a href="lat.md/">Design (lat.md)</a> · <a href="openspec/specs/">Specs (OpenSpec)</a></p>
 
-> **Status: new.** Designed and implemented in September and October 2026 as one Rust library, released as 0.8.0 on crates.io (`tiramemsu`, plus the `tiramemsu-mcp` server and the `tm` command line), PyPI (`tiramemsu`) and npm (`@tiramemsu/node`). There is no network server; it runs on rusqlite natively, on SQLite compiled to WebAssembly in the browser, and (experimental in 0.8) on redb. What is measured and what is not is listed under [Status](#status).
+> **Status: new.** Designed and implemented in September and October 2026 as one Rust library, released as 0.8.1 on crates.io (`tiramemsu`, plus the `tiramemsu-mcp` server and the `tm` command line), PyPI (`tiramemsu`) and npm (`@tiramemsu/node`). There is no network server; it runs on rusqlite natively, on SQLite compiled to WebAssembly in the browser, and (experimental in 0.8) on redb. What is measured and what is not is listed under [Status](#status).
 
 ## Why
 

@@ -9,6 +9,8 @@ OpenSpec changes in `openspec/changes/archive/`.
 
 ## [Unreleased]
 
+## [0.8.1] - 2026-10-27
+
 Faster native runner on redb (`openspec/changes/archive/2026-10-27-tune-native-runner/`). No file format, API or answer changes.
 
 ### Changed
@@ -231,7 +233,8 @@ First release.
 - Named graphs: `Tx::add_to_graph`, `remove_from_graph`, `clear_graph`, `View::graphs`, `View::graph_members`. SPARQL gains `GRAPH`, `FROM NAMED` and graph management updates.
 - JSON bridge (`tiramemsu-json`), Node.js bindings (`@tiramemsu/node`) and Python bindings (`tiramemsu`), with release workflows for PyPI wheels and npm.
 
-[Unreleased]: https://github.com/Volland/tiramemsu/compare/v0.8.0...HEAD
+[Unreleased]: https://github.com/Volland/tiramemsu/compare/v0.8.1...HEAD
+[0.8.1]: https://github.com/Volland/tiramemsu/compare/v0.8.0...v0.8.1
 [0.8.0]: https://github.com/Volland/tiramemsu/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/Volland/tiramemsu/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/Volland/tiramemsu/compare/v0.5.0...v0.6.0
