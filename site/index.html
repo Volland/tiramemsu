@@ -4,14 +4,14 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Tiramemsu: layered, never-forget memory for agents</title>
-<meta name="description" content="Tiramemsu is an embedded graph database on SQLite for agent memory. Recall by words and meaning that respects time travel, facts with layers of provenance and belief, two clocks, nothing ever deleted, SPARQL and Cypher over one file, natively and in the browser.">
+<meta name="description" content="Tiramemsu is an embedded graph database for agent memory, in one file on SQLite or redb. Facts with layers of provenance and belief, two clocks, nothing ever deleted, recall by words and meaning in any past moment, SPARQL and Cypher, natively, over MCP and in the browser.">
 <link rel="icon" href="assets/logo.svg" type="image/svg+xml">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
 <header class="top"><div class="wrap">
   <a class="brand" href="./"><img src="assets/logo.svg" alt="">Tiramemsu</a>
-  <nav class="menu"><a href="#new">New in 0.6</a><a href="#why">Why</a><a href="#features">Features</a><a href="#start">Quick start</a><a href="articles/">Articles</a><a href="paper/">Papers</a><a href="https://github.com/Volland/tiramemsu">GitHub</a></nav>
+  <nav class="menu"><a href="#why">Why</a><a href="#usecases">Use cases</a><a href="#features">Features</a><a href="#matrix">Matrix</a><a href="#start">Quick start</a><a href="articles/">Articles</a><a href="paper/">Papers</a><a href="https://github.com/Volland/tiramemsu">GitHub</a></nav>
 </div></header>
 
 <main>
@@ -19,42 +19,11 @@
   <div>
     <p class="slogan">Your agent’s brain loves Tiramemsu.</p>
     <h1>Memory that has <em>layers</em>, travels in time, and never forgets.</h1>
-    <p class="lead">Tiramemsu is an embedded graph database on SQLite for agent memory. Every fact has its own id, so it can carry a confidence, a source or a belief, layer on layer. Every change is kept with when it was learned and when it was true. And an agent can recall by words and by meaning, today or as of any moment in the past, from one file.</p>
-    <div class="btns"><a class="btn primary" href="#start">Quick start</a><a class="btn" href="articles/vector-memory.html">Vector memory that remembers when</a><a class="btn" href="articles/vector-cookbook.html">Vector cookbook</a><a class="btn" href="articles/hybrid-recall.html">Hybrid recall</a><a class="btn" href="paper/">Read the papers</a></div>
+    <p class="lead">Tiramemsu is an embedded graph database for agent memory. Every fact has its own id, so it can carry a confidence, a source or a belief, layer on layer. Every change is kept with when it was learned and when it was true. And an agent can recall by words and by meaning, today or as of any moment in the past, from one file on SQLite or redb.</p>
+    <div class="btns"><a class="btn primary" href="#start">Quick start</a><a class="btn" href="#usecases">Use cases</a><a class="btn" href="#matrix">Feature matrix</a><a class="btn" href="paper/">Read the papers</a></div>
   </div>
   <img src="assets/logo.svg" alt="A brain taking a bite out of a tiramisu whose layers are a graph">
 </div>
-
-<section id="new" class="new"><div class="wrap">
-  <h2>New in 0.8: two engines, one memory</h2>
-  <p class="sub">Choose SQLite or redb when you create a memory; everything else detects it. redb is experimental in 0.8. <a href="articles/two-engines.html">Read why, with the benchmark →</a></p>
-  <ul class="hl">
-    <li><a href="articles/two-engines.html"><strong>redb backend</strong><span>A pure-Rust file with snapshot readers and no reader pool: the same ids, clocks and history as SQLite.</span></a></li>
-    <li><a href="articles/wcoj-on-kv.html"><strong>Native runner</strong><span>SPARQL and Cypher over redb with hybrid and worst-case-optimal joins: a hub triangle in 45 ms, not 5 s.</span></a></li>
-    <li><a href="articles/two-engines.html"><strong>The <code>tm</code> command</strong><span><code>tm create --backend redb</code>, <code>query</code>, <code>import</code>, <code>export</code>, <code>convert</code>, <code>compact</code>, <code>bench</code>.</span></a></li>
-    <li><a href="https://github.com/Volland/tiramemsu/blob/main/bench/backends/README.md"><strong>An honest benchmark</strong><span>Against SQLite and Oxigraph at a million statements, with every loss listed.</span></a></li>
-  </ul>
-  <h3 class="group">New in 0.6: vector indexes in SPARQL and Cypher</h3>
-  <p class="sub">The whole vector loop now works from the query languages: create an index, add embeddings, search, drop. <a href="articles/vector-cookbook.html">See every sample →</a></p>
-  <ul class="hl">
-    <li><a href="articles/vector-cookbook.html#create"><strong>CREATE VECTOR INDEX</strong><span>Cypher index commands, Neo4j <code>indexConfig</code> included, plus <code>SHOW</code> and <code>DROP</code>.</span></a></li>
-    <li><a href="articles/vector-cookbook.html#add"><strong>Embed from Cypher</strong><span><code>CALL tiramemsu.vector.setEmbedding(r, 'minilm', $v)</code>, one row or a whole <code>UNWIND</code>.</span></a></li>
-    <li><a href="articles/vector-cookbook.html#add"><strong>Embed from SPARQL</strong><span><code>tm:vectorEmbedding</code> in <code>INSERT DATA</code> and <code>INSERT … WHERE</code>, annotations included.</span></a></li>
-    <li><a href="articles/vector-cookbook.html#show"><strong>Drop keeps the past</strong><span>A dropped index is gone now; searches as of before the drop still answer.</span></a></li>
-  </ul>
-  <h3 class="group">New in 0.5: recall by meaning, in any moment</h3>
-  <p class="sub">Vector and hybrid recall, built for a memory that travels in time, plus faster queries and a round of fixes. <a href="articles/vector-memory.html">Read how it works →</a></p>
-  <ul class="hl">
-    <li><a href="articles/vector-memory.html"><strong>Vector recall</strong><span>Store your model’s embeddings beside the facts and search them by meaning.</span></a></li>
-    <li><a href="articles/vector-memory.html#time"><strong>Exact under time travel</strong><span>The view filters first, so <code>as_of</code> and <code>valid_at</code> never lose a hit.</span></a></li>
-    <li><a href="articles/hybrid-recall.html"><strong>Hybrid recall</strong><span>Words and meaning fused by rank, ties broken by evidence.</span></a></li>
-    <li><a href="articles/hybrid-recall.html#expansion"><strong>Recall with context</strong><span>Each hit can bring its source, confidence and related facts.</span></a></li>
-    <li><a href="articles/hybrid-recall.html#everywhere"><strong>One recall everywhere</strong><span>Rust, Python, Node, SPARQL, Cypher and MCP run the same search.</span></a></li>
-    <li><a href="articles/vector-memory.html#hosts"><strong>Any SQLite, even the browser</strong><span>No extension needed: the same results natively and in WebAssembly.</span></a></li>
-    <li><a href="articles/vector-memory.html#never"><strong>Vectors never forgotten</strong><span>Append-only, in the same file and transaction as the facts.</span></a></li>
-    <li><a href="https://github.com/Volland/tiramemsu/blob/main/CHANGELOG.md"><strong>2–3× faster lookups</strong><span>Point and two-hop SPARQL queries no longer re-plan on every call.</span></a></li>
-  </ul>
-</div></section>
 
 <section id="why"><div class="wrap">
   <h2>What makes it different</h2>
@@ -63,9 +32,9 @@
     <div class="card"><span class="tag">Facts about facts</span><h3>Every statement has an id</h3><p>Confidence, source, belief and correction are statements about statements, not a side table. Ask “why do I believe this?” in one query.</p></div>
     <div class="card"><span class="tag">Two clocks</span><h3>What we knew, and when it was true</h3><p>Transaction time and valid time on every fact. Read memory as it was at any transaction, at any instant, or across its whole history.</p></div>
     <div class="card"><span class="tag">Recall in the past</span><h3>Search by meaning, as of then</h3><p>Vector and text recall run inside the chosen view. An as-of view sees only the facts and vectors that existed then, so a past answer never drifts.</p></div>
-    <div class="card"><span class="tag">Never forget</span><h3>History is guarded in the file</h3><p>SQLite triggers refuse deletes and rewrites of facts, terms, transactions and vectors. Forgetting is a retraction that stays visible in history.</p></div>
+    <div class="card"><span class="tag">Never forget</span><h3>History is guarded</h3><p>Deletes and rewrites of facts, terms, transactions and vectors are refused. Forgetting is a retraction that stays visible in history, with who and why.</p></div>
     <div class="card"><span class="tag">Evidence, not guesses</span><h3>Every hit says why</h3><p>Hits carry their confidence, confirmations, authors and age, ranked in a fixed, named order. Missing evidence is reported as missing, never invented.</p></div>
-    <div class="card"><span class="tag">Embedded</span><h3>One file, no server</h3><p>A Rust library over SQLite, with Python and Node bindings, an MCP server for agents, and the same engine in the browser.</p></div>
+    <div class="card"><span class="tag">Embedded</span><h3>One file, no server</h3><p>A Rust library on SQLite or redb, with Python and Node bindings, an MCP server for agents, a command line, and the same engine in the browser.</p></div>
   </div>
   <h3 class="group">How it compares</h3>
   <table>
@@ -78,7 +47,7 @@
       <tr><td>Search a past moment</td><td class="win">Same results forever</td><td>Filter after top-k loses hits</td><td>Not usually</td></tr>
       <tr><td>Deletes</td><td class="win">Refused; retract instead</td><td>Allowed</td><td>Allowed</td></tr>
       <tr><td>Query languages</td><td class="win">SPARQL and Cypher, one store</td><td>API</td><td>One language</td></tr>
-      <tr><td>Deployment</td><td class="win">One SQLite file, also in the browser</td><td>Service or library</td><td>Server</td></tr>
+      <tr><td>Deployment</td><td class="win">One file, embedded, also in the browser</td><td>Service or library</td><td>Server</td></tr>
     </tbody>
   </table>
   <p class="sub">“Typical” means the common default, not every product. The time-travel argument is spelled out in <a href="articles/vector-memory.html">Vector memory that remembers when</a>.</p>
@@ -90,51 +59,117 @@ past = db.as_of(instant=<span class="s">"2026-10-06T09:00:00Z"</span>)
     <span class="k">print</span>(hit.rank, hit.o, hit.evidence.confidence, hit.via)   <span class="c"># facts, their sources, why</span></code></pre>
 </div></section>
 
+<section id="usecases"><div class="wrap">
+  <h2>Suggested use cases</h2>
+  <p class="sub">Where layers, two clocks and a history that is never deleted pay off. Each card names the features it leans on and links to a worked example.</p>
+  <div class="grid uses-grid">
+    <div class="card usecase"><span class="tag">Assistants</span><h3>A personal assistant that can be corrected</h3><p>A user changes jobs, moves city, or says “that’s wrong”. Correct the fact and keep its source and confidence; later answer “what did you think I did last month?” exactly.</p><p class="uses"><span>supersede</span><span>confidence layers</span><span>as-of views</span></p><a href="articles/time-travel.html">Time travel, explained →</a></div>
+    <div class="card usecase"><span class="tag">Coding agents</span><h3>Project memory for Claude Code</h3><p>Register one MCP server and the agent remembers decisions, conventions and who said what across sessions, with no code to write and a read-only mode for reviewers.</p><p class="uses"><span>MCP server</span><span>recall</span><span>read-only</span></p><a href="articles/mcp-memory.html">Memory over MCP →</a></div>
+    <div class="card usecase"><span class="tag">Grounded answers</span><h3>RAG that cites and knows when it is stale</h3><p>Recall by words and meaning, expand each hit to its sources, cite the statement ids behind every row, and get told when a saved answer’s evidence changes.</p><p class="uses"><span>hybrid recall</span><span>provenance</span><span>saved answers</span></p><a href="articles/recall-review-recheck.html">Recall, review, recheck →</a></div>
+    <div class="card usecase"><span class="tag">Multi-agent</span><h3>Shared memory for a team of agents</h3><p>Every write records its author and reason, disagreements between sources surface as conflicts, and facts move between memories as bundles. On redb, any number of agents read snapshots at once.</p><p class="uses"><span>tx metadata</span><span>conflicts</span><span>bundles</span><span>redb readers</span></p><a href="articles/layer-recipes.html">Questions only layers answer →</a></div>
+    <div class="card usecase"><span class="tag">Observability</span><h3>Agent traces that say what caused what</h3><p>Store each step of a run as a causal-temporal event graph, then ask in SPARQL which tool call led to a bad answer and what the agent knew at that moment.</p><p class="uses"><span>statement ids</span><span>two clocks</span><span>paths</span></p><a href="articles/causal-temporal-event-graphs.html">Causal-temporal event graphs →</a></div>
+    <div class="card usecase"><span class="tag">Knowledge work</span><h3>Research notes with provenance</h3><p>Claims from papers, interviews or the web, each with its source, confidence and the claims it supports. Keep contradictions side by side instead of overwriting, and nest context as metagraphs.</p><p class="uses"><span>layers</span><span>conflicts</span><span>named graphs</span><span>metagraphs</span></p><a href="articles/metagraphs.html">Metagraphs from one row shape →</a></div>
+    <div class="card usecase"><span class="tag">Audit</span><h3>Decisions you can reconstruct</h3><p>Show what the system believed when it acted, not what it believes now. Deletes are refused, every retraction keeps its reason, and the past reads the same forever.</p><p class="uses"><span>never-forget</span><span>as-of views</span><span>retraction reasons</span></p><a href="articles/layered-graphs.html">Layered graphs, explained →</a></div>
+    <div class="card usecase"><span class="tag">Propagation</span><h3>Who could have learned it, and when</h3><p>Contact chains, rumour spread, dependency impact: paths where valid time never goes backwards, each with its earliest arrival and a flag if the search was cut.</p><p class="uses"><span>journeys</span><span>dependents</span><span>budgets</span></p><a href="articles/journeys-in-time.html">Journeys that respect time →</a></div>
+    <div class="card usecase"><span class="tag">Local-first</span><h3>Memory that lives in the browser</h3><p>Run the whole engine in a Web Worker, in memory or in OPFS: an offline assistant or a notes app whose memory, text and vector recall never leave the device.</p><p class="uses"><span>WebAssembly</span><span>OPFS</span><span>text + vector recall</span></p><a href="articles/vector-memory.html#hosts">Any host, even the browser →</a></div>
+  </div>
+</div></section>
+
 <section id="features"><div class="wrap">
   <h2>Feature sets</h2>
-  <p class="sub">A small Rust core over one SQLite file. Most of what follows is opt-in, so a store that does not ask for it behaves as before.</p>
+  <p class="sub">A small Rust core over one file. Most of what follows is opt-in, so a store that does not ask for it pays nothing for it. The <a href="#matrix">feature matrix</a> shows where each one runs.</p>
   <h3 class="group">Remember</h3>
-  <div class="grid">
+  <div class="grid four">
     <div class="card"><span class="tag">Layers</span><h3>Provenance and belief stack</h3><p>A statement is a row with its own id, so it can be the subject or object of other statements, to any depth. Retracting a fact retracts its layers.</p></div>
     <div class="card"><span class="tag">Correct</span><h3>Supersede, confirm, speculate</h3><p>Correct a fact and its layers are replayed on the new one. Confirm a fact from a new source. Try changes in a <code>with</code> block that leaves no trace.</p></div>
     <div class="card"><span class="tag">Schema</span><h3>Cardinality, uniqueness, types</h3><p>Predicates can be single-valued, unique or typed, checked on every write, with idempotent <code>assert</code> and parallel edges by <code>create</code>.</p></div>
     <div class="card"><span class="tag">Review</span><h3>Conflicts and import previews</h3><p>See where values overlap in valid time, with every statement’s evidence, and dry-run a bundle from another memory before taking it.</p></div>
   </div>
   <h3 class="group">Time travel</h3>
-  <div class="grid">
-    <div class="card"><span class="tag">Bitemporal</span><h3>Now, as of, history, valid at</h3><p>Pick a view per query or per pattern, in Rust, SPARQL (<code>SERVICE &lt;tm:asOf/…&gt;</code>) and Cypher (<code>USE AS OF</code>).</p></div>
+  <div class="grid four">
+    <div class="card"><span class="tag">Bitemporal</span><h3>Now, as of, history, valid at</h3><p>Pick a view per query or per pattern, in Rust, SPARQL (<code>SERVICE &lt;tm:asOf/…&gt;</code>) and Cypher (<code>USE AS OF</code>). Write valid time from SPARQL Update too.</p></div>
     <div class="card"><span class="tag">Journeys</span><h3>Paths that respect time</h3><p>Who could have heard it from Ana after March 1st, with the earliest arrival, and whether the search was complete or cut at a cap.</p></div>
     <div class="card"><span class="tag">Recheck</span><h3>Answers that know they are stale</h3><p>Saved queries are marked <code>stale</code> or <code>recheck</code> by later writes, once each; answers on a past view stay fresh.</p></div>
-    <div class="card"><span class="tag">Metagraphs</span><h3>Structure with two clocks</h3><p>Edges are nodes and can hold subgraphs. Nest, fold and unfold them, and ask how the structure looked last week. <a href="articles/metagraphs.html">Read more</a>.</p></div>
+    <div class="card"><span class="tag">Metagraphs</span><h3>Structure with two clocks</h3><p>Edges are nodes and can hold subgraphs. Nest, fold and unfold them, and ask how the structure looked last week.</p></div>
   </div>
   <h3 class="group">Recall</h3>
-  <div class="grid">
-    <div class="card"><span class="tag">New</span><h3>Vector recall</h3><p>Define a model, store the vectors your model computes, search exactly (cosine, dot, L2; f32 or f16). As-of views see only vectors stored by then.</p></div>
-    <div class="card"><span class="tag">New in 0.6</span><h3>Vector indexes in queries</h3><p><code>CREATE VECTOR INDEX</code>, <code>setEmbedding</code> and <code>DROP INDEX</code> in Cypher; <code>tm:vectorEmbedding</code> in SPARQL Update. <a href="articles/vector-cookbook.html">Cookbook</a>.</p></div>
-    <div class="card"><span class="tag">New</span><h3>Hybrid recall</h3><p>Text and vector channels fused by reciprocal rank, expanded to each hit’s layers and subject facts, with <code>via</code> saying how each arrived.</p></div>
-    <div class="card"><span class="tag">Text</span><h3>Find it by words</h3><p>FTS5 recall over string values in any view, each hit with its evidence, from Rust, SPARQL and Cypher.</p></div>
+  <div class="grid four">
+    <div class="card"><span class="tag">Meaning</span><h3>Vector recall</h3><p>Store the vectors your model computes and search them exactly (cosine, dot, L2; f32 or f16). Create, fill and drop indexes from Rust, SPARQL or Cypher. <a href="articles/vector-cookbook.html">Cookbook</a>.</p></div>
+    <div class="card"><span class="tag">Words</span><h3>Text recall</h3><p>BM25 recall over string values in any view, each hit with its evidence, from Rust, the bindings, SPARQL and Cypher.</p></div>
+    <div class="card"><span class="tag">Hybrid</span><h3>Words and meaning together</h3><p>Text and vector channels fused by reciprocal rank, expanded to each hit’s layers and subject facts, with <code>via</code> saying how each arrived.</p></div>
     <div class="card"><span class="tag">Evidence</span><h3>Ranked, never invented</h3><p>Ties break on confidence, confirmations, distinct authors and recency; absent evidence stays absent. Every policy has a name.</p></div>
   </div>
   <h3 class="group">Query</h3>
-  <div class="grid">
-    <div class="card"><span class="tag">Languages</span><h3>SPARQL and Cypher</h3><p>SPARQL 1.1 with RDF 1.2 annotations and openCypher share one IR and one semantics table. A relationship is also a <code>:Statement</code> node.</p></div>
+  <div class="grid four">
+    <div class="card"><span class="tag">Languages</span><h3>SPARQL and Cypher</h3><p>SPARQL 1.1 with RDF 1.2 annotations and openCypher share one IR and one semantics table. A relationship is also a <code>:Statement</code> node with an id and a transaction.</p></div>
     <div class="card"><span class="tag">Paths</span><h3>Native path engine</h3><p>Reachability, trails and shortest paths as an automaton search that can cross layers and stay inside named graphs.</p></div>
     <div class="card"><span class="tag">Graphs</span><h3>Named graphs as tags</h3><p>A graph is a node or a statement, and membership is one more layer. <code>GRAPH</code>, <code>FROM</code> and <code>WITH</code> need no new table.</p></div>
-    <div class="card"><span class="tag">Joins</span><h3>Leapfrog triejoin</h3><p>An opt-in native operator for cyclic patterns, with <code>explain</code> saying which route ran and why.</p></div>
+    <div class="card"><span class="tag">Joins</span><h3>Joins built for cycles</h3><p>On redb the native runner picks nested loops, hash joins or a worst-case-optimal join per pattern; on SQLite a leapfrog triejoin is opt-in. <code>explain</code> says which ran. <a href="articles/wcoj-on-kv.html">How</a>.</p></div>
   </div>
   <h3 class="group">For agents and operations</h3>
-  <div class="grid">
+  <div class="grid four">
     <div class="card"><span class="tag">Agents</span><h3>An MCP server</h3><p><code>tiramemsu-mcp</code> gives Claude Code, Claude Desktop or any MCP client typed memory tools, from <code>assert</code> to <code>recall</code>, with a read-only mode.</p></div>
+    <div class="card"><span class="tag">Shell</span><h3>The <code>tm</code> command</h3><p>Create, inspect, query (table, JSON, CSV, N-Triples, any time view), import and export RDF, convert between engines, compact and benchmark.</p></div>
     <div class="card"><span class="tag">Budgets</span><h3>Deadlines and cancellation</h3><p>Bound any call by time, rows, bytes or the wait for a reader. Over a limit is a typed error, never a silent prefix.</p></div>
-    <div class="card"><span class="tag">Bulk</span><h3>Large loads in chunks</h3><p>Import sessions commit in chunks, hold the write lease and refresh planner statistics once at the end.</p></div>
-    <div class="card"><span class="tag">Portable</span><h3>Fact bundles</h3><p>Export a fact with its layers and evidence, and import it into another memory idempotently.</p></div>
+    <div class="card"><span class="tag">Bulk and portable</span><h3>Large loads, fact bundles</h3><p>Import sessions commit in chunks. Export a fact with its layers and evidence, and import it into another memory idempotently.</p></div>
   </div>
   <h3 class="group">Run anywhere</h3>
-  <div class="grid">
-    <div class="card"><span class="tag">Embedded</span><h3>One file, one crate</h3><p>Rust over bundled SQLite (WAL, STRICT), behind a small executor trait. Python and Node bindings share one JSON bridge.</p></div>
+  <div class="grid four">
+    <div class="card"><span class="tag">Engines</span><h3>SQLite or redb</h3><p>Choose when you create a file; opening detects it. Both hold the same ids, clocks and history, and <code>tm convert</code> replays one into the other. <a href="articles/two-engines.html">Which to pick</a>.</p></div>
     <div class="card"><span class="tag">Browser</span><h3>The engine in a Web Worker</h3><p>SQLite compiled to WebAssembly, in memory or in OPFS, with the same file format, vector and text recall included.</p></div>
     <div class="card"><span class="tag">Lean</span><h3>Optional query front ends</h3><p>Turn off default features and the crate links no parser or planner; transactions, views and recall still work.</p></div>
-    <div class="card"><span class="tag">Verified</span><h3>Specs, tests and a paper</h3><p>Fifty capability specs, property tests against brute force, closed W3C and TCK harnesses, and a formal model with proofs.</p></div>
+    <div class="card"><span class="tag">Verified</span><h3>Specs, tests and papers</h3><p>Capability specs written before the code, property tests against brute force, both engines checked row for row, W3C and TCK harnesses, and a formal model with proofs.</p></div>
+  </div>
+</div></section>
+
+<section id="matrix"><div class="wrap">
+  <h2>Feature matrix</h2>
+  <p class="sub">Where each feature runs. Python, Node.js and the browser share one JSON bridge, so they expose the same operations; the MCP server exposes a curated set of tools; the <code>tm</code> command line reaches the rest through SPARQL and Cypher.</p>
+  <table class="matrix">
+    <thead>
+      <tr><th>Feature</th><th>Rust</th><th>Python</th><th>Node.js</th><th>Browser</th><th>MCP</th><th class="eng">SQLite</th><th>redb</th></tr>
+    </thead>
+    <tbody>
+      <tr class="grp"><td colspan="8">Remember</td></tr>
+      <tr><td>Statement ids and layers</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td><td class="y eng">✓</td><td class="y">✓</td></tr>
+      <tr><td>Supersede and confirm</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td><td class="y eng">✓</td><td class="y">✓</td></tr>
+      <tr><td>Retract with cascade</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td><td class="n">–</td><td class="y eng">✓</td><td class="y">✓</td></tr>
+      <tr><td>Speculative <code>with</code> blocks</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td><td class="n">–</td><td class="y eng">✓</td><td class="y">✓</td></tr>
+      <tr><td>Predicate schemas</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td><td class="p">checked</td><td class="y eng">✓</td><td class="y">✓</td></tr>
+      <tr><td>Conflicts and bundle previews</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td><td class="y eng">✓</td><td class="y">✓</td></tr>
+      <tr><td>Fact bundles (export, import)</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td><td class="y eng">✓</td><td class="y">✓</td></tr>
+      <tr class="grp"><td colspan="8">Time travel</td></tr>
+      <tr><td>Now, as-of, history, valid-at views</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td><td class="y eng">✓</td><td class="y">✓</td></tr>
+      <tr><td>Time-respecting journeys</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td><td class="p">via query</td><td class="y eng">✓</td><td class="y">✓</td></tr>
+      <tr><td>Dependents (what breaks if retracted)</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td><td class="y eng">✓</td><td class="y">✓</td></tr>
+      <tr><td>Saved answers and recheck</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td><td class="y eng">✓</td><td class="n">not yet</td></tr>
+      <tr class="grp"><td colspan="8">Recall</td></tr>
+      <tr><td>Text recall (BM25)</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td><td class="y eng">FTS5</td><td class="y">own index</td></tr>
+      <tr><td>Vector search, exact and view-aware</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td><td class="y eng">✓</td><td class="y">✓</td></tr>
+      <tr><td>Hybrid recall with expansion</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td><td class="y eng">✓</td><td class="y">✓</td></tr>
+      <tr><td>Vector indexes from SPARQL and Cypher</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td><td class="p">own tools</td><td class="y eng">✓</td><td class="y">✓</td></tr>
+      <tr class="grp"><td colspan="8">Query</td></tr>
+      <tr><td>SPARQL 1.1 with RDF 1.2 annotations</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td><td class="y eng">✓</td><td class="y">✓</td></tr>
+      <tr><td>SPARQL Update and Cypher writes</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td><td class="n">–</td><td class="y eng">✓</td><td class="y">✓</td></tr>
+      <tr><td>openCypher reads, <code>:Statement</code> view</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td><td class="y eng">✓</td><td class="y">✓</td></tr>
+      <tr><td>Paths, trails, shortest paths</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td><td class="p">via query</td><td class="y eng">✓</td><td class="y">✓</td></tr>
+      <tr><td>Named graphs and metagraphs</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td><td class="p">via query</td><td class="y eng">✓</td><td class="y">✓</td></tr>
+      <tr><td>Worst-case-optimal joins</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td><td class="p">on redb</td><td class="p eng">opt-in LFTJ</td><td class="y">automatic</td></tr>
+      <tr><td>Explain</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td><td class="n">–</td><td class="y eng">✓</td><td class="y">✓</td></tr>
+      <tr class="grp"><td colspan="8">Operations</td></tr>
+      <tr><td>Budgets and cancellation</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td><td class="n">–</td><td class="y">✓</td><td class="y eng">✓</td><td class="y">✓</td></tr>
+      <tr><td>Bulk import sessions</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td><td class="n">–</td><td class="n">–</td><td class="y eng">✓</td><td class="y">✓</td></tr>
+      <tr><td>Concurrent readers</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td><td class="n">one call at a time</td><td class="n">–</td><td class="p eng">reader pool</td><td class="y">unlimited snapshots</td></tr>
+      <tr><td>Durability modes, sync</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td><td class="n">–</td><td class="n">–</td><td class="y eng">✓</td><td class="y">✓</td></tr>
+      <tr><td>Convert between engines</td><td class="y">✓</td><td class="n">–</td><td class="n">–</td><td class="n">–</td><td class="n">–</td><td class="y eng">✓</td><td class="y">✓</td></tr>
+      <tr><td>Runs in the browser</td><td class="n">–</td><td class="n">–</td><td class="n">–</td><td class="y">✓</td><td class="n">–</td><td class="y eng">✓</td><td class="n">–</td></tr>
+    </tbody>
+  </table>
+  <p class="sub">✓ supported · – not offered on that surface. “via query” means the MCP <code>query</code> tool reaches it through SPARQL or Cypher; “checked” means schemas are enforced on MCP writes but defined elsewhere; “own tools” means dedicated MCP tools rather than query writes. The command line converts, compacts and benchmarks either engine. redb is experimental.</p>
+  <h3 class="group">Which engine?</h3>
+  <div class="grid">
+    <div class="card"><span class="tag">Default</span><h3>SQLite</h3><p>The smallest files, the browser build, FTS5, saved answers, and the most mature planner for star-shaped lookups. Pick it unless one of the reasons on the right applies.</p></div>
+    <div class="card"><span class="tag">Experimental</span><h3>redb</h3><p>Many agents reading at once, queries with cycles (who else is connected to both, which claims support each other), large loads, or a storage path with no C in it.</p></div>
   </div>
 </div></section>
 
@@ -155,13 +190,13 @@ past = db.as_of(instant=<span class="s">"2026-10-06T09:00:00Z"</span>)
 <section id="layers"><div class="wrap">
   <h2>Layered graphs</h2>
   <p class="sub">A layer is not a separate structure. It is a statement whose subject is the id of another statement.</p>
-  <figure><img src="assets/layers.svg" alt="Three layers: the fact alice worksAt acme, a confidence and a source about it, and a belief supported by it" width="760" height="520"></figure>
+
   <p><a href="articles/layered-graphs.html">Read the full explanation →</a></p>
 </div></section>
 
 <section id="how"><div class="wrap">
   <h2>How it is built</h2>
-  <p class="sub">Two front ends compile to one logical IR. Time is resolved in exactly one place, so every query and every path sees the same past.</p>
+  <p class="sub">Two front ends compile to one logical IR. Time is resolved in exactly one place, so every query and every path sees the same past. On SQLite the plan runs as generated SQL; on redb a native runner executes the same plan. The diagram shows the SQLite path.</p>
   <figure><img src="assets/architecture.svg" alt="Architecture: SPARQL, Cypher and the Rust API compile to one IR; a planner and a path engine read through a view-aware scan over one SQLite file" width="760" height="500"></figure>
   <p><a href="articles/architecture.html">How tiramemsu is built: the full layer diagram, explained →</a></p>
 </div></section>
@@ -280,46 +315,36 @@ claude mcp add tiramemsu -- tiramemsu-mcp --db ./memory.db --text-index</code></
   <h2>Where it stands</h2>
   <p class="sub">Tiramemsu is new: designed in September 2026 and grown in the open since. Here is what is measured, and what is not.</p>
   <div class="grid">
-    <div class="card"><h3>95 000 lines of Rust</h3><p>Nine crates plus four bindings, 1 355 tests including property tests against brute force, 50 capability specs written before the code (OpenSpec) and a design graph kept in sync (lat.md).</p></div>
+    <div class="card"><h3>Specs before code</h3><p>About 118 000 lines of Rust in fourteen crates and four bindings, 57 capability specs written before the code (OpenSpec), and a design graph kept in sync (lat.md).</p></div>
     <div class="card"><h3>SPARQL</h3><p>634 of 781 in-scope W3C tests pass (66 more are skipped: named-graph data, unsupported formats). Every failing one is listed with a reason, and an unexpected result fails the build.</p></div>
     <div class="card"><h3>Cypher</h3><p>2 615 of 3 880 openCypher TCK scenarios (67 %). Temporal types and a few dual-view cases are deferred and listed.</p></div>
-    <div class="card"><h3>Speed</h3><p>SPARQL point query 20 µs at 100 000 statements. Exact vector search over 10 000 768-d vectors in 12 ms, 100 000 in 134 ms; text plus vector recall in 10 ms at 10 000. <a href="https://github.com/Volland/tiramemsu/blob/main/crates/tiramemsu/benches/README.md">Benchmarks and caveats</a>.</p></div>
+    <div class="card"><h3>Speed</h3><p>SPARQL point query 20 µs at 100 000 statements. Exact vector search over 10 000 768-d vectors in 12 ms. At a million statements a triangle through hubs takes 45 ms on redb, 5.1 s on SQLite’s own plan. <a href="https://github.com/Volland/tiramemsu/blob/main/bench/backends/README.md">Benchmarks, losses included</a>.</p></div>
   </div>
-  <p class="note"><strong>Known limits.</strong> Vector search is exact, so its cost grows with the number of visible vectors; an approximate tier is the next step past about a million. The optional sign-bit prefilter is coarse: on real 100-d vectors it needs about 5 % of the corpus as candidates for 0.95 recall. The application computes embeddings, and a corrected fact needs a new one. As-of lookups slow down as one key collects many updates. Decimals come back as doubles in SPARQL. There is no network server; the MCP server is local and speaks stdio only. In the browser the database uses a rollback journal and refuses query budgets and bulk import.</p>
+  <p class="note"><strong>Known limits.</strong> Vector search is exact, so its cost grows with the number of visible vectors; past about a million an approximate tier will be needed. The application computes embeddings, and a corrected fact needs a new one. redb is experimental: its files are about three times larger than SQLite’s, star-shaped lookups and variable-length Cypher paths are slower, and saved answers are not supported on it yet. Writes are full transactions with ids, history and schema checks, so raw insert speed is far below a plain triple store. There is no network server; the MCP server is local and speaks stdio only. In the browser the database is SQLite with a rollback journal and refuses query budgets and bulk import.</p>
 </div></section>
 
 <section id="paper"><div class="wrap">
   <h2>The papers</h2>
   <p class="sub">Three preprints that write down the model behind tiramemsu and prove what it guarantees. CC BY 4.0, archived on Zenodo.</p>
   <div class="grid">
-    <div class="card"><span class="tag">Paper 1 · consistency</span><h3><a href="paper/layered-bitemporal-graphs.html">Layered Bitemporal Graphs</a></h3><p>One operator, the ground core, explains why retraction cascades, why the past stays grounded and how corrections keep their layers. Repairs it found shipped in 0.4.0.</p></div>
+    <div class="card"><span class="tag">Paper 1 · consistency</span><h3><a href="paper/layered-bitemporal-graphs.html">Layered Bitemporal Graphs</a></h3><p>One operator, the ground core, explains why retraction cascades, why the past stays grounded and how corrections keep their layers.</p></div>
     <div class="card"><span class="tag">Paper 2 · representation</span><h3><a href="paper/metagraph-encodings.html">Metagraph Encodings over Identified Triples</a></h3><p>Metagraphs are cheap to write as identified triples. Reading them back needs exact image constraints, each one proved necessary.</p></div>
     <div class="card"><span class="tag">Paper 3 · interoperability</span><h3><a href="paper/export-boundaries.html">When Is a Temporal Statement Store a Statement Graph?</a></h3><p>Closed, acyclic sets export to OneGraph losslessly. The export kernel is the most you can keep, and the full history loses only correction cycles.</p></div>
   </div>
-  <div class="btns" style="margin-top:18px"><a class="btn primary" href="paper/">All papers</a><a class="btn" href="articles/three-papers.html">The series in one page</a><a class="btn" href="articles/">All articles</a></div>
+  <div class="btns" style="margin-top:18px"><a class="btn primary" href="paper/">All papers</a><a class="btn" href="articles/three-papers.html">The series in one page</a></div>
 </div></section>
 
 <section id="articles"><div class="wrap">
-  <h2>Articles</h2>
-  <ul class="list-articles">
-    <li class="card"><h3><a href="articles/three-papers.html">One record, three questions</a></h3><p>The three papers in one page with one running example: does memory stay grounded, can structure be read back, and what can leave the store intact.</p></li>
-    <li class="card"><h3><a href="articles/statement-store-export.html">What leaves the store intact</a></h3><p>A plain-language companion to the export paper: the export kernel, why history exports when snapshots do not, and both clocks in RDF-star.</p></li>
-    <li class="card"><h3><a href="articles/exact-metagraph-encodings.html">Cheap to write, careful to read</a></h3><p>A plain-language companion to the metagraph paper: exact images, annotations that outlive their bearers, executable metapaths and what depth costs.</p></li>
-    <li class="card"><h3><a href="articles/hybrid-recall.html">Words, meaning and evidence: hybrid recall</a></h3><p>Text and vector recall fused by reciprocal rank, ties broken by evidence, expansion to layers and subject facts with via, recall in the past, the same call in Rust, Python, SPARQL, Cypher and MCP, and measured numbers.</p></li>
-    <li class="card"><h3><a href="articles/vector-memory.html">Vector memory that remembers when</a></h3><p>Recall by meaning in a memory that travels in time: why top-k-then-filter loses answers under as_of and valid_at, exact search over the visible statements, hybrid recall with text, and honest limits.</p></li>
-    <li class="card"><h3><a href="articles/metagraphs.html">Metagraphs from one row shape</a></h3><p>Edges that are vertices, vertices and edges that hold subgraphs, nesting, n-ary edges, fold and unfold, all as statements with two clocks.</p></li>
-    <li class="card"><h3><a href="articles/layer-recipes.html">Questions only layers can answer</a></h3><p>Evidence through time, impact analysis, who wrote it and why it was forgotten, contradictions, cited answers and portable facts: tested recipes.</p></li>
-    <li class="card"><h3><a href="articles/layered-graphs.html">Layered graphs, explained</a></h3><p>Why giving every fact an id turns provenance, confidence and beliefs into ordinary queries.</p></li>
-    <li class="card"><h3><a href="articles/tiramemsu-vs-oxilite.html">How tiramemsu differs from oxilite</a></h3><p>Same author, same SQLite base, different answers to “what is a statement?”. With a benchmark.</p></li>
-    <li class="card"><h3><a href="articles/time-travel.html">Time travel and bitemporality, explained</a></h3><p>Two clocks, when we knew and when it was true, how to query the past in Rust, SPARQL and Cypher, and why an agent wants both.</p></li>
-    <li class="card"><h3><a href="articles/whats-new-0-3.html">What’s new in 0.3</a></h3><p>Ten new features, each with what it is, why an agent wants it, examples in Python, Node.js and Rust, and its limits.</p></li>
-    <li class="card"><h3><a href="articles/recall-review-recheck.html">Recall, review, recheck</a></h3><p>How an agent’s memory finds things by words, sees where sources disagree, and knows when a saved answer has gone stale.</p></li>
-    <li class="card"><h3><a href="articles/mcp-memory.html">Give your agent a memory over MCP</a></h3><p>Setting up tiramemsu-mcp in Claude Code and Claude Desktop: the tools, read-only mode, budgets, provenance coverage and a sample session.</p></li>
-    <li class="card"><h3><a href="articles/journeys-in-time.html">Journeys that respect time</a></h3><p>Time-respecting paths in SPARQL and Cypher, earliest arrival, and how a query says whether its paths were complete.</p></li>
-    <li class="card"><h3><a href="articles/bounded-queries-bulk-loads.html">Bounded queries and bulk loads</a></h3><p>Budgets, cancellation and result limits, bulk import sessions, and a join operator for cyclic patterns with a small triangle benchmark.</p></li>
-    <li class="card"><h3><a href="articles/architecture.html">How tiramemsu is built</a></h3><p>One diagram of the layers, from the query front ends down to the one SQLite file, and the four ways to use it.</p></li>
-    <li class="card"><h3><a href="articles/grounded-memory.html">Memory that stays grounded</a></h3><p>A plain-language companion to the paper: one operator explains the cascade, time travel, valid-time slices and corrections, and why metagraphs get two clocks for free.</p></li>
-  </ul>
+  <h2>Read next</h2>
+  <p class="sub">Six places to start. The <a href="articles/">article index</a> groups everything else by topic.</p>
+  <div class="grid">
+    <div class="card"><span class="tag">Concepts</span><h3><a href="articles/layered-graphs.html">Layered graphs, explained</a></h3><p>Why giving every fact an id turns provenance, confidence and beliefs into ordinary queries.</p></div>
+    <div class="card"><span class="tag">Concepts</span><h3><a href="articles/time-travel.html">Time travel and bitemporality</a></h3><p>Two clocks, when we knew and when it was true, and how to query the past.</p></div>
+    <div class="card"><span class="tag">Recall</span><h3><a href="articles/hybrid-recall.html">Words, meaning and evidence</a></h3><p>Text and vector recall fused by rank, expanded to sources, the same call on every surface.</p></div>
+    <div class="card"><span class="tag">Agents</span><h3><a href="articles/mcp-memory.html">Give your agent a memory over MCP</a></h3><p>Set up <code>tiramemsu-mcp</code> in Claude Code or Claude Desktop, with a sample session.</p></div>
+    <div class="card"><span class="tag">Engines</span><h3><a href="articles/two-engines.html">Two engines, one memory</a></h3><p>SQLite or redb, one logical database in both, and where each one wins and loses.</p></div>
+    <div class="card"><span class="tag">Recipes</span><h3><a href="articles/layer-recipes.html">Questions only layers can answer</a></h3><p>Evidence through time, impact analysis, contradictions and cited answers: tested recipes.</p></div>
+  </div>
 </div></section>
 </main>
 
