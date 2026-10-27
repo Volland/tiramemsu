@@ -333,6 +333,124 @@ fn rare_predicate_first() {
     assert!(first.contains("v:rare>"), "{lines:#?}");
 }
 
+/// The first join step of an explain.
+fn first_step(lines: &[String]) -> &String {
+    lines
+        .iter()
+        .find(|l| l.contains("index nested loop") || l.contains("hash join"))
+        .unwrap()
+}
+
+// WatDiv F1's shape: 20 sellers (the smallest pattern) at one end, 50 users in
+// one city at the other; starting from the sellers walks every product and like.
+// @tg: verifies:: [[openspec:native-query-execution#Cost-based join order#Selective constant before a small pattern]] {since: "2026-10-27", level: integration}
+#[test]
+fn selective_constant_before_small_pattern() {
+    let dir = tempfile::tempdir().unwrap();
+    let db = open(dir.path(), Backend::Redb, OpenOptions::default());
+    let t = |s: String, p: &str, o: String| (s, p.to_string(), o);
+    bulk(
+        &db,
+        (0..20)
+            .map(|i| t(format!("s{i}"), "locatedIn", format!("c{}", i % 5)))
+            .chain((0..2_000).map(|i| t(format!("p{i}"), "soldBy", format!("s{}", i % 20))))
+            .chain((0..5_000).flat_map(|u| {
+                (0..4).map(move |k| {
+                    t(
+                        format!("u{u}"),
+                        "likes",
+                        format!("p{}", (u * 7 + k) % 2_000),
+                    )
+                })
+            }))
+            .chain((0..5_000).map(|u| t(format!("u{u}"), "livesIn", format!("city{}", u % 100)))),
+    );
+    let q = "SELECT ?u ?p ?s ?c WHERE { ?u v:livesIn v:city1 . ?u v:likes ?p . \
+             ?p v:soldBy ?s . ?s v:locatedIn ?c }";
+    let lines = plan_lines(&db, q);
+    assert!(first_step(&lines).contains("v:livesIn>"), "{lines:#?}");
+    let rows = sparql_on(&db.now(), &format!("PREFIX v: <urn:tiramemsu:v:> {q}")).unwrap();
+    assert_eq!(rows.len(), 200);
+}
+
+/// Opens the same statements on SQLite and redb.
+fn both(dir: &std::path::Path, load: impl Fn(&Db)) -> (Db, Db) {
+    let s = open(dir, Backend::Sqlite, OpenOptions::default());
+    let r = open(dir, Backend::Redb, OpenOptions::default());
+    load(&s);
+    load(&r);
+    (s, r)
+}
+
+fn sorted(view: &View<'_>, q: &str) -> Vec<Vec<Canon>> {
+    let mut rows = sparql_on(view, &format!("PREFIX v: <urn:tiramemsu:v:> {q}")).unwrap();
+    rows.sort_by_key(|r| format!("{r:?}"));
+    rows
+}
+
+// @tg: verifies:: [[openspec:native-query-execution#Constant equalities seek#String equality becomes a seek]] {since: "2026-10-27", level: integration}
+#[test]
+fn string_equality_becomes_a_seek() {
+    let dir = tempfile::tempdir().unwrap();
+    let (s, r) = both(dir.path(), |db| {
+        db.transact(TxOptions::default(), |tx| {
+            for i in 0..2_000 {
+                tx.assert(
+                    v(&format!("n{i}")),
+                    v("name"),
+                    Value::str(format!("n{}", i % 500)),
+                    Valid::ALWAYS,
+                )?;
+            }
+            let tagged = Value::LangStr {
+                lex: "n7".into(),
+                lang: "en".into(),
+            };
+            tx.assert(v("x"), v("name"), tagged, Valid::ALWAYS)?;
+            Ok(())
+        })
+        .unwrap();
+    });
+    let q = r#"SELECT ?x WHERE { ?x v:name ?n FILTER(?n = "n7") }"#;
+    let lines = plan_lines(&r, q);
+    assert!(
+        lines.iter().any(|l| l.contains("bound n to constant")),
+        "{lines:#?}"
+    );
+    assert!(
+        first_step(&lines).contains("index nested loop")
+            && first_step(&lines).contains(", 1 rows)"),
+        "{lines:#?}"
+    );
+    let rows = sorted(&r.now(), q);
+    assert_eq!(rows.len(), 4);
+    assert_eq!(rows, sorted(&s.now(), q));
+}
+
+// @tg: verifies:: [[openspec:native-query-execution#Constant equalities seek#Numeric equality is not pinned]] {since: "2026-10-27", level: integration}
+#[test]
+fn numeric_equality_is_not_pinned() {
+    let dir = tempfile::tempdir().unwrap();
+    let (s, r) = both(dir.path(), |db| {
+        db.transact(TxOptions::default(), |tx| {
+            tx.assert(v("a"), v("age"), Value::Int(7), Valid::ALWAYS)?;
+            tx.assert(v("b"), v("age"), Value::Double(7.0), Valid::ALWAYS)?;
+            tx.assert(v("c"), v("age"), Value::Int(8), Valid::ALWAYS)?;
+            Ok(())
+        })
+        .unwrap();
+    });
+    let q = "SELECT ?x WHERE { ?x v:age ?a FILTER(?a = 7) }";
+    let lines = plan_lines(&r, q);
+    assert!(
+        !lines.iter().any(|l| l.contains("bound a to constant")),
+        "{lines:#?}"
+    );
+    let rows = sorted(&r.now(), q);
+    assert_eq!(rows.len(), 2, "{rows:?}");
+    assert_eq!(rows, sorted(&s.now(), q));
+}
+
 #[path = "../examples/triangles.rs"]
 mod harness;
 

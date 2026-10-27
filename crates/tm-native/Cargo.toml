@@ -17,6 +17,7 @@ tm-core = { workspace = true }
 tm-store = { workspace = true }
 tm-ir = { workspace = true }
 tm-exec = { workspace = true }
+rustc-hash = "2"
 
 [dev-dependencies]
 proptest = "1"

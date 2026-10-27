@@ -1034,7 +1034,7 @@ checksum = "fd3ca314f692efd6c868f8408f53fe444634a845f96c028b97d35f6a1f79f0ee"
 
 [[package]]
 name = "tiramemsu"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "lru",
  "serde_json",
@@ -1051,7 +1051,7 @@ dependencies = [
 
 [[package]]
 name = "tm-bench"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -1060,7 +1060,7 @@ dependencies = [
 
 [[package]]
 name = "tm-bench-backends"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "oxigraph",
  "serde_json",
@@ -1069,7 +1069,7 @@ dependencies = [
 
 [[package]]
 name = "tm-core"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "lru",
  "thiserror",
@@ -1077,7 +1077,7 @@ dependencies = [
 
 [[package]]
 name = "tm-cypher"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "chrono",
  "chrono-tz",
@@ -1090,7 +1090,7 @@ dependencies = [
 
 [[package]]
 name = "tm-exec"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "lru",
  "regex",
@@ -1100,15 +1100,16 @@ dependencies = [
 
 [[package]]
 name = "tm-ir"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "tm-core",
 ]
 
 [[package]]
 name = "tm-native"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
+ "rustc-hash",
  "tm-core",
  "tm-exec",
  "tm-ir",
@@ -1117,7 +1118,7 @@ dependencies = [
 
 [[package]]
 name = "tm-redb"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "redb",
  "tm-core",
@@ -1126,7 +1127,7 @@ dependencies = [
 
 [[package]]
 name = "tm-rusqlite"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "rusqlite",
  "tm-core",
@@ -1134,7 +1135,7 @@ dependencies = [
 
 [[package]]
 name = "tm-sparql"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "peg",
  "spargebra",
@@ -1144,7 +1145,7 @@ dependencies = [
 
 [[package]]
 name = "tm-store"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "lru",
  "tm-core",

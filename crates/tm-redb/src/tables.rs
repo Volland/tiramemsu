@@ -15,7 +15,7 @@ pub const TX: TableDefinition<i64, i64> = TableDefinition::new("tx");
 /// Instant → transaction number.
 pub const TX_INSTANT: TableDefinition<i64, i64> = TableDefinition::new("tx_instant");
 /// Eid → the whole statement row (eight encoded integers).
-pub const STMT: TableDefinition<i64, [u8; 64]> = TableDefinition::new("stmt");
+pub const STMT: TableDefinition<i64, &'static [u8; 64]> = TableDefinition::new("stmt");
 /// `(t_add, eid)` of every statement.
 pub const LOG_ADD: TableDefinition<&[u8], ()> = TableDefinition::new("log_add");
 /// `(t_ret, eid)` of every retracted statement.
@@ -23,9 +23,9 @@ pub const LOG_RET: TableDefinition<&[u8], ()> = TableDefinition::new("log_ret");
 /// Predicates that ever held two eids with the same `(s, p, o)`.
 pub const PRED_MULTI: TableDefinition<i64, ()> = TableDefinition::new("pred_multi");
 /// Predicate → live statements, distinct live subjects, distinct live objects.
-pub const PRED_STATS: TableDefinition<i64, [u8; 24]> = TableDefinition::new("pred_stats");
+pub const PRED_STATS: TableDefinition<i64, &'static [u8; 24]> = TableDefinition::new("pred_stats");
 /// `(s, key)` → `(value, updated_at)`.
-pub const VOLATILE: TableDefinition<&[u8], [u8; 16]> = TableDefinition::new("volatile");
+pub const VOLATILE: TableDefinition<&[u8], &'static [u8; 16]> = TableDefinition::new("volatile");
 /// `(model, eid)` → `t`, sign bits and packed vector.
 pub const EMBEDDING: TableDefinition<&[u8], &[u8]> = TableDefinition::new("embedding");
 /// Indexed string value → token count and language.
@@ -35,9 +35,9 @@ pub const TEXT_TOKEN: TableDefinition<&str, u64> = TableDefinition::new("text_to
 /// `token 0x00 value` → token positions.
 pub const TEXT_POST: TableDefinition<&[u8], &[u8]> = TableDefinition::new("text_post");
 /// A live permutation table: key `(a, b, c, eid)`, value `t_add, v_from, v_to`.
-pub type LiveTable = TableDefinition<'static, &'static [u8], [u8; 24]>;
+pub type LiveTable = TableDefinition<'static, &'static [u8], &'static [u8; 24]>;
 /// A history permutation table: key `(a, b, c, MAX - t_add, eid)`.
-pub type HistTable = TableDefinition<'static, &'static [u8], [u8; 32]>;
+pub type HistTable = TableDefinition<'static, &'static [u8], &'static [u8; 32]>;
 
 /// The six live permutations.
 pub const LIVE: [(LiveTable, [usize; 3]); 6] = [

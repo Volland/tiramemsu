@@ -5,6 +5,8 @@ use std::cell::RefCell;
 use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet};
 
+use rustc_hash::FxHashMap;
+
 use tm_core::store::ReadStore;
 use tm_core::text::TextQuery;
 use tm_core::{budget, Error, ObjectId, RecallQuery, Result, Value, VectorQuery};
@@ -439,6 +441,11 @@ impl<'a> Exec<'a> {
                 };
                 let (mut r, late) = match &**input {
                     Node::Join(inputs, ns) => self.join_with(inputs, ns, parts)?,
+                    // a lone pattern under filters joins as a pattern too, so
+                    // its conjuncts run inside the match (Cypher's `{name: …}`)
+                    n if lift(n).is_some() => {
+                        self.join_with(std::slice::from_ref(&**input), &[], parts)?
+                    }
                     _ => (self.eval(input)?, parts),
                 };
                 self.filter_rows(&mut r, &late)?;
@@ -913,6 +920,14 @@ impl<'a> Exec<'a> {
 
     /// The inner join of two relations (`Gen::merge`).
     pub fn merge(&self, acc: Rel, r: Rel, null_safe: &[Var]) -> Result<Rel> {
+        // the unit relation is the identity of the join: no copy of the other side
+        let unit = |x: &Rel| x.vars.is_empty() && x.iso.is_empty() && x.rows.len() == 1;
+        if unit(&acc) {
+            return Ok(r);
+        }
+        if unit(&r) {
+            return Ok(acc);
+        }
         let shared: Vec<(usize, usize, bool)> = r
             .vars
             .iter()
@@ -1002,7 +1017,7 @@ impl<'a> Exec<'a> {
             })
         };
         if hashable && !shared.is_empty() {
-            let mut table: HashMap<Vec<Key>, Vec<usize>> = HashMap::new();
+            let mut table: FxHashMap<Vec<Key>, Vec<usize>> = FxHashMap::default();
             for (i, rrow) in r.rows.iter().enumerate() {
                 let k: Vec<Key> = shared
                     .iter()
@@ -1318,17 +1333,17 @@ impl<'a> Exec<'a> {
             .collect();
         let keyed = gidx.iter().any(|g| g.is_some());
         let mut groups: Vec<(Vec<Key>, Vec<usize>)> = Vec::new();
-        let mut index: HashMap<Vec<Key>, usize> = HashMap::new();
+        let mut index: FxHashMap<Vec<Key>, usize> = FxHashMap::default();
         for (i, row) in r.rows.iter().enumerate() {
             let k: Vec<Key> = gidx
                 .iter()
                 .filter_map(|g| g.map(|g| sv::key(&row[g])))
                 .collect();
-            match index.get(&k) {
-                Some(j) => groups[*j].1.push(i),
-                None => {
-                    index.insert(k.clone(), groups.len());
-                    groups.push((k, vec![i]));
+            match index.entry(k) {
+                std::collections::hash_map::Entry::Occupied(e) => groups[*e.get()].1.push(i),
+                std::collections::hash_map::Entry::Vacant(e) => {
+                    groups.push((e.key().clone(), vec![i]));
+                    e.insert(groups.len() - 1);
                 }
             }
         }

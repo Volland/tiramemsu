@@ -450,8 +450,9 @@ How graph and RDF engines join, and what the native runner takes from each.
 
 The native runner follows Kùzu and Umbra ([[crates/tm-native/src/bgp.rs]]):
 
-- **Order:** greedy, from exact per-predicate statistics (live statements, distinct subjects and objects) kept by redb, preferring patterns connected to bound variables. A pattern bound on its predicate only is estimated from those statistics in every view (history is never smaller than the live count); any other pattern by a range probe of at most 4 096 keys.
-- **Acyclic steps:** an index nested loop (one prefix scan on the permutation that fits the bound positions) or a hash join (one scan, hashed on the shared variables), whichever the estimate says reads less.
+- **Order:** from exact per-predicate statistics (live statements, distinct subjects and objects) kept by redb. Every pattern is tried as the first access path and each order is completed greedily with the connected pattern of fewest matches per row; the order with the fewest estimated intermediate rows wins. Starting from the smallest pattern alone made WatDiv F1 grow 315 000 intermediate rows through a chain that a selective constant at its other end keeps at 10 000. A pattern bound on its predicate only is estimated from those statistics in every view (history is never smaller than the live count); any other pattern by a range probe of at most 4 096 keys.
+- **Acyclic steps:** an index nested loop (one prefix scan on the permutation that fits the bound positions) or a hash join (one scan, its rows sorted by the hash of the shared variables), whichever the estimate says reads less.
+- **Flat rows:** a join step's rows live in one buffer, a fixed number of slots per row, so extending a row allocates nothing; a probe's key prefix is built on the stack. Rows become `Rel` values only when the pattern set is done.
 - **Cyclic cores:** a generic join over hash tries built once per pattern, so the work is bounded by the AGM bound of the core, not by an intermediate binary result.
 - **Late decoding:** joins, equality, graph and time filters run on ObjectIds; terms are decoded only for projected columns and value expressions.
 
@@ -462,6 +463,7 @@ A filter over a join is split into conjuncts, and each is applied as early as th
 Patterns that the planner wraps in filters and a projection keeping all their variables (as Cypher relationships are) join as plain patterns, their filters becoming conjuncts. The patterns are grouped into connected components and each component is matched on its own, so a conjunct that reads one component cuts it before components are crossed. A conjunct that reads nothing a path binds is applied before the paths run, as SQLite tests it before calling `tm_path`. A conjunct is placed only on columns whose final value is already fixed (terms that are never null), never on a column a later merge may coalesce.
 
 - **Inside the join:** a conjunct over one component's variables is checked inside its pattern join, right after the step that binds its last variable.
+- **Constant equalities:** a conjunct `?v = k` whose constant the evaluator compares by identity (in the dictionary, neither a number nor a date-time) binds `?v` to `k`'s ObjectId before the join, so the patterns seek on it; explain shows `bound v to constant`. A lone pattern under filters (an `EXISTS` body, a Cypher property map) is matched as a join too, so its conjuncts reach the pattern.
 - **Semi-join seeds:** a positive `EXISTS` whose rows are few (at most 10 000) seeds the patterns it shares variables with, with its distinct values, as Cypher's `{name: 'Ada'}` property maps do; the `EXISTS` itself is still checked, by a hash probe.
 - **Path endpoints:** a path's end variable is its output only when no other input binds it; otherwise conjuncts on it run before the path, so a shortest path between two filtered nodes is one search, not one per node pair.
 

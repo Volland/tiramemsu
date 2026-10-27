@@ -228,7 +228,7 @@ impl RedbStore {
             .begin_read()
             .map_err(st)?;
         let t = r.open_table(PRED_STATS).map_err(st)?;
-        Ok(stats_of(t.get(p).map_err(st)?.map(|v| v.value())))
+        Ok(stats_of(t.get(p).map_err(st)?.map(|v| *v.value())))
     }
 
     /// Which of the six live and three history permutations hold statement `eid`
@@ -246,7 +246,7 @@ impl RedbStore {
         let Some(v) = stmt.get(eid).map_err(st)? else {
             return Ok((vec![false; 6], vec![false; 3]));
         };
-        let row = stmt_row(eid, &v.value());
+        let row = stmt_row(eid, v.value());
         let mut live = Vec::new();
         for (def, order) in LIVE {
             let t = r.open_table(def).map_err(st)?;
@@ -383,14 +383,14 @@ pub struct RedbRead {
     term_key: ReadOnlyTable<&'static [u8], i64>,
     tx: ReadOnlyTable<i64, i64>,
     tx_instant: ReadOnlyTable<i64, i64>,
-    stmt: ReadOnlyTable<i64, [u8; 64]>,
-    live: Vec<ReadOnlyTable<&'static [u8], [u8; 24]>>,
-    hist: Vec<ReadOnlyTable<&'static [u8], [u8; 32]>>,
+    stmt: ReadOnlyTable<i64, &'static [u8; 64]>,
+    live: Vec<ReadOnlyTable<&'static [u8], &'static [u8; 24]>>,
+    hist: Vec<ReadOnlyTable<&'static [u8], &'static [u8; 32]>>,
     log_add: ReadOnlyTable<&'static [u8], ()>,
     log_ret: ReadOnlyTable<&'static [u8], ()>,
     pred_multi: ReadOnlyTable<i64, ()>,
-    pred_stats: ReadOnlyTable<i64, [u8; 24]>,
-    volatile: ReadOnlyTable<&'static [u8], [u8; 16]>,
+    pred_stats: ReadOnlyTable<i64, &'static [u8; 24]>,
+    volatile: ReadOnlyTable<&'static [u8], &'static [u8; 16]>,
     embedding: ReadOnlyTable<&'static [u8], &'static [u8]>,
     text_doc: ReadOnlyTable<i64, &'static [u8]>,
     text_token: ReadOnlyTable<&'static str, u64>,
@@ -432,7 +432,7 @@ impl RedbRead {
     /// The exact statistics of predicate `p` in this snapshot.
     pub fn predicate_stats(&self, p: i64) -> Result<(u64, u64, u64)> {
         Ok(stats_of(
-            self.pred_stats.get(p).map_err(st)?.map(|v| v.value()),
+            self.pred_stats.get(p).map_err(st)?.map(|v| *v.value()),
         ))
     }
 }
@@ -450,7 +450,7 @@ fn log_after<T: ReadableTable<&'static [u8], ()>>(t: &T, after: i64) -> Result<V
     Ok(out)
 }
 
-fn volatile_rows<T: ReadableTable<&'static [u8], [u8; 16]>>(
+fn volatile_rows<T: ReadableTable<&'static [u8], &'static [u8; 16]>>(
     t: &T,
 ) -> Result<Vec<(i64, i64, VolatileRow)>> {
     let mut out = Vec::new();
@@ -461,8 +461,8 @@ fn volatile_rows<T: ReadableTable<&'static [u8], [u8; 16]>>(
             at(k.value(), 0),
             at(k.value(), 1),
             VolatileRow {
-                value: at(&v, 0),
-                updated_at: at(&v, 1),
+                value: at(v, 0),
+                updated_at: at(v, 1),
             },
         ));
     }
@@ -554,7 +554,7 @@ impl ReadStore for RedbRead {
             .stmt
             .get(eid)
             .map_err(st)?
-            .map(|v| stmt_row(eid, &v.value())))
+            .map(|v| stmt_row(eid, v.value())))
     }
 
     fn scan(&self, pat: Pattern, scope: Scope) -> Result<RowIter<'_>> {
@@ -646,8 +646,8 @@ impl ReadStore for RedbRead {
             .map(|v| {
                 let v = v.value();
                 VolatileRow {
-                    value: at(&v, 0),
-                    updated_at: at(&v, 1),
+                    value: at(v, 0),
+                    updated_at: at(v, 1),
                 }
             }))
     }
@@ -735,14 +735,14 @@ impl RedbWrite {
 
     fn get_stats(&self, p: i64) -> Result<(u64, u64, u64)> {
         let t = self.table(PRED_STATS)?;
-        let v = t.get(p).map_err(st)?.map(|v| v.value());
+        let v = t.get(p).map_err(st)?.map(|v| *v.value());
         Ok(stats_of(v))
     }
 
     // @tg: implements:: [[openspec:redb-storage#Exact predicate statistics]] {since: "2026-10-27"}
     fn put_stats(&self, p: i64, s: (u64, u64, u64)) -> Result<()> {
         self.table(PRED_STATS)?
-            .insert(p, stats_value(s))
+            .insert(p, &stats_value(s))
             .map_err(st)?;
         Ok(())
     }
@@ -799,7 +799,7 @@ impl ReadStore for RedbWrite {
 
     fn statement(&self, eid: i64) -> Result<Option<StmtRow>> {
         let t = self.table(STMT)?;
-        let v = t.get(eid).map_err(st)?.map(|v| stmt_row(eid, &v.value()));
+        let v = t.get(eid).map_err(st)?.map(|v| stmt_row(eid, v.value()));
         Ok(v)
     }
 
@@ -869,8 +869,8 @@ impl ReadStore for RedbWrite {
         let v = t.get(key(&[s, k]).as_slice()).map_err(st)?.map(|v| {
             let v = v.value();
             VolatileRow {
-                value: at(&v, 0),
-                updated_at: at(&v, 1),
+                value: at(v, 0),
+                updated_at: at(v, 1),
             }
         });
         Ok(v)
@@ -981,18 +981,18 @@ impl WriteStore for RedbWrite {
             if stmt.get(r.eid).map_err(st)?.is_some() {
                 return Err(duplicate("statement", r.eid));
             }
-            stmt.insert(r.eid, stmt_value(r)).map_err(st)?;
+            stmt.insert(r.eid, &stmt_value(r)).map_err(st)?;
         }
         let lv = live_value(r);
         for (def, order) in LIVE {
             self.table(def)?
-                .insert(live_key(order, r).as_slice(), lv)
+                .insert(live_key(order, r).as_slice(), &lv)
                 .map_err(st)?;
         }
         let hv = hist_value(r);
         for (def, order) in HIST {
             self.table(def)?
-                .insert(hist_key(order, r).as_slice(), hv)
+                .insert(hist_key(order, r).as_slice(), &hv)
                 .map_err(st)?;
         }
         self.table(LOG_ADD)?
@@ -1024,7 +1024,7 @@ impl WriteStore for RedbWrite {
             ..old
         };
         self.table(STMT)?
-            .insert(eid, stmt_value(&new))
+            .insert(eid, &stmt_value(&new))
             .map_err(st)?;
         for (def, order) in LIVE {
             self.table(def)?
@@ -1034,7 +1034,7 @@ impl WriteStore for RedbWrite {
         let hv = hist_value(&new);
         for (def, order) in HIST {
             self.table(def)?
-                .insert(hist_key(order, &old).as_slice(), hv)
+                .insert(hist_key(order, &old).as_slice(), &hv)
                 .map_err(st)?;
         }
         self.table(LOG_RET)?
@@ -1063,7 +1063,7 @@ impl WriteStore for RedbWrite {
         v[0..8].copy_from_slice(&enc(row.value));
         v[8..16].copy_from_slice(&enc(row.updated_at));
         self.table(VOLATILE)?
-            .insert(key(&[s, k]).as_slice(), v)
+            .insert(key(&[s, k]).as_slice(), &v)
             .map_err(st)?;
         Ok(())
     }

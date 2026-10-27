@@ -42,6 +42,50 @@ pub fn key(parts: &[i64]) -> Vec<u8> {
     k
 }
 
+/// A key prefix of up to three encoded integers, kept on the stack so that a
+/// join probe allocates nothing to seek.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Prefix {
+    buf: [u8; 24],
+    len: usize,
+}
+
+impl Prefix {
+    /// The empty prefix.
+    pub const EMPTY: Prefix = Prefix {
+        buf: [0; 24],
+        len: 0,
+    };
+
+    /// Appends an encoded integer.
+    #[inline]
+    pub fn push(&mut self, x: i64) {
+        self.buf[self.len..self.len + 8].copy_from_slice(&enc(x));
+        self.len += 8;
+    }
+
+    /// The prefix bytes.
+    #[inline]
+    pub fn as_slice(&self) -> &[u8] {
+        &self.buf[..self.len]
+    }
+
+    /// [`prefix_end`] without a heap allocation.
+    pub fn end(&self) -> Option<Prefix> {
+        let mut end = *self;
+        while end.len > 0 {
+            end.len -= 1;
+            let last = end.buf[end.len];
+            if last < 0xFF {
+                end.buf[end.len] = last + 1;
+                end.len += 1;
+                return Some(end);
+            }
+        }
+        None
+    }
+}
+
 /// The `n`-th integer of a key or value.
 #[inline]
 pub fn at(b: &[u8], n: usize) -> i64 {
@@ -79,5 +123,28 @@ mod tests {
         assert_eq!(prefix_end(&[1, 2]), Some(vec![1, 3]));
         assert_eq!(prefix_end(&[1, 0xFF]), Some(vec![2]));
         assert_eq!(prefix_end(&[0xFF]), None);
+    }
+
+    #[test]
+    fn stack_prefix_bounds_match_prefix_end() {
+        for parts in [
+            vec![],
+            vec![0i64],
+            vec![-1],
+            vec![i64::MAX],
+            vec![7, -1],
+            vec![3, i64::MAX, 9],
+        ] {
+            let mut p = Prefix::EMPTY;
+            for x in &parts {
+                p.push(*x);
+            }
+            assert_eq!(p.as_slice(), key(&parts).as_slice());
+            assert_eq!(
+                p.end().map(|e| e.as_slice().to_vec()),
+                prefix_end(&key(&parts)),
+                "{parts:?}"
+            );
+        }
     }
 }

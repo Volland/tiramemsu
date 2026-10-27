@@ -5,7 +5,7 @@ use tm_core::term::TermKey;
 use tm_core::{Error, Result};
 use tm_store::{EmbeddingRow, Pattern, StmtRow, TermRow, TextDoc};
 
-use crate::keys::{at, enc, key, opt, prefix_end, unopt};
+use crate::keys::{at, enc, key, opt, unopt, Prefix};
 
 /// Maps a redb error to [`Error::Storage`].
 pub fn st(e: impl std::fmt::Display) -> Error {
@@ -129,38 +129,43 @@ pub fn hist_row(order: [usize; 3], k: &[u8], v: &[u8; 32]) -> StmtRow {
     }
 }
 
-/// The key prefix of the bound positions of `pat` in `order`.
-pub fn prefix(order: [usize; 3], pat: &Pattern) -> Vec<u8> {
+/// The key prefix of the bound positions of `pat` in `order`, and whether it
+/// covers every bound position (then a row in its range matches `pat`).
+pub fn prefix(order: [usize; 3], pat: &Pattern) -> (Prefix, bool) {
     let bound = [pat.s, pat.p, pat.o];
-    let mut parts = Vec::new();
+    let mut pre = Prefix::EMPTY;
+    let mut n = 0;
     for o in order {
         match bound[o] {
-            Some(x) => parts.push(x),
+            Some(x) => {
+                pre.push(x);
+                n += 1;
+            }
             None => break,
         }
     }
-    key(&parts)
+    (pre, n == pat.bound())
 }
 
 /// The rows of a live permutation whose key starts with `pre`, filtered by `pat`.
 pub fn scan_live<'t, T>(
     t: &'t T,
     order: [usize; 3],
-    pre: Vec<u8>,
+    (pre, covered): (Prefix, bool),
     pat: Pattern,
 ) -> Result<impl Iterator<Item = Result<StmtRow>> + 't>
 where
-    T: ReadableTable<&'static [u8], [u8; 24]>,
+    T: ReadableTable<&'static [u8], &'static [u8; 24]>,
 {
-    let range = match prefix_end(&pre) {
+    let range = match pre.end() {
         Some(end) => t.range::<&[u8]>(pre.as_slice()..end.as_slice()),
         None => t.range::<&[u8]>(pre.as_slice()..),
     }
     .map_err(st)?;
     Ok(range.filter_map(move |e| match e {
         Ok((k, v)) => {
-            let r = live_row(order, k.value(), &v.value());
-            pat.matches(&r).then_some(Ok(r))
+            let r = live_row(order, k.value(), v.value());
+            (covered || pat.matches(&r)).then_some(Ok(r))
         }
         Err(e) => Some(Err(st(e))),
     }))
@@ -170,21 +175,21 @@ where
 pub fn scan_hist<'t, T>(
     t: &'t T,
     order: [usize; 3],
-    pre: Vec<u8>,
+    (pre, covered): (Prefix, bool),
     pat: Pattern,
 ) -> Result<impl Iterator<Item = Result<StmtRow>> + 't>
 where
-    T: ReadableTable<&'static [u8], [u8; 32]>,
+    T: ReadableTable<&'static [u8], &'static [u8; 32]>,
 {
-    let range = match prefix_end(&pre) {
+    let range = match pre.end() {
         Some(end) => t.range::<&[u8]>(pre.as_slice()..end.as_slice()),
         None => t.range::<&[u8]>(pre.as_slice()..),
     }
     .map_err(st)?;
     Ok(range.filter_map(move |e| match e {
         Ok((k, v)) => {
-            let r = hist_row(order, k.value(), &v.value());
-            pat.matches(&r).then_some(Ok(r))
+            let r = hist_row(order, k.value(), v.value());
+            (covered || pat.matches(&r)).then_some(Ok(r))
         }
         Err(e) => Some(Err(st(e))),
     }))
@@ -196,12 +201,12 @@ pub fn scan_stmt<'t, T>(
     live_only: bool,
 ) -> Result<impl Iterator<Item = Result<StmtRow>> + 't>
 where
-    T: ReadableTable<i64, [u8; 64]>,
+    T: ReadableTable<i64, &'static [u8; 64]>,
 {
     let range = t.range::<i64>(..).map_err(st)?;
     Ok(range.filter_map(move |e| match e {
         Ok((k, v)) => {
-            let r = stmt_row(k.value(), &v.value());
+            let r = stmt_row(k.value(), v.value());
             (!live_only || r.live()).then_some(Ok(r))
         }
         Err(e) => Some(Err(st(e))),

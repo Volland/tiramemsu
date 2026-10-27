@@ -14,12 +14,16 @@
 //! differ.
 
 use std::collections::{BTreeSet, HashMap};
+use std::hash::Hasher;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering as AtomicOrdering};
 use std::sync::Mutex;
 
-use tm_core::{budget, ObjectId, Result};
+use rustc_hash::{FxHashMap, FxHasher};
+use tm_core::{budget, ObjectId, Result, Value};
 use tm_exec::plan::analyze::is_cyclic;
 use tm_exec::plan::{PExpr, PTerm, PTriple};
+use tm_exec::udf::{kind_of_value, K_NUM};
+use tm_ir::CmpOp;
 use tm_ir::{MatchMode, Var};
 use tm_store::{Pattern, ReadStore, StmtRow, View};
 
@@ -30,6 +34,78 @@ use crate::value::V;
 const UNBOUND: i64 = i64::MIN;
 /// The most keys a cardinality probe reads (a larger range estimates as this).
 const PROBE_CAP: u64 = 4_096;
+
+/// Join rows stored flat, `w` slots per row in one buffer, so that extending a
+/// row allocates nothing. The count is kept apart because a pattern set without
+/// variables still has one (empty) row per match.
+#[derive(Clone, Debug, Default)]
+pub struct Rows {
+    w: usize,
+    n: usize,
+    data: Vec<i64>,
+}
+
+impl Rows {
+    fn new(w: usize) -> Rows {
+        Rows {
+            w,
+            n: 0,
+            data: Vec::new(),
+        }
+    }
+
+    /// Number of rows.
+    pub fn len(&self) -> usize {
+        self.n
+    }
+
+    /// True when there is no row.
+    pub fn is_empty(&self) -> bool {
+        self.n == 0
+    }
+
+    fn row(&self, i: usize) -> &[i64] {
+        &self.data[i * self.w..(i + 1) * self.w]
+    }
+
+    /// The rows in order.
+    pub fn iter(&self) -> impl Iterator<Item = &[i64]> + '_ {
+        (0..self.n).map(move |i| self.row(i))
+    }
+
+    fn push(&mut self, r: &[i64]) {
+        debug_assert_eq!(r.len(), self.w);
+        self.data.extend_from_slice(r);
+        self.n += 1;
+    }
+
+    /// Appends a copy of `r` and returns it to be extended; [`Rows::pop`] takes
+    /// it back when the extension fails.
+    fn push_tail(&mut self, r: &[i64]) -> &mut [i64] {
+        self.push(r);
+        let at = self.data.len() - self.w;
+        &mut self.data[at..]
+    }
+
+    fn pop(&mut self) {
+        self.n -= 1;
+        self.data.truncate(self.n * self.w);
+    }
+
+    fn extend(&mut self, other: Rows) {
+        self.n += other.n;
+        self.data.extend_from_slice(&other.data);
+    }
+}
+
+/// The hash of the values of `slots` in `row`.
+fn hash_slots(slots: &[usize], row: &[i64]) -> u64 {
+    let mut h = FxHasher::default();
+    for s in slots {
+        h.write_i64(row[*s]);
+    }
+    h.finish()
+}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Pos {
@@ -140,6 +216,9 @@ pub struct Bgp<'e, 'a> {
     /// Conjuncts over the patterns' variables, each with the slots it reads and
     /// whether it was applied; checked as soon as those slots are bound.
     filters: Vec<(PExpr, Vec<usize>, bool)>,
+    /// Slots a conjunct `?v = constant` fixes to the constant's id: bound
+    /// before the join, so it seeks instead of filtering every row.
+    pins: Vec<(usize, i64)>,
 }
 
 impl<'e, 'a> Bgp<'e, 'a> {
@@ -210,12 +289,14 @@ impl<'e, 'a> Bgp<'e, 'a> {
             canonical: HashMap::new(),
             plan: Vec::new(),
             filters: Vec::new(),
+            pins: Vec::new(),
         })
     }
 
     /// Sets the conjuncts to check during the join, each as soon as the slots it
     /// reads are bound.
     pub fn set_filters(&mut self, filters: &[PExpr]) {
+        self.pins = filters.iter().filter_map(|f| self.pin(f)).collect();
         let names: Vec<String> = self.vars.iter().map(|v| format!("{v:?}")).collect();
         self.filters = filters
             .iter()
@@ -231,10 +312,11 @@ impl<'e, 'a> Bgp<'e, 'a> {
     /// Keeps the rows on which every filter whose slots are bound holds (`all`:
     /// every filter not yet applied), as SQLite tests a `WHERE` term in the
     /// first loop that binds its columns.
-    fn apply_filters(&mut self, rows: Vec<Vec<i64>>, all: bool) -> Result<Vec<Vec<i64>>> {
-        let Some(first) = rows.first() else {
+    fn apply_filters(&mut self, rows: Rows, all: bool) -> Result<Rows> {
+        if rows.is_empty() {
             return Ok(rows);
-        };
+        }
+        let first = rows.row(0);
         let ready: Vec<usize> = (0..self.filters.len())
             .filter(|i| {
                 let (_, needs, done) = &self.filters[*i];
@@ -255,19 +337,18 @@ impl<'e, 'a> Bgp<'e, 'a> {
             rows: Vec::new(),
             iso: Vec::new(),
         };
-        let mut out = Vec::with_capacity(rows.len());
-        for r in rows {
+        let mut out = Rows::new(rows.w);
+        let mut vals: Vec<V> = Vec::with_capacity(nv);
+        for r in rows.iter() {
             budget::poll()?;
-            let vals: Vec<V> = r[..nv]
-                .iter()
-                .map(|x| {
-                    if *x == UNBOUND {
-                        V::Null
-                    } else {
-                        V::Integer(*x)
-                    }
-                })
-                .collect();
+            vals.clear();
+            vals.extend(r[..nv].iter().map(|x| {
+                if *x == UNBOUND {
+                    V::Null
+                } else {
+                    V::Integer(*x)
+                }
+            }));
             let mut ok = true;
             for i in &ready {
                 if crate::value::cond(&self.ex.cond(&self.filters[*i].0, &rel, &vals)?)
@@ -281,10 +362,35 @@ impl<'e, 'a> Bgp<'e, 'a> {
                 out.push(r);
             }
         }
+        drop(rows);
         for i in &ready {
             self.filters[*i].2 = true;
         }
         Ok(out)
+    }
+
+    // @tg: implements:: [[openspec:native-query-execution#Constant equalities seek]] {since: "2026-10-27"}
+    /// The slot and id a conjunct `?v = k` fixes. On a term the native
+    /// evaluator compares such a constant by id (`eq_const`, for a
+    /// constant that is neither a number nor a date), so binding `?v` to the id
+    /// keeps exactly the rows the conjunct keeps; the conjunct is still checked.
+    fn pin(&self, f: &PExpr) -> Option<(usize, i64)> {
+        let PExpr::Cmp(CmpOp::Eq, a, b) = f else {
+            return None;
+        };
+        let (v, k) = match (a.as_ref(), b.as_ref()) {
+            (PExpr::Var(v), PExpr::Const(k)) | (PExpr::Const(k), PExpr::Var(v)) => (v, k),
+            _ => return None,
+        };
+        if kind_of_value(&k.value) == K_NUM || matches!(k.value, Value::DateTime { .. }) {
+            return None;
+        }
+        let slot = self.vars.iter().position(|x| x == v)?;
+        let id = k.id?;
+        self.pats
+            .iter()
+            .any(|p| p.slots().contains(&slot))
+            .then_some((slot, id.raw()))
     }
 
     /// The output variables: the seed variables, then the patterns' in order.
@@ -330,42 +436,78 @@ impl<'e, 'a> Bgp<'e, 'a> {
     }
 
     // @tg: implements:: [[openspec:native-query-execution#Cost-based join order]] {since: "2026-10-27"}
-    fn order(&self, seeded: &[bool]) -> Vec<usize> {
+    /// The join order: from each possible first pattern, a greedy completion
+    /// that takes the connected pattern with the fewest matches per row next;
+    /// the order with the fewest estimated intermediate rows wins. Starting from
+    /// the smallest pattern alone can grow a large intermediate result that a
+    /// selective pattern taken first would have avoided (WatDiv F1).
+    fn order(&self, seeded: &[bool], seed_rows: usize) -> Vec<usize> {
+        let n = self.pats.len();
+        let any_seeded = seeded.iter().any(|b| *b);
+        let mut best: Option<(f64, Vec<usize>)> = None;
+        for first in 0..n {
+            // with seed variables, only a pattern connected to them may start
+            if any_seeded && !self.pats[first].slots().iter().any(|s| seeded[*s]) {
+                continue;
+            }
+            let (cost, order) = self.greedy(seeded, seed_rows, first);
+            if best.as_ref().is_none_or(|(c, _)| cost < *c) {
+                best = Some((cost, order));
+            }
+        }
+        match best {
+            Some((_, order)) => order,
+            // no pattern touches the seed variables: a cross product
+            None => self.greedy(seeded, seed_rows, usize::MAX).1,
+        }
+    }
+
+    /// The greedy order starting with pattern `first` (any, when out of range)
+    /// and its cost, the sum of the estimated rows after each step.
+    fn greedy(&self, seeded: &[bool], seed_rows: usize, first: usize) -> (f64, Vec<usize>) {
         let n = self.pats.len();
         let mut bound = seeded.to_vec();
         bound.resize(self.nslots, false);
         let mut done = vec![false; n];
         let mut out = Vec::with_capacity(n);
-        for _ in 0..n {
+        let mut rows = seed_rows.max(1) as f64;
+        let mut cost = 0.0;
+        for k in 0..n {
             let connected =
                 |i: usize, bound: &[bool]| self.pats[i].slots().iter().any(|s| bound[*s]);
             let any_connected = (0..n).any(|i| !done[i] && connected(i, &bound));
-            let best = (0..n)
-                .filter(|i| !done[*i])
-                .filter(|i| !any_connected || connected(*i, &bound))
-                .min_by(|a, b| {
-                    self.pats[*a]
-                        .estimate(&bound)
-                        .partial_cmp(&self.pats[*b].estimate(&bound))
-                        .unwrap_or(std::cmp::Ordering::Equal)
-                })
-                .expect("a pattern left");
-            done[best] = true;
-            for s in self.pats[best].slots() {
+            let next = if k == 0 && first < n {
+                first
+            } else {
+                (0..n)
+                    .filter(|i| !done[*i])
+                    .filter(|i| !any_connected || connected(*i, &bound))
+                    .min_by(|a, b| {
+                        self.pats[*a]
+                            .estimate(&bound)
+                            .partial_cmp(&self.pats[*b].estimate(&bound))
+                            .unwrap_or(std::cmp::Ordering::Equal)
+                    })
+                    .expect("a pattern left")
+            };
+            rows *= self.pats[next].estimate(&bound);
+            cost += rows;
+            done[next] = true;
+            for s in self.pats[next].slots() {
                 bound[s] = true;
             }
-            if let Some(h) = self.pats[best].iso_eid {
+            if let Some(h) = self.pats[next].iso_eid {
                 bound[h] = true;
             }
-            out.push(best);
+            out.push(next);
         }
-        out
+        (cost, out)
     }
 
     /// Joins every pattern, starting from `seed` rows (values of the seed
     /// variables, all terms); returns rows over [`Bgp::vars`].
-    pub fn run(&mut self, seed: Vec<Vec<i64>>) -> Result<Vec<Vec<i64>>> {
-        let seeded: Vec<bool> = (0..self.nslots)
+    pub fn run(&mut self, seed: Vec<Vec<i64>>) -> Result<Rows> {
+        let mut seeded: Vec<bool> = (0..self.nslots)
             .map(|s| seed.first().is_some_and(|r| s < r.len()))
             .collect();
         let edges: Vec<BTreeSet<Var>> = self
@@ -382,15 +524,30 @@ impl<'e, 'a> Bgp<'e, 'a> {
             if self.pats.len() >= 3 && seed.len() == 1 && seed[0].is_empty() && is_cyclic(&edges) {
                 self.generic_join()?
             } else {
-                let mut rows: Vec<Vec<i64>> = seed
-                    .into_iter()
-                    .map(|mut r| {
-                        r.resize(self.nslots, UNBOUND);
-                        r
-                    })
+                let pins: Vec<(usize, i64)> = self
+                    .pins
+                    .iter()
+                    .copied()
+                    .filter(|(s, _)| !seeded[*s])
                     .collect();
+                for (s, id) in &pins {
+                    seeded[*s] = true;
+                    self.plan.push(format!(
+                        "bound {} to constant {id} from an equality",
+                        self.vars[*s].name()
+                    ));
+                }
+                let mut rows = Rows::new(self.nslots);
+                rows.data.reserve(seed.len() * self.nslots);
+                for mut r in seed {
+                    r.resize(self.nslots, UNBOUND);
+                    for (s, id) in &pins {
+                        r[*s] = *id;
+                    }
+                    rows.push(&r);
+                }
                 rows = self.apply_filters(rows, false)?;
-                for i in self.order(&seeded) {
+                for i in self.order(&seeded, rows.len()) {
                     rows = self.step(i, rows)?;
                     rows = self.apply_filters(rows, false)?;
                     if rows.is_empty() {
@@ -399,24 +556,17 @@ impl<'e, 'a> Bgp<'e, 'a> {
                 }
                 rows
             };
-        let rows = self.apply_filters(rows, true)?;
-        let nv = self.vars.len();
-        Ok(rows
-            .into_iter()
-            .map(|mut r| {
-                r.truncate(nv);
-                r
-            })
-            .collect())
+        // rows keep the hidden isomorphism slots after the variables
+        self.apply_filters(rows, true)
     }
 
     // @tg: implements:: [[openspec:native-query-execution#Late decoding]] {since: "2026-10-27"}
     /// One join step: extends `rows` by pattern `i`.
-    fn step(&mut self, i: usize, rows: Vec<Vec<i64>>) -> Result<Vec<Vec<i64>>> {
-        let bound: Vec<bool> = match rows.first() {
-            Some(r) => r.iter().map(|v| *v != UNBOUND).collect(),
-            None => return Ok(rows),
-        };
+    fn step(&mut self, i: usize, rows: Rows) -> Result<Rows> {
+        if rows.is_empty() {
+            return Ok(rows);
+        }
+        let bound: Vec<bool> = rows.row(0).iter().map(|v| *v != UNBOUND).collect();
         let probe = self.pats[i].estimate(&bound);
         let card = self.pats[i].card.max(1) as f64;
         let shared: Vec<usize> = self.pats[i]
@@ -429,7 +579,8 @@ impl<'e, 'a> Bgp<'e, 'a> {
         let use_hash = !shared.is_empty()
             && (rows.len() as f64) * (1.0 + probe) > 4.0 * card
             && rows.len() > 64;
-        let mut out = Vec::new();
+        let w = rows.w;
+        let mut out = Rows::new(w);
         let par = Par {
             store: self.ex.store.as_sync(),
             threshold: self.ex.parallel_threshold,
@@ -441,63 +592,61 @@ impl<'e, 'a> Bgp<'e, 'a> {
                 self.pats[i].card,
                 rows.len()
             ));
+            // the build side sorted by the hash of its shared slots, each hash
+            // mapped to its run; `bind` rejects the rows of a colliding hash
             let all = self.scan(i, None)?;
-            let mut table: HashMap<Vec<i64>, Vec<StmtRow>> = HashMap::new();
+            let mut build: Vec<(u64, StmtRow)> = Vec::with_capacity(all.len());
+            let mut probe_row = vec![UNBOUND; self.nslots];
             for r in all {
                 if !self.canonical_ok(i, &r)? {
                     continue;
                 }
-                let mut probe_row = vec![UNBOUND; self.nslots];
+                probe_row.fill(UNBOUND);
                 if !bind(&self.pats[i], &r, &mut probe_row) {
                     continue;
                 }
-                let key: Vec<i64> = shared.iter().map(|s| probe_row[*s]).collect();
-                table.entry(key).or_default().push(r);
+                build.push((hash_slots(&shared, &probe_row), r));
+            }
+            build.sort_unstable_by_key(|(h, _)| *h);
+            let mut table: FxHashMap<u64, (usize, usize)> = FxHashMap::default();
+            let mut a = 0;
+            while a < build.len() {
+                let h = build[a].0;
+                let mut b = a + 1;
+                while b < build.len() && build[b].0 == h {
+                    b += 1;
+                }
+                table.insert(h, (a, b));
+                a = b;
             }
             let pats = &self.pats;
-            let probe_rows = |_: &(dyn ReadStore + Sync), chunk: &[Vec<i64>]| {
-                let mut out = Vec::new();
-                for (n, row) in chunk.iter().enumerate() {
+            let probe = |chunk: &[i64]| -> Result<Rows> {
+                let mut out = Rows::new(w);
+                for (n, row) in chunk.chunks_exact(w).enumerate() {
                     if n % 1024 == 0 {
                         budget::check()?;
                     }
-                    let key: Vec<i64> = shared.iter().map(|s| row[*s]).collect();
-                    if let Some(ms) = table.get(&key) {
-                        for r in ms {
+                    if let Some(&(a, b)) = table.get(&hash_slots(&shared, row)) {
+                        for (_, r) in &build[a..b] {
                             budget::poll()?;
-                            let mut next = row.clone();
-                            if bind(&pats[i], r, &mut next) && iso_ok_in(pats, i, &next) {
-                                out.push(next);
+                            let next = out.push_tail(row);
+                            if !(bind(&pats[i], r, next) && iso_ok_in(pats, i, next)) {
+                                out.pop();
                             }
                         }
                     }
                 }
                 Ok(out)
             };
-            match par.run(&rows, &probe_rows)? {
+            // shared slots exist, so rows are at least one slot wide
+            match par.run(&rows, &|_, chunk| probe(chunk))? {
                 Some(rows) => {
                     self.plan
                         .push(format!("  in parallel morsels of {MORSEL} rows"));
                     out = rows;
                 }
-                None => {
-                    // sequential: the store is not shared with other threads
-                    for (n, row) in rows.into_iter().enumerate() {
-                        if n % 1024 == 0 {
-                            budget::check()?;
-                        }
-                        let key: Vec<i64> = shared.iter().map(|s| row[*s]).collect();
-                        if let Some(ms) = table.get(&key) {
-                            for r in ms {
-                                budget::poll()?;
-                                let mut next = row.clone();
-                                if bind(&self.pats[i], r, &mut next) && self.iso_ok(i, &next) {
-                                    out.push(next);
-                                }
-                            }
-                        }
-                    }
-                }
+                // sequential: the store is not shared with other threads
+                None => out = probe(&rows.data)?,
             }
         } else {
             self.plan.push(format!(
@@ -506,40 +655,56 @@ impl<'e, 'a> Bgp<'e, 'a> {
                 probe,
                 rows.len()
             ));
-            if !self.pats[i].canonical {
-                let (pats, pat) = (&self.pats, &self.pats[i]);
-                let probe_rows = |store: &(dyn ReadStore + Sync), chunk: &[Vec<i64>]| {
-                    let mut out = Vec::new();
-                    for row in chunk {
+            let (pats, pat) = (&self.pats, &self.pats[i]);
+            if !pat.canonical {
+                let probe_rows = |store: &(dyn ReadStore + Sync), chunk: &[i64]| {
+                    let mut out = Rows::new(w);
+                    for row in chunk.chunks_exact(w) {
                         for r in pat.view.scan(store, pat.pattern(Some(row)))? {
                             budget::poll()?;
                             let r = r?;
-                            let mut next = row.clone();
-                            if bind(pat, &r, &mut next) && iso_ok_in(pats, i, &next) {
-                                out.push(next);
+                            let next = out.push_tail(row);
+                            if !(bind(pat, &r, next) && iso_ok_in(pats, i, next)) {
+                                out.pop();
                             }
                         }
                     }
                     Ok(out)
                 };
-                if let Some(rows) = par.run(&rows, &probe_rows)? {
-                    self.plan
-                        .push(format!("  in parallel morsels of {MORSEL} rows"));
-                    return Ok(rows);
+                if w > 0 {
+                    if let Some(rows) = par.run(&rows, &probe_rows)? {
+                        self.plan
+                            .push(format!("  in parallel morsels of {MORSEL} rows"));
+                        return Ok(rows);
+                    }
                 }
+                for (n, row) in rows.iter().enumerate() {
+                    if n % 1024 == 0 {
+                        budget::check()?;
+                    }
+                    for r in pat.view.scan(self.ex.store, pat.pattern(Some(row)))? {
+                        budget::poll()?;
+                        let r = r?;
+                        let next = out.push_tail(row);
+                        if !(bind(pat, &r, next) && iso_ok_in(pats, i, next)) {
+                            out.pop();
+                        }
+                    }
+                }
+                return Ok(out);
             }
-            for (n, row) in rows.into_iter().enumerate() {
+            for (n, row) in rows.iter().enumerate() {
                 if n % 1024 == 0 {
                     budget::check()?;
                 }
-                for r in self.scan(i, Some(&row))? {
+                for r in self.scan(i, Some(row))? {
                     budget::poll()?;
                     if !self.canonical_ok(i, &r)? {
                         continue;
                     }
-                    let mut next = row.clone();
-                    if bind(&self.pats[i], &r, &mut next) && self.iso_ok(i, &next) {
-                        out.push(next);
+                    let next = out.push_tail(row);
+                    if !(bind(&self.pats[i], &r, next) && iso_ok_in(&self.pats, i, next)) {
+                        out.pop();
                     }
                 }
             }
@@ -581,7 +746,7 @@ impl<'e, 'a> Bgp<'e, 'a> {
 
     // @tg: implements:: [[openspec:native-query-execution#Worst-case-optimal cyclic joins]] {since: "2026-10-27"}
     /// The worst-case-optimal join of a cyclic pattern set.
-    fn generic_join(&mut self) -> Result<Vec<Vec<i64>>> {
+    fn generic_join(&mut self) -> Result<Rows> {
         // variable order: most patterns first, then the most selective
         let mut order: Vec<usize> = (0..self.nslots).collect();
         let uses = |s: usize, pats: &[Pat]| {
@@ -623,7 +788,7 @@ impl<'e, 'a> Bgp<'e, 'a> {
             ));
             tries.push((slots, trie));
         }
-        let mut out = Vec::new();
+        let mut out = Rows::new(self.nslots);
         let mut row = vec![UNBOUND; self.nslots];
         let mut cursors: Vec<&Trie> = tries.iter().map(|(_, t)| t).collect();
         let mut depth: Vec<usize> = vec![0; tries.len()];
@@ -654,7 +819,7 @@ impl<'e, 'a> Bgp<'e, 'a> {
         cursors: &mut Vec<&'t Trie>,
         depth: &mut Vec<usize>,
         row: &mut Vec<i64>,
-        out: &mut Vec<Vec<i64>>,
+        out: &mut Rows,
         visited: &mut u64,
     ) -> Result<()> {
         if k == order.len() {
@@ -664,7 +829,7 @@ impl<'e, 'a> Bgp<'e, 'a> {
             if (0..self.pats.len()).all(|i| self.iso_ok(i, row)) {
                 for _ in 0..mult {
                     budget::poll()?;
-                    out.push(row.clone());
+                    out.push(row);
                 }
             }
             budget::poll()?;
@@ -682,33 +847,31 @@ impl<'e, 'a> Bgp<'e, 'a> {
             .iter()
             .min_by_key(|i| cursors[**i].children.len())
             .expect("a participant");
-        let keys: Vec<i64> = cursors[smallest].children.keys().copied().collect();
-        *visited += keys.len() as u64;
-        for v in keys {
-            let mut next: Vec<&Trie> = Vec::with_capacity(parts.len());
-            let mut ok = true;
-            for i in &parts {
-                match cursors[*i].children.get(&v) {
+        let level: &'t Trie = cursors[smallest];
+        *visited += level.children.len() as u64;
+        // the cursors of this level, restored after each value
+        let saved: Vec<&'t Trie> = parts.iter().map(|i| cursors[*i]).collect();
+        let mut next: Vec<&'t Trie> = Vec::with_capacity(parts.len());
+        for &v in level.children.keys() {
+            next.clear();
+            for c in &saved {
+                match c.children.get(&v) {
                     Some(c) => next.push(c),
-                    None => {
-                        ok = false;
-                        break;
-                    }
+                    None => break,
                 }
             }
-            if !ok {
+            if next.len() < parts.len() {
                 continue;
             }
-            let saved: Vec<&Trie> = parts.iter().map(|i| cursors[*i]).collect();
-            for (i, c) in parts.iter().zip(next) {
-                cursors[*i] = c;
+            for (i, c) in parts.iter().zip(&next) {
+                cursors[*i] = *c;
                 depth[*i] += 1;
             }
             row[s] = v;
             self.descend(order, k + 1, tries, cursors, depth, row, out, visited)?;
             row[s] = UNBOUND;
-            for (i, c) in parts.iter().zip(saved) {
-                cursors[*i] = c;
+            for (i, c) in parts.iter().zip(&saved) {
+                cursors[*i] = *c;
                 depth[*i] -= 1;
             }
         }
@@ -719,7 +882,7 @@ impl<'e, 'a> Bgp<'e, 'a> {
 /// A hash trie: one level per variable, leaf counts for bag multiplicity.
 #[derive(Debug, Default)]
 struct Trie {
-    children: HashMap<i64, Trie>,
+    children: FxHashMap<i64, Trie>,
     count: u64,
 }
 
@@ -747,12 +910,13 @@ pub fn eval(
     bgp.set_filters(filters);
     let rows = bgp.run(seed_rows)?;
     let vars = bgp.vars().to_vec();
+    let vars_len = vars.len();
     let mut rel = Rel {
         cols: vars.iter().map(|_| Col::term(false)).collect(),
         vars,
         rows: rows
-            .into_iter()
-            .map(|r| r.into_iter().map(V::Integer).collect())
+            .iter()
+            .map(|r| r[..vars_len].iter().map(|x| V::Integer(*x)).collect())
             .collect(),
         iso: Vec::new(),
     };
@@ -825,10 +989,10 @@ struct Par<'s> {
 }
 
 /// The output of one morsel, once a worker has run it.
-type Slot = Mutex<Option<Result<Vec<Vec<i64>>>>>;
+type Slot = Mutex<Option<Result<Rows>>>;
 
-type MorselWork<'w> =
-    dyn Fn(&(dyn ReadStore + Sync), &[Vec<i64>]) -> Result<Vec<Vec<i64>>> + Sync + 'w;
+/// The work of one morsel: its rows, flat, extended into new rows.
+type MorselWork<'w> = dyn Fn(&(dyn ReadStore + Sync), &[i64]) -> Result<Rows> + Sync + 'w;
 
 // @tg: implements:: [[openspec:native-query-execution#Parallel scans]] {since: "2026-10-27", confidence: partial, note: "join steps only; scans and hash builds stay sequential"}
 impl Par<'_> {
@@ -837,11 +1001,11 @@ impl Par<'_> {
     /// (no shareable store, below the threshold, or one core). Each worker sees
     /// the caller's deadline and cancellation; the first error in morsel order
     /// is returned and stops the others.
-    fn run(&self, rows: &[Vec<i64>], work: &MorselWork<'_>) -> Result<Option<Vec<Vec<i64>>>> {
+    fn run(&self, rows: &Rows, work: &MorselWork<'_>) -> Result<Option<Rows>> {
         let Some(store) = self.store else {
             return Ok(None);
         };
-        if self.threshold == 0 || rows.len() < self.threshold.max(2 * MORSEL) {
+        if rows.w == 0 || self.threshold == 0 || rows.len() < self.threshold.max(2 * MORSEL) {
             return Ok(None);
         }
         let n = rows.len().div_ceil(MORSEL);
@@ -866,7 +1030,8 @@ impl Par<'_> {
                         if k >= n {
                             break;
                         }
-                        let chunk = &rows[k * MORSEL..((k + 1) * MORSEL).min(rows.len())];
+                        let chunk = &rows.data
+                            [k * MORSEL * rows.w..((k + 1) * MORSEL).min(rows.len()) * rows.w];
                         let r = work(store, chunk);
                         if r.is_err() {
                             failed.store(true, AtomicOrdering::Relaxed);
@@ -880,7 +1045,7 @@ impl Par<'_> {
                 });
             }
         });
-        let mut out = Vec::new();
+        let mut out = Rows::new(rows.w);
         for r in results {
             match r.into_inner().unwrap_or_else(|p| p.into_inner()) {
                 Some(Ok(rows)) => out.extend(rows),

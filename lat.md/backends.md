@@ -50,9 +50,9 @@ Phase 1 is done. Phase 2 was measured on 2026-10-27: the trait engine on SQLite 
 
 ## Hybrid Join Engine
 
-D42: the native runner joins acyclic parts with index nested loops and hash joins, and cyclic cores with a worst-case-optimal multiway intersection, in an order chosen greedily from exact predicate statistics.
+D42: the native runner joins acyclic parts with index nested loops and hash joins, and cyclic cores with a worst-case-optimal multiway intersection, in a greedy order from exact predicate statistics, tried from every first pattern.
 
-This is the Kùzu and Umbra design; [[query#Native Runner]] describes the operators. Two parts of the plan were deferred after measurement: dynamic-programming join order (greedy with exact statistics matched it on the corpus) and sideways semijoin filters. MillenniumDB's LFTJ-everywhere is simpler but slower on the chains and stars that dominate agent memory; Free Join is newer research with no production precedent. See [[query#Physical Planning#LFTJ]] for the measured cyclic-join gains on SQLite.
+This is the Kùzu and Umbra design; [[query#Native Runner]] describes the operators. Two parts of the plan were deferred after measurement: dynamic-programming join order (greedy with exact statistics matched it on the corpus) and sideways semijoin filters. Greedy from the smallest pattern alone did not hold at 10⁶ statements: WatDiv F1 took 83 ms against SQLite's 23 ms, and trying every first pattern brought it to 20 ms (the `tune-native-runner` change). MillenniumDB's LFTJ-everywhere is simpler but slower on the chains and stars that dominate agent memory; Free Join is newer research with no production precedent. See [[query#Physical Planning#LFTJ]] for the measured cyclic-join gains on SQLite.
 
 - motivated_by:: [[constraints#Read Performance First]] {weight: primary, since: "2026-10-27"}
 

@@ -342,6 +342,7 @@ Keys and values are byte strings compared with `memcmp`, so redb can shorten the
 - **Writes:** an assert inserts the `stmt` row, six live keys, three history keys and the log entry; a retraction deletes the six live keys and rewrites the history values. About eleven B-tree writes per statement, the price of order freedom for joins.
 - **Statistics:** `pred_stats` changes in the same write transaction; a distinct count moves only when the `(p, s)` or `(p, o)` prefix of `l_pso` / `l_pos` becomes empty or non-empty.
 - **Text index:** postings with token positions, document lengths and frequencies in redb tables, written in the statement's transaction. Matching and `bm25()` follow FTS5 exactly ([[crates/tm-store/src/search.rs#match_values]]), so recall is identical on both backends.
+- **Zero-copy values:** fixed-width values are read as `&[u8; N]`, which redb stores under the same type name as `[u8; N]`, so the file format is unchanged; the owned array type decodes byte by byte and was the largest cost of a scan.
 - **Readers:** a view is one redb read transaction; there is no pool and no wait for the writer. Compaction (`Db::compact`) needs no other open transaction.
 - **Durability:** `OpenOptions::durability` ([[backends#Durability Modes]]): `Normal` commits non-durably and a flusher makes the file durable within `flush_interval` (50 ms) or every `flush_commits` (1000) commits; `Immediate` fsyncs every commit; `None` only on `Db::sync` and close. A crash returns the file to its last durable commit.
 
