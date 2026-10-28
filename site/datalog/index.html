@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Datalog in Tiramemsu: a guide</title>
+<meta name="description" content="A practical guide to Tiramemsu's Datalog: the language, DatalogMTL operators and Allen relations over valid time, constraints enforced at commit, stored programs, materialization, and goal calls from SPARQL and Cypher.">
+<link rel="icon" href="../assets/logo.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+<header class="top"><div class="wrap">
+  <a class="brand" href="../"><img src="../assets/logo.svg" alt="">Tiramemsu</a>
+  <nav class="menu"><a href="../#features">Features</a><a href="../#start">Quick start</a><a href="./" aria-current="page">Datalog guide</a><a href="../n3/">N3 book</a><a href="../articles/">Articles</a></nav>
+</div></header>
+
+<article class="post">
+<h1>Datalog in Tiramemsu: a guide</h1>
+<p class="meta">Guide · feature <code>datalog</code> · crate <code>tm-datalog</code></p>
+
+<p>Datalog is how Tiramemsu answers “what follows from what we know”, “what must never be true” and “what should be remembered because it follows”, over a memory with two clocks. This guide is the practical companion to the <a href="../articles/datalog-temporal-reasoning.html">long read</a>: the language, the time operators, constraints, materialization and where each call lives. Design decisions are in <code>lat.md/datalog.md</code> (DL1 to DL26).</p>
+<p>Datalog is the opt-in facade feature <code>datalog</code> (crate <code>tm-datalog</code>, published to crates.io). It does not need the query engine, so <code>--no-default-features --features datalog</code> is enough. In the examples <code>v:</code> is <code>urn:tiramemsu:v:</code>, one of the prefixes every program may use without declaring: <code>rdf</code>, <code>rdfs</code>, <code>xsd</code>, <code>owl</code>, <code>dl</code>, <code>sys</code>, <code>tm</code> and <code>v</code>.</p>
+<h2 id="five-minutes">Five minutes</h2>
+<p>Store two statements and a program, then ask a question:</p>
+<pre class="rust"><code>let v = |s: &amp;str| Value::iri(format!(&quot;urn:tiramemsu:v:{s}&quot;));
+db.transact(TxOptions::default(), |tx| {
+    tx.assert(v(&quot;alice&quot;), v(&quot;manager&quot;), v(&quot;bob&quot;), Valid::ALWAYS)?;
+    tx.assert(v(&quot;bob&quot;), v(&quot;manager&quot;), v(&quot;carol&quot;), Valid::ALWAYS)?;
+    Ok(())
+})?;
+let program = DatalogProgram::Text(
+    &quot;reports(X, Y) :- v:manager(X, Y).\n\
+     reports(X, Z) :- reports(X, Y), v:manager(Y, Z).&quot;.into(),
+);
+let r = db.now().datalog(&amp;program, Some(&quot;reports(v:alice, X)&quot;), &amp;DatalogOptions::default())?;
+// two rows: bob and carol, each with the valid time over which it holds</code></pre>
+<p>From the command line the same program in a file <code>reporting.dl</code> is <code>tm datalog mem.db reporting.dl "reports(v:alice, X)"</code>; the bridge op is <code>datalog</code>, the MCP tool <code>datalog_query</code>.</p>
+<h2 id="the-language">The language</h2>
+<p>A program is text. <code>%</code> starts a comment. It holds:</p>
+<table>
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
+<thead>
+<tr>
+<th>Item</th>
+<th>Form</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Prefix</td>
+<td><code>@prefix ex: &lt;http://example.org/&gt; .</code></td>
+</tr>
+<tr>
+<td>Rule</td>
+<td><code>head :- body.</code> (a fact is a head with no body)</td>
+</tr>
+<tr>
+<td>Goal</td>
+<td><code>?- body.</code></td>
+</tr>
+<tr>
+<td>Constraint</td>
+<td><code>constraint name warn :- body.</code> or <code>constraint name error :- body.</code></td>
+</tr>
+</tbody>
+</table>
+<p>Variables start with an upper-case letter or <code>_</code>; a bare <code>_</code> is anonymous. Constants are prefixed names, <code>&lt;iri&gt;</code>, strings, numbers, booleans and typed literals. Durations are numbers with a unit: <code>ms</code>, <code>s</code>, <code>m</code>, <code>h</code>, <code>d</code>, <code>w</code> (<code>30d</code>).</p>
+<p><strong>Atoms.</strong> <code>ex:p(S, O)</code> reads the live statements whose predicate is <code>ex:p</code>, under set semantics on <code>(S, O)</code>. <code>ex:p(S, O) @ E</code> also binds the statement’s id, one row per statement, which is how you reach layers: <code>v:worksAt(X, C) @ E, v:confidence(E, K), K &gt; 0.8</code>. A predicate IRI that a rule head also defines is a derived relation that holds the stored statements as well, so stored and derived facts combine. Plain lower-case names (<code>reports</code>) are derived relations of any arity.</p>
+<p><strong>Reserved atoms</strong> reach the rest of a statement:</p>
+<table>
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
+<thead>
+<tr>
+<th>Atom</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>triple(S, P, O)</code></td>
+<td>any predicate (a variable predicate turns pruning off); a fact, valid over the statement’s time</td>
+</tr>
+<tr>
+<td><code>stmt(E, S, P, O)</code></td>
+<td>the statement’s record; holds at every instant</td>
+</tr>
+<tr>
+<td><code>valid(E, From, To)</code></td>
+<td>the statement’s valid interval (<code>dl:inf</code> for an open end)</td>
+</tr>
+<tr>
+<td><code>added(E, T)</code>, <code>tx_instant(T, Ms)</code></td>
+<td>the transaction that added it, and its instant</td>
+</tr>
+<tr>
+<td><code>in_graph(E, G)</code></td>
+<td>named-graph membership</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Builtins.</strong> Comparisons <code>= != &lt; &lt;= &gt; &gt;=</code> (the wrong kind of value makes the comparison false, never an error); arithmetic <code>+ - * / %</code> on numbers, and on instants and durations (<code>D + 30d</code>); <code>concat</code>, <code>strlen</code>, <code>lower</code>, <code>upper</code>, <code>contains</code>, <code>starts_with</code>; <code>now()</code>, the view’s pinned instant.</p>
+<p><strong>Negation and aggregates</strong> are stratified. <code>not v:manager(X, _)</code> needs <code>X</code> bound by a positive atom. Aggregates are <code>N = count : { body }</code> and <code>S = sum V : { body }</code> (also <code>min</code>, <code>max</code>). A program that recurses through negation or an aggregate is refused with the cycle named (<code>DatalogUnstratifiable</code>).</p>
+<p><strong>Invention.</strong> <code>exists M: v:assignedManager(X, M) :- rdf:type(X, v:Employee), not v:manager(X, _).</code> invents a node per <code>X</code>. The same firing reuses the same node. Recursion through invention needs <code>limits.max_new_values</code> (<code>DatalogUnboundedInvention</code>).</p>
+<h2 id="time">Time</h2>
+<p>A derived fact holds at an instant exactly when it follows from the statements valid at that instant. Facts that were never valid together never combine. Results carry their valid time as a set of half-open intervals of epoch milliseconds.</p>
+<pre><code>v:worksIn(P, L) :- v:worksAt(P, C), v:locatedIn(C, L).</code></pre>
+<p>With <code>worksAt</code> valid 2020 to 2025 and <code>locatedIn</code> valid from 2024, <code>worksIn</code> holds 2024 to 2025. <code>time: atemporal</code> ignores valid time and makes every result unbounded. A <code>valid_at(t)</code> view gives intervals <code>[t, t+1)</code>. Transaction time is the view’s: an <code>as_of</code> view runs the program that was stored then over the facts believed then, and <code>now()</code> is that view’s instant.</p>
+<h3 id="datalogmtl-operators">DatalogMTL operators</h3>
+<p>Body operators take a window <code>[a, b]</code> of durations (<code>b</code> may be <code>inf</code>):</p>
+<table>
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
+<thead>
+<tr>
+<th>Operator</th>
+<th>A holds at <code>t</code> when…</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>past[a,b] A</code></td>
+<td>A held at some instant in <code>[t−b, t−a]</code></td>
+</tr>
+<tr>
+<td><code>always_past[a,b] A</code></td>
+<td>A held throughout <code>[t−b, t−a]</code></td>
+</tr>
+<tr>
+<td><code>future[a,b] A</code>, <code>always_future[a,b] A</code></td>
+<td>the same, looking forward</td>
+</tr>
+<tr>
+<td><code>A since[a,b] B</code></td>
+<td>B held at some <code>s</code> in the window and A at every instant after it</td>
+</tr>
+<tr>
+<td><code>A until[a,b] B</code></td>
+<td>B holds at some <code>s</code> in the window and A at every instant before it</td>
+</tr>
+</tbody>
+</table>
+<pre><code>alert(X)    :- past[0d, 3d] v:fever(X, true).
+tenured(X)  :- always_past[0d, 30d] v:employed(X, true).
+pending(S)  :- v:unacked(S, true) since[0, inf] v:alarm(S, true).
+always_future[0d, 7d] blocked(R) :- v:booked(R, true).</code></pre>
+<p>Heads may only use the <code>always_*</code> operators; <code>past</code> or <code>future</code> in a head is not Horn and fails with <code>DatalogNotHorn</code>. <strong>Recursion through an operator needs a window</strong>: a program like <code>contagious(Y) :- past[0d, 3d] contagious(X), v:contact(X, Y).</code> can push intervals forward forever, so it fails with <code>DatalogUnboundedRecursion</code> unless you pass <code>window</code> (a clip for every iteration).</p>
+<h3 id="allen-relations">Allen relations</h3>
+<p><code>before</code>, <code>meets</code>, <code>overlaps</code>, <code>starts</code>, <code>during</code>, <code>finishes</code>, <code>equals</code> and the converses <code>finishedBy</code>, <code>contains</code>, <code>startedBy</code>, <code>overlappedBy</code>, <code>metBy</code>, <code>after</code>, plus <code>intersects</code>, are builtins over statement ids or intervals; <code>interval(E, I)</code>, <code>start(I, T)</code>, <code>end(I, T)</code> and <code>duration(I, D)</code> take intervals apart. Use <code>stmt</code> records when the two statements were never valid together:</p>
+<pre><code>stmt(E1, v:a, v:job, v:x), stmt(E2, v:a, v:job, v:y), meets(E1, E2)</code></pre>
+<p>The same goal through facts (<code>v:job(v:a, v:x) @ E1, ...</code>) has no row, because the two jobs are never valid at one instant.</p>
+<h2 id="constraints">Constraints</h2>
+<pre><code>constraint one_ceo error :- v:role(X, v:CEO), v:role(Y, v:CEO), X != Y.
+constraint owned   warn  :- rdf:type(P, v:Project), not v:owner(P, _).</code></pre>
+<p>A constraint is a body that must have no match. <code>View::check</code> (bridge <code>check</code>, MCP <code>check_constraints</code>, CLI <code>tm check</code>) returns each violation with its bindings, the statement ids it rests on and the intervals on which it holds, on any view. Because it is temporal, successive CEOs are fine and overlapping ones are a violation on exactly the overlap.</p>
+<p><strong>Enforcement.</strong> <code>tx.enforce(program, true)</code> (bridge <code>enforce</code>, MCP <code>enforce_program</code>, CLI <code>tm program enforce</code>) writes <code>(program dl:enforced true)</code>. From then on every commit checks the program’s <code>error</code> constraints from the statements it added and retracted only, under <code>OpenOptions::constraint_budget</code> (default 50 ms and 100 000 seed rows). A violation rolls the commit back with <code>ConstraintViolated</code>; over budget it fails with <code>ConstraintBudgetExceeded</code>. <code>warn</code> violations are listed in the transaction report; a dry run lists both; a <code>with</code> speculation fails like a commit. Enforcing a program that live data already violates is refused, listing the violations. An <code>error</code> constraint must be enforceable: stored atoms, non-recursive derived relations (inlined), and metric operators with finite windows. Aggregates, <code>since</code>/<code>until</code> and recursive relations make it check-only (<code>ConstraintNotEnforceable</code>).</p>
+<h2 id="stored-programs">Stored programs</h2>
+<p><code>tx.store_program(node, text)</code> keeps the text as the one statement <code>(node dl:source "...")</code>. The text is parsed and analysed first, so an invalid program is never stored. Editing is a supersede, so an <code>as_of</code> view runs the program believed then. A node holds rules of one language: storing Datalog where N3 rules live (or the reverse) fails with <code>RuleLanguageConflict</code>. <code>View::program_info</code> reports the rules, strata, constraints, the predicates read and whether the program recurses through an operator or through invention. Run a stored program with <code>DatalogProgram::Stored(node)</code>.</p>
+<h2 id="materialization">Materialization</h2>
+<p><code>Db::materialize_program(node, &amp;opts)</code> (bridge <code>materializeProgram</code>, MCP <code>materialize_program</code>, CLI <code>tm materialize-program</code>) evaluates the program on a snapshot and writes the conclusions of its IRI relations as <strong>derived beliefs</strong>: ordinary statements whose support is their premises plus the program statement. Retract a premise or edit the program and the conclusions go with it, in the same transaction. One statement is written per interval on which one derivation holds; a later run over a longer interval widens it; invented nodes are reused. A run never reads its own earlier conclusions, so running it again writes nothing but the transaction label <code>(tx dl:materialized program)</code>; <code>dry_run</code> reports without writing.</p>
+<p>Strata that use negation or aggregates are <strong>reconciled</strong>: a conclusion the run no longer derives is retracted, and the transaction is labelled <code>dl:reconciled</code> with a count. Such a stratum can go stale between runs, because a later write does not retract anything, so the report lists their predicates in <code>needs_rerun_after_writes</code>.</p>
+<h2 id="goals-inside-sparql-and-cypher">Goals inside SPARQL and Cypher</h2>
+<pre class="sparql"><code>SELECT ?X ?mail WHERE {
+  SERVICE &lt;urn:tiramemsu:dl:query&gt; { [] dl:program v:reporting ; dl:goal &quot;reports(v:alice, X)&quot; }
+  ?X v:email ?mail }</code></pre>
+<pre class="cypher"><code>CALL tiramemsu.datalog.query(&#39;v:reporting&#39;, &#39;reports(v:alice, X)&#39;) YIELD X, validFrom, validTo</code></pre>
+<p>The program (a stored node with <code>dl:program</code>, or inline with <code>dl:text</code>) and the goal must be constants or parameters. The call runs once per query, in the query’s snapshot and under its deadline. A goal value the store has no id for (a computed string, an invented node) fails the call with <code>Unsupported</code>; ask it through <code>View::datalog</code>.</p>
+<h2 id="running-it">Running it</h2>
+<p><code>DatalogOptions</code> (the bridge takes the same names in camelCase): <code>scope</code> (the whole view, named graphs, or seeds with hops), <code>window</code>, <code>time</code> (<code>Pointwise</code> or <code>Atemporal</code>), <code>limits</code> (<code>max_iterations</code>, <code>max_facts</code>, <code>max_fragments</code>, <code>max_new_values</code>), <code>demand</code> (magic sets for goals with constants, on by default), <code>proof</code> (one derivation per row), <code>access</code> (<code>Auto</code>, <code>Probe</code>, <code>Load</code>), <code>parallel_threshold</code> and <code>require_complete</code> (turn a reached limit into <code>DatalogIncomplete</code>). A run that hits a limit returns <code>Incomplete</code> with the limit named, and every row it returns is still a true consequence. <code>View::explain_datalog</code> shows the strata, join order and each predicate’s access.</p>
+<h2 id="what-to-know-before-relying-on-it">What to know before relying on it</h2>
+<ul>
+<li><strong>Not built:</strong> incremental materialization (every run evaluates the whole program), and a worst-case-optimal join for cyclic rule bodies.</li>
+<li><strong>Speed:</strong> goal queries with constants run in milliseconds; full closures are 3 to 4 times slower than Soufflé’s interpreter and 6 to 7 times faster than N3 on a hub graph. Figures and caveats are in <code>bench/datalog/README.md</code>.</li>
+<li><strong>Errors:</strong> <code>DatalogParse</code>, <code>DatalogUnsafe</code>, <code>DatalogUnstratifiable</code>, <code>DatalogReserved</code>, <code>DatalogNotHorn</code>, <code>DatalogUnboundedRecursion</code>, <code>DatalogUnboundedInvention</code>, <code>DatalogTemporalOperatorInAtemporal</code>, <code>DatalogDuplicateConstraint</code>, <code>DatalogIncomplete</code>, <code>DatalogCallShape</code>, <code>UnknownProgram</code>, <code>RuleLanguageConflict</code>, <code>ConstraintViolated</code>, <code>ConstraintNotEnforceable</code>, <code>ConstraintBudgetExceeded</code>.</li>
+<li><strong>N3 or Datalog:</strong> both are in the same store and share the support cascade. Reach for N3 for quoted formulas, N3 builtins and proof text; for Datalog when you need speed on recursion, temporal operators, enforced constraints or negation that materializes.</li>
+</ul>
+
+<p><a href="../articles/datalog-temporal-reasoning.html">The long read: Datalog over time →</a></p>
+</article>
+
+<footer><div class="wrap">
+  <span>Tiramemsu · MIT OR Apache-2.0 · <a href="https://github.com/Volland/tiramemsu">github.com/Volland/tiramemsu</a></span>
+  <span><a href="../">Home</a> · <a href="../articles/">Articles</a></span>
+  <span><a href="../impressum.html">Impressum</a> · <a href="../datenschutz.html">Datenschutz</a> · <a href="../agb.html">AGB</a></span>
+</div></footer>
+</body>
+</html>

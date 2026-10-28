@@ -7,6 +7,7 @@ It appears on Substack, from this folder, and on the website as `site/articles/d
 | File | What it is |
 |---|---|
 | `datalog-temporal-reasoning.md` | The article, the source of truth. No tables, because Substack cannot show them |
+| `build-guide.py` | Rebuilds the guide page `site/datalog/index.html` from `docs/datalog.md` (needs `pandoc`) |
 | `build-site.py` | Rebuilds the website page (needs `pandoc`): `python3 build-site.py` |
 
 ## Where the claims come from
