@@ -20,6 +20,9 @@ pub struct ToolError {
     pub code: String,
     /// What went wrong, for a person.
     pub message: String,
+    /// The bridge error's other fields, such as `program`, `constraint` and
+    /// `violations` of a `ConstraintViolated` refusal; empty for most errors.
+    pub details: Map<String, J>,
 }
 
 impl ToolError {
@@ -28,6 +31,7 @@ impl ToolError {
         ToolError {
             code: code.into(),
             message: message.into(),
+            details: Map::new(),
         }
     }
 
@@ -35,15 +39,24 @@ impl ToolError {
         ToolError::new("InvalidArgument", message)
     }
 
-    /// The error as `{"code", "message"}`, the form of the bridge's errors.
+    /// The error as `{"code", "message", ...}`, the form of the bridge's errors.
     pub fn to_json(&self) -> J {
-        json!({ "code": self.code, "message": self.message })
+        let mut m = self.details.clone();
+        m.insert("code".into(), json!(self.code));
+        m.insert("message".into(), json!(self.message));
+        J::Object(m)
     }
 }
 
 impl From<BindError> for ToolError {
     fn from(e: BindError) -> ToolError {
-        ToolError::new(e.code(), e.to_string())
+        let mut err = ToolError::new(e.code(), e.to_string());
+        if let J::Object(mut m) = e.to_json() {
+            m.remove("code");
+            m.remove("message");
+            err.details = m;
+        }
+        err
     }
 }
 
@@ -97,8 +110,10 @@ enum Schema {
     Count(&'static str),
     Flag(&'static str),
     Vector(&'static str),
-    #[cfg(feature = "n3")]
+    #[cfg(any(feature = "n3", feature = "datalog"))]
     Iri(&'static str),
+    #[cfg(feature = "datalog")]
+    Names(&'static str),
 }
 
 const TERM: &str = "A term: a string (a plain string literal), a number, a boolean, or an object \
@@ -157,8 +172,12 @@ impl Schema {
                 "items": { "type": "number" },
                 "description": d,
             }),
-            #[cfg(feature = "n3")]
+            #[cfg(any(feature = "n3", feature = "datalog"))]
             Schema::Iri(d) => json!({ "type": ["string", "object"], "description": d }),
+            #[cfg(feature = "datalog")]
+            Schema::Names(d) => {
+                json!({ "type": "array", "items": { "type": "string" }, "description": d })
+            }
         }
     }
 }
@@ -602,14 +621,163 @@ be written and writes nothing.",
             ("dryRun", Schema::Flag("Report what would be written and write nothing."), false),
         ],
     },
+    #[cfg(feature = "datalog")]
+    Tool {
+        name: "datalog_query",
+        title: "Query memory with Datalog",
+        description: "Run a Datalog program over memory on a view and return the rows of a goal, without \
+writing anything. Give the program as Datalog text (program) or name a program stored with store_program \
+(stored); goal is a body such as \"reports(v:alice, X)\" (default: the program's first ?- goal). Stored facts \
+are atoms p(s, o) over predicate IRIs; rules may recurse, negate (stratified), aggregate and use metric \
+operators over valid time. A row holds over the valid time in which its binding follows from the facts valid \
+then; each row carries those intervals and, with proof, the rule and statements behind each interval. Text \
+may use the prefixes v: (urn:tiramemsu:v:), rdf:, rdfs:, xsd:, owl:, dl:, sys: and tm: without declaring \
+them. An asOf view runs over memory as believed then, with the program believed then.",
+        writes: false,
+        idempotent: true,
+        args: &[
+            ("program", Schema::Text("Datalog program text (or give stored)."), false),
+            ("stored", Schema::Iri(PROGRAM), false),
+            (
+                "goal",
+                Schema::Text("The goal: a Datalog body such as reports(v:alice, X), with or without ?-."),
+                false,
+            ),
+            ("scope", Schema::Object(SCOPE), false),
+            ("window", Schema::Object(WINDOW), false),
+            (
+                "time",
+                Schema::Enum(
+                    "pointwise (default): rows respect valid time; atemporal: ignore valid time.",
+                    &["pointwise", "atemporal"],
+                ),
+                false,
+            ),
+            ("limits", Schema::Object(DL_LIMITS), false),
+            (
+                "demand",
+                Schema::Flag("Evaluate a goal with constants for demand only (magic sets). Default: true."),
+                false,
+            ),
+            ("proof", Schema::Flag("Add each row's derivation per interval."), false),
+            ("access", Schema::Enum(ACCESS, &["auto", "probe", "load"]), false),
+            ("parallelThreshold", Schema::Count(PARALLEL), false),
+            (
+                "requireComplete",
+                Schema::Flag("Fail with DatalogIncomplete instead of returning partial rows."),
+                false,
+            ),
+            ("view", Schema::View, false),
+        ],
+    },
+    #[cfg(feature = "datalog")]
+    Tool {
+        name: "check_constraints",
+        title: "Check Datalog constraints",
+        description: "Evaluate the constraints of a Datalog program (constraint name warn|error :- body.) over \
+memory on a view and return the violated ones, without writing anything. Give the program as text (program) \
+or name a stored program (stored); only restricts the check to these constraint names. Each violation carries \
+the body's bindings, the statements its derivation used (eids) and the valid time over which it holds, so \
+facts that were never true together never violate a constraint. An asOf view checks memory as believed then.",
+        writes: false,
+        idempotent: true,
+        args: &[
+            ("program", Schema::Text("Datalog program text (or give stored)."), false),
+            ("stored", Schema::Iri(PROGRAM), false),
+            ("only", Schema::Names("Check only the constraints with these names."), false),
+            ("scope", Schema::Object(SCOPE), false),
+            ("window", Schema::Object(WINDOW), false),
+            (
+                "time",
+                Schema::Enum(
+                    "pointwise (default): violations respect valid time; atemporal: ignore valid time.",
+                    &["pointwise", "atemporal"],
+                ),
+                false,
+            ),
+            ("limits", Schema::Object(DL_LIMITS), false),
+            ("access", Schema::Enum(ACCESS, &["auto", "probe", "load"]), false),
+            ("parallelThreshold", Schema::Count(PARALLEL), false),
+            (
+                "requireComplete",
+                Schema::Flag("Fail with DatalogIncomplete instead of returning a partial check."),
+                false,
+            ),
+            ("view", Schema::View, false),
+        ],
+    },
+    #[cfg(feature = "datalog")]
+    Tool {
+        name: "store_program",
+        title: "Store a Datalog program",
+        description: "Store Datalog text as the program program: one statement (program dl:source \"<text>\"). \
+Storing new text for an existing program supersedes the old version, which stays visible in asOf views; \
+storing the same text again changes nothing. Text that does not parse or is unsafe, unstratifiable or \
+unbounded is refused (DatalogParse, DatalogUnsafe, ...), and a node that holds N3 rules is refused \
+(RuleLanguageConflict); nothing is written then. Returns the program statement (eid), whether anything \
+changed and the transaction (t).",
+        writes: true,
+        idempotent: true,
+        args: &[
+            ("program", Schema::Iri(PROGRAM), true),
+            ("text", Schema::Text("The Datalog program text."), true),
+        ],
+    },
+    #[cfg(feature = "datalog")]
+    Tool {
+        name: "enforce_program",
+        title: "Enforce a Datalog program's constraints",
+        description: "Enforce the error constraints of a stored Datalog program (on, the default) at every \
+write, or stop enforcing them (on: false): one statement (program dl:enforced true). Turning it on first \
+checks the program's error constraints over all of memory and is refused with ConstraintViolated when memory \
+already violates one, or ConstraintNotEnforceable when one cannot be checked from a write's changes. From \
+then on any write that would introduce a violation is refused with ConstraintViolated and writes nothing; the \
+error lists the violations (bindings, eids, valid time). warn constraints never refuse a write. Returns the \
+enforcement statement (eid, null when turned off) and the transaction (t).",
+        writes: true,
+        idempotent: true,
+        args: &[
+            ("program", Schema::Iri(PROGRAM), true),
+            (
+                "on",
+                Schema::Flag("true (default) enforces the program; false stops enforcing it."),
+                false,
+            ),
+        ],
+    },
+    #[cfg(feature = "datalog")]
+    Tool {
+        name: "materialize_program",
+        title: "Materialize a Datalog program",
+        description: "Run the stored Datalog program program on a snapshot and write its conclusions as derived \
+beliefs, in one transaction: each conclusion is supported by its premises and by the program statement, so it \
+is retracted when a premise is retracted or corrected, or when the program is edited. Re-runs reuse existing \
+conclusions, widen their valid time and reconcile their support. Conclusions that cannot be stored are \
+reported as unstorable, and needsRerunAfterWrites lists the predicates the run's own writes feed. dryRun \
+reports what would be written and writes nothing. An unknown program is refused (UnknownProgram).",
+        writes: true,
+        idempotent: true,
+        args: &[
+            ("program", Schema::Iri(PROGRAM), true),
+            ("scope", Schema::Object(SCOPE), false),
+            ("window", Schema::Object(WINDOW), false),
+            ("limits", Schema::Object(DL_LIMITS), false),
+            (
+                "requireComplete",
+                Schema::Flag("Refuse to write when the run is incomplete."),
+                false,
+            ),
+            ("dryRun", Schema::Flag("Report what would be written and write nothing."), false),
+        ],
+    },
 ];
 
 #[cfg(feature = "n3")]
 const RULE_SET: &str = "A rule set: an IRI as a plain string, or a term object.";
-#[cfg(feature = "n3")]
+#[cfg(any(feature = "n3", feature = "datalog"))]
 const SCOPE: &str = "The statements reasoned over: \"all\" (default), {\"graphs\": [terms]} (members of these \
 named graphs) or {\"seeds\": {\"nodes\": [terms], \"hops\": n}} (statements within hops of the seed nodes).";
-#[cfg(feature = "n3")]
+#[cfg(any(feature = "n3", feature = "datalog"))]
 const WINDOW: &str =
     "The valid-time window of the run: {\"from\": time, \"to\": time}, either bound optional. \
 Default: unbounded.";
@@ -617,6 +785,18 @@ Default: unbounded.";
 const LIMITS: &str =
     "The reasoner's limits per run: {\"maxIterations\", \"maxMatchSteps\", \"maxBackwardDepth\", \
 \"maxTermBytes\"}.";
+#[cfg(feature = "datalog")]
+const PROGRAM: &str =
+    "A Datalog program stored with store_program: an IRI as a plain string, or a term object.";
+#[cfg(feature = "datalog")]
+const DL_LIMITS: &str =
+    "The engine's limits per run: {\"maxIterations\", \"maxFacts\", \"maxFragments\", \
+\"maxNewValues\"}; past one the status is incomplete.";
+#[cfg(feature = "datalog")]
+const ACCESS: &str =
+    "How stored atoms are read: auto (default), probe (index lookups) or load (scan once).";
+#[cfg(feature = "datalog")]
+const PARALLEL: &str = "Deltas larger than this run in parallel (default 4096; 0: never).";
 
 fn tool(name: &str) -> Option<&'static Tool> {
     TOOLS.iter().find(|t| t.name == name)
@@ -996,6 +1176,91 @@ fn run(db: &Database, config: &Config, t: &Tool, args: &J) -> Result<J, ToolErro
             c.insert("budget".into(), budget.clone());
             Ok(db.call("materialize", &J::Object(c))?)
         }
+        // @tg: implements:: [[openspec:datalog-programs#Datalog read surfaces]] {since: "2026-10-28"}
+        #[cfg(feature = "datalog")]
+        "datalog_query" => {
+            let mut c = Map::new();
+            for k in [
+                "program",
+                "stored",
+                "goal",
+                "scope",
+                "window",
+                "time",
+                "limits",
+                "demand",
+                "proof",
+                "access",
+                "parallelThreshold",
+                "requireComplete",
+            ] {
+                if let Some(v) = get(k) {
+                    c.insert(k.into(), v);
+                }
+            }
+            let (mut r, v) = read("datalog", c)?;
+            r["view"] = v;
+            Ok(r)
+        }
+        // @tg: implements:: [[openspec:datalog-constraints#Check constraints]] {since: "2026-10-28"}
+        #[cfg(feature = "datalog")]
+        "check_constraints" => {
+            let mut c = Map::new();
+            for k in [
+                "program",
+                "stored",
+                "only",
+                "scope",
+                "window",
+                "time",
+                "limits",
+                "access",
+                "parallelThreshold",
+                "requireComplete",
+            ] {
+                if let Some(v) = get(k) {
+                    c.insert(k.into(), v);
+                }
+            }
+            let (mut r, v) = read("check", c)?;
+            r["view"] = v;
+            Ok(r)
+        }
+        // @tg: implements:: [[openspec:datalog-programs#Store a program]] {since: "2026-10-28"}
+        #[cfg(feature = "datalog")]
+        "store_program" => {
+            let op =
+                json!({ "op": "storeProgram", "program": get("program"), "text": get("text") });
+            let r = transact(json!([op]))?;
+            let changed = r["asserted"].as_array().is_some_and(|a| !a.is_empty());
+            Ok(json!({
+                "eid": r["results"][0]["eid"],
+                "changed": changed,
+                "superseded": r["superseded"],
+                "t": r["t"],
+            }))
+        }
+        // @tg: implements:: [[openspec:datalog-constraints#Constraint surfaces]] {since: "2026-10-28"}
+        #[cfg(feature = "datalog")]
+        "enforce_program" => {
+            let on = get("on").unwrap_or(J::Bool(true));
+            let op = json!({ "op": "enforce", "program": get("program"), "on": on });
+            let r = transact(json!([op]))?;
+            Ok(json!({ "eid": r["results"][0]["eid"], "on": on, "t": r["t"] }))
+        }
+        // @tg: implements:: [[openspec:datalog-materialization#Materialization surfaces]]
+        #[cfg(feature = "datalog")]
+        "materialize_program" => {
+            let mut c = Map::new();
+            c.insert("stored".into(), get("program").unwrap_or(J::Null));
+            for k in ["scope", "window", "limits", "requireComplete", "dryRun"] {
+                if let Some(v) = get(k) {
+                    c.insert(k.into(), v);
+                }
+            }
+            c.insert("budget".into(), budget.clone());
+            Ok(db.call("materializeProgram", &J::Object(c))?)
+        }
         other => Err(ToolError::arg(format!("unknown tool {other:?}"))),
     }
 }
@@ -1160,6 +1425,9 @@ mod tests {
         ];
         if cfg!(feature = "n3") {
             expected.push("reason");
+        }
+        if cfg!(feature = "datalog") {
+            expected.extend(["datalog_query", "check_constraints"]);
         }
         assert_eq!(names, expected);
         assert!(ro

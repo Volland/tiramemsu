@@ -160,6 +160,13 @@ impl Binder<'_> {
                 }
                 Op::Text(t)
             }
+            Op::Datalog(t) => {
+                let mut t = t.clone();
+                if let tm_ir::DlProgramRef::Iri(i) = &mut t.program {
+                    *i = self.term(i)?;
+                }
+                Op::Datalog(t)
+            }
             Op::Vector(t) => {
                 let mut t = t.clone();
                 t.model = self.term(&t.model)?;

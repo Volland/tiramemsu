@@ -53,6 +53,7 @@ One writer commits at a time ([[architecture#Connections and Concurrency]]), so 
 
 - constrains:: [[reasoning#Explicit Materialization]] {strength: must, source: "lat.md/architecture.md#Connections and Concurrency"}
 - constrains:: [[reasoning#Snapshot Then Commit]] {strength: must, source: "lat.md/architecture.md#Connections and Concurrency"}
+- constrains:: [[datalog#Warn And Error Constraints]] {strength: must, source: "lat.md/architecture.md#Connections and Concurrency", note: "checks are seeded by the change and budgeted"}
 
 ## Publishable Crates
 

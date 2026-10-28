@@ -87,6 +87,50 @@ pub const SYS_DIMENSIONS: &str = "urn:tiramemsu:sys:dimensions";
 pub const SYS_METRIC: &str = "urn:tiramemsu:sys:metric";
 /// Embedding model: how its vectors are stored (`"f32"` or `"f16"`).
 pub const SYS_VECTOR_ENCODING: &str = "urn:tiramemsu:sys:vectorEncoding";
+/// `dl:` namespace: stored Datalog programs and the labels of their conclusions.
+pub const DL: &str = "urn:tiramemsu:dl:";
+/// `dl:source`: `(program dl:source "<text>")`, the one live statement of a
+/// stored Datalog program.
+pub const DL_SOURCE: &str = "urn:tiramemsu:dl:source";
+/// `dl:enforced`: `(program dl:enforced true)` turns a stored program's `error`
+/// constraints on at commit.
+pub const DL_ENFORCED: &str = "urn:tiramemsu:dl:enforced";
+/// `dl:derivedBy`: `(D dl:derivedBy program)`, the program that concluded a
+/// materialized statement (a label, not support).
+pub const DL_DERIVED_BY: &str = "urn:tiramemsu:dl:derivedBy";
+/// `dl:rule`: `(D dl:rule i)`, the index of the rule that concluded it.
+pub const DL_RULE: &str = "urn:tiramemsu:dl:rule";
+/// `dl:skolem`: the unique key of a node invented by an `exists` head.
+pub const DL_SKOLEM: &str = "urn:tiramemsu:dl:skolem";
+/// `dl:materialized`: `(tx dl:materialized program)`, a transaction that
+/// materialized the program.
+pub const DL_MATERIALIZED: &str = "urn:tiramemsu:dl:materialized";
+/// `dl:reconciled`: `(tx dl:reconciled program)`, a materialization that
+/// retracted conclusions the run no longer derived.
+pub const DL_RECONCILED: &str = "urn:tiramemsu:dl:reconciled";
+/// `dl:reconciledCount`: `(tx dl:reconciledCount n)`, how many it retracted.
+pub const DL_RECONCILED_COUNT: &str = "urn:tiramemsu:dl:reconciledCount";
+/// `dl:inf`: the constant a Datalog rule sees for an unbounded valid-time end.
+pub const DL_INF: &str = "urn:tiramemsu:dl:inf";
+/// `dl:query`: the SPARQL `SERVICE` IRI of a Datalog goal call
+/// (`lat.md/query#Datalog Calls`). Not a stored or virtual predicate.
+pub const DL_QUERY: &str = "urn:tiramemsu:dl:query";
+/// `dl:goal`: in a goal call, the goal body (a string literal).
+pub const DL_GOAL: &str = "urn:tiramemsu:dl:goal";
+/// `dl:program`: in a goal call, the IRI of a stored program.
+pub const DL_PROGRAM: &str = "urn:tiramemsu:dl:program";
+/// `dl:text`: in a goal call, the program text (a string literal).
+pub const DL_TEXT: &str = "urn:tiramemsu:dl:text";
+/// `dl:validFrom`: in a goal call, binds the start of each valid interval.
+pub const DL_VALID_FROM: &str = "urn:tiramemsu:dl:validFrom";
+/// `dl:validTo`: in a goal call, binds the end of each valid interval.
+pub const DL_VALID_TO: &str = "urn:tiramemsu:dl:validTo";
+/// `n3:source`: the statement of a stored N3 rule set (the rule-language
+/// conflict check reads it without the `n3` feature).
+pub const N3_SOURCE: &str = "urn:tiramemsu:n3:source";
+/// `tm:Interval`: the datatype of interval values (`"<from>/<to>"` in epoch
+/// milliseconds, `..` for an open end).
+pub const TM_INTERVAL: &str = "urn:tiramemsu:tm:Interval";
 /// `rdf:type`.
 pub const RDF_TYPE: &str = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
 

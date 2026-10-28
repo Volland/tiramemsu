@@ -5,7 +5,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it, expect } from "vitest";
-import { Database, iri, stmt, TiramemsuError } from "../lib/index.ts";
+import { Database, iri, Ref, stmt, TiramemsuError } from "../lib/index.ts";
 
 // Helpers matching the bridge test namespace.
 const v = (s: string) => iri(`urn:tiramemsu:v:${s}`);
@@ -876,6 +876,183 @@ describe("N3 reasoning", () => {
       const r = db.materialize("urn:tiramemsu:v:mortality", { requireComplete: true });
       expect(r.derived).toHaveLength(1);
       expect(r.status).toBe("complete");
+    } finally { cleanup(dir); }
+  });
+});
+
+// ---- Datalog -----------------------------------------------------------------
+
+describe("Datalog", () => {
+  const manager = v("manager");
+  const reports = "reports(X, Y) :- v:manager(X, Y).\nreports(X, Z) :- reports(X, Y), v:manager(Y, Z).\n";
+
+  // @tg: verifies:: [[openspec:datalog-programs#Datalog read surfaces#Bridge goal query]] {since: "2026-10-28", level: integration}
+  it("answers a goal over program text and a stored program", () => {
+    const { db, dir } = tempDb();
+    try {
+      db.transact((tx) => {
+        tx.assert(alice, manager, v("bob"));
+        tx.assert(v("bob"), manager, v("carol"));
+      });
+      const r = db.datalog({ program: reports, goal: "reports(v:alice, X)" });
+      expect(r.status).toBe("complete");
+      expect(r.columns).toEqual(["X"]);
+      expect(r.rows.map((row) => row.values)).toEqual([[v("bob")], [v("carol")]]);
+      expect(r.rows[0].valid).toEqual([{ from: null, to: null }]);
+      expect(r.program).toBeNull();
+      // a Datalog run writes nothing
+      expect(db.now().triples()).toHaveLength(2);
+
+      const stored = db.transact((tx) => { tx.storeProgram("urn:tiramemsu:v:reporting", reports); });
+      const ps = (stored.results[0] as { eid: number }).eid;
+      const again = db.now().datalog({ stored: v("reporting"), goal: "reports(v:alice, X)", proof: true });
+      expect(again.programStatement).toBe(ps);
+      expect(again.program).toEqual(v("reporting"));
+      expect(again.rows).toHaveLength(2);
+      expect(again.rows[0].proof).toHaveLength(1);
+      const info = db.programInfo({ stored: "urn:tiramemsu:v:reporting" });
+      expect(info.text).toBe(reports);
+      expect(info.rules).toBe(2);
+      expect(info.strata).toEqual([{ relations: ["reports"], recursive: true, monotonic: true }]);
+
+      const above = db.datalogReason({ program: `${reports}v:above(X, Y) :- reports(Y, X).\n` });
+      expect(above.conclusions.map((c) => [c.s, c.o])).toContainEqual([v("carol"), alice]);
+      expect(above.conclusions.every((c) => (c.p as { iri: string }).iri === "urn:tiramemsu:v:above")).toBe(true);
+      const e = db.explainDatalog({ program: reports, goal: "reports(v:alice, X)" });
+      expect(e.plan.some((l) => l.startsWith("access"))).toBe(true);
+      expect(e.result.rows).toHaveLength(2);
+
+      try {
+        db.datalog({ program: "p(X) :- v:q(X, Y" });
+        throw new Error("expected DatalogParse");
+      } catch (err) {
+        expect((err as TiramemsuError).code).toBe("DatalogParse");
+      }
+      try {
+        db.datalog({ stored: "urn:tiramemsu:v:none", goal: "reports(v:alice, X)" });
+        throw new Error("expected UnknownProgram");
+      } catch (err) {
+        expect((err as TiramemsuError).code).toBe("UnknownProgram");
+      }
+      const none = db.now().datalog({ program: reports, goal: "reports(v:alice, X)", scope: { graphs: [v("g")] } });
+      expect(none.rows).toHaveLength(0);
+    } finally { cleanup(dir); }
+  });
+
+  it("materializes a stored Datalog program as derived beliefs", () => {
+    const { db, dir } = tempDb();
+    try {
+      const manager = v("manager");
+      db.transact((tx) => {
+        tx.assert(v("alice"), manager, v("bob"));
+        tx.assert(v("bob"), manager, v("carol"));
+        tx.storeProgram(
+          "urn:tiramemsu:v:reporting",
+          "v:reportsTo(X, Y) :- v:manager(X, Y).\nv:reportsTo(X, Z) :- v:reportsTo(X, Y), v:manager(Y, Z).\n",
+        );
+      });
+      const reportsTo = () =>
+        db.now().triples().filter((t) => (t.p as { iri: string }).iri === "urn:tiramemsu:v:reportsTo");
+      const before = db.now().triples().length;
+      const dry = db.materializeProgram("urn:tiramemsu:v:reporting", { dryRun: true });
+      expect(dry.dryRun).toBe(true);
+      expect(dry.derived).toHaveLength(3);
+      expect(dry.program).toEqual(v("reporting"));
+      expect(db.now().triples()).toHaveLength(before);
+      expect(reportsTo()).toHaveLength(0);
+
+      const real = db.materializeProgram(v("reporting"), { requireComplete: true });
+      expect(real.derived).toHaveLength(3);
+      expect(real.status).toBe("complete");
+      expect(real.report).not.toBeNull();
+            expect(reportsTo()).toHaveLength(3);
+
+      const again = db.materializeProgram("urn:tiramemsu:v:reporting");
+      expect(again.derived).toHaveLength(0);
+      expect(again.existing).toHaveLength(3);
+
+      try {
+        db.materializeProgram("urn:tiramemsu:v:none");
+        throw new Error("expected UnknownProgram");
+      } catch (err) {
+        expect((err as TiramemsuError).code).toBe("UnknownProgram");
+      }
+    } finally { cleanup(dir); }
+  });
+
+  it("checks constraints and reports violations", () => {
+    const { db, dir } = tempDb();
+    try {
+      const role = v("role");
+      const ceo = v("CEO");
+      db.transact((tx) => { tx.assert(v("a"), role, ceo, { validFrom: "2020-01-01" }); });
+      db.transact((tx) => { tx.assert(v("b"), role, ceo, { validFrom: "2023-01-01" }); });
+      const policies = "constraint one_ceo error :- v:role(X, v:CEO), v:role(Y, v:CEO), X != Y.\n";
+      db.transact((tx) => { tx.storeProgram("urn:tiramemsu:v:policies", policies); });
+      const c = db.check({ stored: "urn:tiramemsu:v:policies" });
+      expect(c.checked).toEqual(["one_ceo"]);
+      expect(c.violated).toHaveLength(1);
+      expect(c.violated[0].name).toBe("one_ceo");
+      expect(c.violated[0].severity).toBe("error");
+      const pairs = c.violated[0].violations.map((x) => [x.bindings.X, x.bindings.Y]);
+      expect(pairs).toContainEqual([v("a"), v("b")]);
+      expect(c.violated[0].violations[0].eids).toHaveLength(2);
+      expect(c.violated[0].violations[0].valid).toEqual([{ from: Date.parse("2023-01-01"), to: null }]);
+      // as of before the second CEO, nothing is violated
+      expect(db.asOf({ tx: 1 }).check({ program: policies }).violated).toHaveLength(0);
+      expect(db.check({ stored: "urn:tiramemsu:v:policies", only: ["one_ceo"] }).checked).toEqual(["one_ceo"]);
+    } finally { cleanup(dir); }
+  });
+
+  it("enforces a program's constraints at commit", () => {
+    const { db, dir } = tempDb();
+    try {
+      const role = v("role");
+      const ceo = v("CEO");
+      const policies = "constraint one_ceo error :- v:role(X, v:CEO), v:role(Y, v:CEO), X != Y.\n";
+      db.transact((tx) => { tx.assert(v("a"), role, ceo); });
+      let off: Ref | null = null;
+      const on = db.transact((tx) => {
+        tx.storeProgram("urn:tiramemsu:v:policies", policies);
+        expect(tx.enforce("urn:tiramemsu:v:policies")).toBeInstanceOf(Ref);
+      });
+      expect(typeof (on.results[1] as { eid: number }).eid).toBe("number");
+
+      // a dry run reports the violations a commit would be refused for
+      const dry = db.transact((tx) => { tx.assert(v("b"), role, ceo); }, { dryRun: true });
+      expect(dry.constraintChecks).toBeGreaterThan(0);
+      expect(dry.seedRows).toBeGreaterThan(0);
+      expect(dry.constraintViolations.length).toBeGreaterThan(0);
+      expect(dry.constraintViolations[0].constraint).toBe("one_ceo");
+      expect(dry.constraintViolations[0].severity).toBe("error");
+
+      // a second CEO is refused, with the violations on the error
+      try {
+        db.transact((tx) => { tx.assert(v("b"), role, ceo); });
+        throw new Error("expected ConstraintViolated");
+      } catch (err) {
+        const e = err as TiramemsuError;
+        expect(e.code).toBe("ConstraintViolated");
+        expect(e.constraint).toBe("one_ceo");
+        expect(e.violations).toHaveLength(2);
+        const pairs = e.violations!.map((x) => [x.bindings.X, x.bindings.Y]);
+        expect(pairs).toContainEqual([v("a"), v("b")]);
+        expect(e.violations![0].eids).toHaveLength(2);
+        expect(e.violations![0].valid).toEqual([{ from: null, to: null }]);
+      }
+      expect(db.now().triples({ p: role })).toHaveLength(1);
+
+      // budget option is accepted; a write outside the program's predicates checks nothing
+      const ok = db.transact((tx) => { tx.assert(v("a"), v("name"), "Ada"); },
+        { constraintBudget: { timeoutMs: 1000, maxSeedRows: 1000 } });
+      expect(ok.constraintChecks).toBe(0);
+      expect(ok.constraintViolations).toEqual([]);
+
+      // turned off, the write commits
+      db.transact((tx) => { off = tx.enforce("urn:tiramemsu:v:policies", false); });
+      expect(off).toBeNull();
+      db.transact((tx) => { tx.assert(v("b"), role, ceo); });
+      expect(db.now().triples({ p: role })).toHaveLength(2);
     } finally { cleanup(dir); }
   });
 });

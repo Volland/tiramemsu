@@ -33,7 +33,7 @@ The releases after 0.4.0 are proposed in `docs/feature-roadmap.md` (see [[projec
 
 Eleven OpenSpec proposals (2026-10-10) cover the releases after 0.4.0 in `docs/feature-roadmap.md`. Vector and hybrid recall are implemented and archived (`openspec/changes/archive/2026-10-11-*`); libSQL is deferred (2026-10-11); the rest are open.
 
-Six more (2026-10-27) add the redb backend and its native runner ([[backends]]).
+Six more (2026-10-27) add the redb backend and its native runner ([[backends]]). Four more (2026-10-28) add Datalog ([[datalog]]).
 
 | Release | Change | Delivers |
 |---|---|---|
@@ -54,6 +54,10 @@ Six more (2026-10-27) add the redb backend and its native runner ([[backends]]).
 | 0.8 | `add-tm-cli` | The `tm` command-line tool ([[backends#Backend Detection and CLI]]) |
 | 0.8 | `add-backend-benchmarks` | redb vs SQLite vs Oxigraph, with an honest strengths-and-weaknesses report and two articles |
 | 0.9 | `move-sqlite-onto-store` | SQLite on the storage trait behind a 5 % regression gate ([[backends#One Engine In Two Phases]]) |
+| — | `add-datalog-engine` | `tm-datalog`: semi-naive engine with DatalogMTL over valid time, magic-set goals, `warn` checks, every surface ([[datalog]]) |
+| — | `add-datalog-constraints` | `error` constraints enforced at commit, seeded by the transaction's changes ([[datalog#Warn And Error Constraints]]) |
+| — | `add-datalog-materialization` | Programs materialized through `derive`, reconciliation, incremental runs ([[datalog#Shared Materialization With Reconciliation]]) |
+| — | `add-datalog-query-calls` | Datalog goals from SPARQL `SERVICE` and Cypher `CALL` ([[datalog#Goal Calls In SPARQL And Cypher]]) |
 
 ```plantuml
 @startuml milestones
@@ -95,6 +99,7 @@ The ten follow-up changes from the 2026-10-03 review (budgets, bulk import, text
 - **Triangles:** SQL nested loops versus the M4 threshold. This decided that LFTJ is built. See [[query#Physical Planning#LFTJ]]. First result (`bench/triangles/`): SQLite's plan matches an intersection join on a uniform graph (1.0×) but is 41× slower on a hub-and-spoke graph and 36–104× slower on layered graphs, growing with size. The threshold is met for skewed cyclic patterns, so M4 is justified for them. With M4 built, `cargo run --release -p tiramemsu --example triangles` compares both routes through tiramemsu on one file after checking equal counts; at the small scale the native route is 1.3× faster on a uniform graph, 12× on hub-and-spoke and 2–4× on layered graphs (results in `bench/triangles/README.md`).
 - **Paths:** all-endpoints shortest path and 3-hop trail latency, reachability over a chain and a small world, all-shortest paths on a grid, and the `rarray` chunk size (`crates/tiramemsu/benches/path.rs`; `PATH_BENCH_STATEMENTS` sets the size, default 10⁵). Trail errors fail the benchmark. Recorded results are in `crates/tiramemsu/benches/README.md`.
 - **Backends:** tiramemsu on SQLite (with and without LFTJ) and on redb against Oxigraph on RocksDB, through `crates/tm-bench` and `bench/backends/` (`tm bench` runs the SQLite-and-redb part). Every query is checked for equal results on every engine before it is timed, and a query that passes 60 s is recorded as a timeout. After the `tune-native-runner` change (2026-10-27), at 10⁵ statements redb wins every cyclic join (a skewed triangle 57× over SQLite's own plan and 1.5× over LFTJ), the Cypher 2-hop (6×), concurrent readers (3.1× at 16 threads), bulk load (2.5×), F1 (2.1×) and lookups in every view. It loses Cypher variable-length paths (about 2.5×), stars and aggregates with selective constants (1.4–1.8×, down from 2.1–3.8×) and size (3.5×). Oxigraph wins writes, load, size and 16-thread readers and loses joins. At 10⁶ a skewed triangle takes 21 ms on redb, 4.9 s on SQLite without LFTJ and 55 s on Oxigraph; F1 is 20 ms against SQLite's 23 ms (0.8.0: 83 ms); redb alone answers the skewed 4-cycle within the cap; a fresh bulk load leaves redb at 7.5× SQLite's size until `tm compact`. The change made C1 1.7×, F1 4.1× and the Cypher 2-hop 124× faster at 10⁶; a larger redb cache changed nothing. Report: `bench/backends/README.md`; decisions [[backends#Hybrid Join Engine]] and [[backends#Snapshot Readers]]. `cargo run --release -p tm-bench --example probe` keeps the loaded files and compares answers before timing, for tuning runs.
+- **Datalog:** closures, demand goals, same-generation and a DatalogMTL run on SQLite and redb against N3 and Soufflé (`cargo run --release -p tm-bench --features datalog,n3 --example datalog`); results and gate verdicts in `bench/datalog/README.md` ([[datalog#Gates And Oracles]]).
 - **Size:** bytes per statement, and index overhead against raw data. Baseline: about 153 bytes per statement, with indexes at 5.3× the table ([[storage#Measured Footprint]]). This benchmark also decides whether `hist_*` becomes partial.
 - **Supersede:** cost as a function of the cascade set size.
 - **Plan quality:** a skewed fixture (one huge class, one rare predicate, churned properties) run with bound parameters, with and without statistics. It guards [[query#Physical Planning#Join Ordering]] and decides whether the forced-order fallback is built.

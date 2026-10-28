@@ -66,6 +66,9 @@ pub enum ProvenanceGap {
     /// A recursive property path (`*`, `+`, `?`): its endpoints come from a
     /// reachability search that carries no statement ids.
     RecursivePath,
+    /// A Datalog goal call (`SERVICE <urn:tiramemsu:dl:query>`): its rows are
+    /// derived, so no statement ids cite them.
+    DatalogCall,
 }
 
 impl ProvenanceGap {
@@ -79,6 +82,7 @@ impl ProvenanceGap {
     pub fn name(self) -> &'static str {
         match self {
             ProvenanceGap::RecursivePath => "recursivePath",
+            ProvenanceGap::DatalogCall => "datalogCall",
         }
     }
 }

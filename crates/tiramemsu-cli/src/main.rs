@@ -5,10 +5,14 @@
 //! backend (SQL on SQLite, the native runner on redb). Errors print their typed
 //! name (`Parse: …`) on stderr and exit 1; usage errors exit 2.
 
+#[cfg(feature = "datalog")]
+mod datalog;
 #[cfg(feature = "n3")]
 mod n3;
 mod output;
 mod rdfio;
+#[cfg(any(feature = "n3", feature = "datalog"))]
+mod reasoning;
 
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -124,6 +128,21 @@ enum Cmd {
     /// Write the conclusions of a stored rule set as derived beliefs.
     #[cfg(feature = "n3")]
     Materialize(n3::MaterializeArgs),
+    /// Run a Datalog program over memory and print a goal's rows (writes nothing).
+    #[cfg(feature = "datalog")]
+    Datalog(datalog::DatalogArgs),
+    /// Check the constraints of a Datalog program and print the violations.
+    #[cfg(feature = "datalog")]
+    Check(datalog::CheckArgs),
+    /// Write a stored Datalog program's conclusions as derived beliefs.
+    #[cfg(feature = "datalog")]
+    MaterializeProgram(datalog::MaterializeProgramArgs),
+    /// Store, print and enforce Datalog programs.
+    #[cfg(feature = "datalog")]
+    Program {
+        #[command(subcommand)]
+        cmd: datalog::ProgramCmd,
+    },
     /// Benchmark SQLite against redb on this machine (a reduced suite; the full
     /// comparison with Oxigraph is `bench/backends`).
     Bench {
@@ -181,6 +200,10 @@ fn main() -> ExitCode {
         Err(e) => {
             let e = tiramemsu_json::BindError::Db(e);
             eprintln!("{}: {e}", e.code());
+            #[cfg(feature = "datalog")]
+            if let tiramemsu_json::BindError::Db(e) = &e {
+                datalog::print_violations(e);
+            }
             ExitCode::FAILURE
         }
     }
@@ -395,6 +418,14 @@ fn run(cmd: Cmd) -> Result<()> {
         Cmd::Rules { cmd } => n3::rules(cmd),
         #[cfg(feature = "n3")]
         Cmd::Materialize(a) => n3::materialize(a),
+        #[cfg(feature = "datalog")]
+        Cmd::Datalog(a) => datalog::datalog(a),
+        #[cfg(feature = "datalog")]
+        Cmd::Check(a) => datalog::check(a),
+        #[cfg(feature = "datalog")]
+        Cmd::MaterializeProgram(a) => datalog::materialize_program(a),
+        #[cfg(feature = "datalog")]
+        Cmd::Program { cmd } => datalog::programs(cmd),
         Cmd::Compact { file } => {
             let db = open(&file)?;
             let before = db.summary()?.file_size;

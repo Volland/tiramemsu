@@ -35,6 +35,8 @@
 //!
 // @lat: [[api#Bindings]]
 
+#[cfg(feature = "datalog")]
+pub mod datalog;
 #[cfg(feature = "n3")]
 pub mod n3;
 mod read;
@@ -142,6 +144,23 @@ impl BindError {
                 Error::N3NotMaterializable { .. } => "N3NotMaterializable",
                 Error::N3Contradiction { .. } => "N3Contradiction",
                 Error::N3Incomplete { .. } => "N3Incomplete",
+                Error::DatalogParse { .. } => "DatalogParse",
+                Error::DatalogUnsafe { .. } => "DatalogUnsafe",
+                Error::DatalogUnstratifiable { .. } => "DatalogUnstratifiable",
+                Error::DatalogReserved { .. } => "DatalogReserved",
+                Error::DatalogNotHorn { .. } => "DatalogNotHorn",
+                Error::DatalogUnboundedRecursion { .. } => "DatalogUnboundedRecursion",
+                Error::DatalogUnboundedInvention { .. } => "DatalogUnboundedInvention",
+                Error::DatalogTemporalOperatorInAtemporal { .. } => {
+                    "DatalogTemporalOperatorInAtemporal"
+                }
+                Error::DatalogDuplicateConstraint { .. } => "DatalogDuplicateConstraint",
+                Error::DatalogIncomplete { .. } => "DatalogIncomplete",
+                Error::UnknownProgram { .. } => "UnknownProgram",
+                Error::RuleLanguageConflict { .. } => "RuleLanguageConflict",
+                Error::ConstraintViolated { .. } => "ConstraintViolated",
+                Error::ConstraintNotEnforceable { .. } => "ConstraintNotEnforceable",
+                Error::ConstraintBudgetExceeded { .. } => "ConstraintBudgetExceeded",
                 Error::Custom(_) => "Custom",
                 _ => "Error",
             },
@@ -150,7 +169,20 @@ impl BindError {
 
     /// The error as `{"code", "message"}`, the text a wrapper parses back into an exception.
     pub fn to_json(&self) -> J {
-        json!({ "code": self.code(), "message": self.to_string() })
+        match self {
+            BindError::Db(Error::ConstraintViolated {
+                program,
+                constraint,
+                violations,
+            }) => json!({
+                "code": self.code(),
+                "message": self.to_string(),
+                "program": program,
+                "constraint": constraint,
+                "violations": violations.iter().map(read::violation_json).collect::<Vec<_>>(),
+            }),
+            _ => json!({ "code": self.code(), "message": self.to_string() }),
+        }
     }
 }
 
@@ -436,12 +468,19 @@ impl Database {
     /// `maxSegments`, `proofN3`, `limits`) and `ruleSetInfo` (`ruleSet`), the
     /// transaction op `storeRules` and `materialize` (`ruleSet`, `scope`,
     /// `window`, `maxSegments`, `limits`, `requireComplete`, `dryRun`, `budget`)
-    /// reason with N3 rules; without it they fail with `Unsupported`.
+    /// reason with N3 rules; without it they fail with `Unsupported`. With the
+    /// feature `datalog`, the reads `datalog` (`program` or `stored`, `goal`,
+    /// `scope`, `window`, `time`, `limits`, `demand`, `proof`, `access`,
+    /// `parallelThreshold`, `requireComplete`), `materializeProgram` (`stored`, `scope`, `window`, `limits`, `requireComplete`, `dryRun`, `budget`), `datalogReason`
+    /// (`includeRelations`), `programInfo`, `explainDatalog` and `check` (`only`)
+    /// and the transaction op `storeProgram` (`program`, `text`) run Datalog;
+    /// without it they fail with `Unsupported`.
     pub fn call(&self, op: &str, args: &J) -> Res<J> {
         match op {
             "sparql" | "cypher" | "triples" | "path" | "events" | "graphs" | "graphMembers"
             | "values" | "dependents" | "bundle" | "textSearch" | "vectorSearch" | "recall"
-            | "unembedded" | "explainSparql" | "conflicts" | "reason" | "ruleSetInfo" => {
+            | "unembedded" | "explainSparql" | "conflicts" | "reason" | "ruleSetInfo"
+            | "datalog" | "datalogReason" | "programInfo" | "explainDatalog" | "check" => {
                 let view = read::view_from_json(&self.db, args.get("view").unwrap_or(&J::Null))?;
                 let (budget, _entry) = self.budget(args.get("budget"))?;
                 match &budget {
@@ -493,6 +532,21 @@ impl Database {
                         .run(|| materialize(&self.db, args).map_err(value::into_core))
                         .map_err(BindError::from),
                     None => materialize(&self.db, args),
+                }
+            }
+            "materializeProgram" => {
+                let (budget, _entry) = self.budget(args.get("budget"))?;
+                let call = || -> Res<J> {
+                    #[cfg(feature = "datalog")]
+                    return datalog::materialize_program(&self.db, args);
+                    #[cfg(not(feature = "datalog"))]
+                    return Err(no_datalog());
+                };
+                match &budget {
+                    Some(b) => b
+                        .run(|| call().map_err(value::into_core))
+                        .map_err(BindError::from),
+                    None => call(),
                 }
             }
             "with" => tx::with(&self.db, args),
@@ -548,6 +602,14 @@ fn materialize(db: &Db, args: &J) -> Res<J> {
     }
 }
 
+/// The error of a Datalog operation in a build without the feature `datalog`.
+#[cfg(not(feature = "datalog"))]
+pub(crate) fn no_datalog() -> BindError {
+    BindError::Db(Error::unsupported(
+        "Datalog (the JSON bridge was built without the feature `datalog`)",
+    ))
+}
+
 /// The error of an N3 operation in a build without the feature `n3`.
 #[cfg(not(feature = "n3"))]
 pub(crate) fn no_n3() -> BindError {
@@ -569,6 +631,25 @@ pub(crate) fn tx_options(j: &J) -> Res<TxOptions> {
                         .as_u64()
                         .ok_or_else(|| arg("maxCascade must be an integer"))?
                         as usize
+                }
+                "constraintBudget" => {
+                    let b = v
+                        .as_object()
+                        .ok_or_else(|| arg("constraintBudget must be {timeoutMs, maxSeedRows}"))?;
+                    let mut cb = tiramemsu::ConstraintBudget::default();
+                    for (bk, bv) in b {
+                        let n = bv
+                            .as_u64()
+                            .ok_or_else(|| arg(format!("{bk} must be a non-negative integer")))?;
+                        match bk.as_str() {
+                            "timeoutMs" => cb.timeout_ms = n,
+                            "maxSeedRows" => cb.max_seed_rows = n,
+                            other => {
+                                return Err(arg(format!("unknown constraintBudget key {other:?}")))
+                            }
+                        }
+                    }
+                    o.constraint_budget = Some(cb);
                 }
                 other => return Err(arg(format!("unknown transaction option {other:?}"))),
             }

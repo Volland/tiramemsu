@@ -9,7 +9,7 @@ use tm_ir::Var;
 use super::{Col, Gen, IsoPat, Item, Rel, Select};
 use crate::lftj::{self, RegionPlan};
 use crate::plan::analyze::{Dom, VClass};
-use crate::plan::{Node, PGraphs, PPath, PRecall, PTerm, PText, PVector};
+use crate::plan::{Node, PDatalog, PGraphs, PPath, PRecall, PTerm, PText, PVector};
 use crate::result::{RegionKind, RouteNote};
 use crate::scan::view_predicates;
 
@@ -225,6 +225,52 @@ impl Gen<'_> {
             r.set(v, Col::term(format!("{a}.via"), true));
         }
         Ok(r)
+    }
+
+    /// Compiles a Datalog goal call: one `tm_datalog(spec)` call whose rows bind the
+    /// goal variables and the interval columns.
+    ///
+    /// Like `tm_lftj` the call sits in a derived table SQLite cannot flatten
+    /// (`LIMIT -1`), so it is materialised once however many rows of the rest of
+    /// the query join it, inside `OPTIONAL` included. The spec holds constants only:
+    /// no outer binding ever reaches the call.
+    // @tg: implements:: [[openspec:datalog-query-calls#Evaluated once per query]] {since: "2026-10-28"}
+    pub fn datalog(&mut self, t: &PDatalog) -> Result<Rel> {
+        let a = self.alias('x');
+        let spec = self
+            .params
+            .push(SqlValue::Text(crate::datalog::spec_text(t)));
+        let mut inner = Rel {
+            items: vec![Item {
+                sql: format!("{}({spec}) AS {a}", crate::datalog::NAME),
+                on: None,
+            }],
+            ..Rel::default()
+        };
+        for (i, (_, v)) in t.outputs.iter().enumerate() {
+            inner.set(v, Col::term(format!("{a}.c{i}"), false));
+        }
+        if let Some((f, to)) = &t.valid {
+            let n = crate::datalog::MAX_OUTPUTS;
+            let _ = n;
+            inner.set(f, Col::term(format!("{a}.validFrom"), true));
+            inner.set(to, Col::term(format!("{a}.validTo"), true));
+        }
+        // every call row, whichever variables the query binds
+        if inner.cols.is_empty() {
+            inner.set(
+                &Var::new(format!("~dl{a}")),
+                Col::term(format!("{a}.c0"), true),
+            );
+        }
+        Ok(self.derive(
+            inner,
+            Select {
+                limit: Some("-1".to_string()),
+                ..Select::default()
+            },
+            Vec::new(),
+        ))
     }
 
     /// Compiles a text recall: one `tm_text(…)` call whose rows bind the eid and

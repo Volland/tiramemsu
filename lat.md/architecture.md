@@ -129,6 +129,7 @@ The Rust workspace is split by layer so each front end compiles against the IR o
 | `tm-sparql` | SPARQL 1.1 (+1.2 annotations) → IR, results as SPARQL JSON/terms | `spargebra`, `tm-ir` |
 | `tm-cypher` | openCypher subset + extensions → IR, results as Cypher values | a Cypher parser, `tm-ir` |
 | `tm-n3` | N3 reasoning with eyeron over facts handed to it: term mapping, rule analysis and pruning sets, the pointwise valid-time sweep, proofs and support keys; never touches a store ([[reasoning]]) | `tm-core`, `eyeron` (git pin until published) |
+| `tm-datalog` | Datalog over a store's views: parser, analysis, interval sets with DatalogMTL and Allen relations, magic-set goals, probe-or-load stored access, semi-naive evaluation, proofs and constraint checks; reads through `ReadStore` and never writes ([[datalog]]) | `tm-core`, `tm-store` (publishable) |
 | `tiramemsu` | Facade: `Db`, `View`, `Tx`, results, reader pool, budgets, bulk import, saved answers, conflict review and previews; the only crate bindings use | `tm-core`, `tm-rusqlite`; the others behind cargo features ([[architecture#Crates#Cargo Features]]) |
 | `tiramemsu-json` (`bindings/json`) | The JSON bridge: one `Database` with `call(op, args)`, shared by every binding ([[bindings#JSON Bridge]]) | `tiramemsu` with `sparql` and `cypher` |
 | `tiramemsu-mcp` | Local stdio MCP server with typed memory tools ([[api#MCP Tools]]) | `tiramemsu-json`, `tiramemsu` |
@@ -207,13 +208,14 @@ The facade's query engine and front ends are optional dependencies (`add-optiona
 | `cypher` | `View::cypher`, `Db::cypher_write*`, `TxCypher`; implies `exec` | `tm-cypher`, `open-cypher` |
 | `redb` | `Backend::Redb`: create, open and convert redb files; queries on them need `exec` | `tm-redb`, `redb` |
 | `n3` | `View::reason`, `View::rule_set_info`, `TxN3::store_rules`, `Db::materialize`; off by default, independent of `exec` ([[reasoning#Optional Crate]]) | `tm-n3`, `eyeron` |
+| `datalog` | `View::datalog`, `View::datalog_reason`, `View::check`, `View::program_info`, `View::explain_datalog`, `TxDatalog::store_program`; off by default, independent of `exec`, no git dependency ([[datalog#Own Kernel Over ReadStore]]) | `tm-datalog` |
 | `default` | `sparql` + `cypher`, and saved answers, which store queries of both languages | all |
 
 - **Serialisation is not parsing.** The RDF terms and the N-Triples writer moved from `tm-sparql` to [[crates/tm-core/src/rdf.rs#render]] and [[crates/tm-core/src/rdf.rs#write_ntriples]], which `tm-sparql` re-exports, so bundle N-Triples and JSON need no front end.
 - **No engine without `exec`.** The facade's engine type is uninhabited and [[crates/tiramemsu/src/db.rs#open_engine]] installs nothing, so a core build behaves like `query_engine: false` with the options absent.
 - **Disabled APIs are absent**, not runtime errors, and the file format does not depend on the features. The JSON bridge, the MCP server and the bindings enable `sparql` and `cypher` explicitly.
 - **Compatibility.** Until 0.2 the `sparql` feature only switched the SPARQL side of the differential suite and `default-features = false` still built both front ends; the facade README documents the migration.
-- **Checks.** `scripts/feature-matrix.sh` asserts each combination's `cargo tree -e normal`, checks and tests it, and hands one file between it and the default build; the CI `features` job runs it for core, exec, sparql, cypher, n3, default and the bindings ([[tests#Optional Query Frontends]]).
+- **Checks.** `scripts/feature-matrix.sh` asserts each combination's `cargo tree -e normal`, checks and tests it, and hands one file between it and the default build; the CI `features` job runs it for core, exec, sparql, cypher, datalog, default and the bindings (n3 locally, while eyeron is a git dependency) ([[tests#Optional Query Frontends]]).
 
 ## Executor
 
@@ -234,6 +236,7 @@ The boundary was drawn before any code existed, because it cost little then and 
 One writer connection behind a mutex and a pool of reader connections, all on one WAL-mode SQLite file.
 
 - **Writer:** every transaction, speculative `with`, and schema change goes through the single writer. Transactions are serialised, which gives MERGE and `sys:unique` checks their atomicity. See [[time-model#Operations]].
+- **Constraint checks:** with the feature `datalog`, the constraints of enforced Datalog programs are checked inside the writer, after the transaction's body and before its commit, seeded by the rows it added and retracted and bounded by `OpenOptions::constraint_budget` ([[datalog#Warn And Error Constraints]], [[crates/tiramemsu/src/datalog_enforce.rs]]). Bulk-import chunks and `with` speculations are checked too.
 - **Import lease:** a bulk import session holds an exclusive write lease between its chunks; other writes fail with `ImportInProgress` instead of interleaving, and readers carry on ([[query#Bulk Import]]).
 - **Readers:** each query takes a reader connection and runs inside one read transaction, so it sees a consistent WAL snapshot.
 - **Bounded acquisition:** waiting for a reader is unbounded by default; `OpenOptions::reader_timeout` or a per-operation budget turns a long wait into `PoolTimeout`, and a deadline or cancellation also ends it ([[query#Query Budgets]]).
@@ -432,6 +435,12 @@ The pages are plain HTML with one stylesheet (`site/style.css`), light and dark 
 `article/cteg/` holds a second article, on causal-temporal event graphs (Foldvik, arXiv 2604.17557) built on statements, published on Substack and as `site/articles/causal-temporal-event-graphs.html`.
 
 Its working example is the sanitized trace of the Claude Code session that wrote it (`code/trace.json`, made by `code/extract-trace.py`). `code/cteg-demo.mjs` loads that trace through the Node binding and runs every SPARQL query the article quotes, writing `code/queries.out.txt`; `code/gen-figures.py` draws the data figures from the same trace. The queries use reifiers, `tm:validFrom`, `tm:addedAt`, `validAt`, `asOf` and `SERVICE <urn:tiramemsu:tm:timeRespecting>` ([[query#Temporal Syntax]], [[query#Temporal Path Syntax]]), so a change there means re-running the demo and updating the article. With `RECORDER=sparql` the demo records the trace through SPARQL valid-time writes ([[query#Front Ends#SPARQL#Valid Time Writes]]), and it reads transactions in Cypher ([[query#Front Ends#Cypher#Statement Ids And Transactions]]). `build-site.py` rebuilds the site page and copies its SVGs to `site/assets/cteg/`.
+
+### Datalog Article
+
+`article/datalog/` holds a third long read, on temporal Datalog and its materialization ([[datalog]]), published on Substack and as `site/articles/datalog-temporal-reasoning.html`.
+
+Its programs come from the tests `crates/tiramemsu/tests/datalog.rs`, `datalog_constraints.rs` and `datalog_materialization.rs`, and its numbers from `bench/datalog/README.md`, so a change to those, or to the status of incremental runs (decision DL22, not built), should be reflected there. `build-site.py` rebuilds the page.
 
 ## Crate Documentation and Publishing
 

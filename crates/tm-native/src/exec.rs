@@ -63,6 +63,10 @@ pub struct Exec<'a> {
     pub path_max_states: usize,
     /// Input rows above which a join step runs in parallel morsels (`0`: never).
     pub parallel_threshold: usize,
+    /// The Datalog provider of the engine, for goal calls.
+    pub datalog: Option<std::sync::Arc<dyn tm_exec::datalog::DatalogProvider>>,
+    /// The relations of the goal calls run so far, by spec: a call runs once.
+    datalog_calls: RefCell<HashMap<String, std::rc::Rc<Rel>>>,
 }
 
 // @tg: implements:: [[openspec:native-query-execution#Same answers as the SQL runner]] {since: "2026-10-27"}
@@ -80,6 +84,7 @@ pub fn execute(
     engine.run_hook();
     let mut ex = Exec::new(store, p.query().semantics, synthetic);
     ex.parallel_threshold = engine.parallel_threshold();
+    ex.datalog = engine.datalog_provider().cloned();
     if let Some(pe) = engine.path_engine() {
         ex.path_max_hops = pe.options().max_hops;
         ex.path_max_states = pe.options().max_states;
@@ -118,6 +123,7 @@ pub fn explain(engine: &QueryEngine, store: &dyn ReadStore, p: &Prepared) -> Res
     let (node, synthetic) = plan(store, p)?;
     let mut ex = Exec::new(store, p.query().semantics, synthetic);
     ex.parallel_threshold = engine.parallel_threshold();
+    ex.datalog = engine.datalog_provider().cloned();
     if let Some(pe) = engine.path_engine() {
         ex.path_max_hops = pe.options().max_hops;
         ex.path_max_states = pe.options().max_states;
@@ -185,6 +191,8 @@ impl<'a> Exec<'a> {
             path_max_hops: 15,
             path_max_states: 1_000_000,
             parallel_threshold: 0,
+            datalog: None,
+            datalog_calls: RefCell::new(HashMap::new()),
         }
     }
 
@@ -425,6 +433,7 @@ impl<'a> Exec<'a> {
             Node::Volatile(v) => self.volatile(v),
             Node::Path(p) => crate::path::eval(self, p, &Rel::unit()),
             Node::Text(t) => self.text(t),
+            Node::Datalog(t) => self.datalog_call(t),
             Node::Vector(t) => self.vector(t),
             Node::Recall(t) => self.recall(t),
             Node::Values(v) => Ok(values(v)),
@@ -1723,6 +1732,62 @@ impl<'a> Exec<'a> {
             }
             rel.rows.push(row);
         }
+        Ok(rel)
+    }
+
+    /// A Datalog goal call: evaluated once per execution through the engine's
+    /// provider (a second evaluation of the same call reuses the relation), its
+    /// rows a relation like the SQL route's `tm_datalog` rows.
+    // @tg: implements:: [[openspec:datalog-query-calls#Evaluated once per query]] {since: "2026-10-28"}
+    fn datalog_call(&self, t: &tm_exec::plan::PDatalog) -> Result<Rel> {
+        use tm_exec::datalog::{run_call, spec_text, DlProgram};
+        use tm_exec::plan::PDlProgram;
+        let key = spec_text(t);
+        if let Some(r) = self.datalog_calls.borrow().get(&key) {
+            return Ok((**r).clone());
+        }
+        let provider = self
+            .datalog
+            .as_ref()
+            .ok_or_else(tm_exec::datalog::no_provider)?;
+        let spec = Self::spec_of(&t.view_text)?;
+        let program = match &t.program {
+            PDlProgram::Stored(i) => DlProgram::Stored(i.clone()),
+            PDlProgram::Text(x) => DlProgram::Text(x.clone()),
+        };
+        let names: Vec<String> = t.outputs.iter().map(|(g, _)| g.clone()).collect();
+        let rows = run_call(
+            provider.as_ref(),
+            self.store,
+            &spec,
+            &program,
+            &t.goal,
+            &names,
+        )?;
+        self.note(format!("datalog call {:?} ({} rows)", t.goal, rows.len()));
+        let mut rel = Rel::default();
+        for (_, v) in &t.outputs {
+            rel.vars.push(v.clone());
+            rel.cols.push(Col::term(false));
+        }
+        if let Some((f, to)) = &t.valid {
+            for v in [f, to] {
+                rel.vars.push(v.clone());
+                rel.cols.push(Col::term(true));
+            }
+        }
+        for r in rows {
+            let mut row: Vec<V> = r.ids.iter().map(|id| V::Integer(id.raw())).collect();
+            if t.valid.is_some() {
+                for id in [r.from, r.to] {
+                    row.push(id.map_or(V::Null, |i| V::Integer(i.raw())));
+                }
+            }
+            rel.rows.push(row);
+        }
+        self.datalog_calls
+            .borrow_mut()
+            .insert(key, std::rc::Rc::new(rel.clone()));
         Ok(rel)
     }
 

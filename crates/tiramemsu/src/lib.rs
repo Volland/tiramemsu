@@ -8,7 +8,8 @@
            The cargo features of this crate are `exec` (the shared query engine: IR, \
            planner, paths, LFTJ), `sparql` and `cypher` (the query front ends, each \
            implying `exec`); the default enables both front ends; `n3` adds N3 \
-           reasoning (`View::reason`) and `redb` the redb backend. Without them the \
+           reasoning (`View::reason`), `datalog` adds Datalog (`View::datalog`) and \
+           `redb` the redb backend. Without them the \
            core tier remains: [`Db`], [`View`] reads, transactions, fact bundles with \
            [`BundleFormat`], text recall, conflict review, bulk import and budgets. \
            See the README's *Cargo features* section for the full table."
@@ -21,8 +22,18 @@ mod budget;
 mod bundle;
 #[cfg(feature = "cypher")]
 mod cypher;
+#[cfg(feature = "datalog")]
+mod datalog;
+#[cfg(all(feature = "datalog", feature = "exec"))]
+mod datalog_call;
+#[cfg(feature = "datalog")]
+mod datalog_enforce;
+#[cfg(feature = "datalog")]
+mod datalog_materialize;
 mod db;
 mod import;
+#[cfg(any(feature = "n3", feature = "datalog"))]
+mod materialize;
 #[cfg(feature = "n3")]
 // @tg: implements:: [[openspec:optional-query-frontends#Optional N3 reasoning feature]] {since: "2026-10-28"}
 mod n3;
@@ -41,6 +52,13 @@ pub use budget::QueryBudget;
 pub use bundle::{BundleFormat, BUNDLE_FORMAT};
 #[cfg(feature = "cypher")]
 pub use cypher::TxCypher;
+#[cfg(feature = "datalog")]
+pub use datalog::TxDatalog;
+#[cfg(all(feature = "datalog", feature = "exec"))]
+#[doc(hidden)]
+pub use datalog_call::{watch_datalog_calls, watched_datalog_calls};
+#[cfg(feature = "datalog")]
+pub use datalog_materialize::{MaterializeProgramOptions, MaterializeProgramReport};
 pub use db::{Db, OpenOptions, Summary};
 pub use import::{BulkImport, ImportProgress, ImportSummary};
 #[cfg(feature = "n3")]
@@ -78,6 +96,7 @@ pub use tm_core::{
 pub use tm_core::{recall, vector};
 pub use tm_core::{BTerm, Bundle, BundleStatement, IdUsage, ImportReport, ImportedStatement};
 pub use tm_core::{Conflict, ConflictEvidence, ConflictQuery, ConflictValue};
+pub use tm_core::{ConstraintBudget, ConstraintViolation};
 pub use tm_core::{
     EmbeddingModel, Metric, RecallHit, RecallQuery, VectorEncoding, VectorHit, VectorQuery,
     VectorResult,
@@ -88,6 +107,18 @@ pub use tm_rusqlite::RusqliteHost;
 pub use tm_cypher as cypher_frontend;
 #[cfg(feature = "cypher")]
 pub use tm_cypher::{CypherParams, CypherResult, CypherValue};
+/// The Datalog crate (`tm-datalog`).
+#[cfg(feature = "datalog")]
+pub use tm_datalog as datalog_engine;
+#[cfg(feature = "datalog")]
+pub use tm_datalog::{
+    AccessMode as DatalogAccess, CheckResult, Conclusion as DatalogConclusion, ConstraintReport,
+    DatalogOptions, DatalogResult, Explain as DatalogExplain, Fact as DatalogFact, FragmentProof,
+    Limit as DatalogLimit, Limits as DatalogLimits, Premise as DatalogPremise,
+    Program as DatalogProgram, ProgramInfo, Proof as DatalogProof,
+    ReasonResult as DatalogReasonResult, Row as DatalogRow, Scope as DatalogScope, Severity,
+    Status as DatalogStatus, Term as DatalogTerm, TimeMode as DatalogTime, Violation,
+};
 #[cfg(feature = "exec")]
 pub use tm_exec::path::row::{Dir as PathDir, HopKind};
 #[cfg(feature = "exec")]

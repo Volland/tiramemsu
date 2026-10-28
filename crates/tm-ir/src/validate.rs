@@ -81,6 +81,18 @@ pub fn scope(op: &Op) -> Scope {
                 s.maybe_missing.insert(c.clone());
             }
         }
+        Op::Datalog(t) => {
+            for (_, v) in &t.outputs {
+                s.push(v);
+            }
+            if let Some((f, to)) = &t.valid {
+                s.push(f);
+                s.push(to);
+                // an open end is unbound
+                s.maybe_missing.insert(f.clone());
+                s.maybe_missing.insert(to.clone());
+            }
+        }
         Op::Recall(t) => {
             s.push(&t.eid);
             for v in [&t.score, &t.rank].into_iter().flatten() {
@@ -363,6 +375,36 @@ fn check_op(op: &Op) -> Result<()> {
             for (i, v) in outs.iter().enumerate() {
                 if outs[..i].contains(v) {
                     return Err(invalid(format!("vector recall binds {v} twice")));
+                }
+            }
+        }
+        Op::Datalog(t) => {
+            match &t.program {
+                crate::op::DlProgramRef::Iri(TermOrVar::Const(Value::Iri(_)))
+                | crate::op::DlProgramRef::Iri(TermOrVar::Param(_)) => {}
+                crate::op::DlProgramRef::Iri(other) => {
+                    return Err(invalid(format!(
+                        "Datalog call needs a program IRI or a parameter, got {other:?}"
+                    )))
+                }
+                crate::op::DlProgramRef::Text(_) => {}
+            }
+            if t.goal.trim().is_empty() {
+                return Err(invalid("Datalog call needs a goal".to_string()));
+            }
+            let mut outs: Vec<&Var> = t.outputs.iter().map(|(_, v)| v).collect();
+            if let Some((f, to)) = &t.valid {
+                outs.push(f);
+                outs.push(to);
+            }
+            for (i, v) in outs.iter().enumerate() {
+                if outs[..i].contains(v) {
+                    return Err(invalid(format!("Datalog call binds {v} twice")));
+                }
+            }
+            for (i, (g, _)) in t.outputs.iter().enumerate() {
+                if t.outputs[..i].iter().any(|(x, _)| x == g) {
+                    return Err(invalid(format!("Datalog call yields {g} twice")));
                 }
             }
         }

@@ -442,6 +442,7 @@ fn check_clause(c: &Clause, scope: &mut Scope, opts: &CheckOpts) -> CResult<Opti
                 "db.relationshiptypes",
                 "db.propertykeys",
                 crate::exec::text::NAME,
+                crate::exec::datalog::NAME,
                 crate::exec::vector::NAME,
                 crate::exec::recall::NAME,
                 crate::exec::schema::SET_EMBEDDING,

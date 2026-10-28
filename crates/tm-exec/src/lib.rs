@@ -2,6 +2,7 @@
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
 
+pub mod datalog;
 pub mod decode;
 pub mod error;
 pub mod exec;
@@ -71,6 +72,7 @@ pub struct QueryEngine {
     cache: TermCache,
     hook: Mutex<Option<Hook>>,
     parallel_threshold: usize,
+    datalog: Option<Arc<dyn datalog::DatalogProvider>>,
 }
 
 impl std::fmt::Debug for QueryEngine {
@@ -95,7 +97,22 @@ impl QueryEngine {
             cache: TermCache::new(term_cache_capacity),
             hook: Mutex::new(None),
             parallel_threshold: DEFAULT_PARALLEL_THRESHOLD,
+            datalog: None,
         }
+    }
+
+    /// This engine with a Datalog provider: the `tm_datalog` calls of both routes
+    /// run goals through it (`lat.md/query#Datalog Calls`). Without one a goal
+    /// call fails with `Unsupported`.
+    #[must_use]
+    pub fn with_datalog_provider(mut self, p: Arc<dyn datalog::DatalogProvider>) -> QueryEngine {
+        self.datalog = Some(p);
+        self
+    }
+
+    /// The registered Datalog provider, if any.
+    pub fn datalog_provider(&self) -> Option<&Arc<dyn datalog::DatalogProvider>> {
+        self.datalog.as_ref()
     }
 
     /// This engine with another parallel threshold: the input rows above which
@@ -121,7 +138,7 @@ impl QueryEngine {
     ///
     /// `MissingCapability` if the host lacks `functions` or `vtab`.
     pub fn install(&self, exec: &mut dyn Executor) -> Result<()> {
-        host::install(exec, &self.registry)
+        host::install(exec, &self.registry, self.datalog.clone())
     }
 
     /// Validates `q`, binds `params` and checks routing, without any I/O.

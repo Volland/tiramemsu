@@ -235,6 +235,24 @@ fn write_op(out: &mut String, op: &Op, depth: usize, pretty: bool) {
             graph_text(&t.graph, out);
             out.push(')');
         }
+        Op::Datalog(t) => {
+            match &t.program {
+                crate::op::DlProgramRef::Iri(i) => {
+                    let _ = write!(out, "(datalog :program {}", term(i));
+                }
+                crate::op::DlProgramRef::Text(x) => {
+                    let _ = write!(out, "(datalog :text {x:?}");
+                }
+            }
+            let _ = write!(out, " :goal {:?} :view {}", t.goal, view_text(&t.view));
+            for (g, v) in &t.outputs {
+                let _ = write!(out, " :out {g}={v}");
+            }
+            if let Some((f, to)) = &t.valid {
+                let _ = write!(out, " :valid {f} {to}");
+            }
+            out.push(')');
+        }
         Op::Recall(t) => {
             let _ = write!(out, "(recall :eid {} :view {}", t.eid, view_text(&t.view));
             if let Some(q) = &t.text {

@@ -475,6 +475,9 @@ fn solutions_from_json(j: &J) -> Result<Solutions> {
                 Some("recursivePath") => {
                     provenance_gaps.push(tm_sparql::results::ProvenanceGap::RecursivePath)
                 }
+                Some("datalogCall") => {
+                    provenance_gaps.push(tm_sparql::results::ProvenanceGap::DatalogCall)
+                }
                 _ => return Err(bad(format!("unknown provenance gap {g}"))),
             }
         }
@@ -678,6 +681,7 @@ impl Analysis {
                 self.recursive |= recursive(&p.path);
             }
             O::Text(t) => self.views.push(t.view),
+            O::Datalog(t) => self.views.push(t.view),
             // an as-of view sees only the embeddings stored by then, so a vector
             // recall is as stable as its view
             O::Vector(t) => self.views.push(t.view),

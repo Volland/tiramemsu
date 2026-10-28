@@ -118,9 +118,11 @@ A view chooses when you look and when the fact was true. Every read takes a view
 | `addToGraph(eid, g)`, `removeFromGraph`, `clearGraph`, `createGraph`, `dropGraph` | Named graphs as tags on statements. A statement (`stmt(eid)` or a `Ref`) can name a graph, so an edge can hold a subgraph |
 | `importBundle(bundle)` | Imports a bundle from `view.bundle`, possibly read from another database; returns a `Ref` to the imported root |
 | `storeRules(ruleSet, n3)` | Stores N3 rules as a rule set; new text supersedes the live version |
+| `storeProgram(program, text)` | Stores a Datalog program; new text supersedes the live version |
+| `enforce(program, on = true)` | Enforces a stored program's `error` constraints at every commit (`on = false` stops); returns a `Ref`, or `null` when turning off |
 | `cypher(text, params?)` | A Cypher query that may write, inside the same transaction |
 
-`opts` takes `validFrom`, `validTo` (a `Date`, epoch milliseconds or an RFC 3339 string) and `onExisting: "confirm"`. `transact(fn, { dryRun: true })` reports what would happen and commits nothing. `db.speculate(fn, queries)` applies changes hypothetically, runs queries on the result, and keeps nothing.
+`opts` takes `validFrom`, `validTo` (a `Date`, epoch milliseconds or an RFC 3339 string) and `onExisting: "confirm"`. `transact(fn, { dryRun: true })` reports what would happen and commits nothing. `transact(fn, { constraintBudget: { timeoutMs, maxSeedRows } })` bounds the commit-time checks of enforced programs. A report carries `constraintChecks`, `seedRows` and `constraintViolations` (`{program, constraint, severity, bindings, eids, valid}`): the `warn` violations of enforced programs, and on a dry run also the `error` ones a commit would be refused for. `db.speculate(fn, queries)` applies changes hypothetically, runs queries on the result, and keeps nothing.
 
 ## Reading
 
@@ -138,6 +140,12 @@ A view chooses when you look and when the fact was true. Every read takes a view
 | `view.reason({ rules? \| ruleSet?, scope?, window?, time?, maxSegments?, proofN3?, limits? })`, `db.reason(...)` | N3 conclusions with valid time and proofs; nothing is written |
 | `view.ruleSetInfo(ruleSet)`, `db.ruleSetInfo(ruleSet)` | A stored rule set's text, statement, rule count and monotonicity |
 | `db.materialize(ruleSet, { scope?, window?, requireComplete?, dryRun? })` | Writes a rule set's conclusions as derived beliefs; `dryRun` writes nothing |
+| `db.materializeProgram(program, { scope?, window?, limits?, requireComplete?, dryRun? })` | Writes a stored Datalog program's conclusions as derived beliefs; a re-run reports them `existing`; `dryRun` writes nothing |
+| `view.datalog({ program? \| stored?, goal?, scope?, window?, time?, limits?, demand?, proof?, access?, requireComplete? })`, `db.datalog(...)` | Datalog goal rows with their valid intervals (and proofs); nothing is written |
+| `view.datalogReason({ program? \| stored?, includeRelations?, ... })`, `db.datalogReason(...)` | The triples a Datalog program concludes that are not stored |
+| `view.programInfo({ program? \| stored? })`, `db.programInfo(...)` | A program's text, rule and goal counts, constraints and strata |
+| `view.explainDatalog({ program? \| stored?, goal?, ... })`, `db.explainDatalog(...)` | The plan of a Datalog run with its result |
+| `view.check({ program? \| stored?, only?, ... })`, `db.check(...)` | The violated constraints of a program with their bindings, eids and valid intervals |
 | `view.graphs()`, `view.graphMembers(g)`, `view.values(s, key)` | Named graphs and values |
 
 `expr` is SPARQL property-path syntax with the predeclared prefixes `v:`, `sys:`, `tm:`, `rdf:` and `xsd:`, for example `v:knows+`. SPARQL supports RDF 1.2 annotations: `{| v:confidence ?c |}` reads a layer.
@@ -183,6 +191,9 @@ Every failure throws a `TiramemsuError` with a `code`:
 | `IdSpaceExhausted` | An id counter passed 2^48 − 1 |
 | `ImportInProgress` | A write, or a second import session, while a bulk import session is open |
 | `SavedAnswerNotFound` | `refreshAnswer` of a name that was never saved |
+| `ConstraintViolated` | A commit would violate an `error` constraint of an enforced program; the error's `program`, `constraint` and `violations` say which |
+| `ConstraintNotEnforceable` | `enforce` of a program with an `error` constraint the commit-time check cannot evaluate |
+| `ConstraintBudgetExceeded` | The commit-time constraint checks ran past their `constraintBudget` |
 | `Sqlite` | A SQLite failure, such as a locked or unreadable file |
 
 ## Options

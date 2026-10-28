@@ -188,6 +188,112 @@ impl TextPattern {
     }
 }
 
+/// Which Datalog program a goal call runs: a stored program's IRI or program text.
+#[derive(Clone, Debug, PartialEq)]
+pub enum DlProgramRef {
+    /// The node holding `(node dl:source "<text>")`: an IRI constant or a parameter.
+    Iri(TermOrVar),
+    /// Program text.
+    Text(String),
+}
+
+/// A Datalog goal call: one solution per goal row and maximal valid interval
+/// (`lat.md/query#Datalog Calls`). Executed once per query execution by the
+/// `tm_datalog` table function on SQLite and by the native runner on redb, both
+/// through the facade's provider over the same engine as `View::datalog`.
+///
+/// The leaf takes no outer binding: its program and goal are constants, so a
+/// planner never pushes a variable into it.
+#[derive(Clone, Debug, PartialEq)]
+pub struct DatalogPattern {
+    /// The program to run.
+    pub program: DlProgramRef,
+    /// The goal body, such as `reports(ex:alice, X)`.
+    pub goal: String,
+    /// The goal variables to bind: goal variable name and the query variable it binds.
+    pub outputs: Vec<(String, Var)>,
+    /// Binds the start and the end of each valid interval (`xsd:dateTime`,
+    /// unbound for an open end).
+    pub valid: Option<(Var, Var)>,
+    /// The view the program reads.
+    pub view: View,
+}
+
+impl DatalogPattern {
+    /// A call of `program` for `goal` under `view` binding nothing yet.
+    pub fn new(program: DlProgramRef, goal: impl Into<String>, view: View) -> DatalogPattern {
+        DatalogPattern {
+            program,
+            goal: goal.into(),
+            outputs: Vec::new(),
+            valid: None,
+            view,
+        }
+    }
+}
+
+/// The variable names of a Datalog goal body in first-occurrence order, read
+/// textually so a front end needs no Datalog parser: an identifier that starts
+/// upper-case or with `_` is a variable, except a bare `_`, a prefix name's
+/// prefix or local part, text inside string literals and inside `<iri>` references.
+///
+/// ```
+/// use tm_ir::goal_variables;
+/// assert_eq!(goal_variables("reports(ex:Alice, X), mail(X, \"Y\", _M, _)"), ["X", "_M"]);
+/// ```
+pub fn goal_variables(goal: &str) -> Vec<String> {
+    let b = goal.as_bytes();
+    let word = |c: u8| c.is_ascii_alphanumeric() || c == b'_';
+    let (mut i, mut out) = (0, Vec::<String>::new());
+    while i < b.len() {
+        let c = b[i];
+        match c {
+            b'"' | b'\'' => {
+                i += 1;
+                while i < b.len() && b[i] != c {
+                    i += if b[i] == b'\\' { 2 } else { 1 };
+                }
+                i += 1;
+            }
+            b'<' => {
+                // an IRI reference has no whitespace before its `>`
+                match goal[i + 1..].find(|x: char| x == '>' || x.is_whitespace() || x == '<') {
+                    Some(n) if b[i + 1 + n] == b'>' => i += n + 2,
+                    _ => i += 1,
+                }
+            }
+            c if word(c) => {
+                let start = i;
+                while i < b.len() && word(b[i]) {
+                    i += 1;
+                }
+                if i < b.len() && b[i] == b':' {
+                    // a prefix name: skip its local part
+                    i += 1;
+                    while i < b.len()
+                        && (word(b[i])
+                            || b[i] == b'-'
+                            || (b[i] == b'.' && i + 1 < b.len() && word(b[i + 1])))
+                    {
+                        i += 1;
+                    }
+                    continue;
+                }
+                let w = &goal[start..i];
+                let first = b[start];
+                if (first.is_ascii_uppercase() || first == b'_')
+                    && w != "_"
+                    && !out.iter().any(|x| x == w)
+                {
+                    out.push(w.to_string());
+                }
+            }
+            _ => i += 1,
+        }
+    }
+    out
+}
+
 /// Vector recall: one solution per visible statement with an embedding under
 /// `model`, nearest to `vector` first, in the order of the store's ranking policy
 /// (`lat.md/query#Vector Recall`). Exact over the statements its view selects.
@@ -410,7 +516,7 @@ pub struct RowNumber {
 
 /// A logical operator: one node of the query tree.
 ///
-/// Leaves are [`TriplePattern`], [`PathPattern`], [`TextPattern`], [`VectorPattern`] and
+/// Leaves are [`TriplePattern`], [`PathPattern`], [`TextPattern`], [`DatalogPattern`], [`VectorPattern`] and
 /// [`Values`]; the rest are
 /// relational operators over child operators. Build trees with the constructor
 /// methods on `Op` (`Op::join`, [`Op::filter`], `Op::project`, ...) or with
@@ -424,6 +530,8 @@ pub enum Op {
     Path(PathPattern),
     /// A text recall.
     Text(TextPattern),
+    /// A Datalog goal call (leaf).
+    Datalog(DatalogPattern),
     /// Vector recall (leaf).
     Vector(VectorPattern),
     /// Hybrid recall (leaf).
@@ -541,6 +649,7 @@ impl Op {
             Op::Triple(_)
             | Op::Path(_)
             | Op::Text(_)
+            | Op::Datalog(_)
             | Op::Vector(_)
             | Op::Recall(_)
             | Op::Values(_) => Vec::new(),
@@ -563,6 +672,7 @@ impl Op {
             Op::Triple(_)
             | Op::Path(_)
             | Op::Text(_)
+            | Op::Datalog(_)
             | Op::Vector(_)
             | Op::Recall(_)
             | Op::Values(_) => Vec::new(),
@@ -589,6 +699,12 @@ impl From<TriplePattern> for Op {
 impl From<TextPattern> for Op {
     fn from(t: TextPattern) -> Op {
         Op::Text(t)
+    }
+}
+
+impl From<DatalogPattern> for Op {
+    fn from(t: DatalogPattern) -> Op {
+        Op::Datalog(t)
     }
 }
 

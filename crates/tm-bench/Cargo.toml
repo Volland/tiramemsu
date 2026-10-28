@@ -21,6 +21,8 @@ serde_json = "1"
 # The N3 reasoning scenario (`reason` module, `examples/reason.rs`). Off by
 # default: eyeron is not on crates.io yet.
 n3 = ["tiramemsu/n3"]
+# The Datalog benchmark (`examples/datalog.rs`; OpenSpec change `add-datalog-engine`).
+datalog = ["tiramemsu/datalog"]
 
 [dev-dependencies]
 tempfile = "3"
@@ -35,3 +37,11 @@ required-features = ["n3"]
 
 [lints]
 workspace = true
+
+[[example]]
+name = "datalog"
+required-features = ["datalog"]
+
+[[example]]
+name = "datalog_constraints"
+required-features = ["datalog"]

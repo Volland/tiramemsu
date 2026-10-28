@@ -295,6 +295,12 @@ impl Pass {
                 self.gaps.insert(ProvenanceGap::RecursivePath);
                 (Op::Path(p), Vec::new())
             }
+            // @tg: implements:: [[openspec:datalog-query-calls#Provenance gap for calls]] {since: "2026-10-28"}
+            Op::Datalog(t) => {
+                // derived rows carry no statement ids: the call is uncited
+                self.gaps.insert(ProvenanceGap::DatalogCall);
+                (Op::Datalog(t), Vec::new())
+            }
             Op::Text(t) => {
                 // the matching statement's eid is bound already, like a reifier
                 let c = ProvColumn {

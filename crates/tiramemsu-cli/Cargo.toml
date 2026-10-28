@@ -27,12 +27,15 @@ oxrdf = { version = "0.3", features = ["rdf-12"] }
 serde_json = "1"
 
 [features]
-default = ["n3"]
+default = ["n3", "datalog"]
 # `tm reason`, `tm rules put|show` and `tm materialize` (OpenSpec change
 # `add-n3-reasoning`). Cargo refuses to publish a crate whose dependencies,
 # optional ones included, are not on crates.io, so this crate (like the facade)
 # cannot be published until `tm-n3` and eyeron are (`publish-eyeron-dependency`).
 n3 = ["tiramemsu/n3", "tiramemsu-json/n3"]
+# `tm datalog`, `tm check` and `tm program put|show`
+# (OpenSpec change `add-datalog-engine`).
+datalog = ["tiramemsu/datalog", "tiramemsu-json/datalog"]
 
 [dev-dependencies]
 tempfile = "3"

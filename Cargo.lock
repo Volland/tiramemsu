@@ -1678,7 +1678,7 @@ checksum = "fd3ca314f692efd6c868f8408f53fe444634a845f96c028b97d35f6a1f79f0ee"
 
 [[package]]
 name = "tiramemsu"
-version = "0.9.0"
+version = "0.10.0"
 dependencies = [
  "criterion",
  "lru",
@@ -1691,6 +1691,7 @@ dependencies = [
  "tempfile",
  "tm-core",
  "tm-cypher",
+ "tm-datalog",
  "tm-exec",
  "tm-ir",
  "tm-n3",
@@ -1704,7 +1705,7 @@ dependencies = [
 
 [[package]]
 name = "tiramemsu-cli"
-version = "0.9.0"
+version = "0.10.0"
 dependencies = [
  "clap",
  "oxrdf",
@@ -1718,7 +1719,7 @@ dependencies = [
 
 [[package]]
 name = "tiramemsu-json"
-version = "0.9.0"
+version = "0.10.0"
 dependencies = [
  "serde_json",
  "tempfile",
@@ -1727,7 +1728,7 @@ dependencies = [
 
 [[package]]
 name = "tiramemsu-mcp"
-version = "0.9.0"
+version = "0.10.0"
 dependencies = [
  "serde_json",
  "tempfile",
@@ -1737,7 +1738,7 @@ dependencies = [
 
 [[package]]
 name = "tiramemsu-node"
-version = "0.9.0"
+version = "0.10.0"
 dependencies = [
  "napi",
  "napi-build",
@@ -1748,7 +1749,7 @@ dependencies = [
 
 [[package]]
 name = "tiramemsu-python"
-version = "0.9.0"
+version = "0.10.0"
 dependencies = [
  "pyo3",
  "pyo3-build-config",
@@ -1758,7 +1759,7 @@ dependencies = [
 
 [[package]]
 name = "tiramemsu-wasm"
-version = "0.9.0"
+version = "0.10.0"
 dependencies = [
  "getrandom 0.3.4",
  "js-sys",
@@ -1774,7 +1775,7 @@ dependencies = [
 
 [[package]]
 name = "tm-bench"
-version = "0.9.0"
+version = "0.10.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -1784,7 +1785,7 @@ dependencies = [
 
 [[package]]
 name = "tm-core"
-version = "0.9.0"
+version = "0.10.0"
 dependencies = [
  "lru",
  "proptest",
@@ -1796,7 +1797,7 @@ dependencies = [
 
 [[package]]
 name = "tm-cypher"
-version = "0.9.0"
+version = "0.10.0"
 dependencies = [
  "chrono",
  "chrono-tz",
@@ -1812,14 +1813,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "tm-datalog"
+version = "0.10.0"
+dependencies = [
+ "proptest",
+ "rustc-hash",
+ "smallvec",
+ "tm-core",
+ "tm-store",
+]
+
+[[package]]
 name = "tm-exec"
-version = "0.9.0"
+version = "0.10.0"
 dependencies = [
  "insta",
  "lru",
  "proptest",
  "regex",
  "rusqlite",
+ "serde_json",
  "tempfile",
  "tiramemsu",
  "tm-core",
@@ -1829,7 +1842,7 @@ dependencies = [
 
 [[package]]
 name = "tm-ir"
-version = "0.9.0"
+version = "0.10.0"
 dependencies = [
  "insta",
  "tm-core",
@@ -1837,7 +1850,7 @@ dependencies = [
 
 [[package]]
 name = "tm-n3"
-version = "0.9.0"
+version = "0.10.0"
 dependencies = [
  "eyeron",
  "proptest",
@@ -1846,7 +1859,7 @@ dependencies = [
 
 [[package]]
 name = "tm-native"
-version = "0.9.0"
+version = "0.10.0"
 dependencies = [
  "proptest",
  "rustc-hash",
@@ -1859,7 +1872,7 @@ dependencies = [
 
 [[package]]
 name = "tm-redb"
-version = "0.9.0"
+version = "0.10.0"
 dependencies = [
  "proptest",
  "redb",
@@ -1871,7 +1884,7 @@ dependencies = [
 
 [[package]]
 name = "tm-rusqlite"
-version = "0.9.0"
+version = "0.10.0"
 dependencies = [
  "rusqlite",
  "tempfile",
@@ -1880,7 +1893,7 @@ dependencies = [
 
 [[package]]
 name = "tm-sparql"
-version = "0.9.0"
+version = "0.10.0"
 dependencies = [
  "insta",
  "oxttl",
@@ -1897,7 +1910,7 @@ dependencies = [
 
 [[package]]
 name = "tm-store"
-version = "0.9.0"
+version = "0.10.0"
 dependencies = [
  "lru",
  "proptest",
@@ -1910,7 +1923,7 @@ dependencies = [
 
 [[package]]
 name = "tm-wasm"
-version = "0.9.0"
+version = "0.10.0"
 dependencies = [
  "getrandom 0.3.4",
  "js-sys",

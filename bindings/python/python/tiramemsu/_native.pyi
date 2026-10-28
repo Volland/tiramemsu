@@ -16,6 +16,7 @@ class Native:
 
         *args* is a JSON object string, or an empty string for operations with no
         arguments.  Returns a JSON string.  Raises ``RuntimeError`` whose message
-        is ``tiramemsu:<json>`` where ``<json>`` is ``{"code","message"}`` on failure.
+        is ``tiramemsu:<json>`` where ``<json>`` is ``{"code","message"}`` on failure
+        (``ConstraintViolated`` adds ``program``, ``constraint`` and ``violations``).
         """
         ...

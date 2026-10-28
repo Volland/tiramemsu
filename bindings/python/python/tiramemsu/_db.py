@@ -12,6 +12,7 @@ from typing import Any, Dict, Iterator, List, Optional, Union, overload
 
 from ._native import Native
 from ._types import (
+    ConstraintBudget,
     CypherResult,
     CypherWriteResult,
     ImportProgress,
@@ -139,6 +140,76 @@ def _conclusion(c: Dict[str, Any]) -> Dict[str, Any]:
         "o": _conclusion_term(c["o"]),
         "proof": proof,
     }
+
+
+# ------------------------------------------------------------------------ Datalog helpers
+
+_DATALOG_LIMIT_KEYS = {
+    "max_iterations": "maxIterations",
+    "max_facts": "maxFacts",
+    "max_fragments": "maxFragments",
+    "max_new_values": "maxNewValues",
+}
+
+
+def _datalog_args(
+    args: Dict[str, Any],
+    program: Optional[str],
+    stored: Any,
+    scope: Any = None,
+    window: Any = None,
+    time: Optional[str] = None,
+    limits: Optional[Dict[str, int]] = None,
+    demand: Optional[bool] = None,
+    proof: bool = False,
+    access: Optional[str] = None,
+    parallel_threshold: Optional[int] = None,
+    require_complete: bool = False,
+) -> Dict[str, Any]:
+    """The program and run options of the Datalog reads."""
+    _scope_args(args, scope, window, None, None)
+    if program is not None:
+        args["program"] = program
+    if stored is not None:
+        args["stored"] = _rule_set_json(stored)
+    if time is not None:
+        args["time"] = time
+    if limits:
+        args["limits"] = {_DATALOG_LIMIT_KEYS.get(k, k): v for k, v in limits.items()}
+    if demand is not None:
+        args["demand"] = demand
+    if proof:
+        args["proof"] = True
+    if access is not None:
+        args["access"] = access
+    if parallel_threshold is not None:
+        args["parallelThreshold"] = parallel_threshold
+    if require_complete:
+        args["requireComplete"] = True
+    return args
+
+
+def _datalog_term(j: Any) -> Any:
+    """A result term: a stored term, or ``{"invented": n}`` for a node a rule invented."""
+    if isinstance(j, dict) and "invented" in j:
+        return j
+    return term_from_json(j)
+
+
+def _fact(f: Dict[str, Any]) -> Dict[str, Any]:
+    return {**f, "args": [_datalog_term(a) for a in f["args"]]}
+
+
+def _program_node(r: Dict[str, Any], key: str) -> None:
+    if r.get(key) is not None:
+        r[key] = term_from_json(r[key])
+
+
+def _datalog_result(r: Dict[str, Any]) -> Dict[str, Any]:
+    r["rows"] = [{**row, "values": [_datalog_term(x) for x in row["values"]]} for row in r["rows"]]
+    r["facts"] = [_fact(f) for f in r["facts"]]
+    _program_node(r, "program")
+    return r
 
 
 def _path_row(r: Dict[str, Any]) -> PathRow:
@@ -487,6 +558,43 @@ class TxBuilder:
         )
         return Ref(name)
 
+    def store_program(self, program: Any, text: str) -> Ref:
+        """Store Datalog text as the program *program* (an IRI ``str`` or a term).
+
+        Writes one statement ``(program dl:source "<text>")``. New text supersedes the
+        live version; equal text returns the live statement. Text that does not compile
+        fails the transaction (``DatalogParse``, ``DatalogUnsafe``, ...), and so does a
+        node that already holds N3 rules (``RuleLanguageConflict``). Returns a
+        :class:`Ref` to the program statement.
+        """
+        name = self._fresh()
+        self._ops.append(
+            {"op": "storeProgram", "program": _rule_set_json(program), "text": text, "as": name}
+        )
+        return Ref(name)
+
+    def enforce(self, program: Any, on: bool = True) -> Optional[Ref]:
+        """Enforce the stored program *program* (an IRI ``str`` or a term) at every
+        commit, or stop enforcing it with ``on=False``.
+
+        Writes one statement ``(program dl:enforced true)``. Turning it on checks the
+        program's ``error`` constraints over the whole store first and fails with
+        ``ConstraintViolated`` when the data already violates one, or
+        ``ConstraintNotEnforceable`` when one cannot be checked from a transaction's
+        changes. From then on a commit that would introduce a violation is refused with
+        ``ConstraintViolated`` (its violations are on the error's ``violations``).
+        Returns a :class:`Ref` to the ``dl:enforced`` statement, or ``None`` when
+        turning enforcement off.
+        """
+        op: Dict[str, Any] = {"op": "enforce", "program": _rule_set_json(program), "on": on}
+        if not on:
+            self._ops.append(op)
+            return None
+        name = self._fresh()
+        op["as"] = name
+        self._ops.append(op)
+        return Ref(name)
+
     def cypher(self, text: str, params: Optional[Dict[str, Any]] = None) -> None:
         """Run a Cypher write statement as part of this transaction."""
         op: Dict[str, Any] = {"op": "cypher", "text": text}
@@ -510,11 +618,13 @@ class TxContext:
         budget: Optional[QueryBudget] = None,
         op: str = "transact",
         extra: Optional[Dict[str, Any]] = None,
+        constraint_budget: Optional[ConstraintBudget] = None,
     ) -> None:
         self._native = native
         self._dry_run = dry_run
         self._max_cascade = max_cascade
         self._budget = budget
+        self._constraint_budget = constraint_budget
         self._op = op
         self._extra = extra or {}
         self._builder = TxBuilder()
@@ -531,7 +641,11 @@ class TxContext:
         if exc_type is not None:
             return  # don't submit when the block raised
         args = _tx_args(
-            self._builder._ops, self._dry_run, self._max_cascade, self._budget
+            self._builder._ops,
+            self._dry_run,
+            self._max_cascade,
+            self._budget,
+            self._constraint_budget,
         )
         args.update(self._extra)
         result_text = _call(self._native, self._op, json.dumps(args))
@@ -543,6 +657,7 @@ def _tx_args(
     dry_run: bool,
     max_cascade: Optional[int],
     budget: Optional[QueryBudget],
+    constraint_budget: Optional[ConstraintBudget] = None,
 ) -> Dict[str, Any]:
     """The bridge arguments of a transaction (or import chunk) of *ops*."""
     args: Dict[str, Any] = {"ops": ops}
@@ -551,6 +666,8 @@ def _tx_args(
         options["dryRun"] = True
     if max_cascade is not None:
         options["maxCascade"] = max_cascade
+    if constraint_budget is not None:
+        options["constraintBudget"] = constraint_budget._to_json()
     if options:
         args["options"] = options
     if budget is not None:
@@ -584,6 +701,7 @@ class BulkImport:
         dry_run: bool = ...,
         max_cascade: Optional[int] = ...,
         budget: Optional[QueryBudget] = ...,
+        constraint_budget: Optional[ConstraintBudget] = ...,
     ) -> Report: ...
 
     @overload
@@ -594,6 +712,7 @@ class BulkImport:
         dry_run: bool = ...,
         max_cascade: Optional[int] = ...,
         budget: Optional[QueryBudget] = ...,
+        constraint_budget: Optional[ConstraintBudget] = ...,
     ) -> TxContext: ...
 
     def chunk(
@@ -603,6 +722,7 @@ class BulkImport:
         dry_run: bool = False,
         max_cascade: Optional[int] = None,
         budget: Optional[QueryBudget] = None,
+        constraint_budget: Optional[ConstraintBudget] = None,
     ) -> Union[Report, TxContext]:
         """Commit one chunk, in the two forms of :meth:`Database.transact`.
 
@@ -610,7 +730,7 @@ class BulkImport:
         """
         extra = {"session": self.session}
         if ops is not None:
-            args = _tx_args(ops, dry_run, max_cascade, budget)
+            args = _tx_args(ops, dry_run, max_cascade, budget, constraint_budget)
             args.update(extra)
             result_text = _call(self._native, "importChunk", json.dumps(args))
             return report_from_json(json.loads(result_text))
@@ -621,6 +741,7 @@ class BulkImport:
             budget=budget,
             op="importChunk",
             extra=extra,
+            constraint_budget=constraint_budget,
         )
 
     def progress(self) -> ImportProgress:
@@ -1072,6 +1193,164 @@ class View:
         r["ruleSet"] = term_from_json(r["ruleSet"])
         return r
 
+    def datalog(
+        self,
+        goal: Optional[str] = None,
+        program: Optional[str] = None,
+        *,
+        stored: Any = None,
+        scope: Any = None,
+        window: Any = None,
+        time: Optional[str] = None,
+        limits: Optional[Dict[str, int]] = None,
+        demand: Optional[bool] = None,
+        proof: bool = False,
+        access: Optional[str] = None,
+        parallel_threshold: Optional[int] = None,
+        require_complete: bool = False,
+    ) -> Dict[str, Any]:
+        """Run a Datalog program over this view and answer *goal*; writes nothing.
+
+        Give the program as Datalog text (*program*) or name a program stored with
+        :meth:`TxBuilder.store_program` (*stored*); *goal* is a body such as
+        ``"reports(v:alice, X)"`` (default: the program's ``?-`` goal). *scope*, *window*
+        and *time* are those of :meth:`reason`; *limits* takes ``max_iterations``,
+        ``max_facts``, ``max_fragments`` and ``max_new_values``; *demand* (default on)
+        rewrites for the goal's bound arguments; *access* is ``"auto"``, ``"probe"`` or
+        ``"load"``; *require_complete* raises ``DatalogIncomplete`` instead of returning a
+        partial result. Returns ``{"columns", "rows", "facts", "t", "now", "strata",
+        "derived", "predicates", "pruned", "demand", "status", "limits", "program",
+        "programStatement"}``; each row is ``{"values", "valid": [{"from", "to"}]}``, with
+        ``"proof"`` when *proof* is set. A node a rule invented is ``{"invented": n}``.
+        """
+        args = _datalog_args(
+            {}, program, stored, scope, window, time, limits, demand, proof, access,
+            parallel_threshold, require_complete,
+        )
+        if goal is not None:
+            args["goal"] = goal
+        return _datalog_result(json.loads(self._call("datalog", args)))
+
+    def datalog_reason(
+        self,
+        program: Optional[str] = None,
+        *,
+        stored: Any = None,
+        scope: Any = None,
+        window: Any = None,
+        time: Optional[str] = None,
+        limits: Optional[Dict[str, int]] = None,
+        demand: Optional[bool] = None,
+        proof: bool = False,
+        access: Optional[str] = None,
+        parallel_threshold: Optional[int] = None,
+        require_complete: bool = False,
+        include_relations: bool = False,
+    ) -> Dict[str, Any]:
+        """Every triple a Datalog program concludes that is not among the stored
+        statements; writes nothing.
+
+        Takes the options of :meth:`datalog`; with *include_relations*, the facts of
+        plain-named relations are returned too. Returns ``{"conclusions", "relations",
+        "facts", "t", "now", "predicates", "status", "limits", "program",
+        "programStatement"}``; each conclusion is ``{"s", "p", "o", "validFrom",
+        "validTo", "proof"}``.
+        """
+        args = _datalog_args(
+            {}, program, stored, scope, window, time, limits, demand, proof, access,
+            parallel_threshold, require_complete,
+        )
+        if include_relations:
+            args["includeRelations"] = True
+        r: Dict[str, Any] = json.loads(self._call("datalogReason", args))
+        r["conclusions"] = [
+            {
+                **c,
+                "s": _datalog_term(c["s"]),
+                "p": term_from_json(c["p"]),
+                "o": _datalog_term(c["o"]),
+            }
+            for c in r["conclusions"]
+        ]
+        r["relations"] = [_fact(f) for f in r["relations"]]
+        r["facts"] = [_fact(f) for f in r["facts"]]
+        _program_node(r, "program")
+        return r
+
+    def program_info(self, program: Optional[str] = None, *, stored: Any = None) -> Dict[str, Any]:
+        """What a program is as this view sees it: ``{"program", "statement", "text",
+        "rules", "goals", "constraints", "strata", "predicates", "variablePredicate",
+        "metricRecursion", "inventionRecursion"}``."""
+        r: Dict[str, Any] = json.loads(
+            self._call("programInfo", _datalog_args({}, program, stored))
+        )
+        _program_node(r, "program")
+        return r
+
+    def explain_datalog(
+        self,
+        goal: Optional[str] = None,
+        program: Optional[str] = None,
+        *,
+        stored: Any = None,
+        scope: Any = None,
+        window: Any = None,
+        time: Optional[str] = None,
+        limits: Optional[Dict[str, int]] = None,
+        demand: Optional[bool] = None,
+        proof: bool = False,
+        access: Optional[str] = None,
+        parallel_threshold: Optional[int] = None,
+        require_complete: bool = False,
+    ) -> Dict[str, Any]:
+        """Run a Datalog goal like :meth:`datalog` (same options) and return
+        ``{"plan", "result"}``: the plan per stratum and rule, with access choices."""
+        args = _datalog_args(
+            {}, program, stored, scope, window, time, limits, demand, proof, access,
+            parallel_threshold, require_complete,
+        )
+        if goal is not None:
+            args["goal"] = goal
+        r: Dict[str, Any] = json.loads(self._call("explainDatalog", args))
+        r["result"] = _datalog_result(r["result"])
+        return r
+
+    def check(
+        self,
+        program: Optional[str] = None,
+        *,
+        only: Optional[List[str]] = None,
+        stored: Any = None,
+        scope: Any = None,
+        window: Any = None,
+        time: Optional[str] = None,
+        limits: Optional[Dict[str, int]] = None,
+        demand: Optional[bool] = None,
+        proof: bool = False,
+        access: Optional[str] = None,
+        parallel_threshold: Optional[int] = None,
+        require_complete: bool = False,
+    ) -> Dict[str, Any]:
+        """Check a program's constraints (or those named in *only*) over this view,
+        pointwise in valid time; writes nothing.
+
+        Takes the options of :meth:`datalog`. Returns ``{"violated", "checked", "t",
+        "now", "status", "limits"}``; each violated constraint is ``{"name",
+        "severity", "violations"}`` and each violation ``{"bindings", "eids",
+        "valid"}``.
+        """
+        args = _datalog_args(
+            {}, program, stored, scope, window, time, limits, demand, proof, access,
+            parallel_threshold, require_complete,
+        )
+        if only is not None:
+            args["only"] = list(only)
+        r: Dict[str, Any] = json.loads(self._call("check", args))
+        for c in r["violated"]:
+            for v in c["violations"]:
+                v["bindings"] = {k: _datalog_term(t) for k, t in v["bindings"].items()}
+        return r
+
 
 # --------------------------------------------------------------------------- Database
 
@@ -1197,6 +1476,7 @@ class Database:
         dry_run: bool = ...,
         max_cascade: Optional[int] = ...,
         budget: Optional[QueryBudget] = ...,
+        constraint_budget: Optional[ConstraintBudget] = ...,
     ) -> Report: ...
 
     @overload
@@ -1207,6 +1487,7 @@ class Database:
         dry_run: bool = ...,
         max_cascade: Optional[int] = ...,
         budget: Optional[QueryBudget] = ...,
+        constraint_budget: Optional[ConstraintBudget] = ...,
     ) -> TxContext: ...
 
     def transact(
@@ -1216,6 +1497,7 @@ class Database:
         dry_run: bool = False,
         max_cascade: Optional[int] = None,
         budget: Optional[QueryBudget] = None,
+        constraint_budget: Optional[ConstraintBudget] = None,
     ) -> Union[Report, TxContext]:
         """Submit a transaction.
 
@@ -1227,13 +1509,18 @@ class Database:
         :class:`Report` directly.
 
         *budget* bounds the transaction; a stopped one commits nothing.
+        *constraint_budget* bounds the commit-time checks of enforced Datalog programs.
         """
         if ops is not None:
-            args = _tx_args(ops, dry_run, max_cascade, budget)
+            args = _tx_args(ops, dry_run, max_cascade, budget, constraint_budget)
             result_text = _call(self._native, "transact", json.dumps(args))
             return report_from_json(json.loads(result_text))
         return TxContext(
-            self._native, dry_run=dry_run, max_cascade=max_cascade, budget=budget
+            self._native,
+            dry_run=dry_run,
+            max_cascade=max_cascade,
+            budget=budget,
+            constraint_budget=constraint_budget,
         )
 
     def cypher_write(
@@ -1395,6 +1682,30 @@ class Database:
         """:meth:`View.rule_set_info` on the live database (:meth:`now`)."""
         return self.now().rule_set_info(rule_set)
 
+    def datalog(
+        self, goal: Optional[str] = None, program: Optional[str] = None, **kwargs: Any
+    ) -> Dict[str, Any]:
+        """:meth:`View.datalog` on the live database (:meth:`now`)."""
+        return self.now().datalog(goal, program, **kwargs)
+
+    def datalog_reason(self, program: Optional[str] = None, **kwargs: Any) -> Dict[str, Any]:
+        """:meth:`View.datalog_reason` on the live database (:meth:`now`)."""
+        return self.now().datalog_reason(program, **kwargs)
+
+    def program_info(self, program: Optional[str] = None, *, stored: Any = None) -> Dict[str, Any]:
+        """:meth:`View.program_info` on the live database (:meth:`now`)."""
+        return self.now().program_info(program, stored=stored)
+
+    def explain_datalog(
+        self, goal: Optional[str] = None, program: Optional[str] = None, **kwargs: Any
+    ) -> Dict[str, Any]:
+        """:meth:`View.explain_datalog` on the live database (:meth:`now`)."""
+        return self.now().explain_datalog(goal, program, **kwargs)
+
+    def check(self, program: Optional[str] = None, **kwargs: Any) -> Dict[str, Any]:
+        """:meth:`View.check` on the live database (:meth:`now`)."""
+        return self.now().check(program, **kwargs)
+
     def materialize(
         self,
         rule_set: Any,
@@ -1430,6 +1741,49 @@ class Database:
         r["skolems"] = [term_from_json(s) for s in r["skolems"]]
         r["staleSupport"] = [_conclusion(c) for c in r["staleSupport"]]
         r["unstorable"] = [_conclusion(c) for c in r["unstorable"]]
+        return r
+
+    def materialize_program(
+        self,
+        program: Any,
+        *,
+        scope: Any = None,
+        window: Any = None,
+        limits: Optional[Dict[str, int]] = None,
+        require_complete: bool = False,
+        dry_run: bool = False,
+        budget: Optional[QueryBudget] = None,
+    ) -> Dict[str, Any]:
+        """Run the stored Datalog program *program* (an IRI string or a term) and write its
+        conclusions as derived beliefs in one transaction, supported by their premises and
+        the program statement. A re-run reports what already exists. With *dry_run*,
+        reports what would be written and writes nothing; an unknown program raises
+        ``UnknownProgram``. Returns ``{"program", "programStatement", "reasonedAt",
+        "report", "derived", "existing", "widened", "reconciled", "skolems",
+        "staleSupport", "unstorable", "needsRerunAfterWrites", "status", "limits",
+        "dryRun"}``.
+        """
+        args = _datalog_args(
+            {}, None, program, scope, window, None, limits, None, False, None, None,
+            require_complete,
+        )
+        if dry_run:
+            args["dryRun"] = True
+        if budget is not None:
+            args["budget"] = budget._to_json()
+        r: Dict[str, Any] = json.loads(_call(self._native, "materializeProgram", json.dumps(args)))
+        _program_node(r, "program")
+        r["skolems"] = [term_from_json(s) for s in r["skolems"]]
+        for key in ("staleSupport", "unstorable"):
+            r[key] = [
+                {
+                    **c,
+                    "s": _datalog_term(c["s"]),
+                    "p": term_from_json(c["p"]),
+                    "o": _datalog_term(c["o"]),
+                }
+                for c in r[key]
+            ]
         return r
 
     def optimize(self) -> None:

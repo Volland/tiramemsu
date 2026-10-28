@@ -24,6 +24,14 @@ class TiramemsuError(Exception):
     def __init__(self, code: str, message: str) -> None:
         super().__init__(message)
         self.code = code
+        self.program: Optional[str] = None
+        """With code ``ConstraintViolated``: the enforced program whose constraint failed."""
+        self.constraint: Optional[str] = None
+        """With code ``ConstraintViolated``: the failed constraint's name."""
+        self.violations: List[Dict[str, Any]] = []
+        """With code ``ConstraintViolated``: the violations the transaction would have
+        introduced, each ``{"program", "constraint", "severity", "bindings", "eids",
+        "valid"}``."""
 
     @classmethod
     def _from_json(cls, text: str) -> "TiramemsuError":
@@ -32,9 +40,15 @@ class TiramemsuError(Exception):
             code = str(d.get("code", "Error"))
             msg = str(d.get("message", text))
         except Exception:
-            code = "Error"
-            msg = text
-        return cls(code, msg)
+            return cls("Error", text)
+        err = cls(code, msg)
+        if isinstance(d.get("program"), str):
+            err.program = d["program"]
+        if isinstance(d.get("constraint"), str):
+            err.constraint = d["constraint"]
+        if isinstance(d.get("violations"), list):
+            err.violations = [constraint_violation_from_json(v) for v in d["violations"]]
+        return err
 
     def __str__(self) -> str:
         return f"[{self.code}] {super().__str__()}"
@@ -73,6 +87,28 @@ class QueryBudget:
             out["maxBytes"] = self.max_bytes
         if self.cancel_key is not None:
             out["cancelKey"] = self.cancel_key
+        return out
+
+
+@dataclass(frozen=True)
+class ConstraintBudget:
+    """Bounds the commit-time checks of enforced Datalog constraints, for
+    ``constraint_budget=`` on writes.
+
+    A commit whose checks run past ``timeout_ms`` or seed more than ``max_seed_rows``
+    delta rows fails with code ``ConstraintBudgetExceeded`` and commits nothing. A field
+    left ``None`` keeps the engine's default.
+    """
+
+    timeout_ms: Optional[int] = None
+    max_seed_rows: Optional[int] = None
+
+    def _to_json(self) -> Dict[str, Any]:
+        out: Dict[str, Any] = {}
+        if self.timeout_ms is not None:
+            out["timeoutMs"] = self.timeout_ms
+        if self.max_seed_rows is not None:
+            out["maxSeedRows"] = self.max_seed_rows
         return out
 
 
@@ -333,6 +369,23 @@ class Report:
     """Eids and kinds of graph-membership statements retracted."""
     results: List[Any] = field(default_factory=list)
     """One result object per op, in order (for ``import_bundle``: ``{"root", "statements"}``)."""
+    constraint_checks: int = 0
+    """Seeded constraint checks run at commit for enforced programs."""
+    seed_rows: int = 0
+    """Delta rows that seeded those checks."""
+    constraint_violations: List[Dict[str, Any]] = field(default_factory=list)
+    """Violations that did not refuse the commit: ``warn`` constraints of enforced programs,
+    and on a dry run also the ``error`` ones a commit would be refused for. Each is
+    ``{"program", "constraint", "severity", "bindings", "eids", "valid"}``."""
+
+
+def constraint_violation_from_json(v: Dict[str, Any]) -> Dict[str, Any]:
+    """Decode a constraint violation's bindings into Python terms."""
+    bindings = {
+        k: t if isinstance(t, dict) and "invented" in t else term_from_json(t)
+        for k, t in (v.get("bindings") or {}).items()
+    }
+    return {**v, "bindings": bindings}
 
 
 def report_from_json(j: Dict[str, Any]) -> Report:
@@ -347,6 +400,11 @@ def report_from_json(j: Dict[str, Any]) -> Report:
         memberships=[int(x) for x in j.get("memberships") or []],
         memberships_retracted=list(j.get("membershipsRetracted") or []),
         results=list(j.get("results") or []),
+        constraint_checks=int(j.get("constraintChecks") or 0),
+        seed_rows=int(j.get("seedRows") or 0),
+        constraint_violations=[
+            constraint_violation_from_json(v) for v in j.get("constraintViolations") or []
+        ],
     )
 
 

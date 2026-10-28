@@ -19,7 +19,9 @@ crate-type = ["cdylib", "rlib"]
 [dependencies]
 tiramemsu = { workspace = true, features = ["sparql", "cypher"] }
 # `n3`: the bridge ops reason, ruleSetInfo, storeRules and materialize
-tiramemsu-json = { workspace = true, features = ["n3"] }
+# `datalog`: the bridge ops datalog, datalogReason, programInfo, explainDatalog,
+# check and storeProgram
+tiramemsu-json = { workspace = true, features = ["n3", "datalog"] }
 tm-wasm = { workspace = true }
 serde_json = "1"
 
