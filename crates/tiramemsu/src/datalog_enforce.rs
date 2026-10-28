@@ -8,6 +8,7 @@
 //! changed in the transaction is checked in full. An `error` violation rolls
 //! the transaction back; `warn` violations are listed in its report.
 
+#[cfg(not(target_arch = "wasm32"))]
 use std::time::Duration;
 
 use tm_core::sqlstore::SqlStore;
@@ -26,6 +27,22 @@ pub(crate) struct Notes {
     pub checks: u64,
     pub seed_rows: u64,
     pub violations: Vec<ConstraintViolation>,
+}
+
+/// True when some program is enforced in the store's live state.
+fn any_enforced(store: &dyn ReadStore) -> Result<bool> {
+    let Some(enforced) = tm_store::dict::encode(store, &Value::iri(DL_ENFORCED))? else {
+        return Ok(false);
+    };
+    Ok(store.count(
+        Pattern {
+            s: None,
+            p: Some(enforced.raw()),
+            o: None,
+        },
+        Scope::Live,
+        1,
+    )? > 0)
 }
 
 /// Runs `f` on the transaction's own state, on either engine.
@@ -198,16 +215,24 @@ pub(crate) fn commit_check(
         }
         Ok(notes)
     };
-    let meter = budget::Meter::new(budget::Interrupt::new(
-        Some(Duration::from_millis(limit.timeout_ms)),
-        None,
-    ));
+    // nothing enforced (the usual case): no clock, no budget, no work
+    if !on_tx(tx, any_enforced)? {
+        return Ok(Notes::default());
+    }
     let outer = budget::active();
+    // `std::time` is unavailable on wasm32: there the checks run without a deadline
+    #[cfg(not(target_arch = "wasm32"))]
     let r = if outer {
         on_tx(tx, run)
     } else {
+        let meter = budget::Meter::new(budget::Interrupt::new(
+            Some(Duration::from_millis(limit.timeout_ms)),
+            None,
+        ));
         budget::scope(meter, || on_tx(tx, run))
     };
+    #[cfg(target_arch = "wasm32")]
+    let r = on_tx(tx, run);
     r.map_err(|e| match e {
         Error::DeadlineExceeded { .. } if !outer => Error::ConstraintBudgetExceeded {
             program: "(enforced programs)".into(),
