@@ -2,7 +2,7 @@
 
 **A local MCP server that gives an agent a tiramemsu memory file as typed tools.**
 
-[Tiramemsu](https://github.com/Volland/tiramemsu) is a bitemporal, never-forget triple store on one SQLite file: every fact is a statement with its own id, layers (sources, confidence, beliefs) are statements about statements, and corrections keep the old version visible in time. `tiramemsu-mcp` serves one such file to an MCP client (Claude Code, Claude Desktop, or any client that speaks MCP over stdio) as fourteen tools. It is a separate, opt-in package: the database crates carry no protocol code.
+[Tiramemsu](https://github.com/Volland/tiramemsu) is a bitemporal, never-forget triple store on one SQLite file: every fact is a statement with its own id, layers (sources, confidence, beliefs) are statements about statements, and corrections keep the old version visible in time. `tiramemsu-mcp` serves one such file to an MCP client (Claude Code, Claude Desktop, or any client that speaks MCP over stdio) as twenty-six tools. It is a separate, opt-in package: the database crates carry no protocol code.
 
 ## Install
 
@@ -73,12 +73,16 @@ Arguments use the JSON forms of the tiramemsu bindings. A term is a string (a pl
 | `reason` | no | `rules` (N3 text) or `ruleSet`, `scope`, `window`, `time`, `maxSegments`, `proofN3`, `limits`, `view` | `{conclusions, loaded, pruned, segments, status, contradiction, …, view}`: what follows, each conclusion with its valid time and proof |
 | `store_rules` | yes | `ruleSet`, `n3` | `{eid, changed, superseded, t}`; equal text changes nothing |
 | `materialize` | yes | `ruleSet`, `scope`, `window`, `maxSegments`, `limits`, `requireComplete`, `dryRun` | `{derived, existing, widened, skolems, staleSupport, unstorable, status, report, …}` |
+| `datalog_query` | no | `program` (Datalog text) or `stored`, `goal`, `scope`, `window`, `time`, `limits`, `demand`, `proof`, `access`, `parallelThreshold`, `requireComplete`, `view` | `{columns, rows, facts, strata, derived, demand, status, limits, programStatement, …, view}`: each row with its values and valid-time intervals |
+| `check_constraints` | no | `program` or `stored`, `only` (constraint names), `scope`, `window`, `time`, `limits`, `access`, `parallelThreshold`, `requireComplete`, `view` | `{violated, checked, status, limits, t, now, view}`: each violated constraint with its severity and violations (bindings, eids, valid) |
+| `store_program` | yes | `program` (the program node), `text` | `{eid, changed, superseded, t}`; equal text changes nothing |
 
 - **Queries only read.** A SPARQL update or a Cypher write clause is refused with `Unsupported` before anything runs; there is no raw SQL.
 - **Provenance coverage.** A SPARQL `SELECT` lists the statements behind each row unless `provenance` is `false`. `provenance.coverage` is `complete`, `incomplete` (with `gaps`, e.g. `["recursivePath"]` for a `+` or `*` path, whose endpoints carry no statement ids) or `unavailable` (Cypher, `ASK`, `CONSTRUCT`, or not requested).
 - **Saved answers.** `save_answer`, `check_answers` and `refresh_answer` write only the derived answer records, never facts, but are left out in read-only mode with the other writing tools.
 - **Conflict review.** `conflicts` never retracts, supersedes or confirms, and refuses the history view. `preview_bundle` runs the import as a dry run on the writer: graph, history and event log stay unchanged and only the ids it allocated are burned, so it is offered in read-only mode. Applying is `import_bundle`, which validates again.
 - **N3 reasoning.** `reason`, `store_rules` and `materialize` come with the cargo feature `n3`, on by default. `reason` only reads and is offered in read-only mode; the other two write. Until eyeron is on crates.io a build with `n3` cannot be published.
+- **Datalog.** `datalog_query`, `check_constraints` and `store_program` come with the cargo feature `datalog`, on by default. The two reads are offered in read-only mode; `store_program` writes and is left out. A program is given as text (`program`) or as a node stored with `store_program` (`stored`), exactly one; errors carry the engine's codes (`DatalogParse`, `DatalogUnsafe`, `DatalogUnstratifiable`, `UnknownProgram`, `RuleLanguageConflict`, `DatalogIncomplete`, ...).
 - **No other file.** An argument such as `path`, `db` or `database` is refused with `PathNotAllowed`, and any argument a tool does not declare with `InvalidArgument`.
 
 ## Errors

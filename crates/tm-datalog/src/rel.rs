@@ -18,6 +18,7 @@ pub type Key = SmallVec<[Id; 4]>;
 type Index = FxHashMap<Key, Vec<u32>>;
 
 /// One derived relation.
+// @tg: -contradicts:: [[datalog#Sorted Columnar Relations]] {reason: "hash indexes and index nested loops; the worst-case-optimal join for cyclic bodies is not built yet", until: "a cyclic workload in the Datalog benchmark"}
 pub struct Rel {
     /// The arity.
     pub arity: usize,
@@ -74,12 +75,19 @@ impl Rel {
     }
 
     fn index(&self, mask: u32) -> Arc<Index> {
-        if let Some(ix) = self.idx.read().unwrap_or_else(|p| p.into_inner()).get(&mask) {
+        if let Some(ix) = self
+            .idx
+            .read()
+            .unwrap_or_else(|p| p.into_inner())
+            .get(&mask)
+        {
             return ix.clone();
         }
         let mut ix: Index = FxHashMap::default();
         for row in 0..self.len() as u32 {
-            ix.entry(key_of(self.tuple(row), mask)).or_default().push(row);
+            ix.entry(key_of(self.tuple(row), mask))
+                .or_default()
+                .push(row);
         }
         let ix = Arc::new(ix);
         self.idx
@@ -99,6 +107,35 @@ impl Rel {
             return self.find(key).into_iter().collect();
         }
         self.index(mask).get(key).cloned().unwrap_or_default()
+    }
+
+    /// Calls `f` with each row whose positions in `mask` hold `key`, without
+    /// copying the index bucket.
+    pub fn for_rows(
+        &self,
+        mask: u32,
+        key: &[Id],
+        mut f: impl FnMut(u32) -> tm_core::Result<()>,
+    ) -> tm_core::Result<()> {
+        if mask == 0 {
+            for row in 0..self.len() as u32 {
+                f(row)?;
+            }
+            return Ok(());
+        }
+        if mask == (1u32 << self.arity) - 1 {
+            if let Some(row) = self.find(key) {
+                f(row)?;
+            }
+            return Ok(());
+        }
+        let ix = self.index(mask);
+        if let Some(rows) = ix.get(key) {
+            for &row in rows {
+                f(row)?;
+            }
+        }
+        Ok(())
     }
 
     /// Adds `iv` to `tuple`'s set; returns the row and the part that is new.

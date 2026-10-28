@@ -450,3 +450,71 @@ fn core_tier_reasons() {
     assert_eq!(r.conclusions.len(), 1);
     assert_eq!(r.conclusions[0].o, N3Term::Value(v("Mortal")));
 }
+
+// optional-query-frontends "Default build has no Datalog": the `datalog` feature
+// is off by default, does not enable `exec`, and is the only way `tm-datalog`
+// enters the build; `scripts/feature-matrix.sh default deps` checks the tree
+// @tg: verifies:: [[openspec:optional-query-frontends#Optional Datalog feature#Default build has no Datalog]] {since: "2026-10-28", level: unit}
+// @tg: verifies:: [[openspec:optional-query-frontends#Optional Datalog feature#Publishable with Datalog]] {since: "2026-10-28", level: unit}
+#[test]
+fn default_build_has_no_datalog() {
+    let manifest: toml::Value = toml::from_str(include_str!("../Cargo.toml")).unwrap();
+    let features = &manifest["features"];
+    let default: Vec<&str> = features["default"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|f| f.as_str().unwrap())
+        .collect();
+    assert!(!default.contains(&"datalog"));
+    let datalog: Vec<&str> = features["datalog"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|f| f.as_str().unwrap())
+        .collect();
+    assert_eq!(datalog, ["dep:tm-datalog"], "datalog does not enable exec");
+    for (name, list) in features.as_table().unwrap() {
+        if name != "datalog" {
+            assert!(
+                !list
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .any(|f| f.as_str() == Some("dep:tm-datalog") || f.as_str() == Some("datalog")),
+                "feature {name} pulls in Datalog"
+            );
+        }
+    }
+    // no git dependency, so the crate stays publishable (CI runs
+    // `cargo publish --dry-run --no-verify -p tm-datalog`)
+    let engine: toml::Value = toml::from_str(include_str!("../../tm-datalog/Cargo.toml")).unwrap();
+    for (dep, spec) in engine["dependencies"].as_table().unwrap() {
+        assert!(spec.get("git").is_none(), "{dep} is a git dependency");
+    }
+}
+
+// optional-query-frontends "Core tier with Datalog": with `--no-default-features
+// --features datalog` the core tier runs Datalog (`scripts/feature-matrix.sh
+// datalog` checks that `tm-exec` is absent from that tree)
+// @tg: verifies:: [[openspec:optional-query-frontends#Optional Datalog feature#Core tier with Datalog]] {since: "2026-10-28", level: unit}
+#[test]
+#[cfg(feature = "datalog")]
+fn core_tier_runs_datalog() {
+    let dir = tempfile::tempdir().unwrap();
+    let db = open(&dir, "m.db");
+    db.transact(TxOptions::default(), |tx| {
+        tx.assert(v("a"), v("manager"), v("b"), Valid::ALWAYS)?;
+        Ok(())
+    })
+    .unwrap();
+    let r = db
+        .now()
+        .datalog(
+            &DatalogProgram::Text("r(X, Y) :- v:manager(X, Y).".into()),
+            Some("r(v:a, Y)"),
+            &DatalogOptions::default(),
+        )
+        .unwrap();
+    assert_eq!(r.rows[0].values, [DatalogTerm::Value(v("b"))]);
+}

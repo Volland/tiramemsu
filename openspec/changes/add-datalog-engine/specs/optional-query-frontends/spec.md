@@ -12,5 +12,5 @@ The facade SHALL offer a feature `datalog` that adds `tm-datalog` to the depende
 - **THEN** it builds, `View::datalog` works, and `tm-exec` is absent from the dependency tree
 
 #### Scenario: Publishable with Datalog
-- **WHEN** `cargo publish --dry-run -p tm-datalog` runs
+- **WHEN** `cargo publish --dry-run --no-verify -p tm-datalog` runs (the manifest test also checks that it has no git dependency)
 - **THEN** it succeeds

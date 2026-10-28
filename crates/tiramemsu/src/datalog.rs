@@ -23,6 +23,7 @@ fn system_now() -> i64 {
 }
 
 impl View<'_> {
+    // @tg: implements:: [[openspec:optional-query-frontends#Optional Datalog feature]] {since: "2026-10-28"}
     fn with_store<R>(&self, f: impl Fn(&dyn ReadStore, i64) -> Result<R>) -> Result<R> {
         let clock = self.db().map_or_else(system_now, |db| db.now_ms());
         self.op(|| {
@@ -72,7 +73,12 @@ impl View<'_> {
     /// # Ok::<(), Error>(())
     /// ```
     // @tg: implements:: [[openspec:datalog-evaluation#Goal queries over a view]] {since: "2026-10-28"}
-    pub fn datalog(&self, program: &Program, goal: Option<&str>, opts: &DatalogOptions) -> Result<DatalogResult> {
+    pub fn datalog(
+        &self,
+        program: &Program,
+        goal: Option<&str>,
+        opts: &DatalogOptions,
+    ) -> Result<DatalogResult> {
         let spec = self.spec();
         self.with_store(|s, clock| tm_datalog::query(s, &spec, clock, program, goal, opts))
     }
@@ -90,7 +96,12 @@ impl View<'_> {
     /// each rule variant's order and each stored predicate's access (feature
     /// `datalog`).
     // @tg: implements:: [[openspec:datalog-evaluation#Explain a program run]] {since: "2026-10-28"}
-    pub fn explain_datalog(&self, program: &Program, goal: Option<&str>, opts: &DatalogOptions) -> Result<Explain> {
+    pub fn explain_datalog(
+        &self,
+        program: &Program,
+        goal: Option<&str>,
+        opts: &DatalogOptions,
+    ) -> Result<Explain> {
         let spec = self.spec();
         self.with_store(|s, clock| tm_datalog::explain(s, &spec, clock, program, goal, opts))
     }
@@ -99,7 +110,12 @@ impl View<'_> {
     /// all) and returns the violated ones, each violation with its bindings,
     /// the statements its derivation used and when it holds (feature `datalog`).
     // @tg: implements:: [[openspec:datalog-constraints#Check constraints]] {since: "2026-10-28"}
-    pub fn check(&self, program: &Program, only: &[String], opts: &DatalogOptions) -> Result<CheckResult> {
+    pub fn check(
+        &self,
+        program: &Program,
+        only: &[String],
+        opts: &DatalogOptions,
+    ) -> Result<CheckResult> {
         let spec = self.spec();
         self.with_store(|s, clock| tm_datalog::check(s, &spec, clock, program, only, opts))
     }

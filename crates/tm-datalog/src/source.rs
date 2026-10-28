@@ -56,7 +56,10 @@ type Key = SmallVec<[Id; 4]>;
 type Index = FxHashMap<Key, Vec<u32>>;
 
 fn row_key(r: &Row, m: u8) -> Key {
-    (0..4).filter(|i| m & (1 << i) != 0).map(|i| r.get(i)).collect()
+    (0..4)
+        .filter(|i| m & (1 << i) != 0)
+        .map(|i| r.get(i))
+        .collect()
 }
 
 /// The statements of one predicate (or of all, `p = None`), in eid order.
@@ -109,6 +112,8 @@ pub struct Access {
 }
 
 /// The stored side of one run.
+// @tg: implements:: [[openspec:datalog-evaluation#Scope and pruning]] {since: "2026-10-28"}
+// @tg: implements:: [[openspec:datalog-evaluation#Budgets and cancellation]] {since: "2026-10-28"}
 pub struct Stored<'s> {
     view: View,
     scope: Option<FxHashSet<Id>>,
@@ -217,7 +222,12 @@ impl<'s> Stored<'s> {
     }
 
     fn load(&self, store: &dyn ReadStore, p: Option<Id>) -> Result<Arc<Loaded>> {
-        if let Some(l) = self.loaded.read().unwrap_or_else(|x| x.into_inner()).get(&p) {
+        if let Some(l) = self
+            .loaded
+            .read()
+            .unwrap_or_else(|x| x.into_inner())
+            .get(&p)
+        {
             return Ok(l.clone());
         }
         let rows = self.scan(
@@ -282,10 +292,25 @@ impl<'s> Stored<'s> {
 
     /// The statements matching `pat`, with their interval sets, in eid order.
     pub fn matches(&self, store: &dyn ReadStore, pat: &Pat4) -> Result<Vec<(Row, IvSet)>> {
+        let mut out = Vec::new();
+        self.for_matches(store, pat, &mut |r, iv| {
+            out.push((r, iv.clone()));
+            Ok(())
+        })?;
+        Ok(out)
+    }
+
+    /// [`Stored::matches`] as a callback: a loaded predicate is read in place.
+    pub fn for_matches(
+        &self,
+        store: &dyn ReadStore,
+        pat: &Pat4,
+        f: &mut dyn FnMut(Row, &IvSet) -> Result<()>,
+    ) -> Result<()> {
         // a bound eid: one statement
         if let Some(e) = pat[3] {
             let Some(r) = store.statement(e)? else {
-                return Ok(Vec::new());
+                return Ok(());
             };
             self.read.fetch_add(1, Ordering::Relaxed);
             let row = Row {
@@ -296,11 +321,10 @@ impl<'s> Stored<'s> {
             };
             let ok = (0..3).all(|i| pat[i].is_none_or(|x| x == row.get(i)));
             let iv = self.iv(&r);
-            return Ok(if ok && self.admits(&r) && !iv.is_empty() {
-                vec![(row, iv)]
-            } else {
-                Vec::new()
-            });
+            if ok && self.admits(&r) && !iv.is_empty() {
+                f(row, &iv)?;
+            }
+            return Ok(());
         }
         let p = pat[1];
         let loaded = self
@@ -334,31 +358,36 @@ impl<'s> Stored<'s> {
             Some(l) => {
                 let m = mask(pat) & !0b0010;
                 if m == 0 {
-                    return Ok(l.rows.iter().copied().zip(l.ivs.iter().cloned()).collect());
+                    for (r, iv) in l.rows.iter().zip(l.ivs.iter()) {
+                        f(*r, iv)?;
+                    }
+                    return Ok(());
                 }
                 let ix = l.index(m);
                 let k: Key = (0..4)
                     .filter(|i| m & (1 << i) != 0)
                     .map(|i| pat[i].unwrap_or_default())
                     .collect();
-                Ok(ix
-                    .get(&k)
-                    .map(|rows| {
-                        rows.iter()
-                            .map(|&i| (l.rows[i as usize], l.ivs[i as usize].clone()))
-                            .collect()
-                    })
-                    .unwrap_or_default())
+                if let Some(rows) = ix.get(&k) {
+                    for &i in rows {
+                        f(l.rows[i as usize], &l.ivs[i as usize])?;
+                    }
+                }
+                Ok(())
             }
-            None => self.scan(
-                store,
-                Pattern {
-                    s: pat[0],
-                    p: pat[1],
-                    o: pat[2],
-                },
-            ),
+            None => {
+                for (r, iv) in self.scan(
+                    store,
+                    Pattern {
+                        s: pat[0],
+                        p: pat[1],
+                        o: pat[2],
+                    },
+                )? {
+                    f(r, &iv)?;
+                }
+                Ok(())
+            }
         }
     }
 }
-

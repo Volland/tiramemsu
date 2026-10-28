@@ -294,8 +294,8 @@ struct Lexer<'a> {
 }
 
 const SYMS: [&str; 22] = [
-    ":-", "?-", "!=", "<=", ">=", "^^", "(", ")", "[", "]", "{", "}", ",", ".", ":", "@", "=",
-    "<", ">", "+", "-", "!",
+    ":-", "?-", "!=", "<=", ">=", "^^", "(", ")", "[", "]", "{", "}", ",", ".", ":", "@", "=", "<",
+    ">", "+", "-", "!",
 ];
 
 impl<'a> Lexer<'a> {
@@ -368,7 +368,9 @@ impl<'a> Lexer<'a> {
         // IRI
         if c == b'<' {
             let rest = &self.src[self.i + 1..];
-            let end = rest.iter().position(|&b| b == b'>' || b.is_ascii_whitespace());
+            let end = rest
+                .iter()
+                .position(|&b| b == b'>' || b.is_ascii_whitespace());
             if let Some(n) = end {
                 if rest[n] == b'>' && n > 0 && !rest[..n].contains(&b'<') {
                     self.bump();
@@ -391,7 +393,9 @@ impl<'a> Lexer<'a> {
                 lex.push_str(&self.take_while(|b| b.is_ascii_digit()));
             }
             if matches!(self.peek(), Some(b'e' | b'E'))
-                && self.peek_at(1).is_some_and(|b| b.is_ascii_digit() || b == b'-' || b == b'+')
+                && self
+                    .peek_at(1)
+                    .is_some_and(|b| b.is_ascii_digit() || b == b'-' || b == b'+')
             {
                 lex.push(self.bump().unwrap_or(b'e') as char);
                 if matches!(self.peek(), Some(b'-' | b'+')) {
@@ -424,9 +428,7 @@ impl<'a> Lexer<'a> {
             let word = self.take_while(Self::name_char);
             // prefixed name: `pre:local` with no space after the colon
             if self.peek() == Some(b':')
-                && self
-                    .peek_at(1)
-                    .is_some_and(Self::name_char)
+                && self.peek_at(1).is_some_and(Self::name_char)
                 && self.peek_at(1) != Some(b'-')
             {
                 self.bump();
@@ -435,9 +437,7 @@ impl<'a> Lexer<'a> {
                     let part = self.take_while(|b| Self::name_char(b) || b == b'-');
                     local.push_str(&part);
                     // an inner dot continues the name; a final one ends the item
-                    if self.peek() == Some(b'.')
-                        && self.peek_at(1).is_some_and(Self::name_char)
-                    {
+                    if self.peek() == Some(b'.') && self.peek_at(1).is_some_and(Self::name_char) {
                         self.bump();
                         local.push('.');
                         continue;
@@ -535,6 +535,7 @@ struct Parser<'a> {
 }
 
 /// Parses program text.
+// @tg: implements:: [[openspec:datalog-language#Program text]] {since: "2026-10-28"}
 pub fn parse(text: &str) -> Result<Ast> {
     let mut lx = Lexer {
         src: text.as_bytes(),
@@ -732,7 +733,9 @@ impl Parser<'_> {
     fn window(&mut self) -> Result<Window> {
         let pos = self.pos;
         self.expect("[")?;
-        let lo = self.duration()?.ok_or_else(|| self.err("`inf` cannot start a window"))?;
+        let lo = self
+            .duration()?
+            .ok_or_else(|| self.err("`inf` cannot start a window"))?;
         self.expect(",")?;
         let hi = self.duration()?;
         self.expect("]")?;
@@ -1013,9 +1016,7 @@ impl Parser<'_> {
                 }
                 (None, None) => Value::Str(s),
             }),
-            _ => {
-                return Err(self.err_at(pos, format!("expected a term, found {}", describe(&t))))
-            }
+            _ => return Err(self.err_at(pos, format!("expected a term, found {}", describe(&t)))),
         })
     }
 }

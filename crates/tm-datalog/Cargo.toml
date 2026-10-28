@@ -15,7 +15,7 @@ rust-version.workspace = true
 [features]
 default = ["parallel"]
 # Join steps over large deltas run as morsels on scoped threads (results are
-# identical either way). Off on wasm, which has no threads.
+# identical either way). Compiled out on wasm32, which has no threads.
 parallel = []
 
 [dependencies]

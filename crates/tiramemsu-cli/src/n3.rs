@@ -1,15 +1,13 @@
 //! `tm reason`, `tm rules put|show` and `tm materialize` (feature `n3`).
 //!
-//! Instants are epoch milliseconds or RFC 3339 dates and date-times
-//! (`2024-06-01`, `2024-06-01T12:00:00Z`); a valid-time window is
-//! `<from>..<to>` with either side left empty for an open end.
+//! Instants and windows are read as [`crate::reasoning`] describes.
 
 use std::path::PathBuf;
 
 use clap::{Args, Subcommand};
-use tiramemsu::value::{parse_date, parse_datetime};
 use tiramemsu::*;
 
+use crate::reasoning::{self, interval, print_json, usage, window};
 use crate::{io, open};
 
 /// `tm reason`.
@@ -103,44 +101,6 @@ pub struct MaterializeArgs {
     json: bool,
 }
 
-fn usage(msg: impl Into<String>) -> Error {
-    Error::invalid_query(msg)
-}
-
-/// An instant: epoch milliseconds, or an RFC 3339 date or date-time.
-pub fn instant(s: &str) -> Result<i64> {
-    let s = s.trim();
-    if let Ok(ms) = s.parse::<i64>() {
-        return Ok(ms);
-    }
-    parse_datetime(s)
-        .map(|(ms, _)| ms)
-        .or_else(|| parse_date(s).map(|d| d * 86_400_000))
-        .ok_or_else(|| {
-            usage(format!(
-                "{s:?} is not an instant (epoch milliseconds or an RFC 3339 date or date-time)"
-            ))
-        })
-}
-
-/// A window `<from>..<to>`; an empty side is an open end.
-pub fn window(s: &str) -> Result<Valid> {
-    let (from, to) = s
-        .split_once("..")
-        .ok_or_else(|| usage(format!("{s:?} is not a window <from>..<to>")))?;
-    let side = |x: &str| {
-        if x.trim().is_empty() {
-            Ok(None)
-        } else {
-            instant(x).map(Some)
-        }
-    };
-    Ok(Valid {
-        from: side(from)?,
-        to: side(to)?,
-    })
-}
-
 fn scope(graphs: &[String]) -> ReasonScope {
     if graphs.is_empty() {
         ReasonScope::All
@@ -160,19 +120,7 @@ const PREFIXES: &[(&str, &str)] = &[
 
 /// A value for a person: IRIs under a known namespace as prefixed names.
 fn value(v: &Value) -> String {
-    match v {
-        Value::Iri(iri) => PREFIXES
-            .iter()
-            .find_map(|(p, ns)| {
-                iri.strip_prefix(ns)
-                    .filter(|local| !local.is_empty() && !local.contains(['/', '#', ':']))
-                    .map(|local| format!("{p}{local}"))
-            })
-            .unwrap_or_else(|| v.to_string()),
-        Value::Int(i) => i.to_string(),
-        Value::Bool(b) => b.to_string(),
-        other => other.to_string(),
-    }
+    reasoning::value(PREFIXES, v)
 }
 
 fn term(t: &N3Term) -> String {
@@ -180,17 +128,6 @@ fn term(t: &N3Term) -> String {
         N3Term::Value(v) => value(v),
         other => other.to_string(),
     }
-}
-
-fn bound(b: Option<i64>, open: &str) -> String {
-    b.map_or(open.to_string(), |ms| rdf::datetime_lexical(ms, Some(0)))
-}
-
-fn interval(v: &Valid) -> String {
-    if v.from.is_none() && v.to.is_none() {
-        return "always".into();
-    }
-    format!("[{}, {})", bound(v.from, "-∞"), bound(v.to, "∞"))
 }
 
 fn status(s: &ReasonStatus) -> String {
@@ -210,10 +147,6 @@ fn conclusion_line(c: &Conclusion) -> String {
     )
 }
 
-fn print_json(j: &serde_json::Value) {
-    println!("{j}");
-}
-
 fn bridge(e: tiramemsu_json::BindError) -> Error {
     match e {
         tiramemsu_json::BindError::Db(e) => e,
@@ -230,15 +163,12 @@ pub fn reason(a: ReasonArgs) -> Result<()> {
         (_, Some(iri)) => Rules::Stored(Value::iri(iri.clone())),
         _ => unreachable!("clap requires one of --rules and --rule-set"),
     };
-    let view = match (a.as_of, &a.as_of_instant) {
-        (Some(t), _) => db.as_of(TimeRef::Tx(t)),
-        (_, Some(i)) => db.as_of(TimeRef::Instant(instant(i)?)),
-        _ => db.now(),
-    };
-    let view = match &a.valid_at {
-        Some(i) => view.valid_at(instant(i)?),
-        None => view,
-    };
+    let view = reasoning::view(
+        &db,
+        a.as_of,
+        a.as_of_instant.as_deref(),
+        a.valid_at.as_deref(),
+    )?;
     let mut opts = ReasonOptions {
         scope: scope(&a.graphs),
         proof_n3: a.proof,

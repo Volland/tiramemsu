@@ -3,10 +3,12 @@
 //! never change the rows, and Horn programs agree with N3.
 #![cfg(feature = "datalog")]
 
+#[cfg(feature = "n3")]
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use proptest::prelude::*;
+#[cfg(feature = "n3")]
 use tiramemsu::datalog_engine::interval::IvSet;
 use tiramemsu::*;
 
@@ -53,7 +55,10 @@ const PROGRAMS: [&str; 3] = [
 ];
 
 fn rows(r: &DatalogResult) -> Vec<(Vec<DatalogTerm>, Vec<Valid>)> {
-    r.rows.iter().map(|x| (x.values.clone(), x.valid.clone())).collect()
+    r.rows
+        .iter()
+        .map(|x| (x.values.clone(), x.valid.clone()))
+        .collect()
 }
 
 proptest! {
@@ -94,7 +99,10 @@ proptest! {
 }
 
 /// Per `(s, p, o)`, the instants a conclusion holds.
-fn coverage(items: impl IntoIterator<Item = (String, String, String, Valid)>) -> BTreeMap<(String, String, String), IvSet> {
+#[cfg(feature = "n3")]
+fn coverage(
+    items: impl IntoIterator<Item = (String, String, String, Valid)>,
+) -> BTreeMap<(String, String, String), IvSet> {
     let mut out: BTreeMap<(String, String, String), IvSet> = BTreeMap::new();
     for (s, p, o, valid) in items {
         let e = out.entry((s, p, o)).or_default();

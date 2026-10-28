@@ -38,7 +38,7 @@ These are explicitly out of scope, so the design can stay small and exact.
 - Physical deletion or excision of facts. See [[time-model#Never Forget]]. Legal erasure is served by crypto-shredding instead, which deletes no row. See [[time-model#Erasure]].
 - Persistent git-style branches. Only short speculative transactions exist. See [[time-model#Speculative Transactions]].
 - Multi-writer replication in v1. The event log is kept ready for it. See [[time-model#Event Log]].
-- Datalog as a query language in v1. Reversed by DL1 ([[datalog#One Language Three Uses]]), proposed on 2026-10-28.
+- Datalog as a query language in v1. Reversed by DL1 ([[datalog#One Language Three Uses]]) on 2026-10-28: goal queries, reasoning and constraint checks ship in `add-datalog-engine`.
 
 ## Decision Record
 

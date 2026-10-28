@@ -115,6 +115,9 @@ fn read_only_refuses_writes_before_a_transaction() {
     if cfg!(feature = "n3") {
         expected.push("reason");
     }
+    if cfg!(feature = "datalog") {
+        expected.extend(["datalog_query", "check_constraints"]);
+    }
     assert_eq!(names, expected);
     for name in ["save_answer", "check_answers", "refresh_answer"] {
         assert_eq!(tool_error(&rpc_call(&mut ro, name, json!({}))), "ReadOnly");
@@ -519,9 +522,10 @@ fn protocol_handshake_and_errors() {
     )
     .unwrap();
     let n3_tools = if cfg!(feature = "n3") { 3 } else { 0 };
+    let datalog_tools = if cfg!(feature = "datalog") { 3 } else { 0 };
     assert_eq!(
         r["result"]["tools"].as_array().unwrap().len(),
-        20 + n3_tools
+        20 + n3_tools + datalog_tools
     );
     // protocol errors
     let code = |r: Option<J>| r.unwrap()["error"]["code"].as_i64().unwrap();
@@ -990,4 +994,189 @@ fn materialize_tool() {
         .unwrap();
     assert_eq!(r["derived"].as_array().unwrap().len(), 1);
     assert_eq!(r["status"], "complete");
+}
+
+#[cfg(feature = "datalog")]
+const REPORTS: &str =
+    "reports(X, Y) :- v:manager(X, Y).\nreports(X, Z) :- reports(X, Y), v:manager(Y, Z).\n";
+
+#[cfg(feature = "datalog")]
+const POLICIES: &str = "constraint no_self error :- reports(X, X).\n\
+constraint flat warn :- reports(X, Y), reports(Y, Z).\n";
+
+/// `alice -manager-> bob -manager-> carol`; returns the two statement ids.
+#[cfg(feature = "datalog")]
+fn chain(server: &Server) -> (J, J) {
+    let fact = |s: &str, o: &str| {
+        server
+            .call_tool(
+                "assert",
+                &json!({ "s": v(s), "p": v("manager"), "o": v(o) }),
+            )
+            .unwrap()["eid"]
+            .clone()
+    };
+    (fact("alice", "bob"), fact("bob", "carol"))
+}
+
+// datalog-programs "Read-only MCP hides writes"
+// @tg: verifies:: [[openspec:datalog-programs#Datalog read surfaces#Read-only MCP hides writes]] {level: integration}
+#[cfg(feature = "datalog")]
+#[test]
+fn read_only_mcp_hides_datalog_writes() {
+    let dir = tempfile::tempdir().unwrap();
+    {
+        let server = open(&dir);
+        chain(&server);
+        server
+            .call_tool(
+                "store_program",
+                &json!({ "program": "urn:tiramemsu:v:reporting", "text": REPORTS }),
+            )
+            .unwrap();
+    }
+    let mut ro = Server::open(Config {
+        read_only: true,
+        ..config(&dir)
+    })
+    .unwrap();
+    let names: Vec<String> = ro
+        .tools()
+        .iter()
+        .map(|t| t["name"].as_str().unwrap().to_string())
+        .collect();
+    assert!(names.iter().any(|n| n == "datalog_query"));
+    assert!(names.iter().any(|n| n == "check_constraints"));
+    assert!(names.iter().all(|n| n != "store_program"));
+    let before = counters(&ro);
+    let r = rpc_call(
+        &mut ro,
+        "store_program",
+        json!({ "program": "urn:x", "text": REPORTS }),
+    );
+    assert_eq!(tool_error(&r), "ReadOnly");
+    assert_eq!(counters(&ro), before);
+    // Datalog reads, so it runs in read-only mode
+    let r = ro
+        .call_tool(
+            "datalog_query",
+            &json!({ "stored": "urn:tiramemsu:v:reporting", "goal": "reports(v:alice, X)" }),
+        )
+        .unwrap();
+    assert_eq!(r["rows"].as_array().unwrap().len(), 2);
+    assert_eq!(r["view"], json!({ "kind": "now" }));
+    let c = ro
+        .call_tool(
+            "check_constraints",
+            &json!({ "program": format!("{REPORTS}{POLICIES}") }),
+        )
+        .unwrap();
+    assert_eq!(c["status"], "complete");
+    assert_eq!(c["violated"][0]["name"], "flat");
+}
+
+// The Datalog tools: datalog_query with text and with a stored program,
+// store_program (idempotent for equal text), check_constraints, strict
+// arguments and typed errors.
+// @tg: verifies:: [[openspec:datalog-programs#Datalog read surfaces]] {level: integration}
+#[cfg(feature = "datalog")]
+#[test]
+fn datalog_query_store_program_and_check_tools() {
+    let dir = tempfile::tempdir().unwrap();
+    let server = open(&dir);
+    let (e1, e2) = chain(&server);
+    let r = server
+        .call_tool(
+            "datalog_query",
+            &json!({ "program": REPORTS, "goal": "reports(v:alice, X)", "proof": true }),
+        )
+        .unwrap();
+    assert_eq!(r["status"], "complete", "{r}");
+    assert_eq!(r["columns"], json!(["X"]));
+    assert_eq!(r["rows"][0]["values"], json!([v("bob")]));
+    assert_eq!(r["rows"][1]["values"], json!([v("carol")]));
+    assert_eq!(r["rows"][0]["valid"], json!([{ "from": null, "to": null }]));
+    assert!(r["rows"][0]["proof"].is_array(), "{r}");
+    let args =
+        json!({ "program": "urn:tiramemsu:v:reporting", "text": format!("{REPORTS}{POLICIES}") });
+    let s1 = server.call_tool("store_program", &args).unwrap();
+    assert_eq!(s1["changed"], true);
+    let s2 = server.call_tool("store_program", &args).unwrap();
+    assert_eq!(
+        (s2["eid"].clone(), s2["changed"].clone()),
+        (s1["eid"].clone(), json!(false))
+    );
+    let stored = server
+        .call_tool(
+            "datalog_query",
+            &json!({ "stored": v("reporting"), "goal": "reports(X, v:carol)",
+                     "view": { "kind": "now" }, "time": "atemporal" }),
+        )
+        .unwrap();
+    assert_eq!(stored["programStatement"], s1["eid"]);
+    assert_eq!(stored["rows"].as_array().unwrap().len(), 2);
+    // alice -> bob -> carol is two levels deep: `flat` is violated, `no_self` is not
+    let c = server
+        .call_tool(
+            "check_constraints",
+            &json!({ "stored": "urn:tiramemsu:v:reporting" }),
+        )
+        .unwrap();
+    assert_eq!(c["checked"], json!(["no_self", "flat"]));
+    assert_eq!(c["violated"].as_array().unwrap().len(), 1, "{c}");
+    assert_eq!(c["violated"][0]["name"], "flat");
+    assert_eq!(c["violated"][0]["severity"], "warn");
+    assert_eq!(c["violated"][0]["violations"][0]["eids"], json!([e1, e2]));
+    let only = server
+        .call_tool(
+            "check_constraints",
+            &json!({ "stored": "urn:tiramemsu:v:reporting", "only": ["no_self"] }),
+        )
+        .unwrap();
+    assert_eq!(only["checked"], json!(["no_self"]));
+    assert_eq!(only["violated"], json!([]));
+    let err = |name: &str, args: J| server.call_tool(name, &args).unwrap_err().code;
+    assert_eq!(
+        err("datalog_query", json!({ "program": "p(X) :- v:q(X, Y" })),
+        "DatalogParse"
+    );
+    assert_eq!(
+        err(
+            "datalog_query",
+            json!({ "stored": "urn:tiramemsu:v:none", "goal": "p(X)" })
+        ),
+        "UnknownProgram"
+    );
+    assert_eq!(
+        err(
+            "store_program",
+            json!({ "program": "urn:x", "text": "p(X) :- v:q(X, Y" })
+        ),
+        "DatalogParse"
+    );
+    assert_eq!(
+        err(
+            "datalog_query",
+            json!({ "program": REPORTS, "stored": "urn:x" })
+        ),
+        "InvalidArgument"
+    );
+    assert_eq!(
+        err(
+            "check_constraints",
+            json!({ "program": POLICIES, "goal": "p(X)" })
+        ),
+        "InvalidArgument"
+    );
+    assert_eq!(
+        err("store_program", json!({ "text": REPORTS })),
+        "InvalidArgument"
+    );
+    assert_eq!(
+        err(
+            "datalog_query",
+            json!({ "program": REPORTS, "file": "/tmp/x" })
+        ),
+        "PathNotAllowed"
+    );
 }

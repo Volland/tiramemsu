@@ -34,7 +34,10 @@ fn bridge_goal_query() {
     let (_d, db) = open();
     chain(&db);
     let r = db
-        .call("datalog", &json!({ "program": REPORTS, "goal": "reports(v:alice, X)" }))
+        .call(
+            "datalog",
+            &json!({ "program": REPORTS, "goal": "reports(v:alice, X)" }),
+        )
         .unwrap();
     assert_eq!(r["status"], "complete");
     assert_eq!(r["columns"], json!(["X"]));
@@ -57,18 +60,39 @@ fn bridge_store_program_info_check_reason_explain() {
         )
         .unwrap();
     assert!(t["results"][0]["eid"].as_u64().is_some());
-    let info = db.call("programInfo", &json!({ "stored": "urn:tiramemsu:v:p" })).unwrap();
+    let info = db
+        .call("programInfo", &json!({ "stored": "urn:tiramemsu:v:p" }))
+        .unwrap();
     assert_eq!(info["rules"], 3);
-    assert_eq!(info["constraints"], json!([{ "name": "no_self", "severity": "error" }]));
-    let c = db.call("check", &json!({ "stored": "urn:tiramemsu:v:p" })).unwrap();
+    assert_eq!(
+        info["constraints"],
+        json!([{ "name": "no_self", "severity": "error" }])
+    );
+    let c = db
+        .call("check", &json!({ "stored": "urn:tiramemsu:v:p" }))
+        .unwrap();
     assert_eq!(c["violated"], json!([]));
     assert_eq!(c["checked"], json!(["no_self"]));
-    let r = db.call("datalogReason", &json!({ "stored": "urn:tiramemsu:v:p", "proof": true })).unwrap();
+    let r = db
+        .call(
+            "datalogReason",
+            &json!({ "stored": "urn:tiramemsu:v:p", "proof": true }),
+        )
+        .unwrap();
     assert_eq!(r["conclusions"].as_array().unwrap().len(), 3);
     let e = db
-        .call("explainDatalog", &json!({ "program": REPORTS, "goal": "reports(v:alice, X)" }))
+        .call(
+            "explainDatalog",
+            &json!({ "program": REPORTS, "goal": "reports(v:alice, X)" }),
+        )
         .unwrap();
-    assert!(e["plan"].as_array().unwrap().iter().any(|l| l.as_str().unwrap().starts_with("access")));
-    let err = db.call("datalog", &json!({ "program": "p(X) :- v:q(X, Y" })).unwrap_err();
+    assert!(e["plan"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|l| l.as_str().unwrap().starts_with("access")));
+    let err = db
+        .call("datalog", &json!({ "program": "p(X) :- v:q(X, Y" }))
+        .unwrap_err();
     assert_eq!(err.code(), "DatalogParse");
 }

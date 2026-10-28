@@ -76,6 +76,9 @@ fn stdio_session_end_to_end() {
     if cfg!(feature = "n3") {
         expected.extend(["reason", "store_rules", "materialize"]);
     }
+    if cfg!(feature = "datalog") {
+        expected.extend(["datalog_query", "check_constraints", "store_program"]);
+    }
     assert_eq!(names, expected);
     let call = |id: u64, name: &str, args: J| {
         json!({ "jsonrpc": "2.0", "id": id, "method": "tools/call",

@@ -11,7 +11,9 @@ use std::collections::{BTreeSet, VecDeque};
 
 use rustc_hash::FxHashMap;
 
-use crate::program::{ready, stratify, CAtom, Elem, Program, Relation, Rule, RuleKind, Slot, Source, Var};
+use crate::program::{
+    ready, stratify, CAtom, Elem, Program, Relation, Rule, RuleKind, Slot, Source, Var,
+};
 use crate::syntax::Pred;
 
 fn plain(r: &Rule) -> Result<(), &'static str> {
@@ -53,7 +55,11 @@ pub fn rewrite(p: &Program, goal: usize) -> Option<(Program, Vec<String>)> {
     let mut rules: Vec<Rule> = Vec::new();
     let mut notes: BTreeSet<String> = BTreeSet::new();
 
-    let adorn = |rel: u32, mask: u32, rels: &mut Vec<Relation>, queue: &mut VecDeque<(u32, u32)>| -> (u32, u32) {
+    let adorn = |rel: u32,
+                 mask: u32,
+                 rels: &mut Vec<Relation>,
+                 queue: &mut VecDeque<(u32, u32)>|
+     -> (u32, u32) {
         if let Some(&x) = adorned.borrow().get(&(rel, mask)) {
             return x;
         }
@@ -82,12 +88,12 @@ pub fn rewrite(p: &Program, goal: usize) -> Option<(Program, Vec<String>)> {
 
     // rewrites a body from `bound`, starting with `start`; emits demand rules
     let rewrite_body = |rule: &Rule,
-                            start: Vec<Elem>,
-                            mut bound: BTreeSet<Var>,
-                            rels: &mut Vec<Relation>,
-                            queue: &mut VecDeque<(u32, u32)>,
-                            out_rules: &mut Vec<Rule>,
-                            notes: &mut BTreeSet<String>|
+                        start: Vec<Elem>,
+                        mut bound: BTreeSet<Var>,
+                        rels: &mut Vec<Relation>,
+                        queue: &mut VecDeque<(u32, u32)>,
+                        out_rules: &mut Vec<Rule>,
+                        notes: &mut BTreeSet<String>|
      -> Vec<Elem> {
         let mut body = start;
         for e in &rule.body {
@@ -170,7 +176,15 @@ pub fn rewrite(p: &Program, goal: usize) -> Option<(Program, Vec<String>)> {
 
     // the goal rule
     let goal_rule = &p.rules[gr];
-    let gbody = rewrite_body(goal_rule, Vec::new(), BTreeSet::new(), &mut rels, &mut queue, &mut rules, &mut notes);
+    let gbody = rewrite_body(
+        goal_rule,
+        Vec::new(),
+        BTreeSet::new(),
+        &mut rels,
+        &mut queue,
+        &mut rules,
+        &mut notes,
+    );
     let mut new_goal = goal_rule.clone();
     new_goal.body = gbody;
     rules.push(new_goal);
@@ -196,10 +210,15 @@ pub fn rewrite(p: &Program, goal: usize) -> Option<(Program, Vec<String>)> {
                 })
                 .collect();
             let start = vec![Elem::Pos(CAtom {
-                src: Source::Derived { rel: m, args: margs },
+                src: Source::Derived {
+                    rel: m,
+                    args: margs,
+                },
                 ops: Vec::new(),
             })];
-            let body = rewrite_body(r, start, bound, &mut rels, &mut queue, &mut rules, &mut notes);
+            let body = rewrite_body(
+                r, start, bound, &mut rels, &mut queue, &mut rules, &mut notes,
+            );
             let mut nr = r.clone();
             nr.head = a;
             nr.body = body;
@@ -235,7 +254,8 @@ pub fn rewrite(p: &Program, goal: usize) -> Option<(Program, Vec<String>)> {
         }
     }
     for r in &p.rules {
-        if need.contains(&r.head) && !matches!(r.kind, RuleKind::Goal(_) | RuleKind::Constraint(_)) {
+        if need.contains(&r.head) && !matches!(r.kind, RuleKind::Goal(_) | RuleKind::Constraint(_))
+        {
             rules.push(r.clone());
         }
     }
@@ -253,6 +273,7 @@ pub fn rewrite(p: &Program, goal: usize) -> Option<(Program, Vec<String>)> {
     // drop relations nothing defines (other goals and constraints)
     stratify(&mut q).ok()?;
     let defined: BTreeSet<u32> = q.rules.iter().map(|r| r.head).collect();
-    q.strata.retain(|s| s.rels.iter().any(|r| defined.contains(r)));
+    q.strata
+        .retain(|s| s.rels.iter().any(|r| defined.contains(r)));
     Some((q, notes.into_iter().collect()))
 }

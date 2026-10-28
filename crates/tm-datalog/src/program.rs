@@ -418,7 +418,10 @@ impl Compiler {
             if r.arity != arity {
                 return Err(unsafe_err(
                     0,
-                    format!("{} is used with {} and {} arguments", r.name, r.arity, arity),
+                    format!(
+                        "{} is used with {} and {} arguments",
+                        r.name, r.arity, arity
+                    ),
                 ));
             }
             return Ok(i);
@@ -473,6 +476,8 @@ impl Compiler {
         })
     }
 
+    // @tg: implements:: [[openspec:datalog-language#Stored atoms]] {since: "2026-10-28"}
+    // @tg: implements:: [[openspec:datalog-language#Reserved atoms]] {since: "2026-10-28"}
     fn atom(&mut self, cx: &mut RuleCx, a: &Atom, derived: &BTreeSet<Pred>) -> Result<Elem> {
         let mut args = Vec::new();
         for e in &a.args {
@@ -661,8 +666,16 @@ impl Compiler {
                     }
                     // a variable named before the aggregate is a group variable;
                     // the rest are local to the aggregate (fixed below)
-                    let group: Vec<Var> = used.iter().copied().filter(|v| before.contains(v)).collect();
-                    let inner: Vec<Var> = used.iter().copied().filter(|v| !before.contains(v)).collect();
+                    let group: Vec<Var> = used
+                        .iter()
+                        .copied()
+                        .filter(|v| before.contains(v))
+                        .collect();
+                    let inner: Vec<Var> = used
+                        .iter()
+                        .copied()
+                        .filter(|v| !before.contains(v))
+                        .collect();
                     Elem::Agg(Box::new(Agg {
                         out: outv,
                         func: *func,
@@ -782,7 +795,13 @@ pub fn ready(e: &Elem, bound: &BTreeSet<Var>, rule: &Rule) -> Option<BTreeSet<Va
 }
 
 /// Checks that some order evaluates `body` from `bound`; returns what it binds.
-fn check_body(body: &[Elem], bound: &BTreeSet<Var>, rule: &Rule, index: usize) -> Result<BTreeSet<Var>> {
+// @tg: implements:: [[openspec:datalog-language#Safety]] {since: "2026-10-28"}
+fn check_body(
+    body: &[Elem],
+    bound: &BTreeSet<Var>,
+    rule: &Rule,
+    index: usize,
+) -> Result<BTreeSet<Var>> {
     let mut bound = bound.clone();
     let mut left: Vec<&Elem> = body.iter().collect();
     while !left.is_empty() {
@@ -798,7 +817,10 @@ fn check_body(body: &[Elem], bound: &BTreeSet<Var>, rule: &Rule, index: usize) -
                         if let Some(v) = ov.iter().find(|v| !inner.contains(v)) {
                             return Err(unsafe_err(
                                 index,
-                                format!("{} in an aggregate is not bound by its body", rule.vars[*v as usize]),
+                                format!(
+                                    "{} in an aggregate is not bound by its body",
+                                    rule.vars[*v as usize]
+                                ),
                             ));
                         }
                     }
@@ -831,6 +853,8 @@ pub fn compile(text: &str) -> Result<Program> {
 }
 
 /// Compiles and analyses a syntax tree.
+// @tg: implements:: [[openspec:datalog-temporal#Always operators in heads]] {since: "2026-10-28"}
+// @tg: implements:: [[openspec:datalog-constraints#Declare constraints]] {since: "2026-10-28"}
 pub fn compile_ast(ast: &syntax::Ast) -> Result<Program> {
     let mut c = Compiler {
         rels: Vec::new(),
@@ -999,7 +1023,10 @@ pub fn compile_ast(ast: &syntax::Ast) -> Result<Program> {
     let defined: BTreeSet<u32> = c.rules.iter().map(|r| r.head).collect();
     for (i, r) in c.rels.iter().enumerate() {
         if !defined.contains(&(i as u32)) {
-            return Err(unsafe_err(0, format!("relation {} is used but never defined", r.name)));
+            return Err(unsafe_err(
+                0,
+                format!("relation {} is used but never defined", r.name),
+            ));
         }
     }
     let mut p = Program {
@@ -1025,7 +1052,11 @@ pub fn compile_ast(ast: &syntax::Ast) -> Result<Program> {
                 if !bound.contains(v) && !r.exists.contains(v) {
                     return Err(unsafe_err(
                         index,
-                        format!("head variable {} (argument {}) is not bound", r.vars[*v as usize], k + 1),
+                        format!(
+                            "head variable {} (argument {}) is not bound",
+                            r.vars[*v as usize],
+                            k + 1
+                        ),
                     ));
                 }
             }
@@ -1070,6 +1101,8 @@ fn deps(e: &Elem, out: &mut Vec<(u32, bool, bool)>) {
 }
 
 /// Computes the strata of `p` in evaluation order.
+// @tg: implements:: [[openspec:datalog-language#Stratified negation and aggregates]] {since: "2026-10-28"}
+// @tg: implements:: [[openspec:datalog-language#Termination analysis]] {since: "2026-10-28"}
 pub fn stratify(p: &mut Program) -> Result<()> {
     let n = p.rels.len();
     let mut edges: Vec<Vec<(u32, bool)>> = vec![Vec::new(); n];
@@ -1199,7 +1232,10 @@ pub fn stratify(p: &mut Program) -> Result<()> {
                         }
                     }
                 }
-                let computed_head = r.args.iter().any(|s| matches!(s, Slot::Var(v) if assigned.contains(v)));
+                let computed_head = r
+                    .args
+                    .iter()
+                    .any(|s| matches!(s, Slot::Var(v) if assigned.contains(v)));
                 if !r.exists.is_empty() || computed_head {
                     invention = true;
                 }
@@ -1297,20 +1333,32 @@ mod tests {
         assert!(a.strata[0].recursive && a.strata[0].monotonic);
         assert_eq!(
             a.predicates,
-            vec!["urn:tiramemsu:v:contact".to_string(), "urn:tiramemsu:v:sick".to_string()]
+            vec![
+                "urn:tiramemsu:v:contact".to_string(),
+                "urn:tiramemsu:v:sick".to_string()
+            ]
         );
         assert!(a.metric_recursion);
     }
 
     #[test]
     fn errors() {
-        assert!(matches!(compile("p(X, Y) :- v:q(X, Z)."), Err(Error::DatalogUnsafe { .. })));
+        assert!(matches!(
+            compile("p(X, Y) :- v:q(X, Z)."),
+            Err(Error::DatalogUnsafe { .. })
+        ));
         assert!(matches!(
             compile("q(X) :- v:a(X, X).\np(X) :- q(X), not r(X).\nr(X) :- q(X), not p(X)."),
             Err(Error::DatalogUnstratifiable { .. })
         ));
-        assert!(matches!(compile("valid(X, Y, Z) :- v:a(X, Y), v:a(Y, Z)."), Err(Error::DatalogReserved { .. })));
-        assert!(matches!(compile("future[0d, 1d] p(X) :- v:a(X, X)."), Err(Error::DatalogNotHorn { .. })));
+        assert!(matches!(
+            compile("valid(X, Y, Z) :- v:a(X, Y), v:a(Y, Z)."),
+            Err(Error::DatalogReserved { .. })
+        ));
+        assert!(matches!(
+            compile("future[0d, 1d] p(X) :- v:a(X, X)."),
+            Err(Error::DatalogNotHorn { .. })
+        ));
         assert!(matches!(
             compile("constraint a warn :- v:a(X, X).\nconstraint a error :- v:a(X, X)."),
             Err(Error::DatalogDuplicateConstraint { .. })

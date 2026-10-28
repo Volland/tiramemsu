@@ -240,7 +240,10 @@ impl<'p, 's> Engine<'p, 's> {
         let mut iters = 1u64;
         if st.recursive {
             loop {
-                let grew = st.rels.iter().any(|&r| !self.sh.rels[r as usize].delta.is_empty());
+                let grew = st
+                    .rels
+                    .iter()
+                    .any(|&r| !self.sh.rels[r as usize].delta.is_empty());
                 if !grew || !self.limits_hit.is_empty() {
                     break;
                 }
@@ -266,7 +269,9 @@ impl<'p, 's> Engine<'p, 's> {
                     for (k, e) in rule.body.iter().enumerate() {
                         if let Elem::Pos(a) = e {
                             if let Some(r) = a.rel() {
-                                if in_stratum.contains(&r) && !self.sh.rels[r as usize].delta.is_empty() {
+                                if in_stratum.contains(&r)
+                                    && !self.sh.rels[r as usize].delta.is_empty()
+                                {
                                     outs.extend(self.eval_rule(ri, Some(k), si)?);
                                 }
                             }
@@ -280,7 +285,13 @@ impl<'p, 's> Engine<'p, 's> {
         let sizes: Vec<String> = st
             .rels
             .iter()
-            .map(|&r| format!("{} = {}", self.sh.prog.rels[r as usize].name, self.sh.rels[r as usize].len()))
+            .map(|&r| {
+                format!(
+                    "{} = {}",
+                    self.sh.prog.rels[r as usize].name,
+                    self.sh.rels[r as usize].len()
+                )
+            })
             .collect();
         self.plan.push(format!(
             "stratum {si} [{}]{}: {iters} iteration(s), {}",
@@ -294,12 +305,19 @@ impl<'p, 's> Engine<'p, 's> {
         Ok(())
     }
 
+    // @tg: implements:: [[openspec:datalog-temporal#Windows and recursion through time]] {since: "2026-10-28"}
+    // @tg: implements:: [[openspec:datalog-evaluation#Limits and completion]] {since: "2026-10-28"}
+    // @tg: implements:: [[openspec:datalog-language#Value invention]] {since: "2026-10-28"}
     fn merge(&mut self, outs: Vec<Out>, si: usize) -> Result<()> {
         let st = &self.sh.prog.strata[si];
         for &r in &st.rels {
             self.sh.rels[r as usize].delta.clear();
         }
-        let clip = if st.metric_recursion { self.sh.opts.window } else { None };
+        let clip = if st.metric_recursion {
+            self.sh.opts.window
+        } else {
+            None
+        };
         for o in outs {
             let mut iv = o.iv;
             if let Some((a, b)) = clip {
@@ -334,12 +352,24 @@ impl<'p, 's> Engine<'p, 's> {
             self.facts += 1;
             if st.invention_recursion {
                 self.new_values += 1;
-                if self.sh.opts.limits.max_new_values.is_some_and(|m| self.new_values >= m) {
+                if self
+                    .sh
+                    .opts
+                    .limits
+                    .max_new_values
+                    .is_some_and(|m| self.new_values >= m)
+                {
                     self.limits_hit.insert(Limit::NewValues);
                     break;
                 }
             }
-            if self.sh.opts.limits.max_facts.is_some_and(|m| self.facts >= m) {
+            if self
+                .sh
+                .opts
+                .limits
+                .max_facts
+                .is_some_and(|m| self.facts >= m)
+            {
                 self.limits_hit.insert(Limit::Facts);
                 break;
             }
@@ -398,12 +428,14 @@ impl<'p, 's> Engine<'p, 's> {
                         _ => None,
                     },
                     Self::slot_bound(&p.o, bound).then_some(0),
-                    p.e.as_ref().filter(|s| Self::slot_bound(s, bound)).map(|_| 0),
+                    p.e.as_ref()
+                        .filter(|s| Self::slot_bound(s, bound))
+                        .map(|_| 0),
                 ];
-                let m = pat
-                    .iter()
-                    .enumerate()
-                    .fold(0u8, |m, (i, x)| if x.is_some() { m | (1 << i) } else { m });
+                let m =
+                    pat.iter()
+                        .enumerate()
+                        .fold(0u8, |m, (i, x)| if x.is_some() { m | (1 << i) } else { m });
                 let key = (pat[1].filter(|_| matches!(p.p, Slot::Const(_))), m);
                 if let Some(e) = self.estimates.get(&key) {
                     return Ok(*e);
@@ -423,7 +455,12 @@ impl<'p, 's> Engine<'p, 's> {
 
     /// The order of `rule`'s body for a variant whose element `delta` reads the
     /// delta, or `None` for a run over full relations.
-    fn plan_rule(&mut self, rule: &Rule, delta: Option<usize>, start: &BTreeSet<Var>) -> Result<Vec<usize>> {
+    fn plan_rule(
+        &mut self,
+        rule: &Rule,
+        delta: Option<usize>,
+        start: &BTreeSet<Var>,
+    ) -> Result<Vec<usize>> {
         let mut bound = start.clone();
         let mut left: Vec<usize> = (0..rule.body.len()).collect();
         let mut order = Vec::new();
@@ -474,7 +511,10 @@ impl<'p, 's> Engine<'p, 's> {
         let rule = &self.sh.prog.rules[ri];
         let order = self.plan_rule(rule, delta, &BTreeSet::new())?;
         if self.iterations == 0 || delta.is_none() {
-            let desc: Vec<String> = order.iter().map(|&k| describe(&rule.body[k], delta == Some(k))).collect();
+            let desc: Vec<String> = order
+                .iter()
+                .map(|&k| describe(&rule.body[k], delta == Some(k)))
+                .collect();
             let line = format!(
                 "  rule {} -> {}: {}",
                 ri,
@@ -486,9 +526,10 @@ impl<'p, 's> Engine<'p, 's> {
             }
         }
         let _ = si;
-        let deltas: Vec<(u32, IvSet)> = match delta.map(|k| &rule.body[k]) {
-            Some(Elem::Pos(a)) => self.sh.rels[a.rel().expect("delta atom") as usize].delta.clone(),
-            _ => Vec::new(),
+        let none = Vec::new();
+        let deltas: &[(u32, IvSet)] = match delta.map(|k| &rule.body[k]) {
+            Some(Elem::Pos(a)) => &self.sh.rels[a.rel().expect("delta atom") as usize].delta,
+            _ => &none,
         };
         let cx = Cx {
             sh: &self.sh,
@@ -498,17 +539,17 @@ impl<'p, 's> Engine<'p, 's> {
             order: &order,
             delta,
         };
-        #[cfg(feature = "parallel")]
+        #[cfg(all(feature = "parallel", not(target_arch = "wasm32")))]
         if let (Some(sync), Some(_)) = (self.sync, delta) {
             let th = self.sh.opts.parallel_threshold;
             if th > 0 && deltas.len() > th {
-                return cx.parallel(sync, &deltas);
+                return cx.parallel(sync, deltas);
             }
         }
         let mut out = Vec::new();
         let mut b = vec![UNBOUND; rule.vars.len()];
         let mut prem = Vec::new();
-        cx.step(0, &mut b, &IvSet::all(), &mut prem, &deltas, &mut out)?;
+        cx.step(0, &mut b, &IvSet::all(), &mut prem, deltas, &mut out)?;
         Ok(out)
     }
 }
@@ -517,8 +558,16 @@ fn describe(e: &Elem, delta: bool) -> String {
     let d = if delta { "Δ" } else { "" };
     match e {
         Elem::Pos(a) | Elem::Neg(a) => {
-            let neg = if matches!(e, Elem::Neg(_)) { "not " } else { "" };
-            let ops: String = a.ops.iter().map(|(o, _)| format!("{} ", o.name())).collect();
+            let neg = if matches!(e, Elem::Neg(_)) {
+                "not "
+            } else {
+                ""
+            };
+            let ops: String = a
+                .ops
+                .iter()
+                .map(|(o, _)| format!("{} ", o.name()))
+                .collect();
             match &a.src {
                 Source::Derived { rel, .. } => format!("{neg}{ops}{d}rel{rel}"),
                 Source::Stored(_) => format!("{neg}{ops}stored"),
@@ -548,15 +597,19 @@ struct Cx<'e, 'p, 's> {
 }
 
 impl Cx<'_, '_, '_> {
-    #[cfg(feature = "parallel")]
+    #[cfg(all(feature = "parallel", not(target_arch = "wasm32")))]
+    // @tg: implements:: [[openspec:datalog-evaluation#Deterministic results]] {since: "2026-10-28"}
     fn parallel(&self, sync: &(dyn ReadStore + Sync), deltas: &[(u32, IvSet)]) -> Result<Vec<Out>> {
         use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
         use std::sync::Mutex;
         let n = deltas.len().div_ceil(MORSEL);
-        let threads = std::thread::available_parallelism().map_or(1, |t| t.get()).min(n);
+        let threads = std::thread::available_parallelism()
+            .map_or(1, |t| t.get())
+            .min(n);
         let next = AtomicUsize::new(0);
         let failed = AtomicBool::new(false);
-        let results: Vec<Mutex<Option<Result<Vec<Out>>>>> = (0..n).map(|_| Mutex::new(None)).collect();
+        let results: Vec<Mutex<Option<Result<Vec<Out>>>>> =
+            (0..n).map(|_| Mutex::new(None)).collect();
         let interrupt = budget::interrupt();
         let (sh, rule, ri, order, delta) = (self.sh, self.rule, self.ri, self.order, self.delta);
         std::thread::scope(|sc| {
@@ -667,10 +720,10 @@ impl Cx<'_, '_, '_> {
     /// The valid interval of a statement id, or the interval an operand value stands for.
     fn interval_of(&self, id: Id) -> Result<Option<Valid>> {
         if let Value::Stmt(e) = self.value(id)? {
-            return Ok(self
-                .store
-                .statement(e.oid().raw())?
-                .map(|r| Valid { from: r.v_from, to: r.v_to }));
+            return Ok(self.store.statement(e.oid().raw())?.map(|r| Valid {
+                from: r.v_from,
+                to: r.v_to,
+            }));
         }
         Ok(terms::as_interval(&self.value(id)?))
     }
@@ -716,7 +769,13 @@ impl Cx<'_, '_, '_> {
                 }
                 Ok(r.lookup(mask, &key)
                     .into_iter()
-                    .map(|row| (r.tuple(row).iter().copied().collect(), r.ivs[row as usize].clone(), Prem::Row(*rel, row)))
+                    .map(|row| {
+                        (
+                            r.tuple(row).iter().copied().collect(),
+                            r.ivs[row as usize].clone(),
+                            Prem::Row(*rel, row),
+                        )
+                    })
                     .collect())
             }
             Source::Stored(p) => {
@@ -799,6 +858,7 @@ impl Cx<'_, '_, '_> {
     }
 
     #[allow(clippy::too_many_arguments)]
+    // @tg: implements:: [[openspec:datalog-temporal#Negation over time]] {since: "2026-10-28"}
     fn step(
         &self,
         k: usize,
@@ -840,7 +900,8 @@ impl Cx<'_, '_, '_> {
                             part.clone()
                         } else {
                             let full = &r.ivs[*row as usize];
-                            apply_ops(full, &a.ops).subtract(&apply_ops(&full.subtract(part), &a.ops))
+                            apply_ops(full, &a.ops)
+                                .subtract(&apply_ops(&full.subtract(part), &a.ops))
                         };
                         let iv2 = iv.intersect(&contrib);
                         if !iv2.is_empty() {
@@ -854,6 +915,81 @@ impl Cx<'_, '_, '_> {
                         }
                     }
                     Self::unbind(&args[..newly.len()], &newly, b);
+                }
+            }
+            Elem::Pos(a) if a.ops.is_empty() => {
+                let slots = a.slots();
+                // read in place: no copy of the matches
+                let visit = |vals: &[Id],
+                             miv: &IvSet,
+                             p: Option<Prem>,
+                             b: &mut Vec<Id>,
+                             prem: &mut Vec<Prem>,
+                             out: &mut Vec<Out>|
+                 -> Result<()> {
+                    budget::poll()?;
+                    let mut newly = SmallVec::<[bool; 4]>::new();
+                    let mut ok = true;
+                    for (s, &x) in slots.iter().zip(vals.iter()) {
+                        match Self::bind(s, x, b, consts) {
+                            Some(n) => newly.push(n),
+                            None => {
+                                newly.push(false);
+                                ok = false;
+                                break;
+                            }
+                        }
+                    }
+                    if ok {
+                        let iv2 = iv.intersect(miv);
+                        if !iv2.is_empty() {
+                            match p {
+                                Some(p) => {
+                                    prem.push(p);
+                                    self.step(k + 1, b, &iv2, prem, deltas, out)?;
+                                    prem.pop();
+                                }
+                                None => self.step(k + 1, b, &iv2, prem, deltas, out)?,
+                            }
+                        }
+                    }
+                    Self::unbind(&slots[..newly.len()], &newly, b);
+                    Ok(())
+                };
+                match &a.src {
+                    Source::Derived { rel, args } => {
+                        let r = &self.sh.rels[*rel as usize];
+                        let magic = self.sh.prog.rels[*rel as usize].magic;
+                        let mut mask = 0u32;
+                        let mut key: SmallVec<[Id; 4]> = SmallVec::new();
+                        for (i, s) in args.iter().enumerate() {
+                            let x = self.val(s, b);
+                            if x != UNBOUND {
+                                mask |= 1 << i;
+                                key.push(x);
+                            }
+                        }
+                        r.for_rows(mask, &key, |row| {
+                            let p = (!magic).then_some(Prem::Row(*rel, row));
+                            visit(r.tuple(row), &r.ivs[row as usize], p, b, prem, out)
+                        })?;
+                    }
+                    Source::Stored(sp) => {
+                        let g = |s: &Slot| {
+                            let x = self.val(s, b);
+                            (x != UNBOUND).then_some(x)
+                        };
+                        let pat: Pat4 = [g(&sp.s), g(&sp.p), g(&sp.o), sp.e.as_ref().and_then(g)];
+                        let all = IvSet::all();
+                        self.sh
+                            .stored
+                            .for_matches(self.store, &pat, &mut |r, siv| {
+                                let vals = [r.s, r.p, r.o, r.e];
+                                let n = if sp.e.is_some() { 4 } else { 3 };
+                                let siv = if sp.record { &all } else { siv };
+                                visit(&vals[..n], siv, Some(Prem::Stmt(r.e)), b, prem, out)
+                            })?;
+                    }
                 }
             }
             Elem::Pos(a) => {
@@ -903,10 +1039,15 @@ impl Cx<'_, '_, '_> {
                         }
                     }
                     if ok {
-                        let aiv = if a.ops.is_empty() { miv } else { apply_ops(&miv, &a.ops) };
+                        let aiv = if a.ops.is_empty() {
+                            miv
+                        } else {
+                            apply_ops(&miv, &a.ops)
+                        };
                         let iv2 = iv.intersect(&aiv);
                         if !iv2.is_empty() {
-                            let demand = matches!(p, Prem::Row(r, _) if self.sh.prog.rels[r as usize].magic);
+                            let demand =
+                                matches!(p, Prem::Row(r, _) if self.sh.prog.rels[r as usize].magic);
                             if demand {
                                 self.step(k + 1, b, &iv2, prem, deltas, out)?;
                             } else {
@@ -969,7 +1110,11 @@ impl Cx<'_, '_, '_> {
                                 }
                             }
                             if ok {
-                                let t = if *until { liv.until(&riv, *window) } else { liv.since(&riv, *window) };
+                                let t = if *until {
+                                    liv.until(&riv, *window)
+                                } else {
+                                    liv.since(&riv, *window)
+                                };
                                 let iv2 = iv.intersect(&t);
                                 if !iv2.is_empty() {
                                     let n = prem.len();
@@ -1055,9 +1200,10 @@ impl Cx<'_, '_, '_> {
         let input = |i: usize| self.val(&args[i], b);
         let outputs: Option<Vec<Value>> = match kind {
             BKind::Valid => match self.value(input(0))? {
-                Value::Stmt(e) => self.store.statement(e.oid().raw())?.map(|r| {
-                    vec![terms::end_value(r.v_from), terms::end_value(r.v_to)]
-                }),
+                Value::Stmt(e) => self
+                    .store
+                    .statement(e.oid().raw())?
+                    .map(|r| vec![terms::end_value(r.v_from), terms::end_value(r.v_to)]),
                 _ => None,
             },
             BKind::Added => match self.value(input(0))? {
@@ -1075,7 +1221,9 @@ impl Cx<'_, '_, '_> {
                 _ => None,
             },
             BKind::Interval => match self.value(input(0))? {
-                Value::Stmt(_) => self.interval_of(input(0))?.map(|v| vec![terms::interval_value(v)]),
+                Value::Stmt(_) => self
+                    .interval_of(input(0))?
+                    .map(|v| vec![terms::interval_value(v)]),
                 _ => None,
             },
             BKind::Start | BKind::End | BKind::Duration => self.interval_of(input(0))?.map(|v| {
@@ -1089,7 +1237,8 @@ impl Cx<'_, '_, '_> {
                 }]
             }),
             BKind::Allen(name) => {
-                let (Some(x), Some(y)) = (self.interval_of(input(0))?, self.interval_of(input(1))?) else {
+                let (Some(x), Some(y)) = (self.interval_of(input(0))?, self.interval_of(input(1))?)
+                else {
                     return Ok(());
                 };
                 if terms::allen(name, x, y) == Some(true) {
@@ -1138,6 +1287,7 @@ impl Cx<'_, '_, '_> {
     }
 
     #[allow(clippy::too_many_arguments)]
+    // @tg: implements:: [[openspec:datalog-temporal#Aggregates over time]] {since: "2026-10-28"}
     fn aggregate(
         &self,
         agg: &Agg,
@@ -1158,7 +1308,9 @@ impl Cx<'_, '_, '_> {
             vars: self.rule.vars.clone(),
             kind: RuleKind::Rule(0),
         };
-        let bound: BTreeSet<Var> = (0..b.len() as Var).filter(|v| b[*v as usize] != UNBOUND).collect();
+        let bound: BTreeSet<Var> = (0..b.len() as Var)
+            .filter(|v| b[*v as usize] != UNBOUND)
+            .collect();
         let order = plan_static(&inner_rule, &bound);
         let sub = Cx {
             sh: self.sh,
@@ -1171,7 +1323,14 @@ impl Cx<'_, '_, '_> {
         let mut items: FxHashMap<Vec<Id>, (Option<Value>, IvSet)> = FxHashMap::default();
         let mut keys: Vec<Vec<Id>> = Vec::new();
         let mut rows = Vec::new();
-        sub.step(0, &mut b.clone(), &IvSet::all(), &mut Vec::new(), &[], &mut rows)?;
+        sub.step(
+            0,
+            &mut b.clone(),
+            &IvSet::all(),
+            &mut Vec::new(),
+            &[],
+            &mut rows,
+        )?;
         for o in rows {
             let bb: &[Id] = &o.tuple;
             let over = match &agg.over {
@@ -1221,7 +1380,10 @@ impl Cx<'_, '_, '_> {
                     let mut acc = Value::Int(0);
                     let mut ok = true;
                     for (x, _) in &live {
-                        match x.as_ref().and_then(|x| terms::arith(&acc, crate::syntax::BinOp::Add, x)) {
+                        match x
+                            .as_ref()
+                            .and_then(|x| terms::arith(&acc, crate::syntax::BinOp::Add, x))
+                        {
                             Some(s) => acc = s,
                             None => ok = false,
                         }
@@ -1287,6 +1449,7 @@ impl Cx<'_, '_, '_> {
         Ok(())
     }
 
+    // @tg: implements:: [[openspec:datalog-evaluation#Provenance on request]] {since: "2026-10-28"}
     fn emit(&self, b: &mut [Id], iv: &IvSet, prem: &[Prem], out: &mut Vec<Out>) -> Result<()> {
         budget::poll()?;
         if self.ri == u32::MAX {
@@ -1354,7 +1517,10 @@ fn plan_static(rule: &Rule, start: &BTreeSet<Var>) -> Vec<usize> {
                 !matches!(rule.body[k], Elem::Pos(_) | Elem::Binary { .. })
                     && ready(&rule.body[k], &bound, rule).is_some()
             })
-            .or_else(|| left.iter().position(|&k| ready(&rule.body[k], &bound, rule).is_some()));
+            .or_else(|| {
+                left.iter()
+                    .position(|&k| ready(&rule.body[k], &bound, rule).is_some())
+            });
         let Some(i) = pick else {
             break;
         };

@@ -6,10 +6,12 @@ use std::collections::BTreeSet;
 use rustc_hash::{FxHashMap, FxHashSet};
 use tm_core::store::{Pattern, ReadStore};
 use tm_core::vocab::{DL_SOURCE, SYS_IN_GRAPH};
-use tm_core::{Eid, Error, ObjectId, Result, Tag, TimeRef, TxSel, Valid, ValidSel, Value, ViewSpec};
+use tm_core::{
+    Eid, Error, ObjectId, Result, Tag, TimeRef, TxSel, Valid, ValidSel, Value, ViewSpec,
+};
 use tm_store::read::View;
 
-use crate::eval::{EvalOptions, Engine, Limit, Limits, Prem};
+use crate::eval::{Engine, EvalOptions, Limit, Limits, Prem};
 use crate::interval::{IvSet, NEG_INF, POS_INF};
 use crate::program::{self, Analysis, RuleKind};
 use crate::source::{Stored, TimeView};
@@ -298,7 +300,11 @@ pub struct Explain {
 }
 
 /// The live `dl:source` statement of `program` in the view, and its text.
-pub fn stored_program(store: &dyn ReadStore, spec: &ViewSpec, program: &Value) -> Result<Option<(String, Eid)>> {
+pub fn stored_program(
+    store: &dyn ReadStore,
+    spec: &ViewSpec,
+    program: &Value,
+) -> Result<Option<(String, Eid)>> {
     let (Some(s), Some(p)) = (
         tm_store::dict::encode(store, program)?,
         tm_store::dict::encode(store, &Value::iri(DL_SOURCE))?,
@@ -315,7 +321,11 @@ pub fn stored_program(store: &dyn ReadStore, spec: &ViewSpec, program: &Value) -
     }
 }
 
-fn text_of(store: &dyn ReadStore, spec: &ViewSpec, program: &Program) -> Result<(String, Option<Value>, Option<Eid>)> {
+fn text_of(
+    store: &dyn ReadStore,
+    spec: &ViewSpec,
+    program: &Program,
+) -> Result<(String, Option<Value>, Option<Eid>)> {
     match program {
         Program::Text(t) => Ok((t.clone(), None, None)),
         Program::Stored(v) => {
@@ -328,6 +338,7 @@ fn text_of(store: &dyn ReadStore, spec: &ViewSpec, program: &Program) -> Result<
 }
 
 /// The view's transaction and instant: the pinned clock (`clock` on a now view).
+// @tg: implements:: [[openspec:datalog-temporal#Transaction time and the pinned clock]] {since: "2026-10-28"}
 fn clock_of(store: &dyn ReadStore, spec: &ViewSpec, clock: i64) -> Result<(u64, i64)> {
     let last = tm_store::read::last_t(store)?;
     Ok(match spec.tx {
@@ -386,8 +397,16 @@ fn scope_eids(store: &dyn ReadStore, view: &View, scope: &Scope) -> Result<Optio
                 let mut next = Vec::new();
                 for n in frontier {
                     for pat in [
-                        Pattern { s: Some(n), p: None, o: None },
-                        Pattern { s: None, p: None, o: Some(n) },
+                        Pattern {
+                            s: Some(n),
+                            p: None,
+                            o: None,
+                        },
+                        Pattern {
+                            s: None,
+                            p: None,
+                            o: Some(n),
+                        },
                     ] {
                         for r in store.scan(pat, view.scope())? {
                             let r = r?;
@@ -431,6 +450,8 @@ fn status(limits: &BTreeSet<Limit>) -> Status {
     }
 }
 
+// @tg: implements:: [[openspec:datalog-temporal#Atemporal mode]] {since: "2026-10-28"}
+// @tg: implements:: [[openspec:datalog-temporal#Windows and recursion through time]] {since: "2026-10-28"}
 fn prepare(
     store: &dyn ReadStore,
     spec: &ViewSpec,
@@ -648,7 +669,8 @@ impl Resolver<'_, '_, '_> {
 }
 
 fn stmt_eid(e: Id) -> Result<Eid> {
-    Eid::from_oid(ObjectId::from_raw(e)).ok_or_else(|| Error::storage("a statement row without a statement id"))
+    Eid::from_oid(ObjectId::from_raw(e))
+        .ok_or_else(|| Error::storage("a statement row without a statement id"))
 }
 
 fn rel_name(p: &Pred) -> String {
@@ -676,7 +698,9 @@ fn finish(store: &dyn ReadStore, eng: &Engine<'_, '_>, opts: &DatalogOptions) ->
     let st = status(&eng.limits_hit);
     if opts.require_complete {
         if let Status::Incomplete { limits } = &st {
-            return Err(Error::DatalogIncomplete { limits: limits.clone() });
+            return Err(Error::DatalogIncomplete {
+                limits: limits.clone(),
+            });
         }
     }
     let _ = store;
@@ -684,7 +708,13 @@ fn finish(store: &dyn ReadStore, eng: &Engine<'_, '_>, opts: &DatalogOptions) ->
 }
 
 /// The rows of goal `gi` of a run.
-fn goal_rows(eng: &Engine<'_, '_>, prep: &Prepared, rel: u32, proof: bool, res: &mut Resolver<'_, '_, '_>) -> Result<Vec<Row>> {
+fn goal_rows(
+    eng: &Engine<'_, '_>,
+    prep: &Prepared,
+    rel: u32,
+    proof: bool,
+    res: &mut Resolver<'_, '_, '_>,
+) -> Result<Vec<Row>> {
     let store = eng.store();
     let r = &eng.sh.rels[rel as usize];
     let mut rows: Vec<(Vec<Value>, i64, Row)> = Vec::new();
@@ -698,7 +728,11 @@ fn goal_rows(eng: &Engine<'_, '_>, prep: &Prepared, rel: u32, proof: bool, res: 
             .iter()
             .map(|&x| eng.sh.terms.term(store, x))
             .collect::<Result<Vec<_>>>()?;
-        let pf = if proof { Some(res.fragments(rel, row, &iv)?) } else { None };
+        let pf = if proof {
+            Some(res.fragments(rel, row, &iv)?)
+        } else {
+            None
+        };
         rows.push((
             sort_key(store, eng.sh.terms, tuple)?,
             iv.intervals()[0].0,
@@ -742,7 +776,15 @@ fn run_goal(
         }
     }
     let terms = Terms::new();
-    let mut eng = engine(store, spec, &prep, &terms, opts, opts.proof, FxHashSet::default())?;
+    let mut eng = engine(
+        store,
+        spec,
+        &prep,
+        &terms,
+        opts,
+        opts.proof,
+        FxHashSet::default(),
+    )?;
     eng.run()?;
     let status = finish(store, &eng, opts)?;
     let mut res = Resolver {
@@ -839,6 +881,7 @@ pub fn reason(
 
 /// [`reason`] without the stored statements `exclude` (a materialization's
 /// own conclusions).
+// @tg: implements:: [[openspec:datalog-evaluation#Agreement with N3 on Horn programs]] {since: "2026-10-28"}
 pub fn reason_excluding(
     store: &dyn ReadStore,
     spec: &ViewSpec,
@@ -868,11 +911,17 @@ pub fn reason_excluding(
             let tuple = r.tuple(row);
             match &rel.name {
                 Pred::Iri(p) => {
-                    let iv = clip(&prep, &r.ivs[row as usize].subtract(&r.stored[row as usize]));
+                    let iv = clip(
+                        &prep,
+                        &r.ivs[row as usize].subtract(&r.stored[row as usize]),
+                    );
                     for &(a, b) in iv.intervals() {
                         let frag = IvSet::one(a, b);
                         let proof = if opts.proof {
-                            res.fragments(ri as u32, row, &frag)?.into_iter().next().map(|f| f.proof)
+                            res.fragments(ri as u32, row, &frag)?
+                                .into_iter()
+                                .next()
+                                .map(|f| f.proof)
                         } else {
                             None
                         };
@@ -895,7 +944,10 @@ pub fn reason_excluding(
                     if iv.is_empty() {
                         continue;
                     }
-                    let args = tuple.iter().map(|&x| terms.term(store, x)).collect::<Result<Vec<_>>>()?;
+                    let args = tuple
+                        .iter()
+                        .map(|&x| terms.term(store, x))
+                        .collect::<Result<Vec<_>>>()?;
                     let mut key = vec![Value::str(n.as_str())];
                     key.extend(sort_key(store, &terms, tuple)?);
                     relations.push((
@@ -1016,4 +1068,3 @@ pub fn info(store: &dyn ReadStore, spec: &ViewSpec, program: &Program) -> Result
 pub fn validate(text: &str) -> Result<Analysis> {
     Ok(program::compile(text)?.analysis())
 }
-

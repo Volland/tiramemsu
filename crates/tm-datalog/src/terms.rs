@@ -236,7 +236,9 @@ pub fn total_cmp(a: &Value, b: &Value) -> Ordering {
         return ra.cmp(&rb);
     }
     if let (Some(x), Some(y)) = (num(a), num(b)) {
-        return x.total_cmp(&y).then_with(|| format!("{a:?}").cmp(&format!("{b:?}")));
+        return x
+            .total_cmp(&y)
+            .then_with(|| format!("{a:?}").cmp(&format!("{b:?}")));
     }
     if let (Some(x), Some(y)) = (instant(a), instant(b)) {
         return x.cmp(&y);
@@ -248,7 +250,9 @@ pub fn total_cmp(a: &Value, b: &Value) -> Ordering {
         (Value::Stmt(x), Value::Stmt(y)) => x.cmp(y),
         (Value::Tx(x), Value::Tx(y)) => x.cmp(y),
         _ => match (string(a), string(b)) {
-            (Some(x), Some(y)) => x.cmp(y).then_with(|| format!("{a:?}").cmp(&format!("{b:?}"))),
+            (Some(x), Some(y)) => x
+                .cmp(y)
+                .then_with(|| format!("{a:?}").cmp(&format!("{b:?}"))),
             _ => format!("{a:?}").cmp(&format!("{b:?}")),
         },
     }
@@ -292,6 +296,7 @@ fn datetime(ms: i64) -> Value {
 }
 
 /// `a op b`; `None` for values of the wrong kind or an overflow.
+// @tg: implements:: [[openspec:datalog-language#Builtins]] {since: "2026-10-28"}
 pub fn arith(a: &Value, op: BinOp, b: &Value) -> Option<Value> {
     match (a, b) {
         (Value::Int(x), Value::Int(y)) => match op {
@@ -394,6 +399,7 @@ pub fn end_value(x: Option<i64>) -> Value {
 }
 
 /// `rel(a, b)` for an Allen relation name.
+// @tg: implements:: [[openspec:datalog-temporal#Allen relations]] {since: "2026-10-28"}
 pub fn allen(name: &str, a: Valid, b: Valid) -> Option<bool> {
     let r = Allen::from_name(name).or_else(|| {
         // snake_case aliases: `finished_by`, `overlapped_by`, ...

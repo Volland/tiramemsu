@@ -59,7 +59,13 @@ fn each<R: std::fmt::Debug + PartialEq>(scenario: impl Fn(&Db) -> R) {
         seen.push((b, r));
     }
     for (b, r) in &seen[1..] {
-        assert_eq!(r, &seen[0].1, "{} differs from {}", b.name(), seen[0].0.name());
+        assert_eq!(
+            r,
+            &seen[0].1,
+            "{} differs from {}",
+            b.name(),
+            seen[0].0.name()
+        );
     }
 }
 
@@ -93,11 +99,17 @@ fn goal(db: &Db, program: &str, g: &str) -> DatalogResult {
 fn rows(r: &DatalogResult) -> Vec<(Vec<String>, Vec<Valid>)> {
     r.rows
         .iter()
-        .map(|row| (row.values.iter().map(|t| t.to_string()).collect(), row.valid.clone()))
+        .map(|row| {
+            (
+                row.values.iter().map(|t| t.to_string()).collect(),
+                row.valid.clone(),
+            )
+        })
         .collect()
 }
 
-const REPORTS: &str = "reports(X, Y) :- v:manager(X, Y).\nreports(X, Z) :- reports(X, Y), v:manager(Y, Z).\n";
+const REPORTS: &str =
+    "reports(X, Y) :- v:manager(X, Y).\nreports(X, Z) :- reports(X, Y), v:manager(Y, Z).\n";
 
 fn chain(db: &Db) -> (Eid, Eid) {
     let e1 = assert_fact(db, "alice", "manager", v("bob"), Valid::ALWAYS);
@@ -123,7 +135,10 @@ fn rules_goal_and_constraint_parse() {
             .unwrap();
         assert_eq!(info.analysis.rules, 2);
         assert_eq!(info.analysis.goals, 1);
-        assert_eq!(info.analysis.constraints, vec![("no_cycle".to_string(), Severity::Error)]);
+        assert_eq!(
+            info.analysis.constraints,
+            vec![("no_cycle".to_string(), Severity::Error)]
+        );
     });
 }
 
@@ -131,8 +146,21 @@ fn rules_goal_and_constraint_parse() {
 #[test]
 fn syntax_error_has_a_position() {
     each(|db| {
-        let e = db.now().program_info(&text("reports(X, Y) :- v:manager(X, Y)")).unwrap_err();
-        assert!(matches!(e, Error::DatalogParse { line: 1, column: 33, .. }), "{e:?}");
+        let e = db
+            .now()
+            .program_info(&text("reports(X, Y) :- v:manager(X, Y)"))
+            .unwrap_err();
+        assert!(
+            matches!(
+                e,
+                Error::DatalogParse {
+                    line: 1,
+                    column: 33,
+                    ..
+                }
+            ),
+            "{e:?}"
+        );
     });
 }
 
@@ -140,9 +168,24 @@ fn syntax_error_has_a_position() {
 #[test]
 fn parallel_statements_under_set_semantics() {
     each(|db| {
-        assert_fact(db, "a", "knows", v("b"), Valid::between(year(2020), year(2021)));
-        assert_fact(db, "a", "knows", v("b"), Valid::between(year(2022), year(2023)));
-        let r = db.now().datalog(&text("?- v:knows(v:a, Y)."), None, &opts()).unwrap();
+        assert_fact(
+            db,
+            "a",
+            "knows",
+            v("b"),
+            Valid::between(year(2020), year(2021)),
+        );
+        assert_fact(
+            db,
+            "a",
+            "knows",
+            v("b"),
+            Valid::between(year(2022), year(2023)),
+        );
+        let r = db
+            .now()
+            .datalog(&text("?- v:knows(v:a, Y)."), None, &opts())
+            .unwrap();
         assert_eq!(r.rows.len(), 1);
         assert_eq!(r.rows[0].values, vec![tv("b")]);
         assert_eq!(r.rows[0].valid.len(), 2);
@@ -154,9 +197,24 @@ fn parallel_statements_under_set_semantics() {
 #[test]
 fn eid_binding_keeps_parallel_statements_apart() {
     each(|db| {
-        assert_fact(db, "a", "knows", v("b"), Valid::between(year(2020), year(2021)));
-        assert_fact(db, "a", "knows", v("b"), Valid::between(year(2022), year(2023)));
-        let r = db.now().datalog(&text("?- v:knows(v:a, Y) @ E."), None, &opts()).unwrap();
+        assert_fact(
+            db,
+            "a",
+            "knows",
+            v("b"),
+            Valid::between(year(2020), year(2021)),
+        );
+        assert_fact(
+            db,
+            "a",
+            "knows",
+            v("b"),
+            Valid::between(year(2022), year(2023)),
+        );
+        let r = db
+            .now()
+            .datalog(&text("?- v:knows(v:a, Y) @ E."), None, &opts())
+            .unwrap();
         assert_eq!(r.rows.len(), 2);
         rows(&r)
     });
@@ -167,12 +225,24 @@ fn eid_binding_keeps_parallel_statements_apart() {
 fn layers_are_ordinary_atoms() {
     each(|db| {
         let e1 = assert_fact(db, "alice", "worksAt", v("acme"), Valid::ALWAYS);
-        tx(db, |t| t.assert(Value::Stmt(e1), v("confidence"), Value::Double(0.9), Valid::ALWAYS));
+        tx(db, |t| {
+            t.assert(
+                Value::Stmt(e1),
+                v("confidence"),
+                Value::Double(0.9),
+                Valid::ALWAYS,
+            )
+        });
         let r = goal(db, "", "v:worksAt(X, C) @ E, v:confidence(E, K), K > 0.8");
         assert_eq!(r.columns, ["X", "C", "E", "K"]);
         assert_eq!(
             r.rows[0].values,
-            vec![tv("alice"), tv("acme"), DatalogTerm::Value(Value::Stmt(e1)), DatalogTerm::Value(Value::Double(0.9))]
+            vec![
+                tv("alice"),
+                tv("acme"),
+                DatalogTerm::Value(Value::Stmt(e1)),
+                DatalogTerm::Value(Value::Double(0.9))
+            ]
         );
         r.rows.len()
     });
@@ -182,11 +252,29 @@ fn layers_are_ordinary_atoms() {
 #[test]
 fn valid_interval_as_data() {
     each(|db| {
-        assert_fact(db, "alice", "worksAt", v("acme"), Valid::between(year(2020), year(2022)));
+        assert_fact(
+            db,
+            "alice",
+            "worksAt",
+            v("acme"),
+            Valid::between(year(2020), year(2022)),
+        );
         let r = goal(db, "", "v:worksAt(v:alice, C) @ E, valid(E, F, T)");
         let row = &r.rows[0].values;
-        assert_eq!(row[2], DatalogTerm::Value(Value::DateTime { ms: year(2020), tz: Some(0) }));
-        assert_eq!(row[3], DatalogTerm::Value(Value::DateTime { ms: year(2022), tz: Some(0) }));
+        assert_eq!(
+            row[2],
+            DatalogTerm::Value(Value::DateTime {
+                ms: year(2020),
+                tz: Some(0)
+            })
+        );
+        assert_eq!(
+            row[3],
+            DatalogTerm::Value(Value::DateTime {
+                ms: year(2022),
+                tz: Some(0)
+            })
+        );
         rows(&r)
     });
 }
@@ -207,10 +295,19 @@ fn reserved_head_refused() {
 #[test]
 fn duration_arithmetic() {
     each(|db| {
-        let due = Value::DateTime { ms: year(2026) + 9 * D, tz: Some(0) };
+        let due = Value::DateTime {
+            ms: year(2026) + 9 * D,
+            tz: Some(0),
+        };
         assert_fact(db, "task1", "due", due, Valid::ALWAYS);
         let r = goal(db, "", "v:due(T, D), E = D + 30d");
-        assert_eq!(r.rows[0].values[2], DatalogTerm::Value(Value::DateTime { ms: year(2026) + 39 * D, tz: Some(0) }));
+        assert_eq!(
+            r.rows[0].values[2],
+            DatalogTerm::Value(Value::DateTime {
+                ms: year(2026) + 39 * D,
+                tz: Some(0)
+            })
+        );
         rows(&r)
     });
 }
@@ -228,7 +325,15 @@ fn wrong_kind_is_false() {
 const UNMANAGED: &str = "unmanaged(X) :- rdf:type(X, v:Employee), not v:manager(X, _).\n";
 
 fn employee(db: &Db, name: &str) -> Eid {
-    tx(db, |t| Ok(t.assert(v(name), Value::iri(vocab::RDF_TYPE), v("Employee"), Valid::ALWAYS)?.eid()))
+    tx(db, |t| {
+        Ok(t.assert(
+            v(name),
+            Value::iri(vocab::RDF_TYPE),
+            v("Employee"),
+            Valid::ALWAYS,
+        )?
+        .eid())
+    })
 }
 
 // @tg: verifies:: [[openspec:datalog-language#Stratified negation and aggregates#Unmanaged employees]] {level: integration}
@@ -239,7 +344,10 @@ fn unmanaged_employees() {
         employee(db, "carol");
         assert_fact(db, "carol", "manager", v("dave"), Valid::ALWAYS);
         let r = goal(db, UNMANAGED, "unmanaged(X)");
-        assert_eq!(r.rows.iter().map(|r| r.values.clone()).collect::<Vec<_>>(), vec![vec![tv("bob")]]);
+        assert_eq!(
+            r.rows.iter().map(|r| r.values.clone()).collect::<Vec<_>>(),
+            vec![vec![tv("bob")]]
+        );
         rows(&r)
     });
 }
@@ -250,7 +358,9 @@ fn negative_cycle_refused() {
     each(|db| {
         let e = db
             .now()
-            .program_info(&text("q(X) :- v:a(X, X).\np(X) :- q(X), not r(X).\nr(X) :- q(X), not p(X)."))
+            .program_info(&text(
+                "q(X) :- v:a(X, X).\np(X) :- q(X), not r(X).\nr(X) :- q(X), not p(X).",
+            ))
             .unwrap_err();
         match e {
             Error::DatalogUnstratifiable { message } => {
@@ -265,7 +375,10 @@ fn negative_cycle_refused() {
 #[test]
 fn unbound_head_variable() {
     each(|db| {
-        let e = db.now().program_info(&text("p(X, Y) :- v:q(X, X).")).unwrap_err();
+        let e = db
+            .now()
+            .program_info(&text("p(X, Y) :- v:q(X, X)."))
+            .unwrap_err();
         match e {
             Error::DatalogUnsafe { message, .. } => assert!(message.contains('Y'), "{message}"),
             other => panic!("{other:?}"),
@@ -298,9 +411,16 @@ fn recursive_invention_needs_a_limit() {
     each(|db| {
         let e = db
             .now()
-            .datalog(&text("n(0).\nn(Y) :- n(X), Y = X + 1."), Some("n(X)"), &opts())
+            .datalog(
+                &text("n(0).\nn(Y) :- n(X), Y = X + 1."),
+                Some("n(X)"),
+                &opts(),
+            )
             .unwrap_err();
-        assert!(matches!(e, Error::DatalogUnboundedInvention { .. }), "{e:?}");
+        assert!(
+            matches!(e, Error::DatalogUnboundedInvention { .. }),
+            "{e:?}"
+        );
     });
 }
 
@@ -314,7 +434,12 @@ fn invention_fuse() {
             .now()
             .datalog(&text("n(0).\nn(Y) :- n(X), Y = X + 1."), Some("n(X)"), &o)
             .unwrap();
-        assert_eq!(r.status, DatalogStatus::Incomplete { limits: vec!["NewValues".into()] });
+        assert_eq!(
+            r.status,
+            DatalogStatus::Incomplete {
+                limits: vec!["NewValues".into()]
+            }
+        );
         assert!(r.rows.len() <= 100, "{}", r.rows.len());
         r.rows.len()
     });
@@ -333,7 +458,16 @@ fn analysis_of_a_recursive_temporal_program() {
         let a = info.analysis;
         assert_eq!(a.strata.len(), 1);
         assert!(a.strata[0].recursive && a.strata[0].monotonic);
-        assert_eq!(a.predicates, vec![v("contact").to_string().trim_matches(['<', '>']).to_string(), "urn:tiramemsu:v:sick".to_string()]);
+        assert_eq!(
+            a.predicates,
+            vec![
+                v("contact")
+                    .to_string()
+                    .trim_matches(['<', '>'])
+                    .to_string(),
+                "urn:tiramemsu:v:sick".to_string()
+            ]
+        );
         assert!(a.metric_recursion);
     });
 }
@@ -347,7 +481,10 @@ fn reporting_chain() {
         chain(db);
         let before = db.history().triples(None, None, None).unwrap();
         let r = goal(db, REPORTS, "reports(v:alice, X)");
-        assert_eq!(r.rows.iter().map(|r| r.values.clone()).collect::<Vec<_>>(), vec![vec![tv("bob")], vec![tv("carol")]]);
+        assert_eq!(
+            r.rows.iter().map(|r| r.values.clone()).collect::<Vec<_>>(),
+            vec![vec![tv("bob")], vec![tv("carol")]]
+        );
         assert_eq!(db.history().triples(None, None, None).unwrap(), before);
         rows(&r)
     });
@@ -360,7 +497,11 @@ fn goal_in_the_text() {
         chain(db);
         let r = db
             .now()
-            .datalog(&text(&format!("{REPORTS}?- reports(v:alice, X).")), None, &opts())
+            .datalog(
+                &text(&format!("{REPORTS}?- reports(v:alice, X).")),
+                None,
+                &opts(),
+            )
             .unwrap();
         assert_eq!(r.rows.len(), 2);
         rows(&r)
@@ -375,11 +516,17 @@ fn conclusions_as_statements() {
         assert_fact(db, "acme", "locatedIn", v("berlin"), Valid::ALWAYS);
         let r = db
             .now()
-            .datalog_reason(&text("v:worksIn(P, L) :- v:worksAt(P, C), v:locatedIn(C, L)."), &opts())
+            .datalog_reason(
+                &text("v:worksIn(P, L) :- v:worksAt(P, C), v:locatedIn(C, L)."),
+                &opts(),
+            )
             .unwrap();
         assert_eq!(r.conclusions.len(), 1);
         let c = &r.conclusions[0];
-        assert_eq!((c.s.clone(), c.p.clone(), c.o.clone()), (tv("alice"), v("worksIn"), tv("berlin")));
+        assert_eq!(
+            (c.s.clone(), c.p.clone(), c.o.clone()),
+            (tv("alice"), v("worksIn"), tv("berlin"))
+        );
         r.conclusions.len()
     });
 }
@@ -390,7 +537,12 @@ fn unused_predicates_are_not_read() {
     each(|db| {
         tx(db, |t| {
             for i in 0..100 {
-                t.assert(v(&format!("p{i}")), v("name"), Value::str(format!("n{i}")), Valid::ALWAYS)?;
+                t.assert(
+                    v(&format!("p{i}")),
+                    v("name"),
+                    Value::str(format!("n{i}")),
+                    Valid::ALWAYS,
+                )?;
             }
             Ok(())
         });
@@ -412,8 +564,14 @@ fn graph_scope() {
         tx(db, |t| t.add_to_graph(e1, v("g1"), AssertOpts::default()));
         let mut o = opts();
         o.scope = DatalogScope::Graphs(vec![v("g1")]);
-        let r = db.now().datalog(&text(REPORTS), Some("reports(v:a, X)"), &o).unwrap();
-        assert_eq!(r.rows.iter().map(|r| r.values.clone()).collect::<Vec<_>>(), vec![vec![tv("b")]]);
+        let r = db
+            .now()
+            .datalog(&text(REPORTS), Some("reports(v:a, X)"), &o)
+            .unwrap();
+        assert_eq!(
+            r.rows.iter().map(|r| r.values.clone()).collect::<Vec<_>>(),
+            vec![vec![tv("b")]]
+        );
         rows(&r)
     });
 }
@@ -430,7 +588,12 @@ fn random_graph(db: &Db, seed: u64, nodes: u64, edges: usize) {
         for _ in 0..edges {
             let a = next() % nodes;
             let b = next() % nodes;
-            t.assert(v(&format!("n{a}")), v("manager"), v(&format!("n{b}")), Valid::ALWAYS)?;
+            t.assert(
+                v(&format!("n{a}")),
+                v("manager"),
+                v(&format!("n{b}")),
+                Valid::ALWAYS,
+            )?;
         }
         Ok(())
     });
@@ -444,11 +607,22 @@ fn goal_directed_equals_full() {
             random_graph(db, seed, 60, 90);
             let mut full = opts();
             full.demand = false;
-            let on = db.now().datalog(&text(REPORTS), Some("reports(v:n3, X)"), &opts()).unwrap();
-            let off = db.now().datalog(&text(REPORTS), Some("reports(v:n3, X)"), &full).unwrap();
+            let on = db
+                .now()
+                .datalog(&text(REPORTS), Some("reports(v:n3, X)"), &opts())
+                .unwrap();
+            let off = db
+                .now()
+                .datalog(&text(REPORTS), Some("reports(v:n3, X)"), &full)
+                .unwrap();
             assert_eq!(rows(&on), rows(&off));
             assert!(on.demand.is_some());
-            assert!(on.derived < off.derived, "{} vs {}", on.derived, off.derived);
+            assert!(
+                on.derived < off.derived,
+                "{} vs {}",
+                on.derived,
+                off.derived
+            );
             rows(&on)
         });
     }
@@ -461,20 +635,33 @@ fn proof_of_a_chain() {
         let (e1, e2) = chain(db);
         let mut o = opts();
         o.proof = true;
-        let r = db.now().datalog(&text(REPORTS), Some("reports(v:alice, v:carol)"), &o).unwrap();
+        let r = db
+            .now()
+            .datalog(&text(REPORTS), Some("reports(v:alice, v:carol)"), &o)
+            .unwrap();
         assert_eq!(r.rows.len(), 1);
         let goal_proof = &r.rows[0].proof.as_ref().unwrap()[0].proof;
         // the goal rests on the derived reports(alice, carol)
-        let DatalogPremise::Fact(i) = goal_proof.premises[0] else { panic!("{goal_proof:?}") };
+        let DatalogPremise::Fact(i) = goal_proof.premises[0] else {
+            panic!("{goal_proof:?}")
+        };
         let p = r.facts[i].proof.as_ref().unwrap();
         assert_eq!(p.rule, Some(1));
-        let DatalogPremise::Fact(j) = p.premises[0] else { panic!("{p:?}") };
+        let DatalogPremise::Fact(j) = p.premises[0] else {
+            panic!("{p:?}")
+        };
         assert_eq!(r.facts[j].args, vec![tv("alice"), tv("bob")]);
-        assert_eq!(r.facts[j].proof.as_ref().unwrap().premises, vec![DatalogPremise::Statement(e1)]);
+        assert_eq!(
+            r.facts[j].proof.as_ref().unwrap().premises,
+            vec![DatalogPremise::Statement(e1)]
+        );
         assert_eq!(p.premises[1], DatalogPremise::Statement(e2));
         let mut plain = opts();
         plain.proof = false;
-        let q = db.now().datalog(&text(REPORTS), Some("reports(v:alice, v:carol)"), &plain).unwrap();
+        let q = db
+            .now()
+            .datalog(&text(REPORTS), Some("reports(v:alice, v:carol)"), &plain)
+            .unwrap();
         assert_eq!(rows(&q), rows(&r));
         assert!(q.rows[0].proof.is_none());
     });
@@ -483,7 +670,12 @@ fn proof_of_a_chain() {
 fn line(db: &Db, n: usize) {
     tx(db, |t| {
         for i in 0..n {
-            t.assert(v(&format!("n{i}")), v("manager"), v(&format!("n{}", i + 1)), Valid::ALWAYS)?;
+            t.assert(
+                v(&format!("n{i}")),
+                v("manager"),
+                v(&format!("n{}", i + 1)),
+                Valid::ALWAYS,
+            )?;
         }
         Ok(())
     });
@@ -497,15 +689,32 @@ fn derived_fact_limit() {
         let mut o = opts();
         o.limits.max_facts = Some(100);
         o.demand = false;
-        let r = db.now().datalog(&text(REPORTS), Some("reports(X, Y)"), &o).unwrap();
-        assert_eq!(r.status, DatalogStatus::Incomplete { limits: vec!["Facts".into()] });
+        let r = db
+            .now()
+            .datalog(&text(REPORTS), Some("reports(X, Y)"), &o)
+            .unwrap();
+        assert_eq!(
+            r.status,
+            DatalogStatus::Incomplete {
+                limits: vec!["Facts".into()]
+            }
+        );
         // every row is a true fact: X precedes Y on the line
         for row in &r.rows {
-            let n = |t: &DatalogTerm| t.to_string().trim_start_matches("<urn:tiramemsu:v:n").trim_end_matches('>').parse::<u32>().unwrap();
+            let n = |t: &DatalogTerm| {
+                t.to_string()
+                    .trim_start_matches("<urn:tiramemsu:v:n")
+                    .trim_end_matches('>')
+                    .parse::<u32>()
+                    .unwrap()
+            };
             assert!(n(&row.values[0]) < n(&row.values[1]));
         }
         o.require_complete = true;
-        let e = db.now().datalog(&text(REPORTS), Some("reports(X, Y)"), &o).unwrap_err();
+        let e = db
+            .now()
+            .datalog(&text(REPORTS), Some("reports(X, Y)"), &o)
+            .unwrap_err();
         assert!(matches!(e, Error::DatalogIncomplete { .. }), "{e:?}");
     });
 }
@@ -521,7 +730,11 @@ fn deadline_stops_a_closure() {
         };
         let mut o = opts();
         o.demand = false;
-        let e = db.now().with_budget(&budget).datalog(&text(REPORTS), Some("reports(X, Y)"), &o).unwrap_err();
+        let e = db
+            .now()
+            .with_budget(&budget)
+            .datalog(&text(REPORTS), Some("reports(X, Y)"), &o)
+            .unwrap_err();
         assert!(matches!(e, Error::DeadlineExceeded { .. }), "{e:?}");
     });
 }
@@ -532,7 +745,10 @@ fn backends_agree() {
     // `each` compares the rows of every backend
     each(|db| {
         random_graph(db, 7, 40, 70);
-        let r = db.now().datalog(&text(REPORTS), Some("reports(X, Y)"), &opts()).unwrap();
+        let r = db
+            .now()
+            .datalog(&text(REPORTS), Some("reports(X, Y)"), &opts())
+            .unwrap();
         rows(&r)
     });
 }
@@ -547,8 +763,14 @@ fn parallel_and_sequential_agree() {
         seq.demand = false;
         let mut par = seq.clone();
         par.parallel_threshold = 1;
-        let a = db.now().datalog(&text(REPORTS), Some("reports(X, Y)"), &seq).unwrap();
-        let b = db.now().datalog(&text(REPORTS), Some("reports(X, Y)"), &par).unwrap();
+        let a = db
+            .now()
+            .datalog(&text(REPORTS), Some("reports(X, Y)"), &seq)
+            .unwrap();
+        let b = db
+            .now()
+            .datalog(&text(REPORTS), Some("reports(X, Y)"), &par)
+            .unwrap();
         assert_eq!(rows(&a), rows(&b));
         rows(&a).len()
     });
@@ -559,7 +781,10 @@ fn parallel_and_sequential_agree() {
 fn explain_shows_access_choice() {
     each(|db| {
         chain(db);
-        let e = db.now().explain_datalog(&text(REPORTS), Some("reports(v:alice, X)"), &opts()).unwrap();
+        let e = db
+            .now()
+            .explain_datalog(&text(REPORTS), Some("reports(v:alice, X)"), &opts())
+            .unwrap();
         let plan = e.plan.join("\n");
         assert!(plan.contains("access <urn:tiramemsu:v:manager>"), "{plan}");
         assert!(plan.contains("iteration"), "{plan}");
@@ -587,7 +812,11 @@ fn works_in(db: &Db, a: Valid, b: Valid) -> Vec<(Value, Valid)> {
 #[test]
 fn facts_never_simultaneously_valid_do_not_combine() {
     each(|db| {
-        let c = works_in(db, Valid::between(year(2020), year(2022)), Valid::from(year(2024)));
+        let c = works_in(
+            db,
+            Valid::between(year(2020), year(2022)),
+            Valid::from(year(2024)),
+        );
         assert!(c.is_empty());
     });
 }
@@ -596,8 +825,15 @@ fn facts_never_simultaneously_valid_do_not_combine() {
 #[test]
 fn overlap_gives_the_intersection() {
     each(|db| {
-        let c = works_in(db, Valid::between(year(2020), year(2025)), Valid::from(year(2024)));
-        assert_eq!(c, vec![(v("worksIn"), Valid::between(year(2024), year(2025)))]);
+        let c = works_in(
+            db,
+            Valid::between(year(2020), year(2025)),
+            Valid::from(year(2024)),
+        );
+        assert_eq!(
+            c,
+            vec![(v("worksIn"), Valid::between(year(2024), year(2025)))]
+        );
         c
     });
 }
@@ -606,11 +842,27 @@ fn overlap_gives_the_intersection() {
 #[test]
 fn two_derivations_coalesce() {
     each(|db| {
-        assert_fact(db, "alice", "worksAt", v("acme"), Valid::between(year(2020), year(2023)));
-        assert_fact(db, "alice", "worksAt", v("beta"), Valid::between(year(2023), year(2026)));
+        assert_fact(
+            db,
+            "alice",
+            "worksAt",
+            v("acme"),
+            Valid::between(year(2020), year(2023)),
+        );
+        assert_fact(
+            db,
+            "alice",
+            "worksAt",
+            v("beta"),
+            Valid::between(year(2023), year(2026)),
+        );
         assert_fact(db, "acme", "locatedIn", v("berlin"), Valid::ALWAYS);
         assert_fact(db, "beta", "locatedIn", v("berlin"), Valid::ALWAYS);
-        let c = db.now().datalog_reason(&text(WORKS_IN), &opts()).unwrap().conclusions;
+        let c = db
+            .now()
+            .datalog_reason(&text(WORKS_IN), &opts())
+            .unwrap()
+            .conclusions;
         assert_eq!(c.len(), 1);
         assert_eq!(c[0].valid, Valid::between(year(2020), year(2026)));
         c.len()
@@ -631,19 +883,31 @@ fn instant_by_instant_oracle() {
         each(|db| {
             let mut x = seed;
             let mut next = |m: u64| {
-                x = x.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+                x = x
+                    .wrapping_mul(6364136223846793005)
+                    .wrapping_add(1442695040888963407);
                 (x >> 33) % m
             };
             tx(db, |t| {
                 for i in 0..5 {
-                    t.assert(v(&format!("n{i}")), v("node"), Value::Bool(true), Valid::ALWAYS)?;
+                    t.assert(
+                        v(&format!("n{i}")),
+                        v("node"),
+                        Value::Bool(true),
+                        Valid::ALWAYS,
+                    )?;
                 }
                 for _ in 0..14 {
                     let (a, b) = (next(5), next(5));
                     let f = next(10) as i64;
                     let len = 1 + next(6) as i64;
                     let p = if next(4) == 0 { "f" } else { "e" };
-                    t.assert(v(&format!("n{a}")), v(p), v(&format!("n{b}")), Valid::between(f, f + len))?;
+                    t.assert(
+                        v(&format!("n{a}")),
+                        v(p),
+                        v(&format!("n{b}")),
+                        Valid::between(f, f + len),
+                    )?;
                 }
                 Ok(())
             });
@@ -653,8 +917,13 @@ fn instant_by_instant_oracle() {
                 for t in -1..17 {
                     let mut at = opts();
                     at.time = DatalogTime::Atemporal;
-                    let snap = db.now().valid_at(t).datalog(&text(prog), None, &at).unwrap();
-                    let want: Vec<Vec<DatalogTerm>> = snap.rows.iter().map(|r| r.values.clone()).collect();
+                    let snap = db
+                        .now()
+                        .valid_at(t)
+                        .datalog(&text(prog), None, &at)
+                        .unwrap();
+                    let want: Vec<Vec<DatalogTerm>> =
+                        snap.rows.iter().map(|r| r.values.clone()).collect();
                     let got: Vec<Vec<DatalogTerm>> = r
                         .rows
                         .iter()
@@ -674,7 +943,13 @@ fn instant_by_instant_oracle() {
 #[test]
 fn fever_within_the_last_three_days() {
     each(|db| {
-        assert_fact(db, "p", "fever", Value::Bool(true), Valid::between(10 * D, 11 * D));
+        assert_fact(
+            db,
+            "p",
+            "fever",
+            Value::Bool(true),
+            Valid::between(10 * D, 11 * D),
+        );
         let r = goal(db, "alert(X) :- past[0d, 3d] v:fever(X, true).", "alert(X)");
         assert_eq!(r.rows[0].valid, vec![Valid::between(10 * D, 14 * D)]);
         rows(&r)
@@ -685,8 +960,18 @@ fn fever_within_the_last_three_days() {
 #[test]
 fn always_in_the_past() {
     each(|db| {
-        assert_fact(db, "p", "employed", Value::Bool(true), Valid::between(0, 100 * D));
-        let r = goal(db, "tenured(X) :- always_past[0d, 30d] v:employed(X, true).", "tenured(X)");
+        assert_fact(
+            db,
+            "p",
+            "employed",
+            Value::Bool(true),
+            Valid::between(0, 100 * D),
+        );
+        let r = goal(
+            db,
+            "tenured(X) :- always_past[0d, 30d] v:employed(X, true).",
+            "tenured(X)",
+        );
         assert_eq!(r.rows[0].valid, vec![Valid::between(30 * D, 100 * D)]);
         rows(&r)
     });
@@ -697,7 +982,13 @@ fn always_in_the_past() {
 fn since() {
     each(|db| {
         assert_fact(db, "s1", "alarm", Value::Bool(true), Valid::between(5, 6));
-        assert_fact(db, "s1", "unacked", Value::Bool(true), Valid::between(5, 20));
+        assert_fact(
+            db,
+            "s1",
+            "unacked",
+            Value::Bool(true),
+            Valid::between(5, 20),
+        );
         let r = goal(
             db,
             "pending(S) :- v:unacked(S, true) since[0, inf] v:alarm(S, true).",
@@ -712,8 +1003,18 @@ fn since() {
 #[test]
 fn holds_for_the_next_week() {
     each(|db| {
-        assert_fact(db, "r1", "booked", Value::Bool(true), Valid::between(D, 2 * D));
-        let r = goal(db, "always_future[0d, 7d] blocked(R) :- v:booked(R, true).", "blocked(R)");
+        assert_fact(
+            db,
+            "r1",
+            "booked",
+            Value::Bool(true),
+            Valid::between(D, 2 * D),
+        );
+        let r = goal(
+            db,
+            "always_future[0d, 7d] blocked(R) :- v:booked(R, true).",
+            "blocked(R)",
+        );
         assert_eq!(r.rows[0].valid, vec![Valid::between(D, 9 * D)]);
         rows(&r)
     });
@@ -723,7 +1024,10 @@ fn holds_for_the_next_week() {
 #[test]
 fn sometime_in_a_head_is_refused() {
     each(|db| {
-        let e = db.now().program_info(&text("future[0d, 1d] p(X) :- v:a(X, X).")).unwrap_err();
+        let e = db
+            .now()
+            .program_info(&text("future[0d, 1d] p(X) :- v:a(X, X)."))
+            .unwrap_err();
         assert!(matches!(e, Error::DatalogNotHorn { .. }), "{e:?}");
     });
 }
@@ -732,13 +1036,37 @@ fn sometime_in_a_head_is_refused() {
 #[test]
 fn job_meets_the_next_job() {
     each(|db| {
-        assert_fact(db, "a", "job", v("x"), Valid::between(year(2020), year(2022)));
-        assert_fact(db, "a", "job", v("y"), Valid::between(year(2022), year(2025)));
+        assert_fact(
+            db,
+            "a",
+            "job",
+            v("x"),
+            Valid::between(year(2020), year(2022)),
+        );
+        assert_fact(
+            db,
+            "a",
+            "job",
+            v("y"),
+            Valid::between(year(2022), year(2025)),
+        );
         // the records of statements never valid together: `stmt` holds always
-        let m = goal(db, "", "stmt(E1, v:a, v:job, v:x), stmt(E2, v:a, v:job, v:y), meets(E1, E2)");
-        let o = goal(db, "", "stmt(E1, v:a, v:job, v:x), stmt(E2, v:a, v:job, v:y), overlaps(E1, E2)");
+        let m = goal(
+            db,
+            "",
+            "stmt(E1, v:a, v:job, v:x), stmt(E2, v:a, v:job, v:y), meets(E1, E2)",
+        );
+        let o = goal(
+            db,
+            "",
+            "stmt(E1, v:a, v:job, v:x), stmt(E2, v:a, v:job, v:y), overlaps(E1, E2)",
+        );
         // as facts they are never valid at one instant
-        let f = goal(db, "", "v:job(v:a, v:x) @ E1, v:job(v:a, v:y) @ E2, meets(E1, E2)");
+        let f = goal(
+            db,
+            "",
+            "v:job(v:a, v:x) @ E1, v:job(v:a, v:y) @ E2, meets(E1, E2)",
+        );
         assert!(f.rows.is_empty());
         assert_eq!(m.rows.len(), 1);
         assert!(o.rows.is_empty());
@@ -751,8 +1079,14 @@ const CONTAGION: &str = "contagious(X) :- v:sick(X, true).\ncontagious(Y) :- pas
 #[test]
 fn contagion_needs_a_window() {
     each(|db| {
-        let e = db.now().datalog(&text(CONTAGION), Some("contagious(X)"), &opts()).unwrap_err();
-        assert!(matches!(e, Error::DatalogUnboundedRecursion { .. }), "{e:?}");
+        let e = db
+            .now()
+            .datalog(&text(CONTAGION), Some("contagious(X)"), &opts())
+            .unwrap_err();
+        assert!(
+            matches!(e, Error::DatalogUnboundedRecursion { .. }),
+            "{e:?}"
+        );
     });
 }
 
@@ -765,11 +1099,17 @@ fn contagion_within_a_window() {
         assert_fact(db, "b", "contact", v("c"), Valid::between(3 * D, 4 * D));
         let mut o = opts();
         o.window = Some(Valid::between(0, 30 * D));
-        let r = db.now().datalog(&text(CONTAGION), Some("contagious(X)"), &o).unwrap();
+        let r = db
+            .now()
+            .datalog(&text(CONTAGION), Some("contagious(X)"), &o)
+            .unwrap();
         let names: Vec<_> = r.rows.iter().map(|r| r.values[0].clone()).collect();
         assert_eq!(names, vec![tv("a"), tv("b"), tv("c")]);
         for row in &r.rows {
-            assert!(row.valid.iter().all(|w| w.from.unwrap_or(-1) >= 0 && w.to.unwrap_or(i64::MAX) <= 30 * D));
+            assert!(row
+                .valid
+                .iter()
+                .all(|w| w.from.unwrap_or(-1) >= 0 && w.to.unwrap_or(i64::MAX) <= 30 * D));
         }
         rows(&r)
     });
@@ -791,23 +1131,46 @@ fn unmanaged_until_a_manager_arrives() {
 #[test]
 fn headcount_changes_with_hires() {
     each(|db| {
-        tx(db, |t| t.assert(v("acme"), Value::iri(vocab::RDF_TYPE), v("Company"), Valid::from(year(2020))));
+        tx(db, |t| {
+            t.assert(
+                v("acme"),
+                Value::iri(vocab::RDF_TYPE),
+                v("Company"),
+                Valid::from(year(2020)),
+            )
+        });
         assert_fact(db, "acme", "employs", v("a"), Valid::from(year(2020)));
-        assert_fact(db, "acme", "employs", v("b"), Valid::between(year(2022), year(2024)));
+        assert_fact(
+            db,
+            "acme",
+            "employs",
+            v("b"),
+            Valid::between(year(2022), year(2024)),
+        );
         let r = goal(
             db,
             "headcount(C, N) :- rdf:type(C, v:Company), N = count : { v:employs(C, _) }.",
             "headcount(C, N)",
         );
-        let got: Vec<(DatalogTerm, Vec<Valid>)> = r.rows.iter().map(|r| (r.values[1].clone(), r.valid.clone())).collect();
+        let got: Vec<(DatalogTerm, Vec<Valid>)> = r
+            .rows
+            .iter()
+            .map(|r| (r.values[1].clone(), r.valid.clone()))
+            .collect();
         assert_eq!(
             got,
             vec![
                 (
                     DatalogTerm::Value(Value::Int(1)),
-                    vec![Valid::between(year(2020), year(2022)), Valid::from(year(2024))]
+                    vec![
+                        Valid::between(year(2020), year(2022)),
+                        Valid::from(year(2024))
+                    ]
                 ),
-                (DatalogTerm::Value(Value::Int(2)), vec![Valid::between(year(2022), year(2024))]),
+                (
+                    DatalogTerm::Value(Value::Int(2)),
+                    vec![Valid::between(year(2022), year(2024))]
+                ),
             ]
         );
         rows(&r)
@@ -835,8 +1198,14 @@ fn reproducible_now() {
         for i in 0..3 {
             assert_fact(db, &format!("x{i}"), "y", v("z"), Valid::ALWAYS);
         }
-        let inst = db.as_of(TimeRef::Tx(3)).datalog(&text(""), Some("T = now()"), &opts()).unwrap();
-        let again = db.as_of(TimeRef::Tx(3)).datalog(&text(""), Some("T = now()"), &opts()).unwrap();
+        let inst = db
+            .as_of(TimeRef::Tx(3))
+            .datalog(&text(""), Some("T = now()"), &opts())
+            .unwrap();
+        let again = db
+            .as_of(TimeRef::Tx(3))
+            .datalog(&text(""), Some("T = now()"), &opts())
+            .unwrap();
         assert_eq!(rows(&inst), rows(&again));
         let tx3 = db.history().triples(None, None, None).unwrap()[2].t_add;
         let _ = tx3;
@@ -848,18 +1217,41 @@ fn reproducible_now() {
 #[test]
 fn atemporal_combines_disjoint_facts() {
     each(|db| {
-        assert_fact(db, "alice", "worksAt", v("acme"), Valid::between(year(2020), year(2022)));
-        assert_fact(db, "acme", "locatedIn", v("berlin"), Valid::from(year(2024)));
+        assert_fact(
+            db,
+            "alice",
+            "worksAt",
+            v("acme"),
+            Valid::between(year(2020), year(2022)),
+        );
+        assert_fact(
+            db,
+            "acme",
+            "locatedIn",
+            v("berlin"),
+            Valid::from(year(2024)),
+        );
         let mut o = opts();
         o.time = DatalogTime::Atemporal;
-        let c = db.now().datalog_reason(&text(WORKS_IN), &o).unwrap().conclusions;
+        let c = db
+            .now()
+            .datalog_reason(&text(WORKS_IN), &o)
+            .unwrap()
+            .conclusions;
         assert_eq!(c.len(), 1);
         assert_eq!(c[0].valid, Valid::ALWAYS);
         let e = db
             .now()
-            .datalog(&text("a(X) :- past[0d, 1d] v:fever(X, true)."), Some("a(X)"), &o)
+            .datalog(
+                &text("a(X) :- past[0d, 1d] v:fever(X, true)."),
+                Some("a(X)"),
+                &o,
+            )
             .unwrap_err();
-        assert!(matches!(e, Error::DatalogTemporalOperatorInAtemporal { .. }), "{e:?}");
+        assert!(
+            matches!(e, Error::DatalogTemporalOperatorInAtemporal { .. }),
+            "{e:?}"
+        );
     });
 }
 
@@ -873,9 +1265,16 @@ fn store_and_run() {
         tx(db, |t| t.store_program(v("reporting"), REPORTS));
         let stored = db
             .now()
-            .datalog(&DatalogProgram::Stored(v("reporting")), Some("reports(v:alice, X)"), &opts())
+            .datalog(
+                &DatalogProgram::Stored(v("reporting")),
+                Some("reports(v:alice, X)"),
+                &opts(),
+            )
             .unwrap();
-        assert_eq!(rows(&stored), rows(&goal(db, REPORTS, "reports(v:alice, X)")));
+        assert_eq!(
+            rows(&stored),
+            rows(&goal(db, REPORTS, "reports(v:alice, X)"))
+        );
         assert!(stored.program_statement.is_some());
         rows(&stored)
     });
@@ -898,10 +1297,16 @@ fn same_text_is_idempotent() {
 fn invalid_text_is_refused() {
     each(|db| {
         let r = db.transact(TxOptions::default(), |t| {
-            t.store_program(v("bad"), "q(X) :- v:a(X, X).\np(X) :- q(X), not r(X).\nr(X) :- q(X), not p(X).")?;
+            t.store_program(
+                v("bad"),
+                "q(X) :- v:a(X, X).\np(X) :- q(X), not r(X).\nr(X) :- q(X), not p(X).",
+            )?;
             Ok(())
         });
-        assert!(matches!(r, Err(Error::DatalogUnstratifiable { .. })), "{r:?}");
+        assert!(
+            matches!(r, Err(Error::DatalogUnstratifiable { .. })),
+            "{r:?}"
+        );
         assert!(db.history().triples(None, None, None).unwrap().is_empty());
     });
 }
@@ -911,17 +1316,33 @@ fn invalid_text_is_refused() {
 fn as_of_uses_the_old_program() {
     each(|db| {
         chain(db); // transactions 1 and 2
-        tx(db, |t| t.store_program(v("reporting"), "reports(X, Y) :- v:manager(X, Y).")); // 3
+        tx(db, |t| {
+            t.store_program(v("reporting"), "reports(X, Y) :- v:manager(X, Y).")
+        }); // 3
         assert_fact(db, "x", "y", v("z"), Valid::ALWAYS); // 4
         tx(db, |t| t.store_program(v("reporting"), REPORTS)); // 5
         let old = db
             .as_of(TimeRef::Tx(4))
-            .datalog(&DatalogProgram::Stored(v("reporting")), Some("reports(v:alice, X)"), &opts())
+            .datalog(
+                &DatalogProgram::Stored(v("reporting")),
+                Some("reports(v:alice, X)"),
+                &opts(),
+            )
             .unwrap();
-        assert_eq!(old.rows.iter().map(|r| r.values.clone()).collect::<Vec<_>>(), vec![vec![tv("bob")]]);
+        assert_eq!(
+            old.rows
+                .iter()
+                .map(|r| r.values.clone())
+                .collect::<Vec<_>>(),
+            vec![vec![tv("bob")]]
+        );
         let now = db
             .now()
-            .datalog(&DatalogProgram::Stored(v("reporting")), Some("reports(v:alice, X)"), &opts())
+            .datalog(
+                &DatalogProgram::Stored(v("reporting")),
+                Some("reports(v:alice, X)"),
+                &opts(),
+            )
             .unwrap();
         assert_eq!(now.rows.len(), 2);
     });
@@ -932,13 +1353,27 @@ fn as_of_uses_the_old_program() {
 fn info_of_a_stored_program() {
     each(|db| {
         tx(db, |t| t.store_program(v("reporting"), REPORTS));
-        let info = db.now().program_info(&DatalogProgram::Stored(v("reporting"))).unwrap();
+        let info = db
+            .now()
+            .program_info(&DatalogProgram::Stored(v("reporting")))
+            .unwrap();
         assert_eq!(info.analysis.rules, 2);
-        let user: Vec<_> = info.analysis.strata.iter().filter(|s| s.relations == ["reports"]).collect();
+        let user: Vec<_> = info
+            .analysis
+            .strata
+            .iter()
+            .filter(|s| s.relations == ["reports"])
+            .collect();
         assert_eq!(user.len(), 1);
         assert!(user[0].recursive && user[0].monotonic);
-        assert_eq!(info.analysis.predicates, vec!["urn:tiramemsu:v:manager".to_string()]);
-        let e = db.now().program_info(&DatalogProgram::Stored(v("nothing"))).unwrap_err();
+        assert_eq!(
+            info.analysis.predicates,
+            vec!["urn:tiramemsu:v:manager".to_string()]
+        );
+        let e = db
+            .now()
+            .program_info(&DatalogProgram::Stored(v("nothing")))
+            .unwrap_err();
         assert!(matches!(e, Error::UnknownProgram { .. }), "{e:?}");
     });
 }
@@ -947,12 +1382,22 @@ fn info_of_a_stored_program() {
 #[test]
 fn n3_node_refused() {
     each(|db| {
-        tx(db, |t| t.assert(v("r"), Value::iri(vocab::N3_SOURCE), Value::str("{ ?x a v:A } => { ?x a v:B } ."), Valid::ALWAYS));
+        tx(db, |t| {
+            t.assert(
+                v("r"),
+                Value::iri(vocab::N3_SOURCE),
+                Value::str("{ ?x a v:A } => { ?x a v:B } ."),
+                Valid::ALWAYS,
+            )
+        });
         let r = db.transact(TxOptions::default(), |t| {
             t.store_program(v("r"), REPORTS)?;
             Ok(())
         });
-        assert!(matches!(r, Err(Error::RuleLanguageConflict { .. })), "{r:?}");
+        assert!(
+            matches!(r, Err(Error::RuleLanguageConflict { .. })),
+            "{r:?}"
+        );
     });
 }
 
@@ -965,7 +1410,10 @@ fn datalog_node_refuses_n3() {
             t.store_rules(v("r"), "{ ?x a v:A } => { ?x a v:B } .")?;
             Ok(())
         });
-        assert!(matches!(r, Err(Error::RuleLanguageConflict { .. })), "{r:?}");
+        assert!(
+            matches!(r, Err(Error::RuleLanguageConflict { .. })),
+            "{r:?}"
+        );
     });
 }
 
@@ -981,7 +1429,10 @@ fn two_constraints() {
         let info = db.now().program_info(&text(POLICIES)).unwrap();
         assert_eq!(
             info.analysis.constraints,
-            vec![("one_ceo".to_string(), Severity::Error), ("owned".to_string(), Severity::Warn)]
+            vec![
+                ("one_ceo".to_string(), Severity::Error),
+                ("owned".to_string(), Severity::Warn)
+            ]
         );
     });
 }
@@ -992,9 +1443,14 @@ fn duplicate_name() {
     each(|db| {
         let e = db
             .now()
-            .program_info(&text("constraint one_ceo warn :- v:a(X, X).\nconstraint one_ceo error :- v:a(X, X)."))
+            .program_info(&text(
+                "constraint one_ceo warn :- v:a(X, X).\nconstraint one_ceo error :- v:a(X, X).",
+            ))
             .unwrap_err();
-        assert!(matches!(e, Error::DatalogDuplicateConstraint { .. }), "{e:?}");
+        assert!(
+            matches!(e, Error::DatalogDuplicateConstraint { .. }),
+            "{e:?}"
+        );
     });
 }
 
@@ -1002,9 +1458,18 @@ fn duplicate_name() {
 #[test]
 fn two_ceos_at_once() {
     each(|db| {
-        let a = assert_fact(db, "a", "role", v("CEO"), Valid::between(year(2020), year(2024)));
+        let a = assert_fact(
+            db,
+            "a",
+            "role",
+            v("CEO"),
+            Valid::between(year(2020), year(2024)),
+        );
         let b = assert_fact(db, "b", "role", v("CEO"), Valid::from(year(2023)));
-        let r = db.now().check(&text(POLICIES), &["one_ceo".into()], &opts()).unwrap();
+        let r = db
+            .now()
+            .check(&text(POLICIES), &["one_ceo".into()], &opts())
+            .unwrap();
         assert_eq!(r.violated.len(), 1);
         let vs = &r.violated[0].violations;
         assert_eq!(vs.len(), 2);
@@ -1012,8 +1477,14 @@ fn two_ceos_at_once() {
             assert_eq!(viol.valid, vec![Valid::between(year(2023), year(2024))]);
             assert_eq!(viol.eids, vec![a, b]);
         }
-        assert_eq!(vs[0].bindings, vec![("X".into(), tv("a")), ("Y".into(), tv("b"))]);
-        assert_eq!(vs[1].bindings, vec![("X".into(), tv("b")), ("Y".into(), tv("a"))]);
+        assert_eq!(
+            vs[0].bindings,
+            vec![("X".into(), tv("a")), ("Y".into(), tv("b"))]
+        );
+        assert_eq!(
+            vs[1].bindings,
+            vec![("X".into(), tv("b")), ("Y".into(), tv("a"))]
+        );
         vs.len()
     });
 }
@@ -1022,9 +1493,18 @@ fn two_ceos_at_once() {
 #[test]
 fn successive_ceos_are_fine() {
     each(|db| {
-        assert_fact(db, "a", "role", v("CEO"), Valid::between(year(2020), year(2024)));
+        assert_fact(
+            db,
+            "a",
+            "role",
+            v("CEO"),
+            Valid::between(year(2020), year(2024)),
+        );
         assert_fact(db, "b", "role", v("CEO"), Valid::from(year(2024)));
-        let r = db.now().check(&text(POLICIES), &["one_ceo".into()], &opts()).unwrap();
+        let r = db
+            .now()
+            .check(&text(POLICIES), &["one_ceo".into()], &opts())
+            .unwrap();
         assert!(r.violated.is_empty());
     });
 }
@@ -1038,8 +1518,18 @@ fn check_as_of_the_past() {
         }
         assert_fact(db, "a", "role", v("CEO"), Valid::ALWAYS); // 6
         assert_fact(db, "b", "role", v("CEO"), Valid::ALWAYS); // 7
-        assert_eq!(db.now().check(&text(POLICIES), &[], &opts()).unwrap().violated.len(), 1);
-        let past = db.as_of(TimeRef::Tx(6)).check(&text(POLICIES), &[], &opts()).unwrap();
+        assert_eq!(
+            db.now()
+                .check(&text(POLICIES), &[], &opts())
+                .unwrap()
+                .violated
+                .len(),
+            1
+        );
+        let past = db
+            .as_of(TimeRef::Tx(6))
+            .check(&text(POLICIES), &[], &opts())
+            .unwrap();
         assert!(past.violated.iter().all(|c| c.name != "one_ceo"));
     });
 }

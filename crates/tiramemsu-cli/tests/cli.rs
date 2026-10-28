@@ -321,3 +321,178 @@ fn cli_dry_run() {
         assert!(again.contains("derived 0, existing 1"), "{again}");
     }
 }
+
+#[cfg(feature = "datalog")]
+const CHAIN_NT: &str =
+    "<urn:tiramemsu:v:alice> <urn:tiramemsu:v:manager> <urn:tiramemsu:v:bob> .\n\
+<urn:tiramemsu:v:bob> <urn:tiramemsu:v:manager> <urn:tiramemsu:v:carol> .\n";
+
+#[cfg(feature = "datalog")]
+const REPORTING_DL: &str =
+    "reports(X, Y) :- v:manager(X, Y).\nreports(X, Z) :- reports(X, Y), v:manager(Y, Z).\n";
+
+#[cfg(feature = "datalog")]
+const POLICIES_DL: &str = "constraint no_self error :- reports(X, X).\n\
+constraint flat warn :- reports(X, Y), reports(Y, Z).\n";
+
+/// A file holding `alice -manager-> bob -manager-> carol` on `backend`, and
+/// `reporting.dl`.
+#[cfg(feature = "datalog")]
+fn reporting(dir: &Path, backend: &str) -> (String, String) {
+    let nt = p(dir, "chain.nt");
+    std::fs::write(&nt, CHAIN_NT).unwrap();
+    let f = p(dir, &format!("{backend}.db"));
+    ok(&["create", &f, "--backend", backend]);
+    ok(&["import", &f, &nt]);
+    let program = p(dir, "reporting.dl");
+    std::fs::write(&program, REPORTING_DL).unwrap();
+    (f, program)
+}
+
+// datalog-programs "CLI goal query", on both backends.
+// @tg: verifies:: [[openspec:datalog-programs#Datalog read surfaces#CLI goal query]] {level: integration}
+#[cfg(feature = "datalog")]
+#[test]
+fn cli_goal_query() {
+    let d = tempfile::tempdir().unwrap();
+    for backend in ["sqlite", "redb"] {
+        let dir = d.path().join(backend);
+        std::fs::create_dir(&dir).unwrap();
+        let (f, program) = reporting(&dir, backend);
+        let before = info(Path::new(&f));
+        let o = tm(&["datalog", &f, &program, "reports(v:alice, X)"]);
+        assert_eq!(
+            o.status.code(),
+            Some(0),
+            "{}",
+            String::from_utf8_lossy(&o.stderr)
+        );
+        let out = String::from_utf8(o.stdout).unwrap();
+        assert_eq!(
+            out.lines().collect::<Vec<_>>(),
+            ["X=v:bob  always", "X=v:carol  always"],
+            "{backend}"
+        );
+        // writes nothing
+        assert_eq!(info(Path::new(&f)), before);
+        let proof = ok(&["datalog", &f, &program, "reports(v:alice, X)", "--proof"]);
+        assert!(proof.contains("by rule 0 from stmt 1"), "{proof}");
+        let j: serde_json::Value = serde_json::from_str(&ok(&[
+            "datalog",
+            &f,
+            &program,
+            "reports(v:alice, X)",
+            "--json",
+        ]))
+        .unwrap();
+        assert_eq!(j["status"], "complete");
+        assert_eq!(
+            j["rows"][1]["values"],
+            serde_json::json!([{ "iri": "urn:tiramemsu:v:carol" }])
+        );
+        // as of before the import there is nothing to report
+        let empty = ok(&[
+            "datalog",
+            &f,
+            &program,
+            "reports(v:alice, X)",
+            "--as-of",
+            "0",
+        ]);
+        assert_eq!(empty, "", "{backend}");
+        let snap = ok(&[
+            "datalog",
+            &f,
+            &program,
+            "reports(v:alice, X)",
+            "--valid-at",
+            "2024-06-01",
+        ]);
+        assert!(
+            snap.contains("X=v:bob  [2024-06-01T00:00:00Z, 2024-06-01T00:00:00.001Z)"),
+            "{snap}"
+        );
+        let plan = ok(&["datalog", &f, &program, "reports(v:alice, X)", "--explain"]);
+        assert!(plan.lines().any(|l| l.starts_with("access")), "{plan}");
+    }
+}
+
+// `tm program put` stores (and re-storing changes nothing), `tm program show`
+// prints it, `tm datalog` runs it by IRI, and `tm check` prints violations.
+// @tg: verifies:: [[openspec:datalog-programs#Datalog read surfaces]] {level: integration}
+#[cfg(feature = "datalog")]
+#[test]
+fn cli_program_put_show_check() {
+    let d = tempfile::tempdir().unwrap();
+    let (f, program) = reporting(d.path(), "sqlite");
+    let policies = p(d.path(), "policies.dl");
+    std::fs::write(&policies, format!("{REPORTING_DL}{POLICIES_DL}")).unwrap();
+    let iri = "urn:tiramemsu:v:reporting";
+    let put = ok(&["program", "put", &f, iri, &policies]);
+    assert!(put.contains("stored as statement"), "{put}");
+    assert!(put.contains("2 rules, 0 goals, 2 constraints"), "{put}");
+    let again = ok(&["program", "put", &f, iri, &policies]);
+    assert!(again.contains("unchanged"), "{again}");
+    let show = ok(&["program", "show", &f, iri]);
+    assert!(
+        show.ends_with(&format!("{REPORTING_DL}{POLICIES_DL}\n")),
+        "{show}"
+    );
+    let j: serde_json::Value =
+        serde_json::from_str(&ok(&["program", "show", &f, iri, "--json"])).unwrap();
+    assert_eq!(j["rules"], 2);
+    assert_eq!(j["constraints"][0]["name"], "no_self");
+    let out = ok(&["datalog", &f, iri, "reports(X, v:carol)"]);
+    assert_eq!(
+        out.lines().collect::<Vec<_>>(),
+        ["X=v:alice  always", "X=v:bob  always"]
+    );
+    // a violation is a result: printed, exit status 0
+    let check = ok(&["check", &f, iri]);
+    assert_eq!(
+        check.lines().collect::<Vec<_>>(),
+        [
+            "flat (warn): 1 violations",
+            "    X=v:alice Y=v:bob Z=v:carol  always  stmts 1, 2",
+        ]
+    );
+    assert_eq!(ok(&["check", &f, &policies, "--only", "no_self"]), "");
+    let cj: serde_json::Value = serde_json::from_str(&ok(&["check", &f, iri, "--json"])).unwrap();
+    assert_eq!(cj["checked"], serde_json::json!(["no_self", "flat"]));
+    // a new version supersedes the old one
+    let new = ok(&["program", "put", &f, iri, &program]);
+    assert!(new.contains("new version"), "{new}");
+    assert_eq!(ok(&["check", &f, iri]), "");
+    let err = |args: &[&str], code: &str| {
+        let o = tm(args);
+        assert_eq!(o.status.code(), Some(1), "{args:?}");
+        let e = String::from_utf8_lossy(&o.stderr).to_string();
+        assert!(e.starts_with(&format!("{code}:")), "{e}");
+    };
+    err(
+        &["datalog", &f, "urn:tiramemsu:v:none", "p(X)"],
+        "UnknownProgram",
+    );
+    err(
+        &["program", "show", &f, "urn:tiramemsu:v:none"],
+        "UnknownProgram",
+    );
+    let bad = p(d.path(), "bad.dl");
+    std::fs::write(&bad, "p(X) :- v:q(X, Y").unwrap();
+    err(&["program", "put", &f, iri, &bad], "DatalogParse");
+    err(&["datalog", &f, &bad], "DatalogParse");
+    err(&["datalog", &f, "missing.dl", "p(X)"], "InvalidQuery");
+    // the program is required
+    assert_eq!(tm(&["datalog", &f]).status.code(), Some(2));
+    let window = ok(&[
+        "datalog",
+        &f,
+        &program,
+        "reports(v:alice, X)",
+        "--valid-during",
+        "2020-01-01..",
+        "--graph",
+        "urn:tiramemsu:v:none",
+    ]);
+    assert_eq!(window, "");
+}

@@ -8,7 +8,8 @@
            The cargo features of this crate are `exec` (the shared query engine: IR, \
            planner, paths, LFTJ), `sparql` and `cypher` (the query front ends, each \
            implying `exec`); the default enables both front ends; `n3` adds N3 \
-           reasoning (`View::reason`) and `redb` the redb backend. Without them the \
+           reasoning (`View::reason`), `datalog` adds Datalog (`View::datalog`) and \
+           `redb` the redb backend. Without them the \
            core tier remains: [`Db`], [`View`] reads, transactions, fact bundles with \
            [`BundleFormat`], text recall, conflict review, bulk import and budgets. \
            See the README's *Cargo features* section for the full table."
@@ -92,6 +93,18 @@ pub use tm_rusqlite::RusqliteHost;
 pub use tm_cypher as cypher_frontend;
 #[cfg(feature = "cypher")]
 pub use tm_cypher::{CypherParams, CypherResult, CypherValue};
+/// The Datalog crate (`tm-datalog`).
+#[cfg(feature = "datalog")]
+pub use tm_datalog as datalog_engine;
+#[cfg(feature = "datalog")]
+pub use tm_datalog::{
+    AccessMode as DatalogAccess, CheckResult, Conclusion as DatalogConclusion, ConstraintReport,
+    DatalogOptions, DatalogResult, Explain as DatalogExplain, Fact as DatalogFact, FragmentProof,
+    Limit as DatalogLimit, Limits as DatalogLimits, Premise as DatalogPremise,
+    Program as DatalogProgram, ProgramInfo, Proof as DatalogProof,
+    ReasonResult as DatalogReasonResult, Row as DatalogRow, Scope as DatalogScope, Severity,
+    Status as DatalogStatus, Term as DatalogTerm, TimeMode as DatalogTime, Violation,
+};
 #[cfg(feature = "exec")]
 pub use tm_exec::path::row::{Dir as PathDir, HopKind};
 #[cfg(feature = "exec")]
@@ -103,18 +116,6 @@ pub use tm_exec::{
 pub use tm_ir as ir;
 #[cfg(feature = "exec")]
 pub use tm_ir::{IrQuery, Params, PathCompleteness, PathMode};
-/// The Datalog crate (`tm-datalog`).
-#[cfg(feature = "datalog")]
-pub use tm_datalog as datalog_engine;
-#[cfg(feature = "datalog")]
-pub use tm_datalog::{
-    AccessMode as DatalogAccess, CheckResult, Conclusion as DatalogConclusion, ConstraintReport,
-    DatalogOptions, DatalogResult, Explain as DatalogExplain, Fact as DatalogFact,
-    FragmentProof, Limit as DatalogLimit, Limits as DatalogLimits, Premise as DatalogPremise,
-    Program as DatalogProgram, ProgramInfo, Proof as DatalogProof,
-    ReasonResult as DatalogReasonResult, Row as DatalogRow, Scope as DatalogScope, Severity,
-    Status as DatalogStatus, Term as DatalogTerm, TimeMode as DatalogTime, Violation,
-};
 /// The N3 reasoning crate (`tm-n3`) and its reasoner (`n3_engine::eyeron`).
 #[cfg(feature = "n3")]
 pub use tm_n3 as n3_engine;

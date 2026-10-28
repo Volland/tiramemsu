@@ -879,3 +879,87 @@ describe("N3 reasoning", () => {
     } finally { cleanup(dir); }
   });
 });
+
+// ---- Datalog -----------------------------------------------------------------
+
+describe("Datalog", () => {
+  const manager = v("manager");
+  const reports = "reports(X, Y) :- v:manager(X, Y).\nreports(X, Z) :- reports(X, Y), v:manager(Y, Z).\n";
+
+  // @tg: verifies:: [[openspec:datalog-programs#Datalog read surfaces#Bridge goal query]] {since: "2026-10-28", level: integration}
+  it("answers a goal over program text and a stored program", () => {
+    const { db, dir } = tempDb();
+    try {
+      db.transact((tx) => {
+        tx.assert(alice, manager, v("bob"));
+        tx.assert(v("bob"), manager, v("carol"));
+      });
+      const r = db.datalog({ program: reports, goal: "reports(v:alice, X)" });
+      expect(r.status).toBe("complete");
+      expect(r.columns).toEqual(["X"]);
+      expect(r.rows.map((row) => row.values)).toEqual([[v("bob")], [v("carol")]]);
+      expect(r.rows[0].valid).toEqual([{ from: null, to: null }]);
+      expect(r.program).toBeNull();
+      // a Datalog run writes nothing
+      expect(db.now().triples()).toHaveLength(2);
+
+      const stored = db.transact((tx) => { tx.storeProgram("urn:tiramemsu:v:reporting", reports); });
+      const ps = (stored.results[0] as { eid: number }).eid;
+      const again = db.now().datalog({ stored: v("reporting"), goal: "reports(v:alice, X)", proof: true });
+      expect(again.programStatement).toBe(ps);
+      expect(again.program).toEqual(v("reporting"));
+      expect(again.rows).toHaveLength(2);
+      expect(again.rows[0].proof).toHaveLength(1);
+      const info = db.programInfo({ stored: "urn:tiramemsu:v:reporting" });
+      expect(info.text).toBe(reports);
+      expect(info.rules).toBe(2);
+      expect(info.strata).toEqual([{ relations: ["reports"], recursive: true, monotonic: true }]);
+
+      const above = db.datalogReason({ program: `${reports}v:above(X, Y) :- reports(Y, X).\n` });
+      expect(above.conclusions.map((c) => [c.s, c.o])).toContainEqual([v("carol"), alice]);
+      expect(above.conclusions.every((c) => (c.p as { iri: string }).iri === "urn:tiramemsu:v:above")).toBe(true);
+      const e = db.explainDatalog({ program: reports, goal: "reports(v:alice, X)" });
+      expect(e.plan.some((l) => l.startsWith("access"))).toBe(true);
+      expect(e.result.rows).toHaveLength(2);
+
+      try {
+        db.datalog({ program: "p(X) :- v:q(X, Y" });
+        throw new Error("expected DatalogParse");
+      } catch (err) {
+        expect((err as TiramemsuError).code).toBe("DatalogParse");
+      }
+      try {
+        db.datalog({ stored: "urn:tiramemsu:v:none", goal: "reports(v:alice, X)" });
+        throw new Error("expected UnknownProgram");
+      } catch (err) {
+        expect((err as TiramemsuError).code).toBe("UnknownProgram");
+      }
+      const none = db.now().datalog({ program: reports, goal: "reports(v:alice, X)", scope: { graphs: [v("g")] } });
+      expect(none.rows).toHaveLength(0);
+    } finally { cleanup(dir); }
+  });
+
+  it("checks constraints and reports violations", () => {
+    const { db, dir } = tempDb();
+    try {
+      const role = v("role");
+      const ceo = v("CEO");
+      db.transact((tx) => { tx.assert(v("a"), role, ceo, { validFrom: "2020-01-01" }); });
+      db.transact((tx) => { tx.assert(v("b"), role, ceo, { validFrom: "2023-01-01" }); });
+      const policies = "constraint one_ceo error :- v:role(X, v:CEO), v:role(Y, v:CEO), X != Y.\n";
+      db.transact((tx) => { tx.storeProgram("urn:tiramemsu:v:policies", policies); });
+      const c = db.check({ stored: "urn:tiramemsu:v:policies" });
+      expect(c.checked).toEqual(["one_ceo"]);
+      expect(c.violated).toHaveLength(1);
+      expect(c.violated[0].name).toBe("one_ceo");
+      expect(c.violated[0].severity).toBe("error");
+      const pairs = c.violated[0].violations.map((x) => [x.bindings.X, x.bindings.Y]);
+      expect(pairs).toContainEqual([v("a"), v("b")]);
+      expect(c.violated[0].violations[0].eids).toHaveLength(2);
+      expect(c.violated[0].violations[0].valid).toEqual([{ from: Date.parse("2023-01-01"), to: null }]);
+      // as of before the second CEO, nothing is violated
+      expect(db.asOf({ tx: 1 }).check({ program: policies }).violated).toHaveLength(0);
+      expect(db.check({ stored: "urn:tiramemsu:v:policies", only: ["one_ceo"] }).checked).toEqual(["one_ceo"]);
+    } finally { cleanup(dir); }
+  });
+});

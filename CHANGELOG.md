@@ -9,6 +9,17 @@ OpenSpec changes in `openspec/changes/archive/`.
 
 ## [Unreleased]
 
+Datalog (`openspec/changes/add-datalog-engine/`, decisions DL1–DL26 in `lat.md/datalog.md`). No file format change: programs are ordinary statements.
+
+### Added
+
+- **`tm-datalog`:** a semi-naive Datalog engine over the storage traits, publishable (no git dependency), behind the facade feature `datalog` (off by default, independent of `exec`). Soufflé-style text with stored atoms, statement records (`stmt`, `valid`, `added`, `tx_instant`), `in_graph`, stratified negation, aggregates, builtins and `exists` heads.
+- **Valid time without segment sweeps:** tuples carry interval sets; the DatalogMTL operators `past`, `always_past`, `future`, `always_future`, `since`, `until` and head `always_*`; the 13 Allen relations; windows for recursion through operators.
+- **`View::datalog`** (goal rows with intervals and optional proofs, magic-set rewriting for goals with constants), **`View::datalog_reason`** (conclusions in N3's shape), **`View::check`** (constraint violations with bindings, eids and intervals), **`View::program_info`**, **`View::explain_datalog`** and **`TxDatalog::store_program`** (programs as `dl:source` statements, versioned by supersede; `RuleLanguageConflict` keeps N3 and Datalog on separate nodes).
+- **Every surface:** bridge ops `datalog`, `datalogReason`, `programInfo`, `explainDatalog`, `check`, `storeProgram`; Node, Python and wasm; MCP tools `datalog_query`, `check_constraints`, `store_program`; CLI `tm datalog`, `tm check`, `tm program put|show`.
+- **`Allen`, `Valid::relate`, `Valid::intersects`** in `tm-core` (tasks 1.1–1.2 of `add-interval-algebra`); `Valid::overlaps` now delegates to `intersects`.
+- **Datalog benchmark** (`cargo run --release -p tm-bench --features datalog,n3 --example datalog`), checked against N3 and Soufflé.
+
 ## [0.9.0] - 2026-10-28
 
 Derived beliefs with support (`openspec/changes/archive/2026-10-28-add-derived-beliefs/`). No file format change: support links are ordinary statements. N3 reasoning (`openspec/changes/archive/2026-10-28-add-n3-reasoning/`) builds on it.

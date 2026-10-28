@@ -872,6 +872,234 @@ function decodeConclusion(c: Record<string, unknown>): Conclusion {
   };
 }
 
+// ---- Datalog ---------------------------------------------------------------
+
+/** A program node: an IRI as a plain string, or a term. */
+export type ProgramInput = string | TermInput;
+
+/** Names a program: exactly one of `program` (Datalog text) and `stored` (a program node). */
+export interface DatalogProgramOptions {
+  program?: string;
+  /** A program stored with `Tx.storeProgram`. */
+  stored?: ProgramInput;
+}
+
+/** The engine's limits for each run. */
+export interface DatalogLimits {
+  maxIterations?: number;
+  maxFacts?: number;
+  maxFragments?: number;
+  maxNewValues?: number;
+}
+
+/** Options shared by every Datalog read. */
+export interface DatalogRunOptions extends DatalogProgramOptions {
+  /** The statements loaded (default: the whole view). */
+  scope?: ReasonScope;
+  /** The valid-time window results are reported in (default: unbounded). */
+  window?: { from?: Date | number | string; to?: Date | number | string };
+  /** `pointwise` (default) respects valid time; `atemporal` ignores it. */
+  time?: "pointwise" | "atemporal";
+  limits?: DatalogLimits;
+  /** Rewrite for the goal's bound arguments (default true). */
+  demand?: boolean;
+  /** Add a derivation to every row, conclusion and fact. */
+  proof?: boolean;
+  /** How stored atoms are read: `auto` (default), `probe` or `load`. */
+  access?: "auto" | "probe" | "load";
+  /** The relation size from which a rule's matches run in parallel. */
+  parallelThreshold?: number;
+  /** Fail with `DatalogIncomplete` instead of returning a partial result. */
+  requireComplete?: boolean;
+}
+
+/** Options for `View.datalog` and `View.explainDatalog`. */
+export interface DatalogOptions extends DatalogRunOptions {
+  /** A goal body, e.g. `reports(v:alice, X)` (default: the program's `?-` goal). */
+  goal?: string;
+}
+
+/** Options for `View.datalogReason`. */
+export interface DatalogReasonOptions extends DatalogRunOptions {
+  /** Also return the facts of plain-named relations. */
+  includeRelations?: boolean;
+}
+
+/** Options for `View.check`. */
+export interface CheckOptions extends DatalogRunOptions {
+  /** Check only the constraints with these names (default: all). */
+  only?: string[];
+}
+
+/** A result term: a stored term, or a node a rule invented. */
+export type DatalogTerm = Term | { invented: number };
+
+/** A valid interval (epoch ms; `null` is unbounded). */
+export interface DatalogInterval {
+  from: number | null;
+  to: number | null;
+}
+
+/** A premise of a derivation: a loaded statement or a derived fact (by index into `facts`). */
+export type DatalogPremise = { eid: number } | { fact: number };
+
+/** A derivation: the rule (by index) and its premises. */
+export interface DatalogProof {
+  rule: number;
+  premises: DatalogPremise[];
+}
+
+/** A derived fact with the valid time it holds over. */
+export interface DatalogFact {
+  relation: string;
+  args: DatalogTerm[];
+  valid: DatalogInterval[];
+  proof: DatalogProof | null;
+}
+
+/** One answer of a goal: the column values and when they hold. */
+export interface DatalogRow {
+  values: DatalogTerm[];
+  valid: DatalogInterval[];
+  /** With `proof`: one derivation per interval. */
+  proof?: Array<{ valid: DatalogInterval; proof: DatalogProof }>;
+}
+
+/** The result of `View.datalog`. */
+export interface DatalogResult {
+  /** The goal's named variables. */
+  columns: string[];
+  rows: DatalogRow[];
+  /** Derived facts the proofs reference. */
+  facts: DatalogFact[];
+  /** The view's transaction number. */
+  t: number;
+  /** The pinned clock (epoch ms). */
+  now: number;
+  strata: number;
+  derived: number;
+  /** The stored predicates read. */
+  predicates: string[];
+  pruned: boolean;
+  /** Whether demand rewriting applied (`null` when it did not), and why parts ran in full. */
+  demand: string[] | null;
+  status: "complete" | "incomplete";
+  /** The limits reached when incomplete. */
+  limits: string[];
+  program: Term | null;
+  programStatement: number | null;
+}
+
+/** One conclusion of `View.datalogReason`: a triple with one maximal interval. */
+export interface DatalogConclusion {
+  s: DatalogTerm;
+  p: Term;
+  o: DatalogTerm;
+  validFrom: number | null;
+  validTo: number | null;
+  proof: DatalogProof | null;
+}
+
+/** The result of `View.datalogReason`. */
+export interface DatalogReasonResult {
+  /** The conclusions not among the stored statements. */
+  conclusions: DatalogConclusion[];
+  /** With `includeRelations`: the facts of plain-named relations. */
+  relations: DatalogFact[];
+  facts: DatalogFact[];
+  t: number;
+  now: number;
+  predicates: string[];
+  status: "complete" | "incomplete";
+  limits: string[];
+  program: Term | null;
+  programStatement: number | null;
+}
+
+/** What a program is (`View.programInfo`). */
+export interface ProgramInfo {
+  program: Term | null;
+  statement: number | null;
+  text: string;
+  rules: number;
+  goals: number;
+  constraints: Array<{ name: string; severity: "warn" | "error" }>;
+  strata: Array<{ relations: string[]; recursive: boolean; monotonic: boolean }>;
+  predicates: string[];
+  variablePredicate: boolean;
+  metricRecursion: boolean;
+  inventionRecursion: boolean;
+}
+
+/** A run's plan and result (`View.explainDatalog`). */
+export interface DatalogExplain {
+  /** The plan, per stratum and rule, with access choices. */
+  plan: string[];
+  result: DatalogResult;
+}
+
+/** One violation of a constraint: the body's bindings, the statements used and when it holds. */
+export interface Violation {
+  bindings: Record<string, DatalogTerm>;
+  eids: number[];
+  valid: DatalogInterval[];
+}
+
+/** The result of `View.check`. */
+export interface CheckResult {
+  /** The violated constraints, in program order. */
+  violated: Array<{ name: string; severity: "warn" | "error"; violations: Violation[] }>;
+  /** The constraints evaluated. */
+  checked: string[];
+  t: number;
+  now: number;
+  status: "complete" | "incomplete";
+  limits: string[];
+}
+
+function programJson(p: ProgramInput): unknown {
+  return typeof p === "string" ? p : toJson(p);
+}
+
+function programArgs(args: Record<string, unknown>, opts: DatalogProgramOptions): Record<string, unknown> {
+  if (opts.program !== undefined) args.program = opts.program;
+  if (opts.stored !== undefined) args.stored = programJson(opts.stored);
+  return args;
+}
+
+function datalogArgs(args: Record<string, unknown>, opts: DatalogRunOptions): Record<string, unknown> {
+  programArgs(scopeArgs(args, { scope: opts.scope, window: opts.window }), opts);
+  if (opts.time !== undefined) args.time = opts.time;
+  if (opts.limits) args.limits = opts.limits;
+  if (opts.demand !== undefined) args.demand = opts.demand;
+  if (opts.proof) args.proof = true;
+  if (opts.access !== undefined) args.access = opts.access;
+  if (opts.parallelThreshold !== undefined) args.parallelThreshold = opts.parallelThreshold;
+  if (opts.requireComplete) args.requireComplete = true;
+  return args;
+}
+
+function datalogTerm(j: unknown): DatalogTerm {
+  if (j !== null && typeof j === "object" && "invented" in j) return j as { invented: number };
+  return fromJson(j);
+}
+
+function decodeFact(f: Record<string, unknown>): DatalogFact {
+  return { ...(f as unknown as DatalogFact), args: (f.args as unknown[]).map(datalogTerm) };
+}
+
+function decodeDatalogResult(r: Record<string, unknown>): DatalogResult {
+  return {
+    ...(r as unknown as DatalogResult),
+    rows: (r.rows as Array<Record<string, unknown>>).map((row) => ({
+      ...(row as unknown as DatalogRow),
+      values: (row.values as unknown[]).map(datalogTerm),
+    })),
+    facts: (r.facts as Array<Record<string, unknown>>).map(decodeFact),
+    program: r.program === null ? null : fromJson(r.program),
+  };
+}
+
 /**
  * An immutable view of the database at a point in transaction time, optionally
  * filtered by valid time. All queries run through a view.
@@ -1171,6 +1399,73 @@ export class View {
     }) as Record<string, unknown>;
     return { ...(r as unknown as RuleSetInfo), ruleSet: fromJson(r.ruleSet) };
   }
+
+  /**
+   * Runs a Datalog program (`program` text, or a program `stored` with `Tx.storeProgram`)
+   * over this view and answers `goal` (default: the program's `?-` goal); writes nothing.
+   * Each row holds over the valid intervals it lists; a `validAt` view evaluates one
+   * snapshot, and an `asOf` view memory (and programs) as believed then.
+   */
+  datalog(opts: DatalogOptions): DatalogResult {
+    const args = datalogArgs({ ...this._base() }, opts);
+    if (opts.goal !== undefined) args.goal = opts.goal;
+    return decodeDatalogResult(callNative(this._db, "datalog", args) as Record<string, unknown>);
+  }
+
+  /** Every triple a Datalog program concludes that is not among the stored statements; writes nothing. */
+  datalogReason(opts: DatalogReasonOptions): DatalogReasonResult {
+    const args = datalogArgs({ ...this._base() }, opts);
+    if (opts.includeRelations) args.includeRelations = true;
+    const r = callNative(this._db, "datalogReason", args) as Record<string, unknown>;
+    return {
+      ...(r as unknown as DatalogReasonResult),
+      conclusions: (r.conclusions as Array<Record<string, unknown>>).map((c) => ({
+        ...(c as unknown as DatalogConclusion),
+        s: datalogTerm(c.s),
+        p: fromJson(c.p),
+        o: datalogTerm(c.o),
+      })),
+      relations: (r.relations as Array<Record<string, unknown>>).map(decodeFact),
+      facts: (r.facts as Array<Record<string, unknown>>).map(decodeFact),
+      program: r.program === null ? null : fromJson(r.program),
+    };
+  }
+
+  /** What a program is as this view sees it: its text, rules, goals, constraints and strata. */
+  programInfo(program: DatalogProgramOptions): ProgramInfo {
+    const r = callNative(this._db, "programInfo", programArgs({ ...this._base() }, program)) as Record<string, unknown>;
+    return { ...(r as unknown as ProgramInfo), program: r.program === null ? null : fromJson(r.program) };
+  }
+
+  /** Runs a Datalog goal like `datalog` and returns its plan (strata, rules, access choices) with the result. */
+  explainDatalog(opts: DatalogOptions): DatalogExplain {
+    const args = datalogArgs({ ...this._base() }, opts);
+    if (opts.goal !== undefined) args.goal = opts.goal;
+    const r = callNative(this._db, "explainDatalog", args) as { plan: string[]; result: Record<string, unknown> };
+    return { plan: r.plan, result: decodeDatalogResult(r.result) };
+  }
+
+  /**
+   * Checks a program's constraints (or those named in `only`) over this view, pointwise in
+   * valid time, and returns each violated one with its violations; writes nothing.
+   */
+  check(opts: CheckOptions): CheckResult {
+    const args = datalogArgs({ ...this._base() }, opts);
+    if (opts.only !== undefined) args.only = opts.only;
+    const r = callNative(this._db, "check", args) as Record<string, unknown>;
+    return {
+      ...(r as unknown as CheckResult),
+      violated: (r.violated as Array<Record<string, unknown>>).map((c) => ({
+        ...(c as unknown as CheckResult["violated"][number]),
+        violations: (c.violations as Array<Record<string, unknown>>).map((v) => ({
+          ...(v as unknown as Violation),
+          bindings: Object.fromEntries(
+            Object.entries(v.bindings as Record<string, unknown>).map(([k, t]) => [k, datalogTerm(t)]),
+          ),
+        })),
+      })),
+    };
+  }
 }
 
 // ---- Transaction ---------------------------------------------------------
@@ -1399,6 +1694,17 @@ export class Tx {
    */
   storeRules(ruleSet: RuleSetInput, n3: string): Ref {
     return this._push({ op: "storeRules", ruleSet: ruleSetJson(ruleSet), n3 }, true);
+  }
+
+  /**
+   * Stores Datalog text as the program `program`: one statement `(program dl:source "<text>")`.
+   * New text supersedes the live version; equal text returns the live statement. Text that
+   * does not compile fails the transaction (`DatalogParse`, `DatalogUnsafe`, ...), and so
+   * does a node that already holds N3 rules (`RuleLanguageConflict`). Returns a Ref to the
+   * program statement.
+   */
+  storeProgram(program: ProgramInput, text: string): Ref {
+    return this._push({ op: "storeProgram", program: programJson(program), text }, true);
   }
 
   /** Runs a Cypher write statement inside this transaction. */
@@ -1658,6 +1964,31 @@ export class Database {
   /** `View.ruleSetInfo` on the live database (`now()`). */
   ruleSetInfo(ruleSet: RuleSetInput): RuleSetInfo {
     return this.now().ruleSetInfo(ruleSet);
+  }
+
+  /** `View.datalog` on the live database (`now()`). */
+  datalog(opts: DatalogOptions): DatalogResult {
+    return this.now().datalog(opts);
+  }
+
+  /** `View.datalogReason` on the live database (`now()`). */
+  datalogReason(opts: DatalogReasonOptions): DatalogReasonResult {
+    return this.now().datalogReason(opts);
+  }
+
+  /** `View.programInfo` on the live database (`now()`). */
+  programInfo(program: DatalogProgramOptions): ProgramInfo {
+    return this.now().programInfo(program);
+  }
+
+  /** `View.explainDatalog` on the live database (`now()`). */
+  explainDatalog(opts: DatalogOptions): DatalogExplain {
+    return this.now().explainDatalog(opts);
+  }
+
+  /** `View.check` on the live database (`now()`). */
+  check(opts: CheckOptions): CheckResult {
+    return this.now().check(opts);
   }
 
   /**

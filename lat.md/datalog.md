@@ -1,11 +1,12 @@
 ---
 type: Decision
+openspec: [datalog-language, datalog-evaluation, datalog-temporal, datalog-programs, datalog-constraints]
 ---
 # Datalog
 
 Decisions DL1–DL24 of the Datalog interview of 2026-10-28: a fast Datalog in its own crate, with DatalogMTL over valid time, for queries, reasoning and constraints beside N3.
 
-All are proposed. The four OpenSpec changes of [[datalog#Four Changes]] are written (2026-10-28) and not yet implemented: `add-datalog-engine`, `add-datalog-constraints`, `add-datalog-materialization` and `add-datalog-query-calls`. N3 stays ([[reasoning]]): it keeps quoted formulas and proof text, and Datalog is the set-at-a-time path to the same derived beliefs.
+The four OpenSpec changes of [[datalog#Four Changes]] were written on 2026-10-28. `add-datalog-engine` is implemented in [[crates/tm-datalog/src/lib.rs]] and the facade's [[crates/tiramemsu/src/datalog.rs]] (DL1–DL12, DL16 for storage, DL18–DL21, DL23, DL25, DL26); `add-datalog-constraints`, `add-datalog-materialization` and `add-datalog-query-calls` follow. N3 stays ([[reasoning]]): it keeps quoted formulas and proof text, and Datalog is the set-at-a-time path to the same derived beliefs.
 
 ## One Language Three Uses
 
@@ -104,7 +105,7 @@ DL12: relations are flat `i64` columns sorted once per needed index, with interv
 
 - motivated_by:: [[backends#Hybrid Join Engine]] {weight: primary, since: "2026-10-28"}
 
-Indexes are chosen per binding pattern, as Soufflé does. Delta and full relations merge by sort-merge with coalescing; each rule variant is ordered from actual sizes and re-planned when a delta changes size tenfold; the delta is cut into parallel morsels. Only ObjectIds are joined and terms are decoded at the output. Rejected: hash tables only (cyclic blow-up, no ordered sweeps) and B-tree relations.
+As built, relations are tuples in one flat buffer with hash indexes per bound-position mask, built on first use and kept current on insert, joined by index nested loops ([[crates/tm-datalog/src/rel.rs]], [[crates/tm-datalog/src/eval.rs]]); the worst-case-optimal join for cyclic bodies is not built yet and is recorded as debt on the code. Indexes are chosen per binding pattern, as Soufflé does. Delta and full relations merge by sort-merge with coalescing; each rule variant is ordered from actual sizes and re-planned when a delta changes size tenfold; the delta is cut into parallel morsels. Only ObjectIds are joined and terms are decoded at the output. Rejected: hash tables only (cyclic blow-up, no ordered sweeps) and B-tree relations.
 
 ## Shared Materialization With Reconciliation
 
@@ -207,3 +208,22 @@ DL24: the work is a prerequisite and four OpenSpec changes, with enforcement bef
 4. `add-datalog-query-calls`: the SPARQL `SERVICE` and Cypher `CALL` through `tm_datalog` and a native operator.
 
 Rejected: materialization before constraints, and one change.
+
+## Statement Records Hold Always
+
+DL25: `stmt(E, S, P, O)` is a statement's record and holds at every instant, while `p(S, O)`, `p(S, O) @ E` and `triple` are facts that hold over the statement's valid time.
+
+- motivated_by:: [[datalog#Interval Sets Through Joins]] {weight: primary, since: "2026-10-28"}
+- motivated_by:: [[datalog#Binary And Reserved Atoms]] {weight: secondary, since: "2026-10-28"}
+
+Found while testing Allen relations: under pointwise semantics two facts that were never valid together never meet in one body, so "job x meets job y" needs the records. `valid`, `added` and `tx_instant` are records too.
+
+## IRI Heads Hold Stored Statements
+
+DL26: a predicate IRI that a head defines is a derived relation that also holds the stored statements of that predicate, as in N3, so stored and derived facts combine and only the derived part is a conclusion.
+
+- motivated_by:: [[datalog#Binary And Reserved Atoms]] {weight: primary, since: "2026-10-28"}
+- motivated_by:: [[datalog#Gates And Oracles]] {weight: secondary, since: "2026-10-28", note: "the N3 differential needs the same meaning"}
+
+Each IRI head gets an implicit seed rule from its stored statements. A rule that negates its own head predicate is therefore recursion through negation and is refused, so a rule inventing a manager for the unmanaged derives a differently named predicate.
+

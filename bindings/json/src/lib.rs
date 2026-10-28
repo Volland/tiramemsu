@@ -463,8 +463,8 @@ impl Database {
         match op {
             "sparql" | "cypher" | "triples" | "path" | "events" | "graphs" | "graphMembers"
             | "values" | "dependents" | "bundle" | "textSearch" | "vectorSearch" | "recall"
-            | "unembedded" | "explainSparql" | "conflicts" | "reason" | "ruleSetInfo" | "datalog"
-            | "datalogReason" | "programInfo" | "explainDatalog" | "check" => {
+            | "unembedded" | "explainSparql" | "conflicts" | "reason" | "ruleSetInfo"
+            | "datalog" | "datalogReason" | "programInfo" | "explainDatalog" | "check" => {
                 let view = read::view_from_json(&self.db, args.get("view").unwrap_or(&J::Null))?;
                 let (budget, _entry) = self.budget(args.get("budget"))?;
                 match &budget {

@@ -141,6 +141,76 @@ def _conclusion(c: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
+# ------------------------------------------------------------------------ Datalog helpers
+
+_DATALOG_LIMIT_KEYS = {
+    "max_iterations": "maxIterations",
+    "max_facts": "maxFacts",
+    "max_fragments": "maxFragments",
+    "max_new_values": "maxNewValues",
+}
+
+
+def _datalog_args(
+    args: Dict[str, Any],
+    program: Optional[str],
+    stored: Any,
+    scope: Any = None,
+    window: Any = None,
+    time: Optional[str] = None,
+    limits: Optional[Dict[str, int]] = None,
+    demand: Optional[bool] = None,
+    proof: bool = False,
+    access: Optional[str] = None,
+    parallel_threshold: Optional[int] = None,
+    require_complete: bool = False,
+) -> Dict[str, Any]:
+    """The program and run options of the Datalog reads."""
+    _scope_args(args, scope, window, None, None)
+    if program is not None:
+        args["program"] = program
+    if stored is not None:
+        args["stored"] = _rule_set_json(stored)
+    if time is not None:
+        args["time"] = time
+    if limits:
+        args["limits"] = {_DATALOG_LIMIT_KEYS.get(k, k): v for k, v in limits.items()}
+    if demand is not None:
+        args["demand"] = demand
+    if proof:
+        args["proof"] = True
+    if access is not None:
+        args["access"] = access
+    if parallel_threshold is not None:
+        args["parallelThreshold"] = parallel_threshold
+    if require_complete:
+        args["requireComplete"] = True
+    return args
+
+
+def _datalog_term(j: Any) -> Any:
+    """A result term: a stored term, or ``{"invented": n}`` for a node a rule invented."""
+    if isinstance(j, dict) and "invented" in j:
+        return j
+    return term_from_json(j)
+
+
+def _fact(f: Dict[str, Any]) -> Dict[str, Any]:
+    return {**f, "args": [_datalog_term(a) for a in f["args"]]}
+
+
+def _program_node(r: Dict[str, Any], key: str) -> None:
+    if r.get(key) is not None:
+        r[key] = term_from_json(r[key])
+
+
+def _datalog_result(r: Dict[str, Any]) -> Dict[str, Any]:
+    r["rows"] = [{**row, "values": [_datalog_term(x) for x in row["values"]]} for row in r["rows"]]
+    r["facts"] = [_fact(f) for f in r["facts"]]
+    _program_node(r, "program")
+    return r
+
+
 def _path_row(r: Dict[str, Any]) -> PathRow:
     """Decode one row of the bridge's ``path`` operation."""
     return PathRow(
@@ -484,6 +554,21 @@ class TxBuilder:
         name = self._fresh()
         self._ops.append(
             {"op": "storeRules", "ruleSet": _rule_set_json(rule_set), "n3": n3, "as": name}
+        )
+        return Ref(name)
+
+    def store_program(self, program: Any, text: str) -> Ref:
+        """Store Datalog text as the program *program* (an IRI ``str`` or a term).
+
+        Writes one statement ``(program dl:source "<text>")``. New text supersedes the
+        live version; equal text returns the live statement. Text that does not compile
+        fails the transaction (``DatalogParse``, ``DatalogUnsafe``, ...), and so does a
+        node that already holds N3 rules (``RuleLanguageConflict``). Returns a
+        :class:`Ref` to the program statement.
+        """
+        name = self._fresh()
+        self._ops.append(
+            {"op": "storeProgram", "program": _rule_set_json(program), "text": text, "as": name}
         )
         return Ref(name)
 
@@ -1072,6 +1157,164 @@ class View:
         r["ruleSet"] = term_from_json(r["ruleSet"])
         return r
 
+    def datalog(
+        self,
+        goal: Optional[str] = None,
+        program: Optional[str] = None,
+        *,
+        stored: Any = None,
+        scope: Any = None,
+        window: Any = None,
+        time: Optional[str] = None,
+        limits: Optional[Dict[str, int]] = None,
+        demand: Optional[bool] = None,
+        proof: bool = False,
+        access: Optional[str] = None,
+        parallel_threshold: Optional[int] = None,
+        require_complete: bool = False,
+    ) -> Dict[str, Any]:
+        """Run a Datalog program over this view and answer *goal*; writes nothing.
+
+        Give the program as Datalog text (*program*) or name a program stored with
+        :meth:`TxBuilder.store_program` (*stored*); *goal* is a body such as
+        ``"reports(v:alice, X)"`` (default: the program's ``?-`` goal). *scope*, *window*
+        and *time* are those of :meth:`reason`; *limits* takes ``max_iterations``,
+        ``max_facts``, ``max_fragments`` and ``max_new_values``; *demand* (default on)
+        rewrites for the goal's bound arguments; *access* is ``"auto"``, ``"probe"`` or
+        ``"load"``; *require_complete* raises ``DatalogIncomplete`` instead of returning a
+        partial result. Returns ``{"columns", "rows", "facts", "t", "now", "strata",
+        "derived", "predicates", "pruned", "demand", "status", "limits", "program",
+        "programStatement"}``; each row is ``{"values", "valid": [{"from", "to"}]}``, with
+        ``"proof"`` when *proof* is set. A node a rule invented is ``{"invented": n}``.
+        """
+        args = _datalog_args(
+            {}, program, stored, scope, window, time, limits, demand, proof, access,
+            parallel_threshold, require_complete,
+        )
+        if goal is not None:
+            args["goal"] = goal
+        return _datalog_result(json.loads(self._call("datalog", args)))
+
+    def datalog_reason(
+        self,
+        program: Optional[str] = None,
+        *,
+        stored: Any = None,
+        scope: Any = None,
+        window: Any = None,
+        time: Optional[str] = None,
+        limits: Optional[Dict[str, int]] = None,
+        demand: Optional[bool] = None,
+        proof: bool = False,
+        access: Optional[str] = None,
+        parallel_threshold: Optional[int] = None,
+        require_complete: bool = False,
+        include_relations: bool = False,
+    ) -> Dict[str, Any]:
+        """Every triple a Datalog program concludes that is not among the stored
+        statements; writes nothing.
+
+        Takes the options of :meth:`datalog`; with *include_relations*, the facts of
+        plain-named relations are returned too. Returns ``{"conclusions", "relations",
+        "facts", "t", "now", "predicates", "status", "limits", "program",
+        "programStatement"}``; each conclusion is ``{"s", "p", "o", "validFrom",
+        "validTo", "proof"}``.
+        """
+        args = _datalog_args(
+            {}, program, stored, scope, window, time, limits, demand, proof, access,
+            parallel_threshold, require_complete,
+        )
+        if include_relations:
+            args["includeRelations"] = True
+        r: Dict[str, Any] = json.loads(self._call("datalogReason", args))
+        r["conclusions"] = [
+            {
+                **c,
+                "s": _datalog_term(c["s"]),
+                "p": term_from_json(c["p"]),
+                "o": _datalog_term(c["o"]),
+            }
+            for c in r["conclusions"]
+        ]
+        r["relations"] = [_fact(f) for f in r["relations"]]
+        r["facts"] = [_fact(f) for f in r["facts"]]
+        _program_node(r, "program")
+        return r
+
+    def program_info(self, program: Optional[str] = None, *, stored: Any = None) -> Dict[str, Any]:
+        """What a program is as this view sees it: ``{"program", "statement", "text",
+        "rules", "goals", "constraints", "strata", "predicates", "variablePredicate",
+        "metricRecursion", "inventionRecursion"}``."""
+        r: Dict[str, Any] = json.loads(
+            self._call("programInfo", _datalog_args({}, program, stored))
+        )
+        _program_node(r, "program")
+        return r
+
+    def explain_datalog(
+        self,
+        goal: Optional[str] = None,
+        program: Optional[str] = None,
+        *,
+        stored: Any = None,
+        scope: Any = None,
+        window: Any = None,
+        time: Optional[str] = None,
+        limits: Optional[Dict[str, int]] = None,
+        demand: Optional[bool] = None,
+        proof: bool = False,
+        access: Optional[str] = None,
+        parallel_threshold: Optional[int] = None,
+        require_complete: bool = False,
+    ) -> Dict[str, Any]:
+        """Run a Datalog goal like :meth:`datalog` (same options) and return
+        ``{"plan", "result"}``: the plan per stratum and rule, with access choices."""
+        args = _datalog_args(
+            {}, program, stored, scope, window, time, limits, demand, proof, access,
+            parallel_threshold, require_complete,
+        )
+        if goal is not None:
+            args["goal"] = goal
+        r: Dict[str, Any] = json.loads(self._call("explainDatalog", args))
+        r["result"] = _datalog_result(r["result"])
+        return r
+
+    def check(
+        self,
+        program: Optional[str] = None,
+        *,
+        only: Optional[List[str]] = None,
+        stored: Any = None,
+        scope: Any = None,
+        window: Any = None,
+        time: Optional[str] = None,
+        limits: Optional[Dict[str, int]] = None,
+        demand: Optional[bool] = None,
+        proof: bool = False,
+        access: Optional[str] = None,
+        parallel_threshold: Optional[int] = None,
+        require_complete: bool = False,
+    ) -> Dict[str, Any]:
+        """Check a program's constraints (or those named in *only*) over this view,
+        pointwise in valid time; writes nothing.
+
+        Takes the options of :meth:`datalog`. Returns ``{"violated", "checked", "t",
+        "now", "status", "limits"}``; each violated constraint is ``{"name",
+        "severity", "violations"}`` and each violation ``{"bindings", "eids",
+        "valid"}``.
+        """
+        args = _datalog_args(
+            {}, program, stored, scope, window, time, limits, demand, proof, access,
+            parallel_threshold, require_complete,
+        )
+        if only is not None:
+            args["only"] = list(only)
+        r: Dict[str, Any] = json.loads(self._call("check", args))
+        for c in r["violated"]:
+            for v in c["violations"]:
+                v["bindings"] = {k: _datalog_term(t) for k, t in v["bindings"].items()}
+        return r
+
 
 # --------------------------------------------------------------------------- Database
 
@@ -1394,6 +1637,30 @@ class Database:
     def rule_set_info(self, rule_set: Any) -> Dict[str, Any]:
         """:meth:`View.rule_set_info` on the live database (:meth:`now`)."""
         return self.now().rule_set_info(rule_set)
+
+    def datalog(
+        self, goal: Optional[str] = None, program: Optional[str] = None, **kwargs: Any
+    ) -> Dict[str, Any]:
+        """:meth:`View.datalog` on the live database (:meth:`now`)."""
+        return self.now().datalog(goal, program, **kwargs)
+
+    def datalog_reason(self, program: Optional[str] = None, **kwargs: Any) -> Dict[str, Any]:
+        """:meth:`View.datalog_reason` on the live database (:meth:`now`)."""
+        return self.now().datalog_reason(program, **kwargs)
+
+    def program_info(self, program: Optional[str] = None, *, stored: Any = None) -> Dict[str, Any]:
+        """:meth:`View.program_info` on the live database (:meth:`now`)."""
+        return self.now().program_info(program, stored=stored)
+
+    def explain_datalog(
+        self, goal: Optional[str] = None, program: Optional[str] = None, **kwargs: Any
+    ) -> Dict[str, Any]:
+        """:meth:`View.explain_datalog` on the live database (:meth:`now`)."""
+        return self.now().explain_datalog(goal, program, **kwargs)
+
+    def check(self, program: Optional[str] = None, **kwargs: Any) -> Dict[str, Any]:
+        """:meth:`View.check` on the live database (:meth:`now`)."""
+        return self.now().check(program, **kwargs)
 
     def materialize(
         self,

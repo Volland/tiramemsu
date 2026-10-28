@@ -33,7 +33,9 @@ fn program_arg(args: &J) -> Res<DatalogProgram> {
         (Some(J::String(text)), None) => Ok(DatalogProgram::Text(text.clone())),
         (Some(_), None) => Err(arg("`program` must be Datalog text")),
         (None, Some(n)) => Ok(DatalogProgram::Stored(node_from_json(n)?)),
-        _ => Err(arg("give exactly one of `program` (Datalog text) and `stored`")),
+        _ => Err(arg(
+            "give exactly one of `program` (Datalog text) and `stored`",
+        )),
     }
 }
 
@@ -146,7 +148,11 @@ pub fn options(args: &J) -> Res<DatalogOptions> {
         None | Some("auto") => DatalogAccess::Auto,
         Some("probe") => DatalogAccess::Probe,
         Some("load") => DatalogAccess::Load,
-        Some(other) => return Err(arg(format!("access must be auto, probe or load, not {other:?}"))),
+        Some(other) => {
+            return Err(arg(format!(
+                "access must be auto, probe or load, not {other:?}"
+            )))
+        }
     };
     if let Some(n) = args.get("parallelThreshold").filter(|v| !v.is_null()) {
         o.parallel_threshold = n
@@ -347,7 +353,11 @@ pub fn check(view: &View<'_>, args: &J) -> Res<J> {
         None | Some(J::Null) => Vec::new(),
         Some(J::Array(a)) => a
             .iter()
-            .map(|x| x.as_str().map(String::from).ok_or_else(|| arg("`only` must be a list of names")))
+            .map(|x| {
+                x.as_str()
+                    .map(String::from)
+                    .ok_or_else(|| arg("`only` must be a list of names"))
+            })
             .collect::<Res<_>>()?,
         Some(_) => return Err(arg("`only` must be a list of names")),
     };

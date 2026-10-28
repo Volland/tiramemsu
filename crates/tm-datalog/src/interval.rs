@@ -17,6 +17,7 @@ pub const POS_INF: i64 = i64::MAX;
 
 /// A coalesced set of half-open intervals.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
+// @tg: implements:: [[openspec:datalog-temporal#Pointwise valid time with intervals]] {since: "2026-10-28"}
 pub struct IvSet(SmallVec<[(i64, i64); 1]>);
 
 fn add(x: i64, d: i64) -> i64 {
@@ -223,6 +224,7 @@ impl IvSet {
     }
 
     /// The set after a unary temporal operator in a body.
+    // @tg: implements:: [[openspec:datalog-temporal#Metric temporal operators]] {since: "2026-10-28"}
     pub fn apply(&self, op: TempOp, w: Window) -> IvSet {
         let (a, b) = (w.lo, w.hi);
         let mapped: Vec<(i64, i64)> = self
@@ -247,6 +249,7 @@ impl IvSet {
 
     /// The set a head `op[a, b] H` gives H from the body's set: the window around
     /// every instant of the body.
+    // @tg: implements:: [[openspec:datalog-temporal#Always operators in heads]] {since: "2026-10-28"}
     pub fn head(&self, op: TempOp, w: Window) -> IvSet {
         match op {
             // H throughout [t+a, t+b]: H on [f+a, e+b)
@@ -350,24 +353,39 @@ mod tests {
     fn algebra() {
         let a = IvSet::from_intervals(vec![(0, 10), (20, 30)]);
         let b = IvSet::one(5, 25);
-        assert_eq!(a.intersect(&b), IvSet::from_intervals(vec![(5, 10), (20, 25)]));
+        assert_eq!(
+            a.intersect(&b),
+            IvSet::from_intervals(vec![(5, 10), (20, 25)])
+        );
         assert_eq!(a.union(&b), IvSet::one(0, 30));
-        assert_eq!(a.subtract(&b), IvSet::from_intervals(vec![(0, 5), (25, 30)]));
+        assert_eq!(
+            a.subtract(&b),
+            IvSet::from_intervals(vec![(0, 5), (25, 30)])
+        );
         assert_eq!(IvSet::one(0, 5).union(&IvSet::one(5, 9)), IvSet::one(0, 9));
-        assert_eq!(IvSet::all().subtract(&IvSet::one(3, POS_INF)), IvSet::one(NEG_INF, 3));
+        assert_eq!(
+            IvSet::all().subtract(&IvSet::one(3, POS_INF)),
+            IvSet::one(NEG_INF, 3)
+        );
     }
 
     #[test]
     fn operators() {
         let fever = IvSet::one(10 * D, 11 * D);
-        assert_eq!(fever.apply(TempOp::Past, w(0, Some(3 * D))), IvSet::one(10 * D, 14 * D));
+        assert_eq!(
+            fever.apply(TempOp::Past, w(0, Some(3 * D))),
+            IvSet::one(10 * D, 14 * D)
+        );
         let emp = IvSet::one(0, 100 * D);
         assert_eq!(
             emp.apply(TempOp::AlwaysPast, w(0, Some(30 * D))),
             IvSet::one(30 * D, 100 * D)
         );
         let booked = IvSet::one(D, 2 * D);
-        assert_eq!(booked.head(TempOp::AlwaysFuture, w(0, Some(7 * D))), IvSet::one(D, 9 * D));
+        assert_eq!(
+            booked.head(TempOp::AlwaysFuture, w(0, Some(7 * D))),
+            IvSet::one(D, 9 * D)
+        );
         // since: alarm [5, 6), unacked [5, 20) ⇒ pending [5, 20)
         let unacked = IvSet::one(5, 20);
         let alarm = IvSet::one(5, 6);
@@ -387,17 +405,31 @@ mod tests {
         ];
         for aset in &sets {
             for bset in &sets {
-                for (lo, hi) in [(0, Some(0)), (0, Some(2)), (1, Some(3)), (2, None), (0, None)] {
+                for (lo, hi) in [
+                    (0, Some(0)),
+                    (0, Some(2)),
+                    (1, Some(3)),
+                    (2, None),
+                    (0, None),
+                ] {
                     let win = w(lo, hi);
                     let got = aset.since(bset, win);
                     let got_u = aset.until(bset, win);
                     for t in -2..16 {
                         let want = (t - hi.unwrap_or(100)..=t - lo)
                             .any(|s| bset.contains(s) && (s + 1..=t).all(|r| aset.contains(r)));
-                        assert_eq!(got.contains(t), want, "since {aset:?} {bset:?} {win:?} t={t}");
+                        assert_eq!(
+                            got.contains(t),
+                            want,
+                            "since {aset:?} {bset:?} {win:?} t={t}"
+                        );
                         let want_u = (t + lo..=t + hi.unwrap_or(100))
                             .any(|s| bset.contains(s) && (t..s).all(|r| aset.contains(r)));
-                        assert_eq!(got_u.contains(t), want_u, "until {aset:?} {bset:?} {win:?} t={t}");
+                        assert_eq!(
+                            got_u.contains(t),
+                            want_u,
+                            "until {aset:?} {bset:?} {win:?} t={t}"
+                        );
                     }
                 }
             }
@@ -406,12 +438,20 @@ mod tests {
 
     #[test]
     fn unary_operators_match_brute_force() {
-        let sets = [IvSet::one(0, 4), IvSet::from_intervals(vec![(1, 3), (5, 9)])];
+        let sets = [
+            IvSet::one(0, 4),
+            IvSet::from_intervals(vec![(1, 3), (5, 9)]),
+        ];
         for s in &sets {
             for (lo, hi) in [(0, Some(0)), (0, Some(2)), (1, Some(3))] {
                 let win = w(lo, hi);
                 let hi = hi.unwrap();
-                for op in [TempOp::Past, TempOp::Future, TempOp::AlwaysPast, TempOp::AlwaysFuture] {
+                for op in [
+                    TempOp::Past,
+                    TempOp::Future,
+                    TempOp::AlwaysPast,
+                    TempOp::AlwaysFuture,
+                ] {
                     let got = s.apply(op, win);
                     for t in -6..16 {
                         let want = match op {

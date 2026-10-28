@@ -9,8 +9,16 @@ use tiramemsu_json::Database;
 fn bridge_without_the_feature() {
     let dir = tempfile::tempdir().unwrap();
     let db = Database::open(dir.path().join("m.db").to_str().unwrap(), &J::Null).unwrap();
-    for op in ["datalog", "datalogReason", "programInfo", "explainDatalog", "check"] {
-        let e = db.call(op, &json!({ "program": "p(X) :- v:q(X, X)." })).unwrap_err();
+    for op in [
+        "datalog",
+        "datalogReason",
+        "programInfo",
+        "explainDatalog",
+        "check",
+    ] {
+        let e = db
+            .call(op, &json!({ "program": "p(X) :- v:q(X, X)." }))
+            .unwrap_err();
         assert_eq!(e.code(), "Unsupported", "{op}");
     }
 }

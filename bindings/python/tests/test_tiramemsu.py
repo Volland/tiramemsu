@@ -1193,3 +1193,74 @@ class TestN3Reasoning:
         assert len(db.now().triples()) == before
         r = db.materialize("urn:tiramemsu:v:mortality", require_complete=True)
         assert len(r["derived"]) == 1 and r["status"] == "complete"
+
+
+# ---------------------------------------------------------------------------- Datalog
+
+REPORTS = (
+    "reports(X, Y) :- v:manager(X, Y).\n"
+    "reports(X, Z) :- reports(X, Y), v:manager(Y, Z).\n"
+)
+ONE_CEO = "constraint one_ceo error :- v:role(X, v:CEO), v:role(Y, v:CEO), X != Y.\n"
+
+
+class TestDatalog:
+    # @tg: verifies:: [[openspec:datalog-programs#Datalog read surfaces#Bridge goal query]] {since: "2026-10-28", level: integration}
+    def test_goal_over_text_and_a_stored_program(self, db: Database) -> None:
+        with db.transact() as tx:
+            tx.assert_(iri("alice"), iri("manager"), iri("bob"))
+            tx.assert_(iri("bob"), iri("manager"), iri("carol"))
+        r = db.datalog("reports(v:alice, X)", REPORTS)
+        assert r["status"] == "complete" and r["columns"] == ["X"]
+        assert [row["values"] for row in r["rows"]] == [[iri("bob")], [iri("carol")]]
+        assert r["rows"][0]["valid"] == [{"from": None, "to": None}]
+        assert r["program"] is None
+        # a Datalog run writes nothing
+        assert len(db.now().triples()) == 2
+
+        with db.transact() as tx:
+            tx.store_program("urn:tiramemsu:v:reporting", REPORTS)
+        stored = db.now().datalog("reports(v:alice, X)", stored=iri("reporting"), proof=True)
+        assert stored["program"] == iri("reporting")
+        assert isinstance(stored["programStatement"], int)
+        assert len(stored["rows"]) == 2 and len(stored["rows"][0]["proof"]) == 1
+        info = db.program_info(stored="urn:tiramemsu:v:reporting")
+        assert info["text"] == REPORTS and info["rules"] == 2
+        assert info["strata"] == [{"relations": ["reports"], "recursive": True, "monotonic": True}]
+
+        above = db.datalog_reason(REPORTS + "v:above(X, Y) :- reports(Y, X).\n")
+        assert (iri("carol"), iri("above"), iri("alice")) in [
+            (c["s"], c["p"], c["o"]) for c in above["conclusions"]
+        ]
+        e = db.explain_datalog("reports(v:alice, X)", REPORTS)
+        assert any(line.startswith("access") for line in e["plan"])
+        assert len(e["result"]["rows"]) == 2
+
+        with pytest.raises(TiramemsuError) as err:
+            db.datalog(program="p(X) :- v:q(X, Y")
+        assert err.value.code == "DatalogParse"
+        with pytest.raises(TiramemsuError) as err:
+            db.datalog("reports(v:alice, X)", stored="urn:tiramemsu:v:none")
+        assert err.value.code == "UnknownProgram"
+        nothing = db.now().datalog(
+            "reports(v:alice, X)", REPORTS, scope={"graphs": [iri("g")]}
+        )
+        assert nothing["rows"] == []
+
+    def test_check_reports_violations(self, db: Database) -> None:
+        with db.transact() as tx:
+            tx.assert_(iri("a"), iri("role"), iri("CEO"), valid_from="2020-01-01")
+        with db.transact() as tx:
+            tx.assert_(iri("b"), iri("role"), iri("CEO"), valid_from="2023-01-01")
+        with db.transact() as tx:
+            tx.store_program("urn:tiramemsu:v:policies", ONE_CEO)
+        c = db.check(stored="urn:tiramemsu:v:policies")
+        assert c["checked"] == ["one_ceo"]
+        [one_ceo] = c["violated"]
+        assert one_ceo["name"] == "one_ceo" and one_ceo["severity"] == "error"
+        pairs = [(x["bindings"]["X"], x["bindings"]["Y"]) for x in one_ceo["violations"]]
+        assert (iri("a"), iri("b")) in pairs
+        assert len(one_ceo["violations"][0]["eids"]) == 2
+        # as of before the second CEO, nothing is violated
+        assert db.as_of(tx=1).check(ONE_CEO)["violated"] == []
+        assert db.check(stored="urn:tiramemsu:v:policies", only=["one_ceo"])["checked"] == ["one_ceo"]
