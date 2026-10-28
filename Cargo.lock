@@ -1832,6 +1832,7 @@ dependencies = [
  "proptest",
  "regex",
  "rusqlite",
+ "serde_json",
  "tempfile",
  "tiramemsu",
  "tm-core",
