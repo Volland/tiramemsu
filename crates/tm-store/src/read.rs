@@ -228,7 +228,9 @@ pub fn visible(store: &dyn ReadStore, view: &View, eid: Eid) -> Result<bool> {
 
 /// The statements that stand on `root` in `spec` (see `tm_core::read::dependents`):
 /// `root` first, then breadth-first every selected statement whose subject or
-/// object was reached, each expansion in ascending eid order.
+/// object was reached and every selected `D` with a selected support link
+/// `(D sys:derivedFrom x)` to a reached `x`, each expansion in ascending eid order.
+// @tg: implements:: [[openspec:statement-dependents#Dependents of a statement]] {since: "2026-10-28"}
 pub fn dependents(store: &dyn ReadStore, spec: &ViewSpec, root: Eid) -> Result<Vec<Eid>> {
     let view = View::resolve(store, spec)?;
     dependents_in(store, &view, root)
@@ -238,6 +240,8 @@ fn dependents_in(store: &dyn ReadStore, view: &View, root: Eid) -> Result<Vec<Ei
     if !visible(store, view, root)? {
         return Ok(Vec::new());
     }
+    let derived_from =
+        dict::encode(store, &Value::iri(tm_core::vocab::SYS_DERIVED_FROM))?.map(ObjectId::raw);
     let mut order = vec![root];
     let mut seen: HashSet<Eid> = HashSet::from([root]);
     let mut i = 0;
@@ -245,12 +249,23 @@ fn dependents_in(store: &dyn ReadStore, view: &View, root: Eid) -> Result<Vec<Ei
         let e = order[i].oid().raw();
         i += 1;
         let mut found: BTreeSet<i64> = BTreeSet::new();
+        let mut derived: Vec<i64> = Vec::new();
         for pat in [
             Pattern::new(Some(e), None, None),
             Pattern::new(None, None, Some(e)),
         ] {
             for r in view.scan(store, pat)? {
-                found.insert(r?.eid);
+                let r = r?;
+                found.insert(r.eid);
+                // the support rule: a selected link (D sys:derivedFrom x) reaches D
+                if Some(r.p) == derived_from && r.o == e {
+                    derived.push(r.s);
+                }
+            }
+        }
+        for d in derived {
+            if store.statement(d)?.is_some_and(|r| view.selects(&r)) {
+                found.insert(d);
             }
         }
         for raw in found {

@@ -200,7 +200,7 @@ let hits = db.now().recall(&RecallQuery {
 
 In Python and Node a model may be given as a plain IRI string.
 
-**MCP.** The server has 19 tools; the five above are the vector ones. `set_embedding` takes an eid; `unembedded` returns `{view, eids}`, the backlog an agent embeds before calling `set_embedding`. Read-only mode hides every tool that writes, including `define_embedding_model` and `set_embedding`. `recall`'s text channel needs the server started with `--text-index`.
+**MCP.** The server has 20 tools; the five above are the vector ones. `set_embedding` takes an eid; `unembedded` returns `{view, eids}`, the backlog an agent embeds before calling `set_embedding`. Read-only mode hides every tool that writes, including `define_embedding_model` and `set_embedding`. `recall`'s text channel needs the server started with `--text-index`.
 
 **SPARQL, vector.** The `tm:vector*` patterns on one subject variable form one recall. `tm:vectorMatch` (a string literal holding a JSON array) and `tm:vectorModel` are required; the others are optional. `tm:vectorPredicate <p>` is repeatable and keeps statements with one of those predicates, before ranking, as `VectorQuery::predicates` does. `GRAPH <g>` restricts the recall, `SERVICE <tm:asOf/…>` times it, and `GRAPH ?g` around it is `InvalidQuery`. Join `?e` to `?s ?p ?o ~ ?e` to read the statement.
 

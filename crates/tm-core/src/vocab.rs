@@ -76,6 +76,9 @@ pub const SYS_VOCAB: &str = "urn:tiramemsu:sys:vocab";
 
 /// `sys:inGraph`: the membership predicate `(eid sys:inGraph graph)` (engine-owned).
 pub const SYS_IN_GRAPH: &str = "urn:tiramemsu:sys:inGraph";
+/// `sys:derivedFrom`: the support link `(D sys:derivedFrom e)` of a derived belief
+/// `D` (engine-owned; written only by `Tx::derive`).
+pub const SYS_DERIVED_FROM: &str = "urn:tiramemsu:sys:derivedFrom";
 /// `sys:Graph`: the class of a declared named graph (`CREATE GRAPH`).
 pub const SYS_GRAPH: &str = "urn:tiramemsu:sys:Graph";
 /// Embedding model: the number of dimensions of its vectors (an integer).

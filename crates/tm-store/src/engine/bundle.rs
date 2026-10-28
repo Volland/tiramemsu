@@ -14,8 +14,10 @@ use super::Tx;
 impl Tx<'_> {
     /// Writes `bundle` into this transaction and maps every bundle-local id to an
     /// eid. Statements are written references first, each through the assert
-    /// pipeline: a `sys:inGraph` membership with [`Tx::add_to_graph`], every other
-    /// statement with [`Tx::assert`] and its valid time. Anonymous node labels get
+    /// pipeline: a `sys:inGraph` membership with [`Tx::add_to_graph`], a statement
+    /// with `sys:derivedFrom` links through [`Tx::derive`] with its supports mapped
+    /// to their eids here (its links are the ones `derive` finds or writes), every
+    /// other statement with [`Tx::assert`] and its valid time. Anonymous node labels get
     /// fresh `NODE` ids, one per label.
     ///
     /// Assert is idempotent, so importing the same bundle again changes nothing
@@ -32,15 +34,36 @@ impl Tx<'_> {
     /// anything is written, and the errors of assert (`UniqueViolation`,
     /// `ValueTypeMismatch`, `ReservedNamespace`, ...).
     ///
+    // @tg: implements:: [[openspec:derived-beliefs#Derivations travel in bundles]] {since: "2026-10-28"}
     pub fn import_bundle(&mut self, bundle: &Bundle) -> Result<ImportReport> {
         bundle.check()?;
         let order = bundle
             .import_order()
             .ok_or_else(|| Error::unsupported("bundle with a reference cycle"))?;
+        let supports = bundle.supports();
+        let derived_from = Value::iri(vocab::SYS_DERIVED_FROM);
         let mut eids: HashMap<u32, (Eid, bool)> = HashMap::new();
         let mut nodes: HashMap<u32, ObjectId> = HashMap::new();
+        // the support links written by `derive`, by (derived, support) in the target
+        let mut links: HashMap<(Eid, Eid), (Eid, bool)> = HashMap::new();
         for i in order {
             let st = &bundle.statements[i];
+            if st.p == derived_from {
+                // written with its derived statement, which the order put first
+                let link = match (&st.s, &st.o) {
+                    (BTerm::Stmt(d), BTerm::Stmt(e)) => links.get(&(eids[d].0, eids[e].0)),
+                    _ => None,
+                };
+                let link = link.copied().ok_or_else(|| Error::InvalidTerm {
+                    position: Position::Subject,
+                    reason: format!(
+                        "support link {} does not link two statements of the bundle",
+                        st.local
+                    ),
+                })?;
+                eids.insert(st.local, link);
+                continue;
+            }
             let s = self.bundle_term(&st.s, &eids, &mut nodes)?;
             let o = self.bundle_term(&st.o, &eids, &mut nodes)?;
             let opts = AssertOpts {
@@ -53,6 +76,14 @@ impl Tx<'_> {
                     reason: format!("the member of membership {} is not a statement", st.local),
                 })?;
                 self.add_to_graph(member, o, opts)?
+            } else if let Some(sup) = supports.get(&st.local) {
+                let sup: Vec<Eid> = sup.iter().map(|l| eids[l].0).collect();
+                let p = self.encode(&st.p)?;
+                let (a, ls) = self.derive_links(s, p, o, st.valid, &sup)?;
+                for (e, l, new) in ls {
+                    links.insert((a.eid(), e), (l, new));
+                }
+                (a.eid(), a.is_new())
             } else {
                 let a = self.assert_with(s, &st.p, o, opts)?;
                 (a.eid(), a.is_new())

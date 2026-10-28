@@ -258,6 +258,24 @@ fn apply(tx: &mut Tx<'_>, ops: &[J]) -> Res<(Vec<J>, HashMap<String, Eid>)> {
                 named = Some(e);
                 json!({ "eid": e.n(), "new": true })
             }
+            // @tg: implements:: [[openspec:derived-beliefs#Derive on every surface]] {since: "2026-10-28"}
+            "derive" => {
+                let (s, p, o) = (
+                    term(tx, op, "s", &refs)?,
+                    term(tx, op, "p", &refs)?,
+                    term(tx, op, "o", &refs)?,
+                );
+                let support = op
+                    .get("support")
+                    .and_then(J::as_array)
+                    .ok_or_else(|| arg("`support` must be a list of statements"))?
+                    .iter()
+                    .map(|j| eid_from_json(j, &refs))
+                    .collect::<Res<Vec<Eid>>>()?;
+                let a = tx.derive(s, p, o, valid(op)?, &support)?;
+                named = Some(a.eid());
+                json!({ "eid": a.eid().n(), "new": matches!(a, Asserted::New(_)) })
+            }
             "retract" => json!(tx.retract(eid(op, "eid", &refs)?)?),
             "retractMatching" => {
                 let (s, p, o) = (

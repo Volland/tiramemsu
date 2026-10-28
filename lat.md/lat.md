@@ -20,3 +20,4 @@ This directory defines the high-level concepts, business logic, and architecture
 - [[backends]] — Decisions D37–D44: the typed storage trait, the redb backend, the native runner, durability modes and backend detection
 - [[reasoning]] — Decisions N1–N18: N3 reasoning with eyeron over views, pointwise valid time, stored rule sets and materialized, grounded conclusions
 - [[constraints]] — Project-level constraints that bind several decisions, with their sources
+- [[derived-beliefs]] — Decisions D45–D52: derived beliefs with `sys:derivedFrom` support links, the support cascade, supersede, bundles and derived upsert

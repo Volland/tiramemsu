@@ -58,6 +58,7 @@ Arguments use the JSON forms of the tiramemsu bindings. A term is a string (a pl
 | `assert` | yes | `s`, `p`, `o`, `validFrom`, `validTo`, `onExisting` (`return` or `confirm`), `graph` | `{eid, new, t}`; a repeated fact returns the existing eid with `new: false` |
 | `confirm` | yes | `eid` | `{eid, confirmation, t}` |
 | `supersede` | yes | `eid`, `patch` (`o`, `validFrom`, `validTo`) | `{old, eid, t, retracted}` |
+| `derive` | yes | `s`, `p`, `o`, `support` (statement ids), `validFrom`, `validTo` | `{eid, new, t}`; the belief is retracted when any support is retracted or corrected |
 | `import_bundle` | yes | `bundle` (`tiramemsu-bundle/1`) | `{root, statements, t}` |
 | `query` | no | `language` (`sparql` or `cypher`), `text`, `params` (Cypher), `view`, `provenance` | `{language, view, result, provenance}` |
 | `dependents` | no | `eid`, `view` | `{eid, view, dependents}` |

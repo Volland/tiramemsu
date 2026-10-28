@@ -103,6 +103,9 @@ impl Tx<'_> {
     ///
     /// Use it to correct a fact while keeping what was said about it: the layers
     /// (source, confidence) move to the new statement, the old ones stay in history.
+    /// Beliefs derived from the corrected statement ([`Tx::derive`]) are retracted
+    /// and not replayed, since they were concluded from the old content; a derived
+    /// root keeps its support links, so a patch of its valid time widens it.
     ///
     /// # Errors
     ///
@@ -135,6 +138,8 @@ impl Tx<'_> {
     /// # Ok::<(), tm_core::Error>(())
     /// ```
     // @lat: [[time-model#Operations#Supersede]]
+    // @tg: implements:: [[openspec:derived-beliefs#Supersede and derived statements]] {since: "2026-10-28"}
+    // @tg: implements:: [[openspec:derived-beliefs#Widening a derivation]] {since: "2026-10-28"}
     pub fn supersede(&mut self, root: Eid, patch: Patch) -> Result<Eid> {
         root.oid().check_origin()?;
         let row = match self.load_row(root)? {
@@ -172,9 +177,12 @@ impl Tx<'_> {
         let cascade: HashSet<Eid> = set.iter().copied().collect();
         let in_graph = self.sys_lookup(vocab::SYS_IN_GRAPH)?;
         let lineage = self.sys_lookup(vocab::SYS_SUPERSEDES)?;
+        let derived_from = self.sys_lookup(vocab::SYS_DERIVED_FROM)?;
         let rows = self.load_rows(&set)?;
-        // Drop foreign memberships and propagate exclusion through structural
-        // dependents. Only retained rows receive fresh identifiers.
+        // Drop foreign memberships and the derived statements reached through a
+        // support link (other than the root: they were concluded from the old
+        // content), and propagate exclusion through structural dependents. Only
+        // retained rows receive fresh identifiers.
         let mut dropped = HashSet::new();
         let mut queue = VecDeque::new();
         let mut dependents: HashMap<Eid, Vec<Eid>> = HashMap::new();
@@ -182,6 +190,14 @@ impl Tx<'_> {
             if Some(r.p) == in_graph && !Eid::from_oid(r.o).is_some_and(|g| cascade.contains(&g)) {
                 dropped.insert(r.eid);
                 queue.push_back(r.eid);
+            }
+            if Some(r.p) == derived_from && Eid::from_oid(r.o).is_some_and(|e| cascade.contains(&e))
+            {
+                if let Some(d) = Eid::from_oid(r.s).filter(|d| *d != root && cascade.contains(d)) {
+                    if dropped.insert(d) {
+                        queue.push_back(d);
+                    }
+                }
             }
             if Some(r.p) != lineage {
                 for id in [r.s, r.o] {

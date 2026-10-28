@@ -182,7 +182,8 @@ pub(crate) fn visible(exec: &mut dyn Executor, spec: &ViewSpec, eid: Eid) -> Res
 
 /// The statements that stand on `root` in `spec`: `root` first, then, breadth-first,
 /// every statement selected by the view whose subject or object is a statement
-/// already reached. Each expansion is appended in ascending eid order and a visited
+/// already reached, and every selected statement `D` with a selected support link
+/// `(D sys:derivedFrom x)` to a reached `x`. Each expansion is appended in ascending eid order and a visited
 /// set makes reference cycles terminate, so under the now view this is the cascade
 /// set a retraction of `root` would retract, in the same order. Empty when `root` is
 /// not selected by the view.
@@ -219,15 +220,20 @@ pub(crate) fn visible(exec: &mut dyn Executor, spec: &ViewSpec, eid: Eid) -> Res
 /// # Ok::<(), tm_core::Error>(())
 /// ```
 // @lat: [[time-model#Cascade#Dependents]]
+// @tg: implements:: [[openspec:statement-dependents#Dependents of a statement]] {since: "2026-10-28"}
 pub fn dependents(exec: &mut dyn Executor, spec: &ViewSpec, root: Eid) -> Result<Vec<Eid>> {
     if !visible(exec, spec, root)? {
         return Ok(Vec::new());
     }
+    let derived_from = crate::term::TermReader::encode(
+        exec,
+        &crate::value::Value::iri(crate::vocab::SYS_DERIVED_FROM),
+    )?;
     // one statement per expansion, the shape of `Tx::cascade_set` with the view's
     // time predicates in place of `t_ret IS NULL`
     let mut params = Params::new();
     let e = params.push(0i64);
-    let mut halves = Vec::with_capacity(2);
+    let mut halves = Vec::with_capacity(3);
     for col in ["s", "o"] {
         let mut conds = vec![format!("a.{col} = {e}")];
         let time = scan_predicates(spec, "a", &mut params);
@@ -236,6 +242,21 @@ pub fn dependents(exec: &mut dyn Executor, spec: &ViewSpec, root: Eid) -> Result
         }
         halves.push(format!(
             "SELECT a.eid FROM triple a WHERE {}",
+            conds.join(" AND ")
+        ));
+    }
+    if let Some(df) = derived_from {
+        // the support rule: a selected link (D sys:derivedFrom x) reaches a selected D
+        let p = params.push(df.raw());
+        let mut conds = vec![format!("a.o = {e}"), format!("a.p = {p}")];
+        for alias in ["a", "d"] {
+            let time = scan_predicates(spec, alias, &mut params);
+            if !time.is_empty() {
+                conds.push(time);
+            }
+        }
+        halves.push(format!(
+            "SELECT a.s FROM triple a JOIN triple d ON d.eid = a.s WHERE {}",
             conds.join(" AND ")
         ));
     }
@@ -273,7 +294,8 @@ pub fn dependents(exec: &mut dyn Executor, spec: &ViewSpec, root: Eid) -> Result
 /// Left out, with everything that references them: statements whose subject or
 /// object is a transaction (transaction numbers are local to a file), statements
 /// whose predicate is engine bookkeeping a user write cannot repeat
-/// (`sys:supersedes`, `sys:confirmedBy`; `sys:inGraph` memberships are kept), and
+/// (`sys:supersedes`, `sys:confirmedBy`; `sys:inGraph` memberships and
+/// `sys:derivedFrom` support links are kept), and
 /// statements that reference a statement not visible in the view. Statements come
 /// references first (ties by eid), local ids are positions, and `NODE` / `BNODE` ids
 /// become bundle-local anonymous labels, so the same view of the same data always

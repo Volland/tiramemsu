@@ -70,15 +70,15 @@ The JSON bridge SHALL accept `derive` as a transaction operation, Node and Pytho
 `Tx::upsert_derived(p, o, support)` SHALL return the node `n` of a live statement `(n p o)` that is derived from exactly the live support set `support`, and otherwise SHALL create a new node `n` and write `(n p o)` through `derive` with `support`. A key that is asserted independently or derived from another support set SHALL NOT be reused. Support validation SHALL be that of `derive`.
 
 #### Scenario: Re-running reuses the node
-- **WHEN** `upsert_derived(tm:skolem, "r/1/abc", [e1, R])` runs in two transactions
+- **WHEN** `upsert_derived(v:skolem, "r/1/abc", [e1, R])` runs in two transactions
 - **THEN** both calls return the same node and the second writes nothing
 
 #### Scenario: The key falls with its support
-- **WHEN** a node was created by `upsert_derived(tm:skolem, "r/1/abc", [e1])` and e1 is retracted
-- **THEN** the key statement is retracted with kind `cascade`, and a later `upsert_derived(tm:skolem, "r/1/abc", [e2])` creates a different node
+- **WHEN** a node was created by `upsert_derived(v:skolem, "r/1/abc", [e1])` and e1 is retracted
+- **THEN** the key statement is retracted with kind `cascade`, and a later `upsert_derived(v:skolem, "r/1/abc", [e2])` creates a different node
 
 #### Scenario: An asserted key is not reused
-- **WHEN** `(n0 tm:skolem "k")` was asserted directly and `upsert_derived(tm:skolem, "k", [e1])` runs
+- **WHEN** `(n0 v:skolem "k")` was asserted directly and `upsert_derived(v:skolem, "k", [e1])` runs
 - **THEN** a new node n1 ≠ n0 is returned
 
 ### Requirement: Widening a derivation

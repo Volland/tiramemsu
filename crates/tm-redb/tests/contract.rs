@@ -82,6 +82,13 @@ fn oracle_fixed_history() {
     oracle::fixed_history(Arc::new(fresh()));
 }
 
+// SQLite and redb agree on derive, re-derive, derived keys, supersede and the support cascade
+// @tg: verifies:: [[openspec:derived-beliefs#Derivation in both engines#Oracle agreement]] {since: "2026-10-28", level: integration}
+#[test]
+fn oracle_derived_history() {
+    oracle::derived_history(Arc::new(fresh()));
+}
+
 #[test]
 fn oracle_random_histories() {
     oracle::random_histories(|| Arc::new(fresh()));

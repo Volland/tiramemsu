@@ -217,6 +217,39 @@ class TxBuilder:
         self._ops.append(op)
         return Ref(name)
 
+    def derive(
+        self,
+        s: Any,
+        p: Any,
+        o: Any,
+        support: List[Any],
+        *,
+        valid_from: Any = None,
+        valid_to: Any = None,
+    ) -> Ref:
+        """Assert the belief ``(s, p, o)`` as derived from every statement in *support*.
+
+        Writes the statement and one engine-owned ``sys:derivedFrom`` link per support.
+        When any support is retracted or superseded, the belief is retracted with it.
+        Deriving the same content from the same live supports again returns the existing
+        statement.  Returns a :class:`Ref`.
+        """
+        name = self._fresh()
+        op: Dict[str, Any] = {
+            "op": "derive",
+            "s": self._v(s),
+            "p": self._v(p),
+            "o": self._v(o),
+            "support": [self._eid(e) for e in support],
+            "as": name,
+        }
+        if valid_from is not None:
+            op["validFrom"] = time_to_json(valid_from)
+        if valid_to is not None:
+            op["validTo"] = time_to_json(valid_to)
+        self._ops.append(op)
+        return Ref(name)
+
     def retract(self, eid: Any) -> None:
         """Retract the statement with this eid (and cascade to any layers on it)."""
         self._ops.append({"op": "retract", "eid": self._eid(eid)})

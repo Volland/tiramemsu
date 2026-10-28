@@ -160,6 +160,22 @@ SELECT ?e ?t FROM <urn:tiramemsu:tm:history> WHERE {
 
 Provenance counts what matched, including `OPTIONAL` parts, the `UNION` branch taken, annotations and graph memberships, and not what was only tested by `FILTER EXISTS` or `MINUS`. Recursive paths contribute no eids yet. See [[query#Front Ends#SPARQL#Query Provenance]]. Tests are in `sparql_provenance.rs`.
 
+## Summaries That Go Stale
+
+A summary written with `Tx::derive` names the observations it rests on, so retracting or correcting one of them retracts the summary in the same transaction, and answers that cited it go stale ([[data-model#Derived Beliefs]]).
+
+```rust
+db.transact(TxOptions::default(), |tx| {
+    let e1 = tx.assert(v("alice"), v("ordered"), v("tea"), Valid::ALWAYS)?.eid();
+    let e2 = tx.assert(v("alice"), v("ordered"), v("tea2"), Valid::ALWAYS)?.eid();
+    tx.derive(v("alice"), v("prefers"), v("tea"), Valid::ALWAYS, &[e1, e2])?;
+    Ok(())
+})?;
+let at_risk = db.now().dependents(e1)?;   // e1, the summary and its links
+```
+
+`dependents` and a dry-run retraction already list the summary, and a saved answer that cited it is marked `stale` with cause `supportRetracted` once a support goes. A second summary of the same content from other observations is a separate statement and stays live. Superseding an observation drops the summary instead of replaying it, since it was computed from the old content. The tests are in `crates/tiramemsu/tests/derived_beliefs.rs`.
+
 ## Typed Layers
 
 `(v:confidence sys:subjectType sys:STMT)` declares that a predicate only annotates statements, so a confidence written on a node by mistake is rejected with `SubjectTypeMismatch` instead of silently becoming a property.

@@ -1,4 +1,4 @@
-//! Recursive retraction over subject and object positions. A port of
+//! Recursive retraction over subject and object positions and support links. A port of
 //! `tm_core::engine::cascade`.
 
 use std::collections::{BTreeSet, HashSet};
@@ -10,10 +10,17 @@ use crate::store::{Pattern, Scope};
 
 impl Tx<'_> {
     /// The cascade set of `root`: `root` plus every live statement reachable over
-    /// subject and object positions, breadth first, each parent's dependents in eid
-    /// order. Fails with `CascadeLimitExceeded` above `max_cascade` statements.
+    /// subject and object positions and over support links (a live `D` with a live
+    /// `(D sys:derivedFrom x)` for a reached `x`), breadth first, each parent's
+    /// dependents in eid order. Fails with `CascadeLimitExceeded` above
+    /// `max_cascade` statements.
+    // @tg: implements:: [[openspec:derived-beliefs#Support cascade]] {since: "2026-10-28"}
+    // @tg: implements:: [[openspec:retraction-cascade#Cascade over subject and object positions]] {since: "2026-10-28"}
     pub(crate) fn cascade_set(&mut self, root: Eid) -> Result<Vec<Eid>> {
         let limit = self.opts.max_cascade;
+        let derived_from = self
+            .sys_lookup(tm_core::vocab::SYS_DERIVED_FROM)?
+            .map(ObjectId::raw);
         let mut order = vec![root];
         let mut seen: HashSet<Eid> = HashSet::from([root]);
         if order.len() > limit {
@@ -24,12 +31,23 @@ impl Tx<'_> {
             let parent = order[i].oid().raw();
             i += 1;
             let mut kids: BTreeSet<i64> = BTreeSet::new();
+            let mut derived: Vec<i64> = Vec::new();
             for pat in [
                 Pattern::new(Some(parent), None, None),
                 Pattern::new(None, None, Some(parent)),
             ] {
                 for r in self.store.scan(pat, Scope::Live)? {
-                    kids.insert(r?.eid);
+                    let r = r?;
+                    kids.insert(r.eid);
+                    // the support rule: a live link (D sys:derivedFrom x) reaches D
+                    if Some(r.p) == derived_from && r.o == parent {
+                        derived.push(r.s);
+                    }
+                }
+            }
+            for d in derived {
+                if self.store.statement(d)?.is_some_and(|r| r.live()) {
+                    kids.insert(d);
                 }
             }
             for raw in kids {

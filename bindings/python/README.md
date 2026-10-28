@@ -112,6 +112,7 @@ A view chooses when you look and when the fact was true. Every read takes a view
 | `supersede(eid, o=, valid_from=, valid_to=)` | Corrects a statement and replays its layers on the new one. A bound you leave out is kept; `None` clears it |
 | `confirm(eid)` | Records that another source agrees |
 | `meta(p, o)`, `upsert(p, o)`, `new_node()` | Transaction metadata, unique upsert, an anonymous node |
+| `derive(s, p, o, support, valid_from=, valid_to=)` | Asserts a belief derived from the `support` statements; retracting or correcting any of them retracts the belief |
 | `add_to_graph(eid, g)`, `remove_from_graph`, `clear_graph`, `create_graph`, `drop_graph` | Named graphs as tags on statements. A statement (`Stmt(eid)` or a `Ref`) can name a graph, so an edge can hold a subgraph |
 | `import_bundle(bundle)` | Imports a bundle from `view.bundle`, possibly read from another database; returns a `Ref` to the imported root, and its entry in `tx.report.results` lists the imported statements |
 | `cypher(text, params=None)` | A Cypher query that may write, inside the same transaction |

@@ -57,6 +57,7 @@ fn stdio_session_end_to_end() {
             "assert",
             "confirm",
             "supersede",
+            "derive",
             "query",
             "dependents",
             "export_bundle",

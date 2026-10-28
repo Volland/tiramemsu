@@ -154,7 +154,7 @@ Supersede is the general **update** verb. It covers changing the object, correct
 
 Algorithm:
 1. Compute the cascade set C of `eid`. See [[time-model#Cascade]].
-2. Select foreign memberships for dropping and propagate exclusion through their structural dependents inside C. The retained root must survive. Allocate fresh eids only for the structurally closed retained set R, forming `σ = {old → new}`.
+2. Select foreign memberships, and derived statements reached through a support link other than the root ([[derived-beliefs#Supersede Drops Derived Dependents]]), for dropping and propagate exclusion through their structural dependents inside C. The retained root must survive. Allocate fresh eids only for the structurally closed retained set R, forming `σ = {old → new}`.
 3. Retract every member of C with `ret_kind = supersede`.
 4. Insert every retained member again with `s` and `o` rewritten through σ, content and valid time unchanged, except the root, which gets the patch. A graph membership is replayed only when its graph is in C (the contents of a statement graph, [[data-model#Named Graphs#Statement Graphs]]); other memberships and their structural annotations are dropped. Root object patches are substituted through σ as well; an endpoint selected for dropping or a direct self-reference is rejected. External structural endpoints must remain live after schema replacement.
 5. Assert `(σ(eid) sys:supersedes eid)`.
@@ -200,9 +200,10 @@ The tx that confirms carries the source and author, so "seen five times from thr
 
 ## Cascade
 
-Retracting a statement retracts, in the same transaction and recursively, every live statement whose subject or object is that eid. Only statement eids cascade; nodes never do.
+Retracting a statement retracts, in the same transaction and recursively, every live statement whose subject or object is that eid, and every live belief derived from it. Only statement eids cascade; nodes never do.
 
-- Walk: breadth-first over `live_spo` (`s = e`) and `live_osp` (`o = e`), with a visited set so cycles terminate. Each frontier is expanded in one query per 500 ids, visiting parents in queue order and each parent's dependents in eid order, so the order equals a node-at-a-time walk; supersede then loads the set's rows in chunks of the same size ([[tests#Review Fixes#Batched Cascade Keeps Its Order]]).
+- Walk: breadth-first over `live_spo` (`s = e`) and `live_osp` (`o = e`), with a visited set so cycles terminate.
+- Support rule: a live link `(D sys:derivedFrom e)` also reaches `D`, so a derived belief falls with any of its supports ([[data-model#Derived Beliefs]], [[derived-beliefs#Support Links Extend The Referent Relation]]). `D` joins the dependents of the same parent in eid order, gets the same `ret_kind` as every cascade member, and counts toward `max_cascade`. Each frontier is expanded in one query per 500 ids, visiting parents in queue order and each parent's dependents in eid order, so the order equals a node-at-a-time walk; supersede then loads the set's rows in chunks of the same size ([[tests#Review Fixes#Batched Cascade Keeps Its Order]]).
 - Retracting `(alice worksAt acme)` touches only triples about that eid, never other triples about `alice` or `acme`.
 - Nothing is lost: cascaded rows get the same `t_ret`, so `asOf(t_ret − 1)` still shows the whole structure, including e.g. what a belief relied on.
 - Guard rails: `TxReport.retracted` lists the full set, `dry_run` previews it, `View::dependents` previews it without the writer (see below), and `max_cascade` (default 10 000) aborts the transaction with `CascadeLimitExceeded`.
@@ -211,9 +212,9 @@ Retracting a statement retracts, in the same transaction and recursively, every 
 
 `View::dependents(eid)` is the cascade walk as a read on any view: what a retraction would take with it now, what depended on a fact then, or everything that ever did. It needs no writer lock and burns no id.
 
-- **Walk:** `eid` first, then breadth-first over the statements visible in the view whose `s` or `o` is a statement already reached, each expansion in ascending eid order, with a visited set. It is the order of the cascade, and an eid not visible in the view gives an empty list. See [[crates/tm-core/src/read.rs#dependents]].
+- **Walk:** `eid` first, then breadth-first over the statements visible in the view whose `s` or `o` is a statement already reached, and over the visible statements `D` with a visible link `(D sys:derivedFrom x)` to a reached `x`, each expansion in ascending eid order, with a visited set. It is the order of the cascade, and an eid not visible in the view gives an empty list. See [[crates/tm-core/src/read.rs#dependents]].
 - **Time:** the root check and every expansion take their predicates from [[crates/tm-core/src/view.rs#scan_predicates]], so `asOf(t)` gives the structure as it was (also after it was retracted), `history` every statement that ever stood on the root, including ones retracted before it, and `validAt` keeps only statements valid at the instant.
-- **Equivalence:** under the now view the set equals the retracted statements and memberships of a dry-run `retract(eid)`, and the ends of the path `(^sys:subject|^sys:object)*` from `eid` ([[query#Physical Planning#Path Engine]]). The path engine is not used, because `tm-core` must run on a host without virtual tables.
+- **Equivalence:** under the now view the set equals the retracted statements and memberships of a dry-run `retract(eid)`, and the ends of the path `(^sys:subject|^sys:object|^sys:derivedFrom)*` from `eid` ([[query#Physical Planning#Path Engine]]). The path engine is not used, because `tm-core` must run on a host without virtual tables.
 - **Unbounded:** the read is never truncated and never fails for size. An under-reported impact list is the worst answer to "what would this take with it", so `max_cascade` stays a guard on retractions only; a caller compares `len()` with its own limit.
 - **Fact bundles** start from the same walk. See [[data-model#Fact Bundles]].
 

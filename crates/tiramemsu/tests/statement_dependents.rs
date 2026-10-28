@@ -1,5 +1,5 @@
 //! Spec `statement-dependents` through the facade: `View::dependents` against the
-//! dry-run cascade and the layer path `(^sys:subject|^sys:object)*`.
+//! dry-run cascade and the path `(^sys:subject|^sys:object|^sys:derivedFrom)*`.
 // the generator serves only the path comparison, which needs the query engine
 #![cfg_attr(not(feature = "exec"), allow(dead_code, unused_imports))]
 
@@ -30,6 +30,7 @@ enum GenOp {
     Supersede { target: u16, o: u8 },
     Retract { target: u16 },
     Cycle { target: u16 },
+    Derive { s: u8, a: u16, b: u16 },
 }
 
 fn op_strategy() -> impl Strategy<Value = GenOp> {
@@ -42,6 +43,7 @@ fn op_strategy() -> impl Strategy<Value = GenOp> {
         1 => (any::<u16>(), 0u8..4).prop_map(|(target, o)| GenOp::Supersede { target, o }),
         2 => any::<u16>().prop_map(|target| GenOp::Retract { target }),
         1 => any::<u16>().prop_map(|target| GenOp::Cycle { target }),
+        2 => (0u8..4, any::<u16>(), any::<u16>()).prop_map(|(s, a, b)| GenOp::Derive { s, a, b }),
     ]
 }
 
@@ -94,6 +96,11 @@ fn apply(db: &Db, op: &GenOp, known: &[Eid]) -> Result<TxReport> {
                     tx.retract(e)?;
                 }
             }
+            GenOp::Derive { s, a, b } => {
+                if let (Some(a), Some(b)) = (pick(known, a), pick(known, b)) {
+                    tx.derive(node(s), v("concludes"), node(s), Valid::ALWAYS, &[a, b])?;
+                }
+            }
             GenOp::Cycle { target } => {
                 let x = tx.create(v("c"), v("about"), Eid::new(next + 1), Valid::ALWAYS)?;
                 tx.create(x, v("about"), v("d"), Valid::ALWAYS)?;
@@ -107,8 +114,10 @@ fn apply(db: &Db, op: &GenOp, known: &[Eid]) -> Result<TxReport> {
 }
 
 // Three ways to ask "what stands on e": the read, the dry-run retraction and the
-// path engine's inverse layer hops. They must agree on every live statement.
+// path engine's inverse layer and support hops. They must agree on every live
+// statement, with random derivations among the operations.
 // @tg: verifies:: [[tests#Dependents#Dependents Match Cascade And Path]] {since: "2026-09-30", level: unit}
+// @tg: verifies:: [[openspec:statement-dependents#Dependents equal the cascade#Random layered graphs]] {since: "2026-10-28", level: integration}
 #[test]
 #[cfg(feature = "exec")] // compares with `View::path`
 fn prop_dependents_match_cascade_and_path() {
@@ -146,7 +155,12 @@ fn prop_dependents_match_cascade_and_path() {
                 .collect();
             prop_assert_eq!(&got, &cascade, "dry run of {:?}", e);
             let ends: BTreeSet<Eid> = now
-                .path(e.oid(), "(^sys:subject|^sys:object)*", PathMode::Reachability, u32::MAX)
+                .path(
+                    e.oid(),
+                    "(^sys:subject|^sys:object|^sys:derivedFrom)*",
+                    PathMode::Reachability,
+                    u32::MAX,
+                )
                 .unwrap()
                 .iter()
                 .map(|r| Eid::from_oid(r.end).expect("a statement end"))
