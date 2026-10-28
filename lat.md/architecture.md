@@ -442,6 +442,10 @@ Its working example is the sanitized trace of the Claude Code session that wrote
 
 The guide `docs/datalog.md` (language, time, constraints, materialization, goal calls) is rendered to `site/datalog/index.html` by `article/datalog/build-guide.py`.
 
+### Integration And Engine Articles
+
+`article/n3-integration/` and `article/datalog-engine/` hold two more long reads: how eyeron is integrated ([[reasoning]]) and how the Datalog engine was built ([[datalog]]), published as `site/articles/n3-reasoner-integration.html` and `building-the-datalog-engine.html`.
+
 Its programs come from the tests `crates/tiramemsu/tests/datalog.rs`, `datalog_constraints.rs` and `datalog_materialization.rs`, and its numbers from `bench/datalog/README.md`, so a change to those, or to the status of incremental runs (decision DL22, not built), should be reflected there. `build-site.py` rebuilds the page.
 
 ## Crate Documentation and Publishing
