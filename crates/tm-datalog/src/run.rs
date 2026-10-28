@@ -538,6 +538,7 @@ fn engine<'p, 's>(
             proof,
             parallel_threshold: opts.parallel_threshold,
             now: prep.now,
+            cheap_estimates: false,
         },
     )
 }

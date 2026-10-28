@@ -92,6 +92,9 @@ pub struct EvalOptions {
     pub parallel_threshold: usize,
     /// The pinned clock (`now()`).
     pub now: i64,
+    /// Plan without reading the store: a stored atom is estimated from its bound
+    /// positions only (commit-time checks, which start from a few seed rows).
+    pub cheap_estimates: bool,
 }
 
 /// One premise of a derivation.
@@ -200,6 +203,28 @@ impl<'p, 's> Engine<'p, 's> {
             new_values: 0,
             estimates: FxHashMap::default(),
         })
+    }
+
+    /// Puts a tuple into a relation before the run, with one stored statement
+    /// (or none) as its derivation.
+    pub fn inject(&mut self, rel: u32, tuple: &[Id], iv: &IvSet, eid: Option<Id>) {
+        let iv = if self.sh.prog.rels[rel as usize].magic {
+            IvSet::all()
+        } else {
+            iv.clone()
+        };
+        let proof = self.sh.opts.proof;
+        let r = &mut self.sh.rels[rel as usize];
+        if let Some((row, new)) = r.insert(tuple, &iv, proof) {
+            if proof {
+                let ix = self.derivs.len() as u32;
+                self.derivs.push(Deriv {
+                    rule: u32::MAX,
+                    premises: eid.map(Prem::Stmt).into_iter().collect(),
+                });
+                r.prov[row as usize].push((new, ix));
+            }
+        }
     }
 
     /// The number of facts derived (new tuples or new parts of their sets).
@@ -418,6 +443,17 @@ impl<'p, 's> Engine<'p, 's> {
                     return Ok(1.0);
                 }
                 Ok((n / 10f64.powi(k as i32)).max(1.0))
+            }
+            Source::Stored(p) if self.sh.opts.cheap_estimates => {
+                let k = [
+                    Self::slot_bound(&p.s, bound),
+                    Self::slot_bound(&p.o, bound),
+                    p.e.as_ref().is_some_and(|s| Self::slot_bound(s, bound)),
+                ]
+                .iter()
+                .filter(|b| **b)
+                .count();
+                Ok(1_000_000.0 / 1000f64.powi(k as i32))
             }
             Source::Stored(p) => {
                 let pat: Pat4 = [

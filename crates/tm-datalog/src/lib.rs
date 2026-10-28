@@ -1,9 +1,11 @@
 //! Tiramemsu Datalog (OpenSpec change `add-datalog-engine`, `lat.md/datalog.md`).
 #![doc = include_str!("../README.md")]
 
+pub mod enforce;
 pub mod eval;
 pub mod interval;
 pub mod magic;
+pub mod materialize;
 pub mod program;
 pub mod rel;
 pub mod run;

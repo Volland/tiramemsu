@@ -347,6 +347,7 @@ impl Pair {
         let opts = TxOptions {
             dry_run: plan.dry_run,
             max_cascade: plan.max_cascade,
+            ..TxOptions::default()
         };
         let known = self.known.clone();
         let a = outcome(self.core.transact(opts, |tx| {

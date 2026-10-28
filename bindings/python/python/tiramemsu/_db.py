@@ -12,6 +12,7 @@ from typing import Any, Dict, Iterator, List, Optional, Union, overload
 
 from ._native import Native
 from ._types import (
+    ConstraintBudget,
     CypherResult,
     CypherWriteResult,
     ImportProgress,
@@ -572,6 +573,28 @@ class TxBuilder:
         )
         return Ref(name)
 
+    def enforce(self, program: Any, on: bool = True) -> Optional[Ref]:
+        """Enforce the stored program *program* (an IRI ``str`` or a term) at every
+        commit, or stop enforcing it with ``on=False``.
+
+        Writes one statement ``(program dl:enforced true)``. Turning it on checks the
+        program's ``error`` constraints over the whole store first and fails with
+        ``ConstraintViolated`` when the data already violates one, or
+        ``ConstraintNotEnforceable`` when one cannot be checked from a transaction's
+        changes. From then on a commit that would introduce a violation is refused with
+        ``ConstraintViolated`` (its violations are on the error's ``violations``).
+        Returns a :class:`Ref` to the ``dl:enforced`` statement, or ``None`` when
+        turning enforcement off.
+        """
+        op: Dict[str, Any] = {"op": "enforce", "program": _rule_set_json(program), "on": on}
+        if not on:
+            self._ops.append(op)
+            return None
+        name = self._fresh()
+        op["as"] = name
+        self._ops.append(op)
+        return Ref(name)
+
     def cypher(self, text: str, params: Optional[Dict[str, Any]] = None) -> None:
         """Run a Cypher write statement as part of this transaction."""
         op: Dict[str, Any] = {"op": "cypher", "text": text}
@@ -595,11 +618,13 @@ class TxContext:
         budget: Optional[QueryBudget] = None,
         op: str = "transact",
         extra: Optional[Dict[str, Any]] = None,
+        constraint_budget: Optional[ConstraintBudget] = None,
     ) -> None:
         self._native = native
         self._dry_run = dry_run
         self._max_cascade = max_cascade
         self._budget = budget
+        self._constraint_budget = constraint_budget
         self._op = op
         self._extra = extra or {}
         self._builder = TxBuilder()
@@ -616,7 +641,11 @@ class TxContext:
         if exc_type is not None:
             return  # don't submit when the block raised
         args = _tx_args(
-            self._builder._ops, self._dry_run, self._max_cascade, self._budget
+            self._builder._ops,
+            self._dry_run,
+            self._max_cascade,
+            self._budget,
+            self._constraint_budget,
         )
         args.update(self._extra)
         result_text = _call(self._native, self._op, json.dumps(args))
@@ -628,6 +657,7 @@ def _tx_args(
     dry_run: bool,
     max_cascade: Optional[int],
     budget: Optional[QueryBudget],
+    constraint_budget: Optional[ConstraintBudget] = None,
 ) -> Dict[str, Any]:
     """The bridge arguments of a transaction (or import chunk) of *ops*."""
     args: Dict[str, Any] = {"ops": ops}
@@ -636,6 +666,8 @@ def _tx_args(
         options["dryRun"] = True
     if max_cascade is not None:
         options["maxCascade"] = max_cascade
+    if constraint_budget is not None:
+        options["constraintBudget"] = constraint_budget._to_json()
     if options:
         args["options"] = options
     if budget is not None:
@@ -669,6 +701,7 @@ class BulkImport:
         dry_run: bool = ...,
         max_cascade: Optional[int] = ...,
         budget: Optional[QueryBudget] = ...,
+        constraint_budget: Optional[ConstraintBudget] = ...,
     ) -> Report: ...
 
     @overload
@@ -679,6 +712,7 @@ class BulkImport:
         dry_run: bool = ...,
         max_cascade: Optional[int] = ...,
         budget: Optional[QueryBudget] = ...,
+        constraint_budget: Optional[ConstraintBudget] = ...,
     ) -> TxContext: ...
 
     def chunk(
@@ -688,6 +722,7 @@ class BulkImport:
         dry_run: bool = False,
         max_cascade: Optional[int] = None,
         budget: Optional[QueryBudget] = None,
+        constraint_budget: Optional[ConstraintBudget] = None,
     ) -> Union[Report, TxContext]:
         """Commit one chunk, in the two forms of :meth:`Database.transact`.
 
@@ -695,7 +730,7 @@ class BulkImport:
         """
         extra = {"session": self.session}
         if ops is not None:
-            args = _tx_args(ops, dry_run, max_cascade, budget)
+            args = _tx_args(ops, dry_run, max_cascade, budget, constraint_budget)
             args.update(extra)
             result_text = _call(self._native, "importChunk", json.dumps(args))
             return report_from_json(json.loads(result_text))
@@ -706,6 +741,7 @@ class BulkImport:
             budget=budget,
             op="importChunk",
             extra=extra,
+            constraint_budget=constraint_budget,
         )
 
     def progress(self) -> ImportProgress:
@@ -1440,6 +1476,7 @@ class Database:
         dry_run: bool = ...,
         max_cascade: Optional[int] = ...,
         budget: Optional[QueryBudget] = ...,
+        constraint_budget: Optional[ConstraintBudget] = ...,
     ) -> Report: ...
 
     @overload
@@ -1450,6 +1487,7 @@ class Database:
         dry_run: bool = ...,
         max_cascade: Optional[int] = ...,
         budget: Optional[QueryBudget] = ...,
+        constraint_budget: Optional[ConstraintBudget] = ...,
     ) -> TxContext: ...
 
     def transact(
@@ -1459,6 +1497,7 @@ class Database:
         dry_run: bool = False,
         max_cascade: Optional[int] = None,
         budget: Optional[QueryBudget] = None,
+        constraint_budget: Optional[ConstraintBudget] = None,
     ) -> Union[Report, TxContext]:
         """Submit a transaction.
 
@@ -1470,13 +1509,18 @@ class Database:
         :class:`Report` directly.
 
         *budget* bounds the transaction; a stopped one commits nothing.
+        *constraint_budget* bounds the commit-time checks of enforced Datalog programs.
         """
         if ops is not None:
-            args = _tx_args(ops, dry_run, max_cascade, budget)
+            args = _tx_args(ops, dry_run, max_cascade, budget, constraint_budget)
             result_text = _call(self._native, "transact", json.dumps(args))
             return report_from_json(json.loads(result_text))
         return TxContext(
-            self._native, dry_run=dry_run, max_cascade=max_cascade, budget=budget
+            self._native,
+            dry_run=dry_run,
+            max_cascade=max_cascade,
+            budget=budget,
+            constraint_budget=constraint_budget,
         )
 
     def cypher_write(

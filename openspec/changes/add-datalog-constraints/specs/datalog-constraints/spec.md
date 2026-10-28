@@ -47,7 +47,7 @@ A commit-time check SHALL evaluate each constraint only from bindings seeded by 
 
 #### Scenario: Seed rows follow the write
 - **WHEN** a store of 10⁵ `ex:role` statements receives one new `ex:role` statement
-- **THEN** the report shows one seed row for `one_ceo`
+- **THEN** the report shows one constraint checked and two seed rows: the new statement seeds each of `one_ceo`'s two `v:role` atoms
 
 ### Requirement: Enforceable constraints
 An `error` constraint SHALL be enforceable when its body reads only stored atoms, reserved atoms, derived relations that are not recursive (inlined into the body) and metric operators with finite windows. Enabling enforcement of a program with a non-enforceable `error` constraint SHALL fail with `ConstraintNotEnforceable` naming it; `View::check` SHALL still evaluate it.

@@ -137,6 +137,13 @@ function timeArg(t: Date | number | string): number | string {
  * e.g. `Parse`, `NotLive`, `InvalidArgument`, `Unsupported`. See README for the full list.
  */
 export class TiramemsuError extends Error {
+  /** With code `ConstraintViolated`: the enforced program whose constraint failed. */
+  program?: string;
+  /** With code `ConstraintViolated`: the failed constraint's name. */
+  constraint?: string;
+  /** With code `ConstraintViolated`: the violations the transaction would have introduced. */
+  violations?: ConstraintViolation[];
+
   constructor(message: string, public readonly code: string) {
     super(message);
     this.name = "TiramemsuError";
@@ -147,12 +154,19 @@ function parseError(e: unknown): TiramemsuError {
   const msg = e instanceof Error ? e.message : String(e);
   const prefix = "tiramemsu:";
   if (msg.startsWith(prefix)) {
+    let obj: Record<string, unknown>;
     try {
-      const obj = JSON.parse(msg.slice(prefix.length)) as { code: string; message: string };
-      return new TiramemsuError(obj.message, obj.code);
+      obj = JSON.parse(msg.slice(prefix.length)) as Record<string, unknown>;
     } catch {
-      // fall through
+      return new TiramemsuError(msg, "Error");
     }
+    const err = new TiramemsuError(String(obj.message), String(obj.code));
+    if (typeof obj.program === "string") err.program = obj.program;
+    if (typeof obj.constraint === "string") err.constraint = obj.constraint;
+    if (Array.isArray(obj.violations)) {
+      err.violations = (obj.violations as Array<Record<string, unknown>>).map(decodeConstraintViolation);
+    }
+    return err;
   }
   return new TiramemsuError(msg, "Error");
 }
@@ -288,6 +302,15 @@ export interface Report {
   superseded: SupersededRecord[];
   memberships: number[];
   membershipsRetracted: RetractedRecord[];
+  /** Seeded constraint checks run at commit for enforced programs. */
+  constraintChecks: number;
+  /** Delta rows that seeded those checks. */
+  seedRows: number;
+  /**
+   * Violations found at commit that do not refuse it: `warn` constraints of enforced
+   * programs, and on a dry run also the `error` violations a commit would be refused for.
+   */
+  constraintViolations: ConstraintViolation[];
   /** One result object per op, in order. */
   results: unknown[];
   /** Named refs from `as` labels, mapping name → eid. */
@@ -1045,6 +1068,34 @@ export interface Violation {
   valid: DatalogInterval[];
 }
 
+/** A violation of an enforced program's constraint, found when a transaction commits. */
+export interface ConstraintViolation extends Violation {
+  /** The program node's IRI or label. */
+  program: string;
+  constraint: string;
+  severity: "warn" | "error";
+}
+
+function decodeBindings(b: unknown): Record<string, DatalogTerm> {
+  return Object.fromEntries(
+    Object.entries(b as Record<string, unknown>).map(([k, t]) => [k, datalogTerm(t)]),
+  );
+}
+
+function decodeConstraintViolation(v: Record<string, unknown>): ConstraintViolation {
+  return { ...(v as unknown as ConstraintViolation), bindings: decodeBindings(v.bindings) };
+}
+
+/** Decodes the bindings of a report's constraint violations. */
+function decodeReport<R extends Report>(r: R): R {
+  if (Array.isArray(r.constraintViolations)) {
+    r.constraintViolations = (r.constraintViolations as unknown as Array<Record<string, unknown>>).map(
+      decodeConstraintViolation,
+    );
+  }
+  return r;
+}
+
 /** The result of `View.check`. */
 export interface CheckResult {
   /** The violated constraints, in program order. */
@@ -1459,9 +1510,7 @@ export class View {
         ...(c as unknown as CheckResult["violated"][number]),
         violations: (c.violations as Array<Record<string, unknown>>).map((v) => ({
           ...(v as unknown as Violation),
-          bindings: Object.fromEntries(
-            Object.entries(v.bindings as Record<string, unknown>).map(([k, t]) => [k, datalogTerm(t)]),
-          ),
+          bindings: decodeBindings(v.bindings),
         })),
       })),
     };
@@ -1477,10 +1526,21 @@ export interface AssertOpts {
   onExisting?: "return" | "confirm";
 }
 
+/**
+ * Bounds the seeded constraint checks of one commit; a check that exceeds it refuses the
+ * transaction with `ConstraintBudgetExceeded`. Defaults come from the database.
+ */
+export interface ConstraintBudget {
+  timeoutMs?: number;
+  maxSeedRows?: number;
+}
+
 /** Options for a transaction. */
 export interface TxOptions {
   dryRun?: boolean;
   maxCascade?: number;
+  /** Bounds the commit-time checks of enforced constraints. */
+  constraintBudget?: ConstraintBudget;
   /** Bounds the transaction; a stopped one commits nothing. */
   budget?: QueryBudget;
 }
@@ -1707,6 +1767,24 @@ export class Tx {
     return this._push({ op: "storeProgram", program: programJson(program), text }, true);
   }
 
+  /**
+   * Enforces the stored program `program` (`on`, the default) or stops enforcing it
+   * (`on = false`): one statement `(program dl:enforced true)`. Turning it on checks the
+   * program's `error` constraints over the whole store first and fails with
+   * `ConstraintViolated` when the data already violates one, or `ConstraintNotEnforceable`
+   * when one cannot be checked from a transaction's delta. From then on every commit that
+   * would introduce a violation is refused with `ConstraintViolated`. Returns a Ref to the
+   * `dl:enforced` statement, or `null` when turning enforcement off.
+   */
+  enforce(program: ProgramInput, on = true): Ref | null {
+    const op = { op: "enforce", program: programJson(program), on };
+    if (!on) {
+      this._push(op, false);
+      return null;
+    }
+    return this._push(op, true);
+  }
+
   /** Runs a Cypher write statement inside this transaction. */
   cypher(text: string, params?: Record<string, unknown>): void {
     this._ops.push({ op: "cypher", text, params });
@@ -1780,7 +1858,9 @@ export class BulkImport {
     } else {
       ops = fnOrOps;
     }
-    return callNative(this._db, "importChunk", txArgs({ session: this.session, ops }, options)) as ChunkReport;
+    return decodeReport(
+      callNative(this._db, "importChunk", txArgs({ session: this.session, ops }, options)) as ChunkReport,
+    );
   }
 
   /** The progress so far. */
@@ -1844,7 +1924,7 @@ export class Database {
     } else {
       ops = fnOrOps;
     }
-    return callNative(this._db, "transact", txArgs({ ops }, options)) as Report;
+    return decodeReport(callNative(this._db, "transact", txArgs({ ops }, options)) as Report);
   }
 
   /** A Cypher statement that may write, executed as one transaction. */

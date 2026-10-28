@@ -522,7 +522,7 @@ fn protocol_handshake_and_errors() {
     )
     .unwrap();
     let n3_tools = if cfg!(feature = "n3") { 3 } else { 0 };
-    let datalog_tools = if cfg!(feature = "datalog") { 3 } else { 0 };
+    let datalog_tools = if cfg!(feature = "datalog") { 4 } else { 0 };
     assert_eq!(
         r["result"]["tools"].as_array().unwrap().len(),
         20 + n3_tools + datalog_tools
@@ -1179,4 +1179,106 @@ fn datalog_query_store_program_and_check_tools() {
         ),
         "PathNotAllowed"
     );
+}
+
+#[cfg(feature = "datalog")]
+const ONE_CEO: &str = "constraint one_ceo error :- v:role(X, v:CEO), v:role(Y, v:CEO), X != Y.\n";
+
+// enforce_program turns a stored program's error constraints on; a violating
+// write through the ordinary write tools is then refused with
+// ConstraintViolated and its violations, and writes nothing.
+// @tg: verifies:: [[openspec:datalog-constraints#Constraint surfaces]] {level: integration}
+#[cfg(feature = "datalog")]
+#[test]
+fn enforce_program_refuses_violating_writes() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut server = open(&dir);
+    let ceo = |who: &str| json!({ "s": v(who), "p": v("role"), "o": v("CEO") });
+    server.call_tool("assert", &ceo("a")).unwrap();
+    server
+        .call_tool(
+            "store_program",
+            &json!({ "program": "urn:tiramemsu:v:policies", "text": ONE_CEO }),
+        )
+        .unwrap();
+    let on = server
+        .call_tool(
+            "enforce_program",
+            &json!({ "program": "urn:tiramemsu:v:policies" }),
+        )
+        .unwrap();
+    assert!(on["eid"].as_u64().is_some(), "{on}");
+    assert_eq!(on["on"], true);
+    assert!(on["t"].as_u64().is_some());
+    let before = counters(&server);
+    let r = rpc_call(&mut server, "assert", ceo("b"));
+    assert_eq!(tool_error(&r), "ConstraintViolated");
+    let e = &r["structuredContent"];
+    assert_eq!(e["constraint"], "one_ceo");
+    let vs = e["violations"].as_array().unwrap();
+    assert_eq!(vs.len(), 2, "{e}");
+    assert_eq!(vs[0]["severity"], "error");
+    assert_eq!(vs[0]["eids"].as_array().unwrap().len(), 2);
+    assert_eq!(vs[0]["valid"], json!([{ "from": null, "to": null }]));
+    assert_eq!(counters(&server), before);
+    // strict arguments
+    let err = |name: &str, args: J| server.call_tool(name, &args).unwrap_err().code;
+    assert_eq!(
+        err("enforce_program", json!({ "on": true })),
+        "InvalidArgument"
+    );
+    assert_eq!(
+        err(
+            "enforce_program",
+            json!({ "program": "urn:tiramemsu:v:policies", "text": ONE_CEO })
+        ),
+        "InvalidArgument"
+    );
+    assert_eq!(
+        err(
+            "enforce_program",
+            json!({ "program": "urn:tiramemsu:v:none" })
+        ),
+        "UnknownProgram"
+    );
+    // turned off, the write goes through
+    let off = server
+        .call_tool(
+            "enforce_program",
+            &json!({ "program": "urn:tiramemsu:v:policies", "on": false }),
+        )
+        .unwrap();
+    assert_eq!(off["eid"], J::Null);
+    assert_eq!(off["on"], false);
+    server.call_tool("assert", &ceo("b")).unwrap();
+}
+
+// @tg: verifies:: [[openspec:datalog-constraints#Constraint surfaces]] {level: integration}
+#[cfg(feature = "datalog")]
+#[test]
+fn read_only_mcp_hides_enforce_program() {
+    let dir = tempfile::tempdir().unwrap();
+    {
+        let server = open(&dir);
+        server
+            .call_tool(
+                "store_program",
+                &json!({ "program": "urn:tiramemsu:v:policies", "text": ONE_CEO }),
+            )
+            .unwrap();
+    }
+    let mut ro = Server::open(Config {
+        read_only: true,
+        ..config(&dir)
+    })
+    .unwrap();
+    assert!(ro.tools().iter().all(|t| t["name"] != "enforce_program"));
+    let before = counters(&ro);
+    let r = rpc_call(
+        &mut ro,
+        "enforce_program",
+        json!({ "program": "urn:tiramemsu:v:policies" }),
+    );
+    assert_eq!(tool_error(&r), "ReadOnly");
+    assert_eq!(counters(&ro), before);
 }

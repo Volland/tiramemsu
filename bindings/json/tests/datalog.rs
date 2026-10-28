@@ -96,3 +96,41 @@ fn bridge_store_program_info_check_reason_explain() {
         .unwrap_err();
     assert_eq!(err.code(), "DatalogParse");
 }
+
+// @tg: verifies:: [[openspec:datalog-constraints#Constraint surfaces#Bridge refusal carries violations]] {level: integration}
+#[test]
+fn bridge_refusal_carries_violations() {
+    let (_d, db) = open();
+    let ceo = |who: &str| json!({ "op": "assert", "s": v(who), "p": v("role"), "o": v("CEO") });
+    db.call("transact", &json!({ "ops": [ceo("a")] })).unwrap();
+    let r = db
+        .call(
+            "transact",
+            &json!({ "ops": [
+                { "op": "storeProgram", "program": "urn:tiramemsu:v:p",
+                  "text": "constraint one_ceo error :- v:role(X, v:CEO), v:role(Y, v:CEO), X != Y." },
+                { "op": "enforce", "program": "urn:tiramemsu:v:p" },
+            ]}),
+        )
+        .unwrap();
+    assert!(r["results"][1]["eid"].as_u64().is_some());
+    let err = db
+        .call("transact", &json!({ "ops": [ceo("b")] }))
+        .unwrap_err();
+    assert_eq!(err.code(), "ConstraintViolated");
+    let j = err.to_json();
+    assert_eq!(j["constraint"], "one_ceo");
+    let vs = j["violations"].as_array().unwrap();
+    assert_eq!(vs.len(), 2);
+    assert!(vs[0]["bindings"]["X"].is_object());
+    assert_eq!(vs[0]["eids"].as_array().unwrap().len(), 2);
+    assert_eq!(vs[0]["valid"], json!([{ "from": null, "to": null }]));
+    // a report counts the checks
+    let ok = db
+        .call(
+            "transact",
+            &json!({ "ops": [ { "op": "assert", "s": v("a"), "p": v("name"), "o": "Ada" } ] }),
+        )
+        .unwrap();
+    assert_eq!(ok["constraintChecks"], 0);
+}

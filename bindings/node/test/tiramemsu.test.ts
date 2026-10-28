@@ -5,7 +5,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it, expect } from "vitest";
-import { Database, iri, stmt, TiramemsuError } from "../lib/index.ts";
+import { Database, iri, Ref, stmt, TiramemsuError } from "../lib/index.ts";
 
 // Helpers matching the bridge test namespace.
 const v = (s: string) => iri(`urn:tiramemsu:v:${s}`);
@@ -960,6 +960,58 @@ describe("Datalog", () => {
       // as of before the second CEO, nothing is violated
       expect(db.asOf({ tx: 1 }).check({ program: policies }).violated).toHaveLength(0);
       expect(db.check({ stored: "urn:tiramemsu:v:policies", only: ["one_ceo"] }).checked).toEqual(["one_ceo"]);
+    } finally { cleanup(dir); }
+  });
+
+  it("enforces a program's constraints at commit", () => {
+    const { db, dir } = tempDb();
+    try {
+      const role = v("role");
+      const ceo = v("CEO");
+      const policies = "constraint one_ceo error :- v:role(X, v:CEO), v:role(Y, v:CEO), X != Y.\n";
+      db.transact((tx) => { tx.assert(v("a"), role, ceo); });
+      let off: Ref | null = null;
+      const on = db.transact((tx) => {
+        tx.storeProgram("urn:tiramemsu:v:policies", policies);
+        expect(tx.enforce("urn:tiramemsu:v:policies")).toBeInstanceOf(Ref);
+      });
+      expect(typeof (on.results[1] as { eid: number }).eid).toBe("number");
+
+      // a dry run reports the violations a commit would be refused for
+      const dry = db.transact((tx) => { tx.assert(v("b"), role, ceo); }, { dryRun: true });
+      expect(dry.constraintChecks).toBeGreaterThan(0);
+      expect(dry.seedRows).toBeGreaterThan(0);
+      expect(dry.constraintViolations.length).toBeGreaterThan(0);
+      expect(dry.constraintViolations[0].constraint).toBe("one_ceo");
+      expect(dry.constraintViolations[0].severity).toBe("error");
+
+      // a second CEO is refused, with the violations on the error
+      try {
+        db.transact((tx) => { tx.assert(v("b"), role, ceo); });
+        throw new Error("expected ConstraintViolated");
+      } catch (err) {
+        const e = err as TiramemsuError;
+        expect(e.code).toBe("ConstraintViolated");
+        expect(e.constraint).toBe("one_ceo");
+        expect(e.violations).toHaveLength(2);
+        const pairs = e.violations!.map((x) => [x.bindings.X, x.bindings.Y]);
+        expect(pairs).toContainEqual([v("a"), v("b")]);
+        expect(e.violations![0].eids).toHaveLength(2);
+        expect(e.violations![0].valid).toEqual([{ from: null, to: null }]);
+      }
+      expect(db.now().triples({ p: role })).toHaveLength(1);
+
+      // budget option is accepted; a write outside the program's predicates checks nothing
+      const ok = db.transact((tx) => { tx.assert(v("a"), v("name"), "Ada"); },
+        { constraintBudget: { timeoutMs: 1000, maxSeedRows: 1000 } });
+      expect(ok.constraintChecks).toBe(0);
+      expect(ok.constraintViolations).toEqual([]);
+
+      // turned off, the write commits
+      db.transact((tx) => { off = tx.enforce("urn:tiramemsu:v:policies", false); });
+      expect(off).toBeNull();
+      db.transact((tx) => { tx.assert(v("b"), role, ceo); });
+      expect(db.now().triples({ p: role })).toHaveLength(2);
     } finally { cleanup(dir); }
   });
 });

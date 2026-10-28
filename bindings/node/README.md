@@ -119,9 +119,10 @@ A view chooses when you look and when the fact was true. Every read takes a view
 | `importBundle(bundle)` | Imports a bundle from `view.bundle`, possibly read from another database; returns a `Ref` to the imported root |
 | `storeRules(ruleSet, n3)` | Stores N3 rules as a rule set; new text supersedes the live version |
 | `storeProgram(program, text)` | Stores a Datalog program; new text supersedes the live version |
+| `enforce(program, on = true)` | Enforces a stored program's `error` constraints at every commit (`on = false` stops); returns a `Ref`, or `null` when turning off |
 | `cypher(text, params?)` | A Cypher query that may write, inside the same transaction |
 
-`opts` takes `validFrom`, `validTo` (a `Date`, epoch milliseconds or an RFC 3339 string) and `onExisting: "confirm"`. `transact(fn, { dryRun: true })` reports what would happen and commits nothing. `db.speculate(fn, queries)` applies changes hypothetically, runs queries on the result, and keeps nothing.
+`opts` takes `validFrom`, `validTo` (a `Date`, epoch milliseconds or an RFC 3339 string) and `onExisting: "confirm"`. `transact(fn, { dryRun: true })` reports what would happen and commits nothing. `transact(fn, { constraintBudget: { timeoutMs, maxSeedRows } })` bounds the commit-time checks of enforced programs. A report carries `constraintChecks`, `seedRows` and `constraintViolations` (`{program, constraint, severity, bindings, eids, valid}`): the `warn` violations of enforced programs, and on a dry run also the `error` ones a commit would be refused for. `db.speculate(fn, queries)` applies changes hypothetically, runs queries on the result, and keeps nothing.
 
 ## Reading
 
@@ -189,6 +190,9 @@ Every failure throws a `TiramemsuError` with a `code`:
 | `IdSpaceExhausted` | An id counter passed 2^48 − 1 |
 | `ImportInProgress` | A write, or a second import session, while a bulk import session is open |
 | `SavedAnswerNotFound` | `refreshAnswer` of a name that was never saved |
+| `ConstraintViolated` | A commit would violate an `error` constraint of an enforced program; the error's `program`, `constraint` and `violations` say which |
+| `ConstraintNotEnforceable` | `enforce` of a program with an `error` constraint the commit-time check cannot evaluate |
+| `ConstraintBudgetExceeded` | The commit-time constraint checks ran past their `constraintBudget` |
 | `Sqlite` | A SQLite failure, such as a locked or unreadable file |
 
 ## Options

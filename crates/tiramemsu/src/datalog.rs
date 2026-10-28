@@ -156,6 +156,39 @@ pub trait TxDatalog {
     /// # Ok::<(), Error>(())
     /// ```
     fn store_program(&mut self, program: Value, text: &str) -> Result<Eid>;
+
+    /// Turns enforcement of stored program `program` on (`(program dl:enforced
+    /// true)`, returned) or off (retracted). From the next commit on, and for
+    /// this transaction itself, every commit is checked against the program's
+    /// constraints: an `error` violation the commit introduces rolls it back with
+    /// `ConstraintViolated`; `warn` violations are listed in its report. Turning
+    /// enforcement on checks the whole program at commit.
+    ///
+    /// # Errors
+    ///
+    /// `UnknownProgram`, and `ConstraintNotEnforceable` for an `error` constraint
+    /// over a recursive relation, an aggregate, `since`/`until` or an operator
+    /// with an infinite window.
+    ///
+    /// ```
+    /// # use tiramemsu::*;
+    /// # let dir = tempfile::tempdir().unwrap();
+    /// # let db = Db::open(dir.path().join("m.db"), OpenOptions::default())?;
+    /// let v = |s: &str| Value::iri(format!("urn:tiramemsu:v:{s}"));
+    /// db.transact(TxOptions::default(), |tx| {
+    ///     tx.store_program(v("policies"), "constraint one error :- v:role(X, v:CEO), v:role(Y, v:CEO), X != Y.")?;
+    ///     tx.enforce(v("policies"), true)?;
+    ///     tx.assert(v("a"), v("role"), v("CEO"), Valid::ALWAYS)?;
+    ///     Ok(())
+    /// })?;
+    /// let second = db.transact(TxOptions::default(), |tx| {
+    ///     tx.assert(v("b"), v("role"), v("CEO"), Valid::ALWAYS)?;
+    ///     Ok(())
+    /// });
+    /// assert!(matches!(second, Err(Error::ConstraintViolated { .. })));
+    /// # Ok::<(), Error>(())
+    /// ```
+    fn enforce(&mut self, program: Value, on: bool) -> Result<Option<Eid>>;
 }
 
 /// The live statement `(node p ?)`, if any.
@@ -203,5 +236,9 @@ impl TxDatalog for Tx<'_> {
         Ok(self
             .assert(program, Value::iri(DL_SOURCE), value, Valid::ALWAYS)?
             .eid())
+    }
+
+    fn enforce(&mut self, program: Value, on: bool) -> Result<Option<Eid>> {
+        crate::datalog_enforce::enforce(self, program, on)
     }
 }

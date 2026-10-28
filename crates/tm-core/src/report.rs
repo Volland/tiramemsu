@@ -311,6 +311,25 @@ impl RetKind {
     }
 }
 
+/// The bound on the constraint checks of one commit (OpenSpec change
+/// `add-datalog-constraints`).
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub struct ConstraintBudget {
+    /// The longest the checks may take, in milliseconds.
+    pub timeout_ms: u64,
+    /// The most seed rows (changed statements a check starts from).
+    pub max_seed_rows: u64,
+}
+
+impl Default for ConstraintBudget {
+    fn default() -> Self {
+        ConstraintBudget {
+            timeout_ms: 50,
+            max_seed_rows: 100_000,
+        }
+    }
+}
+
 /// Options of a transaction.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct TxOptions {
@@ -318,6 +337,8 @@ pub struct TxOptions {
     pub dry_run: bool,
     /// Largest cascade set allowed per root retraction.
     pub max_cascade: usize,
+    /// The bound on this transaction's constraint checks (`None`: the database's).
+    pub constraint_budget: Option<ConstraintBudget>,
 }
 
 impl Default for TxOptions {
@@ -325,8 +346,26 @@ impl Default for TxOptions {
         TxOptions {
             dry_run: false,
             max_cascade: 10_000,
+            constraint_budget: None,
         }
     }
+}
+
+/// One violation of a Datalog constraint found at commit.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ConstraintViolation {
+    /// The program node, rendered.
+    pub program: String,
+    /// The constraint's name.
+    pub constraint: String,
+    /// `"warn"` or `"error"`.
+    pub severity: String,
+    /// The body's named variables and their values.
+    pub bindings: Vec<(String, Value)>,
+    /// The statements its derivation used.
+    pub eids: Vec<Eid>,
+    /// When it holds.
+    pub valid: Vec<Valid>,
 }
 
 /// A supersede patch: only the object and the valid-time bounds can change.
@@ -405,7 +444,7 @@ pub struct IdUsage {
 }
 
 /// What a committed (or dry-run) transaction did.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct TxReport {
     /// Transaction number (the would-be number for a dry run).
     pub t: TxId,
@@ -424,6 +463,13 @@ pub struct TxReport {
     pub memberships: Vec<Eid>,
     /// Every retracted membership with its kind, listed here and not in `retracted`.
     pub memberships_retracted: Vec<(Eid, RetKind)>,
+    /// The Datalog constraints evaluated at commit.
+    pub constraint_checks: u64,
+    /// The changed statements those checks started from.
+    pub seed_rows: u64,
+    /// The `warn` violations the transaction introduced (and, in a dry run, the
+    /// `error` ones it would have been refused for).
+    pub constraint_violations: Vec<ConstraintViolation>,
 }
 
 /// One statement row as returned by a lookup.

@@ -646,6 +646,7 @@ impl<'a> Tx<'a> {
             superseded: self.superseded.clone(),
             memberships: self.memberships.clone(),
             memberships_retracted: self.memberships_retracted.clone(),
+            ..TxReport::default()
         }
     }
 

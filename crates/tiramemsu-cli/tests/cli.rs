@@ -496,3 +496,79 @@ fn cli_program_put_show_check() {
     ]);
     assert_eq!(window, "");
 }
+
+#[cfg(feature = "datalog")]
+const ONE_CEO_DL: &str =
+    "constraint one_ceo error :- v:role(X, v:CEO), v:role(Y, v:CEO), X != Y.\n";
+
+// `tm program enforce` on clean data exits 0 and `tm program show` reports the
+// program enforced; a violating import is then refused, `tm program unenforce`
+// turns it off, and enforcing over violating data fails with the violations.
+#[cfg(feature = "datalog")]
+// @tg: verifies:: [[openspec:datalog-constraints#Constraint surfaces#CLI enforce]] {level: integration}
+#[test]
+fn cli_program_enforce() {
+    let d = tempfile::tempdir().unwrap();
+    let f = p(d.path(), "mem.db");
+    ok(&["create", &f]);
+    let ceo = |who: &str| {
+        let nt = p(d.path(), &format!("{who}.nt"));
+        std::fs::write(
+            &nt,
+            format!("<urn:tiramemsu:v:{who}> <urn:tiramemsu:v:role> <urn:tiramemsu:v:CEO> .\n"),
+        )
+        .unwrap();
+        nt
+    };
+    ok(&["import", &f, &ceo("a")]);
+    let policies = p(d.path(), "policies.dl");
+    std::fs::write(&policies, ONE_CEO_DL).unwrap();
+    let iri = "urn:tiramemsu:v:policies";
+    ok(&["program", "put", &f, iri, &policies]);
+    let show = ok(&["program", "show", &f, iri]);
+    assert!(
+        show.lines().next().unwrap().ends_with("not enforced"),
+        "{show}"
+    );
+
+    let o = tm(&["program", "enforce", &f, iri]);
+    assert_eq!(o.status.code(), Some(0), "{o:?}");
+    let out = String::from_utf8_lossy(&o.stdout).to_string();
+    assert!(out.contains("enforced as statement"), "{out}");
+    let show = ok(&["program", "show", &f, iri]);
+    assert!(
+        show.lines()
+            .next()
+            .unwrap()
+            .contains(", enforced (statement"),
+        "{show}"
+    );
+    let j: serde_json::Value =
+        serde_json::from_str(&ok(&["program", "show", &f, iri, "--json"])).unwrap();
+    assert_eq!(j["enforced"], true);
+    assert!(j["enforcedStatement"].as_u64().is_some());
+    let again = ok(&["program", "enforce", &f, iri]);
+    assert!(again.contains("already enforced"), "{again}");
+
+    // a second CEO is refused, with the violations on stderr
+    let refused = tm(&["import", &f, &ceo("b")]);
+    assert_eq!(refused.status.code(), Some(1));
+    let e = String::from_utf8_lossy(&refused.stderr).to_string();
+    assert!(e.starts_with("ConstraintViolated:"), "{e}");
+    assert!(e.contains("X=v:a Y=v:b"), "{e}");
+
+    // turned off, the import commits; enforcing again is refused
+    let off = ok(&["program", "unenforce", &f, iri]);
+    assert!(off.contains("no longer enforced"), "{off}");
+    assert!(ok(&["program", "unenforce", &f, iri]).contains("not enforced"));
+    ok(&["import", &f, &ceo("b")]);
+    let o = tm(&["program", "enforce", &f, iri]);
+    assert_eq!(o.status.code(), Some(1));
+    let e = String::from_utf8_lossy(&o.stderr).to_string();
+    assert!(e.starts_with("ConstraintViolated:"), "{e}");
+    assert!(ok(&["program", "show", &f, iri])
+        .lines()
+        .next()
+        .unwrap()
+        .ends_with("not enforced"));
+}

@@ -117,9 +117,10 @@ A view chooses when you look and when the fact was true. Every read takes a view
 | `import_bundle(bundle)` | Imports a bundle from `view.bundle`, possibly read from another database; returns a `Ref` to the imported root, and its entry in `tx.report.results` lists the imported statements |
 | `store_rules(rule_set, n3)` | Stores N3 rules as a rule set; new text supersedes the live version |
 | `store_program(program, text)` | Stores a Datalog program; new text supersedes the live version |
+| `enforce(program, on=True)` | Enforces a stored program's `error` constraints at every commit (`on=False` stops); returns a `Ref`, or `None` when turning off |
 | `cypher(text, params=None)` | A Cypher query that may write, inside the same transaction |
 
-Times accept a `datetime`, a `date`, epoch milliseconds or an RFC 3339 string. `db.transact(dry_run=True)` reports what would happen and commits nothing. `db.speculate(ops, queries)` applies changes hypothetically, runs queries on the result, and keeps nothing.
+Times accept a `datetime`, a `date`, epoch milliseconds or an RFC 3339 string. `db.transact(dry_run=True)` reports what would happen and commits nothing. `db.transact(constraint_budget=ConstraintBudget(timeout_ms=, max_seed_rows=))` bounds the commit-time checks of enforced programs. A report carries `constraint_checks`, `seed_rows` and `constraint_violations` (dicts `{"program", "constraint", "severity", "bindings", "eids", "valid"}`): the `warn` violations of enforced programs, and on a dry run also the `error` ones a commit would be refused for. `db.speculate(ops, queries)` applies changes hypothetically, runs queries on the result, and keeps nothing.
 
 ## Reading
 
@@ -189,6 +190,9 @@ Every failure raises `TiramemsuError` with a `.code`:
 | `TextIndexUnavailable` | `text_search` before the text index was built (`text_index=True` or `rebuild_text_index()`) |
 | `MissingCapability` | `text_search` on a SQLite without FTS5 |
 | `SavedAnswerNotFound` | `refresh_answer` of a name that was never saved |
+| `ConstraintViolated` | A commit would violate an `error` constraint of an enforced program; the error's `program`, `constraint` and `violations` say which |
+| `ConstraintNotEnforceable` | `enforce` of a program with an `error` constraint the commit-time check cannot evaluate |
+| `ConstraintBudgetExceeded` | The commit-time constraint checks ran past their `constraint_budget` |
 | `Sqlite` | A SQLite failure, such as a locked or unreadable file |
 
 ## Options

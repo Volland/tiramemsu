@@ -134,7 +134,7 @@ enum Cmd {
     /// Check the constraints of a Datalog program and print the violations.
     #[cfg(feature = "datalog")]
     Check(datalog::CheckArgs),
-    /// Store and print Datalog programs.
+    /// Store, print and enforce Datalog programs.
     #[cfg(feature = "datalog")]
     Program {
         #[command(subcommand)]
@@ -197,6 +197,10 @@ fn main() -> ExitCode {
         Err(e) => {
             let e = tiramemsu_json::BindError::Db(e);
             eprintln!("{}: {e}", e.code());
+            #[cfg(feature = "datalog")]
+            if let tiramemsu_json::BindError::Db(e) = &e {
+                datalog::print_violations(e);
+            }
             ExitCode::FAILURE
         }
     }

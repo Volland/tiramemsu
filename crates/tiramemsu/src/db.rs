@@ -135,6 +135,9 @@ pub struct OpenOptions {
     /// redb only: a `Normal` commit after this many non-durable ones is durable
     /// (default 1000).
     pub flush_commits: u64,
+    /// The bound on the Datalog constraint checks of every commit (default 50 ms
+    /// and 100 000 seed rows); `TxOptions::constraint_budget` overrides it.
+    pub constraint_budget: tm_core::ConstraintBudget,
     /// redb only: the input rows above which a join step of the native runner
     /// runs in parallel morsels (default 4096); `0` disables parallelism.
     #[cfg(feature = "exec")]
@@ -179,6 +182,7 @@ impl Default for OpenOptions {
             durability: Durability::Normal,
             flush_interval: Duration::from_millis(50),
             flush_commits: 1000,
+            constraint_budget: tm_core::ConstraintBudget::default(),
             #[cfg(feature = "exec")]
             parallel_threshold: tm_exec::DEFAULT_PARALLEL_THRESHOLD,
             #[cfg(feature = "exec")]
@@ -351,6 +355,8 @@ pub struct Db {
     clock: Arc<dyn Clock>,
     /// The bulk import session holding the write lease (0: none).
     import_lease: AtomicU64,
+    #[cfg_attr(not(feature = "datalog"), allow(dead_code))]
+    constraint_budget: tm_core::ConstraintBudget,
 }
 
 /// How often a bounded writer wait polls cancellation.
@@ -538,6 +544,7 @@ impl Db {
             path: path.to_path_buf(),
             clock: opts.clock.clone(),
             import_lease: AtomicU64::new(0),
+            constraint_budget: opts.constraint_budget,
         })
     }
 
@@ -729,6 +736,7 @@ impl Db {
             path: path.to_path_buf(),
             clock: opts.clock.clone(),
             import_lease: AtomicU64::new(0),
+            constraint_budget: opts.constraint_budget,
         })
     }
 
@@ -1061,13 +1069,26 @@ impl Db {
             return Err(Error::ImportInProgress);
         }
         guard.defer_statistics(lease.is_some());
-        armed(&mut guard, |store| {
+        #[cfg(feature = "datalog")]
+        let notes: std::cell::RefCell<Option<crate::datalog_enforce::Notes>> = Default::default();
+        #[cfg(feature = "datalog")]
+        let (notes_ref, limit) = (
+            &notes,
+            opts.constraint_budget.unwrap_or(self.constraint_budget),
+        );
+        let report = armed(&mut guard, |store| {
             store.transact(opts, move |tx| {
                 #[cfg(feature = "exec")]
                 if let Some(e) = engine {
                     tx.set_extension(e);
                 }
                 f(tx)?;
+                // Datalog constraints of enforced programs (add-datalog-constraints)
+                #[cfg(feature = "datalog")]
+                {
+                    let n = crate::datalog_enforce::commit_check(tx, opts.dry_run, limit)?;
+                    *notes_ref.borrow_mut() = Some(n);
+                }
                 if budget::active() {
                     // the last point a budget stops the write; past it the
                     // bookkeeping and COMMIT run without the interrupt
@@ -1081,7 +1102,17 @@ impl Db {
                 }
                 Ok(())
             })
-        })
+        });
+        #[cfg(feature = "datalog")]
+        let report = report.map(|mut r| {
+            if let Some(n) = notes.take() {
+                r.constraint_checks = n.checks;
+                r.seed_rows = n.seed_rows;
+                r.constraint_violations = n.violations;
+            }
+            r
+        });
+        report
     }
 
     /// [`Db::transact`] as one operation bounded by `budget`. The deadline and the
@@ -1160,7 +1191,13 @@ impl Db {
         let mut w = self.lock()?;
         match &mut *w {
             Writer::Sql(store) => store.speculate(
-                |tx| ops(&mut Tx::new(tx)),
+                |tx| {
+                    let mut tx = Tx::new(tx);
+                    ops(&mut tx)?;
+                    #[cfg(feature = "datalog")]
+                    crate::datalog_enforce::commit_check(&mut tx, false, self.constraint_budget)?;
+                    Ok(())
+                },
                 |exec| {
                     let cell: RefCell<&mut dyn Executor> = RefCell::new(exec);
                     let view = View::on_writer(&cell, ViewSpec::NOW, engine);
@@ -1168,7 +1205,13 @@ impl Db {
                 },
             ),
             Writer::Kv(e) => e.speculate(
-                |tx| ops(&mut Tx::new(tx)),
+                |tx| {
+                    let mut tx = Tx::new(tx);
+                    ops(&mut tx)?;
+                    #[cfg(feature = "datalog")]
+                    crate::datalog_enforce::commit_check(&mut tx, false, self.constraint_budget)?;
+                    Ok(())
+                },
                 |store| {
                     let view = View::on_store(store, ViewSpec::NOW, engine);
                     query(&view)

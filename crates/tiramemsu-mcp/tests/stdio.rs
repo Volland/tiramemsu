@@ -77,7 +77,12 @@ fn stdio_session_end_to_end() {
         expected.extend(["reason", "store_rules", "materialize"]);
     }
     if cfg!(feature = "datalog") {
-        expected.extend(["datalog_query", "check_constraints", "store_program"]);
+        expected.extend([
+            "datalog_query",
+            "check_constraints",
+            "store_program",
+            "enforce_program",
+        ]);
     }
     assert_eq!(names, expected);
     let call = |id: u64, name: &str, args: J| {

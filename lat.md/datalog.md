@@ -6,7 +6,7 @@ openspec: [datalog-language, datalog-evaluation, datalog-temporal, datalog-progr
 
 Decisions DL1–DL24 of the Datalog interview of 2026-10-28: a fast Datalog in its own crate, with DatalogMTL over valid time, for queries, reasoning and constraints beside N3.
 
-The four OpenSpec changes of [[datalog#Four Changes]] were written on 2026-10-28. `add-datalog-engine` is implemented in [[crates/tm-datalog/src/lib.rs]] and the facade's [[crates/tiramemsu/src/datalog.rs]] (DL1–DL12, DL16 for storage, DL18–DL21, DL23, DL25, DL26); `add-datalog-constraints`, `add-datalog-materialization` and `add-datalog-query-calls` follow. N3 stays ([[reasoning]]): it keeps quoted formulas and proof text, and Datalog is the set-at-a-time path to the same derived beliefs.
+The four OpenSpec changes of [[datalog#Four Changes]] were written on 2026-10-28. `add-datalog-engine` is implemented in [[crates/tm-datalog/src/lib.rs]] and the facade's [[crates/tiramemsu/src/datalog.rs]] (DL1–DL12, DL16 for storage, DL18–DL21, DL23, DL25, DL26); `add-datalog-constraints` implements DL15 and DL16's enforcement ([[crates/tm-datalog/src/enforce.rs]], [[crates/tiramemsu/src/datalog_enforce.rs]]); `add-datalog-materialization` and `add-datalog-query-calls` follow. N3 stays ([[reasoning]]): it keeps quoted formulas and proof text, and Datalog is the set-at-a-time path to the same derived beliefs.
 
 ## One Language Three Uses
 
@@ -130,7 +130,7 @@ DL15: `warn` constraints are check-only through `View::check`; `error` constrain
 
 - motivated_by:: [[constraints#Single Writer]] {weight: primary, since: "2026-10-28", note: "bounded, delta-seeded and budgeted, unlike the per-commit reasoning N10 rejected"}
 
-A violation reports bindings, eids and intervals, at any as-of or valid-at view. An `error` constraint may read stored atoms, inlined non-recursive rules and metric operators; one over recursive rules is check-only in v1. Registering an `error` constraint that live data violates is rejected with the violations, as schema changes are ([[data-model#Predicate Schema]]). A view over the writer reads uncommitted state through `ReadStore`, and `added_since` and `retracted_since` give the delta, so the check sits in the facade and behaves the same on both engines. `with` speculation previews violations. Over budget, the transaction fails with `ConstraintBudgetExceeded`.
+A violation reports bindings, eids and intervals, at any as-of or valid-at view. An `error` constraint may read stored atoms, inlined non-recursive rules and metric operators; one over recursive rules is check-only in v1. Registering an `error` constraint that live data violates is rejected with the violations, as schema changes are ([[data-model#Predicate Schema]]). A view over the writer reads uncommitted state through `ReadStore`, and `added_since` and `retracted_since` give the delta, so the check sits in the facade and behaves the same on both engines. `with` speculation previews violations. Over budget, the transaction fails with `ConstraintBudgetExceeded`. As built, a constraint body is unfolded through its non-recursive derived atoms; each positive stored atom gets a variant reading only the added rows whose constants fit it, and each negated one a variant starting from the retracted rows; a violation is kept when the view as of the previous transaction did not already hold it over the same instants. A program whose text or enforcement changed is checked in full. Aggregates, `since`/`until` and operators with an infinite window make an `error` constraint not enforceable.
 
 ## Program Nodes
 
@@ -138,7 +138,7 @@ DL16: a program is a node with one `dl:source` statement holding its text, `dl:`
 
 - motivated_by:: [[reasoning#Stored Rule Sets]] {weight: primary, since: "2026-10-28"}
 
-As-of runs and checks use the program believed then, and enforcement is versioned like any statement. The writer caches enforced programs and drops the cache when a `dl:source` or `dl:enforced` statement changes. A node holding both N3 rules and a program fails with `RuleLanguageConflict`.
+As-of runs and checks use the program believed then, and enforcement is versioned like any statement. As built there is no cache: each commit reads the `dl:enforced` marks and the program text from the transaction's own state, which costs one dictionary lookup when nothing is enforced and cannot go stale. A node holding both N3 rules and a program fails with `RuleLanguageConflict`.
 
 ## Goal Calls In SPARQL And Cypher
 

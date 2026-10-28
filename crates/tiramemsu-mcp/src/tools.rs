@@ -20,6 +20,9 @@ pub struct ToolError {
     pub code: String,
     /// What went wrong, for a person.
     pub message: String,
+    /// The bridge error's other fields, such as `program`, `constraint` and
+    /// `violations` of a `ConstraintViolated` refusal; empty for most errors.
+    pub details: Map<String, J>,
 }
 
 impl ToolError {
@@ -28,6 +31,7 @@ impl ToolError {
         ToolError {
             code: code.into(),
             message: message.into(),
+            details: Map::new(),
         }
     }
 
@@ -35,15 +39,24 @@ impl ToolError {
         ToolError::new("InvalidArgument", message)
     }
 
-    /// The error as `{"code", "message"}`, the form of the bridge's errors.
+    /// The error as `{"code", "message", ...}`, the form of the bridge's errors.
     pub fn to_json(&self) -> J {
-        json!({ "code": self.code, "message": self.message })
+        let mut m = self.details.clone();
+        m.insert("code".into(), json!(self.code));
+        m.insert("message".into(), json!(self.message));
+        J::Object(m)
     }
 }
 
 impl From<BindError> for ToolError {
     fn from(e: BindError) -> ToolError {
-        ToolError::new(e.code(), e.to_string())
+        let mut err = ToolError::new(e.code(), e.to_string());
+        if let J::Object(mut m) = e.to_json() {
+            m.remove("code");
+            m.remove("message");
+            err.details = m;
+        }
+        err
     }
 }
 
@@ -710,6 +723,28 @@ changed and the transaction (t).",
             ("text", Schema::Text("The Datalog program text."), true),
         ],
     },
+    #[cfg(feature = "datalog")]
+    Tool {
+        name: "enforce_program",
+        title: "Enforce a Datalog program's constraints",
+        description: "Enforce the error constraints of a stored Datalog program (on, the default) at every \
+write, or stop enforcing them (on: false): one statement (program dl:enforced true). Turning it on first \
+checks the program's error constraints over all of memory and is refused with ConstraintViolated when memory \
+already violates one, or ConstraintNotEnforceable when one cannot be checked from a write's changes. From \
+then on any write that would introduce a violation is refused with ConstraintViolated and writes nothing; the \
+error lists the violations (bindings, eids, valid time). warn constraints never refuse a write. Returns the \
+enforcement statement (eid, null when turned off) and the transaction (t).",
+        writes: true,
+        idempotent: true,
+        args: &[
+            ("program", Schema::Iri(PROGRAM), true),
+            (
+                "on",
+                Schema::Flag("true (default) enforces the program; false stops enforcing it."),
+                false,
+            ),
+        ],
+    },
 ];
 
 #[cfg(feature = "n3")]
@@ -1179,6 +1214,14 @@ fn run(db: &Database, config: &Config, t: &Tool, args: &J) -> Result<J, ToolErro
                 "superseded": r["superseded"],
                 "t": r["t"],
             }))
+        }
+        // @tg: implements:: [[openspec:datalog-constraints#Constraint surfaces]] {since: "2026-10-28"}
+        #[cfg(feature = "datalog")]
+        "enforce_program" => {
+            let on = get("on").unwrap_or(J::Bool(true));
+            let op = json!({ "op": "enforce", "program": get("program"), "on": on });
+            let r = transact(json!([op]))?;
+            Ok(json!({ "eid": r["results"][0]["eid"], "on": on, "t": r["t"] }))
         }
         other => Err(ToolError::arg(format!("unknown tool {other:?}"))),
     }

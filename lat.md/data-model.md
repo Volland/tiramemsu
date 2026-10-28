@@ -315,4 +315,4 @@ Predicates may carry optional schema flags, stored as `sys:` triples with the pr
 - Each flag holds one live value, and a new value retracts the old one with kind `cardinality`, except `sys:subjectType`, whose values accumulate.
 - A schema change that live data already violates is rejected, and the error lists the violating eids. For `sys:subjectType` the check uses the set the change leaves: retracting or superseding one of several values narrows it and is checked too, while retracting the last value lifts the constraint.
 - Checks on a write run in the order value type, subject type, uniqueness, cardinality-one replacement ([[time-model#Operations#Assert]]). The flags in force are read into [[crates/tm-core/src/engine/schema.rs#PredicateSchema]].
-- Schema checks run inside the writer transaction. See [[architecture#Connections and Concurrency]].
+- Schema checks run inside the writer transaction. See [[architecture#Connections and Concurrency]]. Constraints that the flags cannot state are written in Datalog and enforced at commit ([[datalog#Warn And Error Constraints]]); the flags stay the fast path for their shapes.

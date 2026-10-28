@@ -401,6 +401,36 @@ pub enum Error {
         /// The program, rendered.
         program: String,
     },
+    /// A transaction would violate an enforced Datalog constraint; nothing was
+    /// written.
+    #[error("constraint {constraint} of {program} violated: {} violation(s)", violations.len())]
+    ConstraintViolated {
+        /// The program, rendered.
+        program: String,
+        /// The constraint.
+        constraint: String,
+        /// The violations.
+        violations: Vec<crate::ConstraintViolation>,
+    },
+    /// Enforcement of a program with an `error` constraint the commit-time check
+    /// cannot evaluate from a transaction's changes.
+    #[error("constraint {constraint} of {program} cannot be enforced: {reason}")]
+    ConstraintNotEnforceable {
+        /// The program, rendered.
+        program: String,
+        /// The constraint.
+        constraint: String,
+        /// Why.
+        reason: String,
+    },
+    /// The constraint checks of a commit exceeded their budget; nothing was written.
+    #[error("constraint checks of {program} exceeded their budget at {constraint}")]
+    ConstraintBudgetExceeded {
+        /// The program, rendered.
+        program: String,
+        /// The constraint being checked.
+        constraint: String,
+    },
     /// Storing rules of one language on a node that holds live rules of the other.
     #[error("{node} already holds {existing} rules")]
     RuleLanguageConflict {

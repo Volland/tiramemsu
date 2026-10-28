@@ -44,7 +44,7 @@ The proposed gates of decision DL20 (`lat.md/datalog.md#Gates And Oracles`):
 |---|---|---|
 | ≥ 10× `tm-n3` on the same Horn programs | hub closure 6.6× (2.6 s against 17.2 s); small world: N3 gave up incomplete after 491 s, Datalog finished in 7.6 s | not met on the hub |
 | ≤ 2× Soufflé's interpreter on closure and same-generation | closure 3.5× (chain), 4.3× (hub), 3.1× (small world) | not met |
-| enforced constraints ≤ 20 % on a 100-statement transaction at 10⁶ | measured by `add-datalog-constraints` | open |
+| enforced constraints ≤ 20 % on a 100-statement transaction at 10⁶ | +15 % on redb (2.45 → 2.81 ms), within noise on SQLite (3.78 → 3.10 ms), when every row seeds the check; 0 checks when no row fits the constraint's atoms | met |
 
 Where it already wins: goals with constants run for demand in 0.4–12 ms where the full
 closure takes 0.6–2 s, same-generation over the chain takes 2–12 ms, and the DatalogMTL
@@ -56,3 +56,25 @@ statements, Nemo and MeTeoR (neither installed). The closure is bound by tuple-a
 insertion and interval-set handling in the semi-naive loop; tuning it (and the
 probe-or-load threshold) is task 9.3, and the worst-case-optimal join for cyclic bodies
 is task 4.11.
+
+## Commit overhead of enforced constraints
+
+`cargo run --release -p tm-bench --features datalog --example datalog_constraints -- --size 1000000 --reps 5`
+(OpenSpec change `add-datalog-constraints`, task 4.4): a 100-statement commit of new
+`v:role` statements on a store of 10⁶ `v:role` statements, without enforcement, with
+`one_ceo` enforced (no row fits its `v:CEO` atoms, so nothing is checked), and with
+`constraint banned error :- v:role(X, R), v:banned(R, true).` enforced (every row seeds a
+probe). Best of five, milliseconds:
+
+| backend | store | enforced | ms per 100-statement commit | checks | seed rows |
+|---|---:|---|---:|---:|---:|
+| sqlite | 1000000 | no | 3.78 | 0 | 0 |
+| sqlite | 1000000 | yes (no row fits) | 1.78 | 0 | 0 |
+| sqlite | 1000000 | yes (every row seeds) | 3.10 | 1 | 100 |
+| redb | 1000000 | no | 2.45 | 0 | 0 |
+| redb | 1000000 | yes (no row fits) | 2.55 | 0 | 0 |
+| redb | 1000000 | yes (every row seeds) | 2.81 | 1 | 100 |
+
+Commit-time checks plan without reading the store's statistics and never load a
+predicate: before that, each check counted up to 4 096 rows per atom through SQLite and
+the seeded commit took 76 ms.

@@ -236,6 +236,7 @@ The boundary was drawn before any code existed, because it cost little then and 
 One writer connection behind a mutex and a pool of reader connections, all on one WAL-mode SQLite file.
 
 - **Writer:** every transaction, speculative `with`, and schema change goes through the single writer. Transactions are serialised, which gives MERGE and `sys:unique` checks their atomicity. See [[time-model#Operations]].
+- **Constraint checks:** with the feature `datalog`, the constraints of enforced Datalog programs are checked inside the writer, after the transaction's body and before its commit, seeded by the rows it added and retracted and bounded by `OpenOptions::constraint_budget` ([[datalog#Warn And Error Constraints]], [[crates/tiramemsu/src/datalog_enforce.rs]]). Bulk-import chunks and `with` speculations are checked too.
 - **Import lease:** a bulk import session holds an exclusive write lease between its chunks; other writes fail with `ImportInProgress` instead of interleaving, and readers carry on ([[query#Bulk Import]]).
 - **Readers:** each query takes a reader connection and runs inside one read transaction, so it sees a consistent WAL snapshot.
 - **Bounded acquisition:** waiting for a reader is unbounded by default; `OpenOptions::reader_timeout` or a per-operation budget turns a long wait into `PoolTimeout`, and a deadline or cancellation also ends it ([[query#Query Budgets]]).

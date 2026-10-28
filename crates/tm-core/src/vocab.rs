@@ -92,6 +92,9 @@ pub const DL: &str = "urn:tiramemsu:dl:";
 /// `dl:source`: `(program dl:source "<text>")`, the one live statement of a
 /// stored Datalog program.
 pub const DL_SOURCE: &str = "urn:tiramemsu:dl:source";
+/// `dl:enforced`: `(program dl:enforced true)` turns a stored program's `error`
+/// constraints on at commit.
+pub const DL_ENFORCED: &str = "urn:tiramemsu:dl:enforced";
 /// `dl:inf`: the constant a Datalog rule sees for an unbounded valid-time end.
 pub const DL_INF: &str = "urn:tiramemsu:dl:inf";
 /// `n3:source`: the statement of a stored N3 rule set (the rule-language

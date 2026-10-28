@@ -1,4 +1,5 @@
-//! `tm datalog`, `tm check` and `tm program put|show` (feature `datalog`).
+//! `tm datalog`, `tm check` and `tm program put|show|enforce|unenforce`
+//! (feature `datalog`).
 //!
 //! A program argument is a file of Datalog text, or, when no such file exists,
 //! the IRI of a program stored with `tm program put`. Instants and windows are
@@ -94,9 +95,23 @@ pub enum ProgramCmd {
         file: PathBuf,
         /// The program (an IRI).
         iri: String,
-        /// Print JSON (text, statement, analysis) instead of the program.
+        /// Print JSON (text, statement, analysis, enforced) instead of the program.
         #[arg(long)]
         json: bool,
+    },
+    /// Enforce a stored program's `error` constraints at every commit. Fails with
+    /// `ConstraintViolated` (and lists the violations) when memory already
+    /// violates one, or `ConstraintNotEnforceable`.
+    Enforce {
+        file: PathBuf,
+        /// The program (an IRI).
+        iri: String,
+    },
+    /// Stop enforcing a stored program's constraints.
+    Unenforce {
+        file: PathBuf,
+        /// The program (an IRI).
+        iri: String,
     },
 }
 
@@ -303,7 +318,40 @@ fn summary(info: &ProgramInfo) -> String {
     )
 }
 
-/// `tm program put|show`.
+/// The live `(program dl:enforced true)` statement in `view`, if any.
+fn enforced(view: &View<'_>, program: &Value) -> Result<Option<Eid>> {
+    let (Some(s), Some(p)) = (
+        view.encode(program)?,
+        view.encode(&Value::iri(vocab::DL_ENFORCED))?,
+    ) else {
+        return Ok(None);
+    };
+    Ok(view.triples(Some(s), Some(p), None)?.first().map(|t| t.eid))
+}
+
+/// Lists the violations of a `ConstraintViolated` refusal on stderr, one per
+/// line in the form `tm check` prints them; nothing for any other error.
+pub fn print_violations(e: &Error) {
+    let Error::ConstraintViolated { violations, .. } = e else {
+        return;
+    };
+    for v in violations {
+        let bindings: Vec<String> = v
+            .bindings
+            .iter()
+            .map(|(k, t)| format!("{k}={}", reasoning::value(PREFIXES, t)))
+            .collect();
+        let eids: Vec<String> = v.eids.iter().map(|e| e.n().to_string()).collect();
+        eprintln!(
+            "    {}  {}  stmts {}",
+            bindings.join(" "),
+            intervals(&v.valid),
+            eids.join(", ")
+        );
+    }
+}
+
+/// `tm program put|show|enforce|unenforce`.
 // @tg: implements:: [[openspec:datalog-programs#Store a program]] {since: "2026-10-28"}
 pub fn programs(cmd: ProgramCmd) -> Result<()> {
     match cmd {
@@ -333,20 +381,63 @@ pub fn programs(cmd: ProgramCmd) -> Result<()> {
         }
         ProgramCmd::Show { file, iri, json } => {
             let db = open(&file)?;
-            let info = db
-                .now()
-                .program_info(&DatalogProgram::Stored(Value::iri(iri.clone())))?;
+            let node = Value::iri(iri.clone());
+            let view = db.now();
+            let info = view.program_info(&DatalogProgram::Stored(node.clone()))?;
+            let on = enforced(&view, &node)?;
             if json {
-                print_json(&tiramemsu_json::datalog::info_json(&info));
+                let mut j = tiramemsu_json::datalog::info_json(&info);
+                j["enforced"] = on.is_some().into();
+                j["enforcedStatement"] = on.map(|e| e.n()).into();
+                print_json(&j);
             } else {
                 println!(
-                    "# program {iri}: statement {}, {}",
+                    "# program {iri}: statement {}, {}, {}",
                     info.statement
                         .map_or("-".to_string(), |e| e.n().to_string()),
-                    summary(&info)
+                    summary(&info),
+                    on.map_or("not enforced".to_string(), |e| format!(
+                        "enforced (statement {})",
+                        e.n()
+                    ))
                 );
                 println!("{}", info.text);
             }
+            Ok(())
+        }
+        // @tg: implements:: [[openspec:datalog-constraints#Constraint surfaces]] {since: "2026-10-28"}
+        ProgramCmd::Enforce { file, iri } => {
+            let db = open(&file)?;
+            let node = Value::iri(iri.clone());
+            let was = enforced(&db.now(), &node)?;
+            let mut eid = None;
+            let report = db.transact(TxOptions::default(), |tx| {
+                eid = tx.enforce(node.clone(), true)?;
+                Ok(())
+            })?;
+            let eid = eid.map_or("-".to_string(), |e| e.n().to_string());
+            if was.is_some() {
+                println!("{iri}: already enforced (statement {eid})");
+            } else {
+                println!(
+                    "{iri}: enforced as statement {eid} (t={}); its error constraints hold now and are checked at every commit",
+                    report.t.0
+                );
+            }
+            Ok(())
+        }
+        ProgramCmd::Unenforce { file, iri } => {
+            let db = open(&file)?;
+            let node = Value::iri(iri.clone());
+            if enforced(&db.now(), &node)?.is_none() {
+                println!("{iri}: not enforced");
+                return Ok(());
+            }
+            let report = db.transact(TxOptions::default(), |tx| {
+                tx.enforce(node.clone(), false)?;
+                Ok(())
+            })?;
+            println!("{iri}: no longer enforced (t={})", report.t.0);
             Ok(())
         }
     }

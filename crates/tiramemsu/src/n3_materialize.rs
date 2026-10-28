@@ -3,20 +3,14 @@
 //! writer, then write the conclusions in one short transaction through
 //! `derive`, with the premises and the rule-set statement as support.
 
-use std::collections::{BTreeSet, HashMap};
-
-use tm_core::engine::reserved;
-use tm_core::vocab::SYS_DERIVED_FROM;
-use tm_core::{
-    budget, Asserted, Eid, Error, Obj, ObjectId, Patch, Result, Tag, TxHandle as Tx, TxOptions,
-    TxReport, Valid, Value,
-};
+use tm_core::{Eid, Error, ObjectId, Result, TxOptions, TxReport, Valid, Value};
 use tm_n3::vocab::{N3_DERIVED_BY, N3_RULE, N3_SKOLEM};
 use tm_n3::{
     Conclusion, Limits, Premise, ReasonOptions, ReasonResult, Scope, Status, Term, TimeMode,
 };
 
 use crate::db::Db;
+use crate::materialize::{self, Fate, Labels, MItem, MSupport, MTerm};
 
 /// The options of [`Db::materialize`] (feature `n3`).
 #[derive(Debug, Clone)]
@@ -89,14 +83,6 @@ struct Prepared {
     rule_set: Value,
     r: Eid,
     result: ReasonResult,
-}
-
-/// What became of one conclusion in the commit.
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum Fate {
-    Written(Eid),
-    Stale,
-    Unstorable,
 }
 
 impl Db {
@@ -229,310 +215,58 @@ impl Db {
             dry_run: opts.dry_run,
             ..TxOptions::default()
         };
+        let items: Vec<MItem> = p.result.conclusions.iter().map(item).collect();
+        let labels = Labels {
+            derived_by: N3_DERIVED_BY,
+            rule: N3_RULE,
+            skolem: N3_SKOLEM,
+        };
+        let mut outcome = None;
         let report = self.transact(tx_opts, |tx| {
-            Commit {
-                tx,
-                rule_set: &p.rule_set,
-                r: p.r,
-                skolems: HashMap::new(),
-                used: BTreeSet::new(),
-            }
-            .run(&p.result.conclusions, &mut out)
+            outcome = Some(materialize::commit(tx, &items, &p.rule_set, p.r, &labels)?);
+            Ok(())
         })?;
+        let o = outcome.unwrap_or_default();
+        out.derived = o.derived;
+        out.existing = o.existing;
+        out.widened = o.widened;
+        out.skolems = o.skolems;
+        for (c, fate) in p.result.conclusions.iter().zip(&o.fates) {
+            match fate {
+                Fate::Stale => out.stale_support.push(c.clone()),
+                Fate::Unstorable => out.unstorable.push(c.clone()),
+                Fate::Written(_) => {}
+            }
+        }
         out.commit = Some(report);
         Ok(out)
     }
 }
 
-/// The state of one commit.
-struct Commit<'t, 'a> {
-    tx: &'t mut Tx<'a>,
-    rule_set: &'t Value,
-    r: Eid,
-    /// (key, support) -> the node `upsert_derived` returned in this run.
-    skolems: HashMap<(String, Vec<Eid>), ObjectId>,
-    /// The statements this run assigned to a conclusion: never widened again in
-    /// the same run, since a later conclusion may already rest on them.
-    used: BTreeSet<Eid>,
-}
-
-/// True when the half-open intervals overlap or touch.
-fn meets(a: &Valid, b: &Valid) -> bool {
-    let a_to_ok = match (a.to, b.from) {
-        (Some(t), Some(f)) => f <= t,
-        _ => true,
+/// A conclusion as an item of the shared commit.
+fn item(c: &Conclusion) -> MItem {
+    let term = |t: &Term| match t {
+        Term::Value(v) => MTerm::Value(v.clone()),
+        Term::Blank(label) => MTerm::Invent(label.clone()),
+        Term::List(_) | Term::Formula(_) => MTerm::Unstorable,
     };
-    let b_to_ok = match (b.to, a.from) {
-        (Some(t), Some(f)) => f <= t,
-        _ => true,
-    };
-    a_to_ok && b_to_ok
-}
-
-/// True when `outer` contains `inner`.
-fn contains(outer: &Valid, inner: &Valid) -> bool {
-    let from_ok = match (outer.from, inner.from) {
-        (None, _) => true,
-        (Some(_), None) => false,
-        (Some(a), Some(b)) => a <= b,
-    };
-    let to_ok = match (outer.to, inner.to) {
-        (None, _) => true,
-        (Some(_), None) => false,
-        (Some(a), Some(b)) => a >= b,
-    };
-    from_ok && to_ok
-}
-
-/// The smallest interval containing both.
-fn hull(a: &Valid, b: &Valid) -> Valid {
-    Valid {
-        from: a.from.zip(b.from).map(|(x, y)| x.min(y)),
-        to: a.to.zip(b.to).map(|(x, y)| x.max(y)),
-    }
-}
-
-/// The part of `a` before or after `b`, for intervals that meet without `b`
-/// containing `a` and without `b` lying strictly inside `a` (then the part
-/// before it).
-fn beside(a: &Valid, b: &Valid) -> Valid {
-    let b_starts_first = match (b.from, a.from) {
-        (None, _) => true,
-        (Some(_), None) => false,
-        (Some(x), Some(y)) => x <= y,
-    };
-    if b_starts_first {
-        Valid {
-            from: b.to,
-            to: a.to,
-        }
-    } else {
-        Valid {
-            from: a.from,
-            to: b.from,
-        }
-    }
-}
-
-/// The tag a subject value encodes to, `None` for a value that cannot be one.
-fn subject_tag(v: &Value) -> Option<Tag> {
-    match v {
-        Value::Iri(_) => Some(Tag::Iri),
-        Value::Node(_) => Some(Tag::Node),
-        Value::BNode(_) => Some(Tag::BNode),
-        Value::Stmt(_) => Some(Tag::Stmt),
-        Value::Tx(_) => Some(Tag::Tx),
-        _ => None,
-    }
-}
-
-impl Commit<'_, '_> {
-    fn run(&mut self, conclusions: &[Conclusion], out: &mut MaterializeReport) -> Result<()> {
-        let mut fates: Vec<Fate> = Vec::with_capacity(conclusions.len());
-        for (i, c) in conclusions.iter().enumerate() {
-            if i % 256 == 255 && budget::active() {
-                budget::check()?;
-            }
-            let fate = self.one(c, &fates, out)?;
-            match fate {
-                Fate::Stale => out.stale_support.push(c.clone()),
-                Fate::Unstorable => out.unstorable.push(c.clone()),
-                Fate::Written(e) => {
-                    self.used.insert(e);
-                }
-            }
-            fates.push(fate);
-        }
-        Ok(())
-    }
-
-    fn live(&mut self, e: Eid) -> Result<bool> {
-        Ok(self.tx.statement(e)?.is_some_and(|row| row.live()))
-    }
-
-    /// Writes one conclusion (design N9, N13, N14, N16).
-    // @tg: implements:: [[openspec:n3-materialization#Skolem nodes]] {since: "2026-10-28"}
-    fn one(&mut self, c: &Conclusion, fates: &[Fate], out: &mut MaterializeReport) -> Result<Fate> {
-        // support: premise statements, statements written for derived premises, R
-        let mut support = BTreeSet::from([self.r]);
-        let mut unstorable = false;
-        for p in &c.proof.premises {
-            let e = match *p {
-                Premise::Statement(e) => e,
-                Premise::Conclusion(j) => match fates.get(j) {
-                    Some(Fate::Written(e)) => *e,
-                    Some(Fate::Stale) => return Ok(Fate::Stale),
-                    Some(Fate::Unstorable) | None => {
-                        unstorable = true;
-                        continue;
-                    }
-                },
-            };
-            support.insert(e);
-        }
-        // a support retracted since the snapshot: skip, never fail the run
-        for &e in &support {
-            if !self.live(e)? {
-                return Ok(Fate::Stale);
-            }
-        }
-        if unstorable {
-            return Ok(Fate::Unstorable);
-        }
-        let support: Vec<Eid> = support.into_iter().collect();
-
-        // the terms as stored objects, blank nodes as Skolem nodes
-        let rule = c.proof.rule;
-        let p_iri = match &c.p {
-            Term::Value(Value::Iri(p)) => p.clone(),
-            _ => return Ok(Fate::Unstorable),
-        };
-        let s_tag = match &c.s {
-            Term::Value(v) => subject_tag(v),
-            Term::Blank(_) => Some(Tag::Node),
+    MItem {
+        s: term(&c.s),
+        p: match &c.p {
+            Term::Value(Value::Iri(p)) => Some(p.clone()),
             _ => None,
-        };
-        let Some(s_tag) = s_tag else {
-            return Ok(Fate::Unstorable);
-        };
-        if reserved::check_predicate(&p_iri, s_tag).is_err() {
-            return Ok(Fate::Unstorable);
-        }
-        if matches!(c.o, Term::List(_) | Term::Formula(_)) {
-            return Ok(Fate::Unstorable);
-        }
-        let s = self.obj(&c.s, rule, &support, out)?;
-        let o = self.obj(&c.o, rule, &support, out)?;
-        let p = Obj::Val(Value::Iri(p_iri));
-
-        // an earlier materialization of the same content from the same support
-        let mut widen = None;
-        let mut valid = c.valid;
-        for (e, v) in self.same_derivations(&s, &p, &o, &support)? {
-            if contains(&v, &c.valid) {
-                out.existing.push(e);
-                return Ok(Fate::Written(e));
-            }
-            if meets(&v, &c.valid) {
-                if !self.used.contains(&e) {
-                    widen.get_or_insert((e, v));
-                } else if widen.is_none() {
-                    // widening it would retract what this run already wrote on
-                    // it: derive the part it does not cover, touching it
-                    valid = beside(&c.valid, &v);
-                }
-            }
-        }
-        if let Some((old, valid)) = widen {
-            let h = hull(&valid, &c.valid);
-            let patch = Patch {
-                v_from: Some(h.from),
-                v_to: Some(h.to),
-                ..Patch::default()
-            };
-            // the replay keeps its support links and its `n3:` labels
-            let new = self.tx.supersede(old, patch)?;
-            out.widened.push((old, new));
-            return Ok(Fate::Written(new));
-        }
-        match self.tx.derive(s, p, o, valid, &support)? {
-            Asserted::New(d) => {
-                self.tx.assert(
-                    d,
-                    Value::iri(N3_DERIVED_BY),
-                    self.rule_set.clone(),
-                    Valid::ALWAYS,
-                )?;
-                self.tx.assert(
-                    d,
-                    Value::iri(N3_RULE),
-                    Value::Int(rule as i64),
-                    Valid::ALWAYS,
-                )?;
-                out.derived.push(d);
-                Ok(Fate::Written(d))
-            }
-            Asserted::Existing(d) => {
-                out.existing.push(d);
-                Ok(Fate::Written(d))
-            }
-        }
-    }
-
-    /// A term as a statement position: a value, or the Skolem node of a blank
-    /// node (`upsert_derived(n3:skolem, "<R>/<rule>/<label>", support)`).
-    fn obj(
-        &mut self,
-        t: &Term,
-        rule: usize,
-        support: &[Eid],
-        out: &mut MaterializeReport,
-    ) -> Result<Obj> {
-        match t {
-            Term::Value(v) => Ok(Obj::Val(v.clone())),
-            Term::Blank(label) => {
-                let key = format!("{}/{rule}/{label}", self.r.oid().raw());
-                let k = (key, support.to_vec());
-                if let Some(&n) = self.skolems.get(&k) {
-                    return Ok(Obj::Id(n));
-                }
-                let n = self.tx.upsert_derived(
-                    Value::iri(N3_SKOLEM),
-                    Value::str(k.0.as_str()),
-                    support,
-                )?;
-                if !out.skolems.contains(&n) {
-                    out.skolems.push(n);
-                }
-                self.skolems.insert(k, n);
-                Ok(Obj::Id(n))
-            }
-            Term::List(_) | Term::Formula(_) => Err(Error::storage("an unstorable term")),
-        }
-    }
-
-    /// The live statements with content `(s, p, o)` whose live support links
-    /// name exactly `support`, with their valid time.
-    fn same_derivations(
-        &mut self,
-        s: &Obj,
-        p: &Obj,
-        o: &Obj,
-        support: &[Eid],
-    ) -> Result<Vec<(Eid, Valid)>> {
-        let mut ids = [None; 3];
-        for (slot, x) in ids.iter_mut().zip([s, p, o]) {
-            *slot = match x {
-                Obj::Id(id) => Some(*id),
-                Obj::Val(v) => self.tx.lookup(v)?,
-            };
-        }
-        let ([Some(s), Some(p), Some(o)], Some(df)) =
-            (ids, self.tx.lookup(&Value::iri(SYS_DERIVED_FROM))?)
-        else {
-            return Ok(Vec::new());
-        };
-        let mut found = Vec::new();
-        for row in self.tx.live_rows(Some(s), Some(p), Some(o))? {
-            let Some(e) = Eid::from_oid(ObjectId::from_raw(row.eid)) else {
-                continue;
-            };
-            let links: BTreeSet<Eid> = self
-                .tx
-                .live_rows(Some(e.oid()), Some(df), None)?
-                .into_iter()
-                .filter_map(|l| Eid::from_oid(ObjectId::from_raw(l.o)))
-                .collect();
-            if links.iter().eq(support.iter()) {
-                found.push((
-                    e,
-                    Valid {
-                        from: row.v_from,
-                        to: row.v_to,
-                    },
-                ));
-            }
-        }
-        Ok(found)
+        },
+        o: term(&c.o),
+        valid: c.valid,
+        rule: c.proof.rule,
+        support: c
+            .proof
+            .premises
+            .iter()
+            .map(|p| match *p {
+                Premise::Statement(e) => MSupport::Statement(e),
+                Premise::Conclusion(j) => MSupport::Item(j),
+            })
+            .collect(),
     }
 }

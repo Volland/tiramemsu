@@ -33,8 +33,8 @@ default = ["n3", "datalog"]
 # optional ones included, are not on crates.io, so this crate (like the facade)
 # cannot be published until `tm-n3` and eyeron are (`publish-eyeron-dependency`).
 n3 = ["tiramemsu/n3", "tiramemsu-json/n3"]
-# The Datalog tools `datalog_query`, `check_constraints` and `store_program`
-# (OpenSpec change `add-datalog-engine`).
+# The Datalog tools `datalog_query`, `check_constraints`, `store_program` and
+# `enforce_program` (OpenSpec changes `add-datalog-engine`, `add-datalog-constraints`).
 datalog = ["tiramemsu/datalog", "tiramemsu-json/datalog"]
 
 [dev-dependencies]

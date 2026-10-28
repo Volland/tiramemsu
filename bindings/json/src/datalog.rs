@@ -373,3 +373,12 @@ pub fn store_program(tx: &mut Tx<'_>, op: &J) -> Res<Eid> {
         .ok_or_else(|| arg("`text` must be Datalog text"))?;
     Ok(tx.store_program(node, text)?)
 }
+
+/// The transaction op `enforce`: `{program, on}` (default `true`) to `{eid}`,
+/// the `dl:enforced` statement, or `null` when turned off.
+// @tg: implements:: [[openspec:datalog-constraints#Constraint surfaces]] {since: "2026-10-28"}
+pub fn enforce(tx: &mut Tx<'_>, op: &J) -> Res<Option<Eid>> {
+    let node = node_from_json(op.get("program").unwrap_or(&J::Null))?;
+    let on = flag(op, "on", true)?;
+    Ok(tx.enforce(node, on)?)
+}

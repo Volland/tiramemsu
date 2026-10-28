@@ -292,6 +292,14 @@ fn apply(tx: &mut Tx<'_>, ops: &[J]) -> Res<(Vec<J>, HashMap<String, Eid>)> {
             }
             #[cfg(not(feature = "datalog"))]
             "storeProgram" => return Err(crate::no_datalog()),
+            #[cfg(feature = "datalog")]
+            "enforce" => {
+                let e = crate::datalog::enforce(tx, op)?;
+                named = e;
+                json!({ "eid": e.map(|e| e.n()) })
+            }
+            #[cfg(not(feature = "datalog"))]
+            "enforce" => return Err(crate::no_datalog()),
             "retract" => json!(tx.retract(eid(op, "eid", &refs)?)?),
             "retractMatching" => {
                 let (s, p, o) = (

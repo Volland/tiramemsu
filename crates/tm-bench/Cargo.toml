@@ -41,3 +41,7 @@ workspace = true
 [[example]]
 name = "datalog"
 required-features = ["datalog"]
+
+[[example]]
+name = "datalog_constraints"
+required-features = ["datalog"]

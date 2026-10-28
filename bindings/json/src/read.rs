@@ -767,6 +767,27 @@ pub(crate) fn event_json(e: &Event) -> J {
 }
 
 /// A transaction report as JSON.
+/// A constraint violation found at commit: `{program, constraint, severity,
+/// bindings: {var: term}, eids, valid: [{from, to}]}`.
+pub fn violation_json(v: &tiramemsu::ConstraintViolation) -> J {
+    let bindings: Map<String, J> = v
+        .bindings
+        .iter()
+        .map(|(k, t)| (k.clone(), crate::value::value_to_json(t)))
+        .collect();
+    json!({
+        "program": v.program,
+        "constraint": v.constraint,
+        "severity": v.severity,
+        "bindings": bindings,
+        "eids": v.eids.iter().map(|e| e.n()).collect::<Vec<_>>(),
+        "valid": v.valid.iter().map(|x| json!({
+            "from": x.from.map_or(J::Null, |f| json!(f)),
+            "to": x.to.map_or(J::Null, |t| json!(t)),
+        })).collect::<Vec<_>>(),
+    })
+}
+
 pub fn report_json(r: &TxReport) -> J {
     let kinds = |v: &[(tiramemsu::Eid, tiramemsu::RetKind)]| {
         v.iter()
@@ -783,6 +804,9 @@ pub fn report_json(r: &TxReport) -> J {
         "superseded": r.superseded.iter().map(|(o, n)| json!({ "old": o.n(), "new": n.n() })).collect::<Vec<_>>(),
         "memberships": ids(&r.memberships),
         "membershipsRetracted": kinds(&r.memberships_retracted),
+        "constraintChecks": r.constraint_checks,
+        "seedRows": r.seed_rows,
+        "constraintViolations": r.constraint_violations.iter().map(violation_json).collect::<Vec<_>>(),
     })
 }
 

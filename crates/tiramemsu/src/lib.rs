@@ -24,8 +24,12 @@ mod bundle;
 mod cypher;
 #[cfg(feature = "datalog")]
 mod datalog;
+#[cfg(feature = "datalog")]
+mod datalog_enforce;
 mod db;
 mod import;
+#[cfg(any(feature = "n3", feature = "datalog"))]
+mod materialize;
 #[cfg(feature = "n3")]
 // @tg: implements:: [[openspec:optional-query-frontends#Optional N3 reasoning feature]] {since: "2026-10-28"}
 mod n3;
@@ -83,6 +87,7 @@ pub use tm_core::{
 pub use tm_core::{recall, vector};
 pub use tm_core::{BTerm, Bundle, BundleStatement, IdUsage, ImportReport, ImportedStatement};
 pub use tm_core::{Conflict, ConflictEvidence, ConflictQuery, ConflictValue};
+pub use tm_core::{ConstraintBudget, ConstraintViolation};
 pub use tm_core::{
     EmbeddingModel, Metric, RecallHit, RecallQuery, VectorEncoding, VectorHit, VectorQuery,
     VectorResult,

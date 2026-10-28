@@ -11,6 +11,7 @@ import pytest
 
 from tiramemsu import (
     BNode,
+    ConstraintBudget,
     Database,
     Iri,
     Literal,
@@ -1264,3 +1265,50 @@ class TestDatalog:
         # as of before the second CEO, nothing is violated
         assert db.as_of(tx=1).check(ONE_CEO)["violated"] == []
         assert db.check(stored="urn:tiramemsu:v:policies", only=["one_ceo"])["checked"] == ["one_ceo"]
+
+    def test_enforce_refuses_a_violating_commit(self, db: Database) -> None:
+        with db.transact() as tx:
+            tx.assert_(iri("a"), iri("role"), iri("CEO"))
+        with db.transact() as tx:
+            tx.store_program("urn:tiramemsu:v:policies", ONE_CEO)
+            assert isinstance(tx.enforce("urn:tiramemsu:v:policies"), Ref)
+        assert tx.report is not None
+        assert isinstance(tx.report.results[1]["eid"], int)
+
+        # a dry run reports the violations a commit would be refused for
+        with db.transact(dry_run=True) as dry:
+            dry.assert_(iri("b"), iri("role"), iri("CEO"))
+        report = dry.report
+        assert report is not None
+        assert report.constraint_checks > 0 and report.seed_rows > 0
+        assert report.constraint_violations
+        assert report.constraint_violations[0]["constraint"] == "one_ceo"
+        assert report.constraint_violations[0]["severity"] == "error"
+
+        # a second CEO is refused, with the violations on the error
+        with pytest.raises(TiramemsuError) as err:
+            with db.transact() as tx:
+                tx.assert_(iri("b"), iri("role"), iri("CEO"))
+        e = err.value
+        assert e.code == "ConstraintViolated"
+        assert e.constraint == "one_ceo"
+        assert len(e.violations) == 2
+        pairs = [(x["bindings"]["X"], x["bindings"]["Y"]) for x in e.violations]
+        assert (iri("a"), iri("b")) in pairs
+        assert len(e.violations[0]["eids"]) == 2
+        assert e.violations[0]["valid"] == [{"from": None, "to": None}]
+        assert len(db.now().triples(p=iri("role"))) == 1
+
+        # a write outside the program's predicates checks nothing
+        ok = db.transact(
+            [{"op": "assert", "s": {"iri": V + "a"}, "p": {"iri": V + "name"}, "o": "Ada"}],
+            constraint_budget=ConstraintBudget(timeout_ms=1000, max_seed_rows=1000),
+        )
+        assert ok.constraint_checks == 0 and ok.constraint_violations == []
+
+        # turned off, the write commits
+        with db.transact() as tx:
+            assert tx.enforce("urn:tiramemsu:v:policies", on=False) is None
+        with db.transact() as tx:
+            tx.assert_(iri("b"), iri("role"), iri("CEO"))
+        assert len(db.now().triples(p=iri("role"))) == 2

@@ -158,6 +158,9 @@ impl BindError {
                 Error::DatalogIncomplete { .. } => "DatalogIncomplete",
                 Error::UnknownProgram { .. } => "UnknownProgram",
                 Error::RuleLanguageConflict { .. } => "RuleLanguageConflict",
+                Error::ConstraintViolated { .. } => "ConstraintViolated",
+                Error::ConstraintNotEnforceable { .. } => "ConstraintNotEnforceable",
+                Error::ConstraintBudgetExceeded { .. } => "ConstraintBudgetExceeded",
                 Error::Custom(_) => "Custom",
                 _ => "Error",
             },
@@ -166,7 +169,20 @@ impl BindError {
 
     /// The error as `{"code", "message"}`, the text a wrapper parses back into an exception.
     pub fn to_json(&self) -> J {
-        json!({ "code": self.code(), "message": self.to_string() })
+        match self {
+            BindError::Db(Error::ConstraintViolated {
+                program,
+                constraint,
+                violations,
+            }) => json!({
+                "code": self.code(),
+                "message": self.to_string(),
+                "program": program,
+                "constraint": constraint,
+                "violations": violations.iter().map(read::violation_json).collect::<Vec<_>>(),
+            }),
+            _ => json!({ "code": self.code(), "message": self.to_string() }),
+        }
     }
 }
 
@@ -600,6 +616,25 @@ pub(crate) fn tx_options(j: &J) -> Res<TxOptions> {
                         .as_u64()
                         .ok_or_else(|| arg("maxCascade must be an integer"))?
                         as usize
+                }
+                "constraintBudget" => {
+                    let b = v
+                        .as_object()
+                        .ok_or_else(|| arg("constraintBudget must be {timeoutMs, maxSeedRows}"))?;
+                    let mut cb = tiramemsu::ConstraintBudget::default();
+                    for (bk, bv) in b {
+                        let n = bv
+                            .as_u64()
+                            .ok_or_else(|| arg(format!("{bk} must be a non-negative integer")))?;
+                        match bk.as_str() {
+                            "timeoutMs" => cb.timeout_ms = n,
+                            "maxSeedRows" => cb.max_seed_rows = n,
+                            other => {
+                                return Err(arg(format!("unknown constraintBudget key {other:?}")))
+                            }
+                        }
+                    }
+                    o.constraint_budget = Some(cb);
                 }
                 other => return Err(arg(format!("unknown transaction option {other:?}"))),
             }
