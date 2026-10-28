@@ -170,7 +170,7 @@ DL20: a `tm-bench` Datalog suite on both backends gates the release, and three o
 
 - motivated_by:: [[reasoning#Tests Prove Semantics]] {weight: primary, since: "2026-10-28"}
 
-Workloads at 10⁵ and 10⁶ statements: transitive closure (chain, hub, small world), same-generation, an RDFS and OWL 2 RL subset on WatDiv, DatalogMTL on a temporal LUBM-style set, and constraint-check cost against transaction size; references are Soufflé's interpreter, Nemo, MeTeoR and eyeron. Proposed gates: ten times `tm-n3` on the same Horn programs, within twice Soufflé's interpreter on closure and same-generation, and at most 20 % added to a 100-statement transaction at 10⁶ by enforced constraints. The brute-force evaluator checks DatalogMTL property tests instant by instant.
+Workloads at 10⁵ and 10⁶ statements: transitive closure (chain, hub, small world), same-generation, an RDFS and OWL 2 RL subset on WatDiv, DatalogMTL on a temporal LUBM-style set, and constraint-check cost against transaction size; references are Soufflé's interpreter, Nemo, MeTeoR and eyeron. Proposed gates: ten times `tm-n3` on the same Horn programs, within twice Soufflé's interpreter on closure and same-generation, and at most 20 % added to a 100-statement transaction at 10⁶ by enforced constraints. The brute-force evaluator checks DatalogMTL property tests instant by instant. Measured on 2026-10-28 (`bench/datalog/README.md`): 6.6× `tm-n3` on a hub closure (N3 did not finish the small-world closure in 491 s) and 3.1–4.3× slower than Soufflé's interpreter on closures, so neither gate is met yet; demand goals run in milliseconds. Tuning is open.
 
 ## Guarded Value Invention
 
