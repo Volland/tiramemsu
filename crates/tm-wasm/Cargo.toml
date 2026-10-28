@@ -38,7 +38,8 @@ sqlite-wasm-vfs = "0.2"
 opfs-tests = []
 
 [dev-dependencies]
-tiramemsu = { workspace = true }
+# Path only: Cargo drops it when publishing, so tm-wasm does not need the facade on crates.io.
+tiramemsu = { path = "../tiramemsu" }
 tm-exec = { workspace = true }
 rusqlite = { version = "0.40", features = ["functions", "vtab", "array", "hooks"] }
 
