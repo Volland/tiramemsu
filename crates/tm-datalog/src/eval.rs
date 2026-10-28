@@ -26,6 +26,8 @@ use crate::syntax::{AggFn, CmpOp, TempOp, Window};
 use crate::terms::{self, Id, Terms};
 
 const UNBOUND: Id = i64::MIN;
+/// Delta rows per parallel morsel.
+#[cfg(all(feature = "parallel", not(target_arch = "wasm32")))]
 const MORSEL: usize = 1024;
 
 /// Limits of a run.
@@ -148,6 +150,11 @@ pub struct Engine<'p, 's> {
     /// What threads share.
     pub sh: Shared<'p, 's>,
     store: &'s dyn ReadStore,
+    /// The store as shareable between threads, for parallel morsels.
+    #[cfg_attr(
+        not(all(feature = "parallel", not(target_arch = "wasm32"))),
+        allow(dead_code)
+    )]
     sync: Option<&'s (dyn ReadStore + Sync)>,
     /// Recorded derivations.
     pub derivs: Vec<Deriv>,
