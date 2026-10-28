@@ -6,7 +6,7 @@ Defines how retracting a statement recursively retracts every live statement bui
 ## Requirements
 
 ### Requirement: Cascade over subject and object positions
-When a statement `e` is retracted by any operation, every statement that is live at that point of the transaction and has `e` as its subject or as its object SHALL be retracted in the same transaction, and the rule SHALL apply recursively to each of them. All statements retracted by one cascade SHALL receive the same `t_ret`, equal to the current transaction. Only statement eids SHALL propagate a cascade; `IRI`, `NODE`, `BNODE`, `TX` and literal values never do.
+When a statement `e` is retracted by any operation, every statement that is live at that point of the transaction and has `e` as its subject or as its object SHALL be retracted in the same transaction, and the rule SHALL apply recursively to each of them. In addition, every live statement `D` for which a live support link `(D sys:derivedFrom e)` exists SHALL be retracted in the same transaction, recursively, so a derived belief falls with any of its supports. All statements retracted by one cascade SHALL receive the same `t_ret`, equal to the current transaction. Only statement eids SHALL propagate a cascade; `IRI`, `NODE`, `BNODE`, `TX` and literal values never do.
 
 #### Scenario: Annotation and reference are retracted
 - **WHEN** `e1 = (alice worksAt acme)`, `e2 = (e1 :confidence 0.8)` and `e7 = (:belief9 :supportedBy e1)` are live and `e1` is retracted in transaction 12
@@ -28,6 +28,10 @@ When a statement `e` is retracted by any operation, every statement that is live
 - **WHEN** `e2 = (e1 :note "a")` was retracted earlier, `e3 = (e2 :note "b")` is live, and `e1` is retracted
 - **THEN** `e2` keeps its original `t_ret` and `ret_kind`
 - **AND** `e3` stays live, because the cascade only follows live statements
+
+#### Scenario: Derived belief follows its support
+- **WHEN** `D = (alice :prefers tea)` was derived from `e1` and `e1` is retracted in transaction 12
+- **THEN** the link `(D sys:derivedFrom e1)` and `D` both have `t_ret = 12`
 
 ### Requirement: Retraction kinds
 Every retracted statement SHALL record a `ret_kind`: `explicit` (0) for the statement named by a retract or matched by retract-matching; `cascade` (1) for every other statement reached from an explicit retraction; `supersede` (2) for every statement in the cascade set of a superseded statement, root included; and `cardinality` (3) for every statement in the cascade set of a statement replaced by a cardinality-one assert, root included. The report SHALL list each retracted eid with the same kind.
