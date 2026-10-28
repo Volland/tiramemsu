@@ -38,7 +38,7 @@ page = f'''<!doctype html>
 <body>
 <header class="top"><div class="wrap">
   <a class="brand" href="../"><img src="../assets/logo.svg" alt="">Tiramemsu</a>
-  <nav class="menu"><a href="../#features">Features</a><a href="../#start">Quick start</a><a href="./" aria-current="page">Articles</a><a href="../paper/">Papers</a><a href="https://github.com/Volland/tiramemsu">GitHub</a></nav>
+  <nav class="menu"><a href="../#features">Features</a><a href="../#start">Quick start</a><a href="./" aria-current="page">Articles</a><a href="../datalog/">Datalog</a><a href="../paper/">Papers</a><a href="https://github.com/Volland/tiramemsu">GitHub</a></nav>
 </div></header>
 
 <article class="post">

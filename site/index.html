@@ -11,7 +11,7 @@
 <body>
 <header class="top"><div class="wrap">
   <a class="brand" href="./"><img src="assets/logo.svg" alt="">Tiramemsu</a>
-  <nav class="menu"><a href="#why">Why</a><a href="#usecases">Use cases</a><a href="#features">Features</a><a href="#matrix">Matrix</a><a href="#start">Quick start</a><a href="benchmarks.html">Benchmarks</a><a href="articles/">Articles</a><a href="n3/">N3 book</a><a href="paper/">Papers</a><a href="https://github.com/Volland/tiramemsu">GitHub</a></nav>
+  <nav class="menu"><a href="#why">Why</a><a href="#usecases">Use cases</a><a href="#features">Features</a><a href="#matrix">Matrix</a><a href="#start">Quick start</a><a href="benchmarks.html">Benchmarks</a><a href="articles/">Articles</a><a href="n3/">N3 book</a><a href="datalog/">Datalog</a><a href="paper/">Papers</a><a href="https://github.com/Volland/tiramemsu">GitHub</a></nav>
 </div></header>
 
 <main>
@@ -98,6 +98,13 @@ past = db.as_of(instant=<span class="s">"2026-10-06T09:00:00Z"</span>)
     <div class="card"><span class="tag">Both clocks</span><h3>Rules that respect time</h3><p>Facts that were never true at the same time never combine. Reason as of any past transaction, with the rules believed then.</p></div>
     <div class="card"><span class="tag">Grounded</span><h3>Conclusions that fall</h3><p>Materialized conclusions rest on their premises and their rule set, and are retracted in the same transaction when either goes.</p></div>
     <div class="card"><span class="tag">Rules as memory</span><h3>Rule sets with history</h3><p>A rule set is a statement: edits are supersedes, and a monotonicity check keeps negation and the clock out of stored conclusions.</p></div>
+  </div>
+  <h3 class="group">Datalog <span class="tag">new</span></h3>
+  <div class="grid four">
+    <div class="card"><span class="tag">Both clocks</span><h3>Datalog over valid time</h3><p>Rules, DatalogMTL operators (<code>past</code>, <code>always_future</code>, <code>since</code>) and the 13 Allen relations, computed in one pass with interval sets. Facts that were never valid together never combine. Opt-in feature <code>datalog</code>. <a href="datalog/">The guide</a>.</p></div>
+    <div class="card"><span class="tag">Constraints</span><h3>Rules that refuse a write</h3><p>A <code>constraint ... error</code> is checked at commit from the statements the transaction changed, so a second CEO fails the write instead of being found later. Succession is not a conflict; overlap is.</p></div>
+    <div class="card"><span class="tag">Grounded</span><h3>Conclusions that fall</h3><p>A stored program can materialize its conclusions as derived beliefs that fall with their premises or with an edit of the program. Negation and aggregates are reconciled on each run.</p></div>
+    <div class="card"><span class="tag">In queries</span><h3>A goal inside SPARQL or Cypher</h3><p>Join a recursive question, such as who is above Alice, with an ordinary pattern: <code>SERVICE &lt;urn:tiramemsu:dl:query&gt;</code> or <code>CALL tiramemsu.datalog.query</code>. <a href="articles/datalog-temporal-reasoning.html">Read the article</a>.</p></div>
   </div>
   <h3 class="group">Recall</h3>
   <div class="grid four">
