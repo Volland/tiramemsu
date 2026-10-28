@@ -44,7 +44,7 @@ pub use id::{Eid, ObjectId, Tag, TxId};
 pub use mapping::Vocab;
 pub use recall::{RecallHit, RecallQuery};
 pub use report::{
-    AssertOpts, Asserted, IdUsage, OnExisting, Patch, PatchField, RetKind, Triple, TxOptions,
+    Allen, AssertOpts, Asserted, IdUsage, OnExisting, Patch, PatchField, RetKind, Triple, TxOptions,
     TxReport, Valid,
 };
 pub use term::{TermDict, TermReader};

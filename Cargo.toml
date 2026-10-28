@@ -35,6 +35,7 @@ tiramemsu-json = { path = "bindings/json", version = "0.9.0" }
 tiramemsu-mcp = { path = "crates/tiramemsu-mcp", version = "0.9.0" }
 tm-wasm = { path = "crates/tm-wasm", version = "0.9.0" }
 tm-n3 = { path = "crates/tm-n3", version = "0.9.0" }
+tm-datalog = { path = "crates/tm-datalog", version = "0.9.0" }
 # The N3 reasoner, pinned to a git commit until it is on crates.io (OpenSpec
 # change `publish-eyeron-dependency`); `tm-n3` is `publish = false` meanwhile.
 # Pinned to the branch of eyereasoner/eyeron#25 on the project fork: with

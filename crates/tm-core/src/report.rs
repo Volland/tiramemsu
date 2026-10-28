@@ -72,11 +72,173 @@ impl Valid {
         self.from.is_none_or(|f| f <= d) && self.to.is_none_or(|t| t > d)
     }
 
-    /// The overlap test of `lat.md/time-model#Operations#Assert`.
+    /// The overlap test of `lat.md/time-model#Operations#Assert`: the same test as
+    /// [`Valid::intersects`].
     pub fn overlaps(&self, b: &Valid) -> bool {
+        self.intersects(b)
+    }
+
+    /// True when the two intervals share an instant: `a.from < b.to ∧ b.from <
+    /// a.to`, an open end comparing past every bound. This is the one definition
+    /// of overlap: assert's test, SPARQL's and Cypher's `intersects` and the
+    /// Datalog builtin use it. It holds exactly for the relations `overlaps`,
+    /// `starts`, `during`, `finishes`, `equals` and their converses.
+    // @tg: implements:: [[openspec:datalog-temporal#Allen relations]] {since: "2026-10-28", confidence: partial}
+    pub fn intersects(&self, b: &Valid) -> bool {
         let a = self;
         (a.from.is_none() || b.to.is_none() || a.from < b.to)
             && (b.from.is_none() || a.to.is_none() || b.from < a.to)
+    }
+
+    /// The Allen relation of `self` to `b`, both proper intervals. Exactly one
+    /// holds for any pair; an open start equals an open start and an open end
+    /// equals an open end.
+    ///
+    /// ```
+    /// use tm_core::{Allen, Valid};
+    ///
+    /// assert_eq!(Valid::between(1, 3).relate(&Valid::between(3, 5)), Allen::Meets);
+    /// assert_eq!(Valid::ALWAYS.relate(&Valid::ALWAYS), Allen::Equals);
+    /// assert_eq!(Valid::from(5).relate(&Valid::between(1, 9)), Allen::OverlappedBy);
+    /// ```
+    pub fn relate(&self, b: &Valid) -> Allen {
+        use std::cmp::Ordering::*;
+        // endpoints on the extended line: an open start is −∞, an open end +∞
+        let lo = |x: Option<i64>| x.map_or(i128::MIN, i128::from);
+        let hi = |x: Option<i64>| x.map_or(i128::MAX, i128::from);
+        let (af, at, bf, bt) = (lo(self.from), hi(self.to), lo(b.from), hi(b.to));
+        if at < bf {
+            return Allen::Before;
+        }
+        if bt < af {
+            return Allen::After;
+        }
+        if at == bf {
+            return Allen::Meets;
+        }
+        if bt == af {
+            return Allen::MetBy;
+        }
+        match (af.cmp(&bf), at.cmp(&bt)) {
+            (Equal, Equal) => Allen::Equals,
+            (Equal, Less) => Allen::Starts,
+            (Equal, Greater) => Allen::StartedBy,
+            (Greater, Equal) => Allen::Finishes,
+            (Less, Equal) => Allen::FinishedBy,
+            (Greater, Less) => Allen::During,
+            (Less, Greater) => Allen::Contains,
+            (Less, Less) => Allen::Overlaps,
+            (Greater, Greater) => Allen::OverlappedBy,
+        }
+    }
+}
+
+/// The thirteen relations of Allen's interval algebra over half-open intervals.
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub enum Allen {
+    /// `a.to < b.from`.
+    Before,
+    /// `a.to = b.from`.
+    Meets,
+    /// `a.from < b.from < a.to < b.to`.
+    Overlaps,
+    /// `a.from = b.from ∧ a.to < b.to`.
+    Starts,
+    /// `b.from < a.from ∧ a.to < b.to`.
+    During,
+    /// `b.from < a.from ∧ a.to = b.to`.
+    Finishes,
+    /// Same endpoints.
+    Equals,
+    /// Converse of `Finishes`.
+    FinishedBy,
+    /// Converse of `During`.
+    Contains,
+    /// Converse of `Starts`.
+    StartedBy,
+    /// Converse of `Overlaps`.
+    OverlappedBy,
+    /// Converse of `Meets`.
+    MetBy,
+    /// Converse of `Before`.
+    After,
+}
+
+impl Allen {
+    /// Every relation, in declaration order.
+    pub const ALL: [Allen; 13] = [
+        Allen::Before,
+        Allen::Meets,
+        Allen::Overlaps,
+        Allen::Starts,
+        Allen::During,
+        Allen::Finishes,
+        Allen::Equals,
+        Allen::FinishedBy,
+        Allen::Contains,
+        Allen::StartedBy,
+        Allen::OverlappedBy,
+        Allen::MetBy,
+        Allen::After,
+    ];
+
+    /// The stable lower-case name (`"overlappedBy"`, ...).
+    pub fn name(self) -> &'static str {
+        match self {
+            Allen::Before => "before",
+            Allen::Meets => "meets",
+            Allen::Overlaps => "overlaps",
+            Allen::Starts => "starts",
+            Allen::During => "during",
+            Allen::Finishes => "finishes",
+            Allen::Equals => "equals",
+            Allen::FinishedBy => "finishedBy",
+            Allen::Contains => "contains",
+            Allen::StartedBy => "startedBy",
+            Allen::OverlappedBy => "overlappedBy",
+            Allen::MetBy => "metBy",
+            Allen::After => "after",
+        }
+    }
+
+    /// The relation with this name.
+    pub fn from_name(s: &str) -> Option<Allen> {
+        Allen::ALL.into_iter().find(|a| a.name() == s)
+    }
+
+    /// The converse relation: `b.relate(a)` when `a.relate(b)` is `self`.
+    pub fn converse(self) -> Allen {
+        match self {
+            Allen::Before => Allen::After,
+            Allen::Meets => Allen::MetBy,
+            Allen::Overlaps => Allen::OverlappedBy,
+            Allen::Starts => Allen::StartedBy,
+            Allen::During => Allen::Contains,
+            Allen::Finishes => Allen::FinishedBy,
+            Allen::Equals => Allen::Equals,
+            Allen::FinishedBy => Allen::Finishes,
+            Allen::Contains => Allen::During,
+            Allen::StartedBy => Allen::Starts,
+            Allen::OverlappedBy => Allen::Overlaps,
+            Allen::MetBy => Allen::Meets,
+            Allen::After => Allen::Before,
+        }
+    }
+
+    /// True for the nine relations whose intervals share an instant.
+    pub fn intersecting(self) -> bool {
+        matches!(
+            self,
+            Allen::Overlaps
+                | Allen::Starts
+                | Allen::During
+                | Allen::Finishes
+                | Allen::Equals
+                | Allen::FinishedBy
+                | Allen::Contains
+                | Allen::StartedBy
+                | Allen::OverlappedBy
+        )
     }
 }
 

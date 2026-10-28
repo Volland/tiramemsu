@@ -12,11 +12,11 @@ A program SHALL be UTF-8 text of `@prefix p: <iri> .` declarations, rules `head 
 - **THEN** it parses into two rules, one goal and one `error` constraint named `no_cycle`
 
 #### Scenario: Syntax error has a position
-- **WHEN** the text is `reports(X, Y) :- ex:manager(X, Y)` with no final period
+- **WHEN** the text is `reports(X, Y) :- v:manager(X, Y)` with no final period (`v:` is a default prefix)
 - **THEN** parsing fails with `DatalogParse` naming line 1 and the column of the end of input
 
 ### Requirement: Stored atoms
-An atom whose predicate is an IRI and that has two arguments, `p(S, O)`, SHALL match the live statements of the view with predicate `p`, under set semantics on `(S, O)`. The form `p(S, O) @ E` SHALL also bind `E` to the statement's eid, with one binding per statement. A predicate IRI that the program also defines in a rule head SHALL be a derived relation, not a stored one; a derived relation SHALL have a fixed arity, and any arity SHALL be allowed for derived relations with plain names.
+An atom whose predicate is an IRI and that has two arguments, `p(S, O)`, SHALL match the live statements of the view with predicate `p`, under set semantics on `(S, O)`. The form `p(S, O) @ E` SHALL also bind `E` to the statement's eid, with one binding per statement. A predicate IRI that the program also defines in a rule head SHALL be a derived relation that also holds the stored statements of that predicate (so a rule cannot negate its own head predicate without recursion through negation); a derived relation SHALL have a fixed arity, and any arity SHALL be allowed for derived relations with plain names.
 
 #### Scenario: Parallel statements under set semantics
 - **WHEN** two live statements `(ex:a ex:knows ex:b)` exist and the goal is `?- ex:knows(ex:a, Y).`
@@ -31,7 +31,7 @@ An atom whose predicate is an IRI and that has two arguments, `p(S, O)`, SHALL m
 - **THEN** there is one row `X = ex:alice, C = ex:acme, E = e1, K = 0.9`
 
 ### Requirement: Reserved atoms
-The reserved atoms SHALL be `triple(S, P, O)` (any stored predicate, P may be a variable), `stmt(E, S, P, O)`, `valid(E, From, To)` (the statement's valid interval, with an unbounded end as the constant `inf`), `in_graph(E, G)` (named-graph membership), `added(E, T)` (the transaction that inserted the statement) and `tx_instant(T, Ms)` (a transaction's instant in epoch milliseconds). Their names SHALL NOT be used as rule heads; doing so SHALL fail with `DatalogReserved`.
+The reserved atoms SHALL be `triple(S, P, O)` (any stored predicate, P may be a variable, holding over the statement's valid time), `stmt(E, S, P, O)` (the statement's record, holding at every instant, so rules can relate statements that were never valid together), `valid(E, From, To)` (the statement's valid interval, with an unbounded end as the constant `inf`), `in_graph(E, G)` (named-graph membership), `added(E, T)` (the transaction that inserted the statement) and `tx_instant(T, Ms)` (a transaction's instant in epoch milliseconds). Their names SHALL NOT be used as rule heads; doing so SHALL fail with `DatalogReserved`.
 
 #### Scenario: Valid interval as data
 - **WHEN** e1 = `(ex:alice ex:worksAt ex:acme)` is valid `[2020-01-01, 2022-01-01)` and the goal is `?- ex:worksAt(ex:alice, C) @ E, valid(E, F, T).`
@@ -74,8 +74,8 @@ Every variable of a head, of a negated atom, of a comparison or of a builtin SHA
 A head MAY introduce a variable with `exists Y:`; each firing SHALL bind it to a node determined by the rule and the values of the head's other variables, so the same firing in another run yields the same node identity within that run's results. Heads MAY compute values with builtins. A program in which a relation depends on itself through an `exists` variable or a computed head value SHALL be refused with `DatalogUnboundedInvention` unless `limits.max_new_values` is set; with the limit, reaching it SHALL stop the run with status `Incomplete` and limit `NewValues`.
 
 #### Scenario: Every employee has a manager
-- **WHEN** the rule is `exists M: ex:manager(X, M) :- rdf:type(X, ex:Employee), not ex:manager(X, _).` and `ex:bob` has no manager
-- **THEN** one conclusion `ex:manager(ex:bob, M1)` is reported with `M1` an invented node
+- **WHEN** the rule is `exists M: ex:assignedManager(X, M) :- rdf:type(X, ex:Employee), not ex:manager(X, _).` and `ex:bob` has no manager
+- **THEN** one conclusion `ex:assignedManager(ex:bob, M1)` is reported with `M1` an invented node
 
 #### Scenario: Recursive invention needs a limit
 - **WHEN** the program is `n(0).` and `n(Y) :- n(X), Y = X + 1.` with no `max_new_values`

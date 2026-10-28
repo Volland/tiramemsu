@@ -78,8 +78,8 @@ Evaluation SHALL run outside the writer; only the commit holds it. A conclusion 
 A node invented by `exists` SHALL become the node returned by `upsert_derived(dl:skolem, "<R eid>/<rule>/<frontier values>", support)`, so re-running the same firing reuses the node.
 
 #### Scenario: Stable invented manager
-- **WHEN** `exists M: ex:manager(X, M) :- rdf:type(X, ex:Employee), not ex:manager(X, _).` is materialized twice for `bob`
-- **THEN** both runs use the same node and the second asserts no new `ex:manager` statement
+- **WHEN** `exists M: ex:assignedManager(X, M) :- rdf:type(X, ex:Employee), not ex:manager(X, _).` is materialized twice for `bob`
+- **THEN** both runs use the same node and the second asserts no new `ex:assignedManager` statement
 
 ### Requirement: Incremental runs
 When the program's live `R` has a previous materialize transaction `t₁` (the latest carrying `(tx dl:materialized program)` after `R` was asserted) and `full` is not set, a run SHALL evaluate monotonic strata from the program's live conclusions as already derived plus the statements added after `t₁`, and SHALL re-derive each conclusion of the program retracted after `t₁` by the cascade when another derivation of it exists in the snapshot. Non-monotonic strata SHALL be evaluated fully and reconciled. The live set after an incremental run SHALL equal the live set after a full run on the same snapshot. `full: true` SHALL force a full run.

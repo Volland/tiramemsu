@@ -326,6 +326,89 @@ pub enum Error {
         /// The builtin failures the reasoner reported.
         errors: Vec<String>,
     },
+    /// Datalog program text that does not parse (facade feature `datalog`).
+    #[error("Datalog parse error at line {line}, column {column}: {message}")]
+    DatalogParse {
+        /// The 1-based line.
+        line: usize,
+        /// The 1-based column.
+        column: usize,
+        /// What was wrong.
+        message: String,
+    },
+    /// A Datalog rule with a variable that no positive atom binds.
+    #[error("unsafe Datalog rule {rule}: {message}")]
+    DatalogUnsafe {
+        /// The index of the rule (goals and constraints follow the rules).
+        rule: usize,
+        /// The variable and where it occurs.
+        message: String,
+    },
+    /// A Datalog program with recursion through negation or aggregation.
+    #[error("Datalog program cannot be stratified: {message}")]
+    DatalogUnstratifiable {
+        /// The relations of one cycle.
+        message: String,
+    },
+    /// A reserved Datalog atom (`triple`, `valid`, ...) used as a rule head.
+    #[error("reserved Datalog name in a head: {name}")]
+    DatalogReserved {
+        /// The reserved name.
+        name: String,
+    },
+    /// A sometime operator (`past`, `future`) in a rule head.
+    #[error("not a Horn rule: {message}")]
+    DatalogNotHorn {
+        /// The offending head.
+        message: String,
+    },
+    /// A program that recurses through a metric temporal operator, run without
+    /// a window.
+    #[error("Datalog recursion through a temporal operator needs a window: {relation}")]
+    DatalogUnboundedRecursion {
+        /// A relation on the cycle.
+        relation: String,
+    },
+    /// A program that recurses through value invention, run without
+    /// `limits.max_new_values`.
+    #[error("Datalog recursion through value invention needs max_new_values: {relation}")]
+    DatalogUnboundedInvention {
+        /// A relation on the cycle.
+        relation: String,
+    },
+    /// A temporal operator in a program run with `TimeMode::Atemporal`.
+    #[error("temporal operator in an atemporal Datalog run: {operator}")]
+    DatalogTemporalOperatorInAtemporal {
+        /// The operator.
+        operator: String,
+    },
+    /// Two constraints of one program with the same name.
+    #[error("duplicate Datalog constraint: {name}")]
+    DatalogDuplicateConstraint {
+        /// The name.
+        name: String,
+    },
+    /// A Datalog run with `require_complete` that reached a limit.
+    #[error("Datalog run incomplete: limits {limits:?}")]
+    DatalogIncomplete {
+        /// The limits reached (`Iterations`, `Facts`, ...), ascending.
+        limits: Vec<String>,
+    },
+    /// `Program::Stored` names a program without a live `dl:source` statement in
+    /// the view (facade feature `datalog`).
+    #[error("unknown Datalog program: {program}")]
+    UnknownProgram {
+        /// The program, rendered.
+        program: String,
+    },
+    /// Storing rules of one language on a node that holds live rules of the other.
+    #[error("{node} already holds {existing} rules")]
+    RuleLanguageConflict {
+        /// The node, rendered.
+        node: String,
+        /// The language it already holds (`"N3"` or `"Datalog"`).
+        existing: String,
+    },
     /// A file that is neither a SQLite nor a redb database.
     #[error("{path} is not a database file this build can open (neither SQLite nor redb)")]
     UnknownFormat {

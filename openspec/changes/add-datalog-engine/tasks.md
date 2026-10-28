@@ -1,6 +1,6 @@
 ## 1. Prerequisite: interval algebra core
 
-- [ ] 1.1 Implement tasks 1.1 and 1.2 of `add-interval-algebra` (`Allen`, `Valid::relate`, `Valid::intersects` in `crates/tm-core/src/report.rs`, with its property test) and check them off in that change.
+- [x] 1.1 Implement tasks 1.1 and 1.2 of `add-interval-algebra` (`Allen`, `Valid::relate`, `Valid::intersects` in `crates/tm-core/src/report.rs`, with its property test) and check them off in that change.
 
 ## 2. Crate and feature
 

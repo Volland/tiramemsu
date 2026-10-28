@@ -87,6 +87,19 @@ pub const SYS_DIMENSIONS: &str = "urn:tiramemsu:sys:dimensions";
 pub const SYS_METRIC: &str = "urn:tiramemsu:sys:metric";
 /// Embedding model: how its vectors are stored (`"f32"` or `"f16"`).
 pub const SYS_VECTOR_ENCODING: &str = "urn:tiramemsu:sys:vectorEncoding";
+/// `dl:` namespace: stored Datalog programs and the labels of their conclusions.
+pub const DL: &str = "urn:tiramemsu:dl:";
+/// `dl:source`: `(program dl:source "<text>")`, the one live statement of a
+/// stored Datalog program.
+pub const DL_SOURCE: &str = "urn:tiramemsu:dl:source";
+/// `dl:inf`: the constant a Datalog rule sees for an unbounded valid-time end.
+pub const DL_INF: &str = "urn:tiramemsu:dl:inf";
+/// `n3:source`: the statement of a stored N3 rule set (the rule-language
+/// conflict check reads it without the `n3` feature).
+pub const N3_SOURCE: &str = "urn:tiramemsu:n3:source";
+/// `tm:Interval`: the datatype of interval values (`"<from>/<to>"` in epoch
+/// milliseconds, `..` for an open end).
+pub const TM_INTERVAL: &str = "urn:tiramemsu:tm:Interval";
 /// `rdf:type`.
 pub const RDF_TYPE: &str = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
 

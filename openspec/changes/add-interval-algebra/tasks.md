@@ -1,7 +1,7 @@
 ## 1. Interval model
 
-- [ ] 1.1 Add `Allen` (thirteen variants with stable names) and `Valid::relate`, `Valid::intersects` in `crates/tm-core/src/report.rs`; reuse `Valid::intersects` in the assert overlap check so there is one definition.
-- [ ] 1.2 Property test: for random proper intervals with optional infinite ends, exactly one relation holds, converses are symmetric, and `intersects` equals the disjunction of the seven intersecting relations and the assert overlap SQL.
+- [x] 1.1 Add `Allen` (thirteen variants with stable names) and `Valid::relate`, `Valid::intersects` in `crates/tm-core/src/report.rs`; reuse `Valid::intersects` in the assert overlap check so there is one definition.
+- [x] 1.2 Property test: for random proper intervals with optional infinite ends, exactly one relation holds, converses are symmetric, and `intersects` equals the disjunction of the nine intersecting relations and the assert overlap SQL.
 
 ## 2. SPARQL
 

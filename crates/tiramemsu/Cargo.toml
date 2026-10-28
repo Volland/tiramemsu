@@ -23,6 +23,7 @@ tm-native = { workspace = true, optional = true }
 tm-sparql = { workspace = true, optional = true }
 tm-cypher = { workspace = true, optional = true }
 tm-n3 = { workspace = true, optional = true }
+tm-datalog = { workspace = true, optional = true }
 lru = "0.18"
 serde_json = "1"
 
@@ -106,6 +107,11 @@ redb = ["dep:tm-redb"]
 # independent of `exec`: the core tier can reason. eyeron is a git dependency
 # until it is on crates.io, so a build with this feature cannot be published.
 n3 = ["dep:tm-n3"]
+# Datalog with DatalogMTL over valid time (`View::datalog`, `View::datalog_reason`,
+# `View::check`, `View::program_info`, `View::explain_datalog`,
+# `TxDatalog::store_program`; OpenSpec change `add-datalog-engine`). Off by default
+# and independent of `exec`: the core tier can run Datalog. No git dependency.
+datalog = ["dep:tm-datalog"]
 
 [lints]
 workspace = true

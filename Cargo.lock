@@ -1691,6 +1691,7 @@ dependencies = [
  "tempfile",
  "tm-core",
  "tm-cypher",
+ "tm-datalog",
  "tm-exec",
  "tm-ir",
  "tm-n3",
@@ -1809,6 +1810,17 @@ dependencies = [
  "tiramemsu",
  "tm-core",
  "tm-ir",
+]
+
+[[package]]
+name = "tm-datalog"
+version = "0.9.0"
+dependencies = [
+ "proptest",
+ "rustc-hash",
+ "smallvec",
+ "tm-core",
+ "tm-store",
 ]
 
 [[package]]

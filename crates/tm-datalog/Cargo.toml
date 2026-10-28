@@ -1,0 +1,31 @@
+[package]
+name = "tm-datalog"
+description = "Tiramemsu Datalog: a semi-naive engine with DatalogMTL over valid time, magic-set goals and constraints, over the storage traits"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+readme = "README.md"
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
+rust-version.workspace = true
+
+[features]
+default = ["parallel"]
+# Join steps over large deltas run as morsels on scoped threads (results are
+# identical either way). Off on wasm, which has no threads.
+parallel = []
+
+[dependencies]
+tm-core = { workspace = true }
+tm-store = { workspace = true }
+rustc-hash = "2"
+smallvec = "1"
+
+[dev-dependencies]
+proptest = "1"
+
+[lints]
+workspace = true

@@ -21,6 +21,8 @@ mod budget;
 mod bundle;
 #[cfg(feature = "cypher")]
 mod cypher;
+#[cfg(feature = "datalog")]
+mod datalog;
 mod db;
 mod import;
 #[cfg(feature = "n3")]
@@ -41,6 +43,8 @@ pub use budget::QueryBudget;
 pub use bundle::{BundleFormat, BUNDLE_FORMAT};
 #[cfg(feature = "cypher")]
 pub use cypher::TxCypher;
+#[cfg(feature = "datalog")]
+pub use datalog::TxDatalog;
 pub use db::{Db, OpenOptions, Summary};
 pub use import::{BulkImport, ImportProgress, ImportSummary};
 #[cfg(feature = "n3")]
@@ -99,6 +103,18 @@ pub use tm_exec::{
 pub use tm_ir as ir;
 #[cfg(feature = "exec")]
 pub use tm_ir::{IrQuery, Params, PathCompleteness, PathMode};
+/// The Datalog crate (`tm-datalog`).
+#[cfg(feature = "datalog")]
+pub use tm_datalog as datalog_engine;
+#[cfg(feature = "datalog")]
+pub use tm_datalog::{
+    AccessMode as DatalogAccess, CheckResult, Conclusion as DatalogConclusion, ConstraintReport,
+    DatalogOptions, DatalogResult, Explain as DatalogExplain, Fact as DatalogFact,
+    FragmentProof, Limit as DatalogLimit, Limits as DatalogLimits, Premise as DatalogPremise,
+    Program as DatalogProgram, ProgramInfo, Proof as DatalogProof,
+    ReasonResult as DatalogReasonResult, Row as DatalogRow, Scope as DatalogScope, Severity,
+    Status as DatalogStatus, Term as DatalogTerm, TimeMode as DatalogTime, Violation,
+};
 /// The N3 reasoning crate (`tm-n3`) and its reasoner (`n3_engine::eyeron`).
 #[cfg(feature = "n3")]
 pub use tm_n3 as n3_engine;

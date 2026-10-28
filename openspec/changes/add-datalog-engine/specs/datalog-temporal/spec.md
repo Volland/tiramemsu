@@ -53,8 +53,8 @@ A head MAY be `always_past[a, b] H` or `always_future[a, b] H`, meaning H holds 
 The 13 Allen relations SHALL be builtins over statement eids or interval pairs (`before(E1, E2)`, `meets`, `overlaps`, `starts`, `during`, `finishes`, `equals` and the six converses), with `interval(E, I)`, `start(I, T)`, `end(I, T)` and `duration(I, D)`, evaluated with the same definitions SPARQL and Cypher use, unbounded ends included.
 
 #### Scenario: Job meets the next job
-- **WHEN** e1 is valid `[2020, 2022)` and e2 is valid `[2022, 2025)`
-- **THEN** `meets(e1, e2)` is true and `overlaps(e1, e2)` is false
+- **WHEN** e1 is valid `[2020, 2022)` and e2 is valid `[2022, 2025)`, and a goal binds them through `stmt(E1, …)` and `stmt(E2, …)`
+- **THEN** `meets(E1, E2)` is true and `overlaps(E1, E2)` is false, while the same goal through the facts `p(S, O) @ E` has no row, because the two are never valid at one instant
 
 ### Requirement: Windows and recursion through time
 A program that analysis reports as recursive through a metric operator SHALL require `DatalogOptions::window`; without one it SHALL fail with `DatalogUnboundedRecursion`. With a window, intervals SHALL be clipped to it before each iteration and the run SHALL terminate. Other programs SHALL run without a window, and a given window SHALL clip their results.

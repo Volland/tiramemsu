@@ -142,6 +142,20 @@ impl BindError {
                 Error::N3NotMaterializable { .. } => "N3NotMaterializable",
                 Error::N3Contradiction { .. } => "N3Contradiction",
                 Error::N3Incomplete { .. } => "N3Incomplete",
+                Error::DatalogParse { .. } => "DatalogParse",
+                Error::DatalogUnsafe { .. } => "DatalogUnsafe",
+                Error::DatalogUnstratifiable { .. } => "DatalogUnstratifiable",
+                Error::DatalogReserved { .. } => "DatalogReserved",
+                Error::DatalogNotHorn { .. } => "DatalogNotHorn",
+                Error::DatalogUnboundedRecursion { .. } => "DatalogUnboundedRecursion",
+                Error::DatalogUnboundedInvention { .. } => "DatalogUnboundedInvention",
+                Error::DatalogTemporalOperatorInAtemporal { .. } => {
+                    "DatalogTemporalOperatorInAtemporal"
+                }
+                Error::DatalogDuplicateConstraint { .. } => "DatalogDuplicateConstraint",
+                Error::DatalogIncomplete { .. } => "DatalogIncomplete",
+                Error::UnknownProgram { .. } => "UnknownProgram",
+                Error::RuleLanguageConflict { .. } => "RuleLanguageConflict",
                 Error::Custom(_) => "Custom",
                 _ => "Error",
             },
