@@ -208,5 +208,18 @@ fn negation_is_detected() {
                 .monotonicity,
             Monotonicity::Monotonic
         );
+        // `list:map` does not name the facts it read
+        store(
+            db,
+            "doubling",
+            "{ ?x v:items ?l. (?l v:double) list:map ?m } => { ?x v:doubled ?m } .",
+        );
+        assert_eq!(
+            db.now().rule_set_info(&v("doubling")).unwrap().monotonicity,
+            Monotonicity::UntracedPremises {
+                rule: 0,
+                builtin: "list:map".into()
+            }
+        );
     });
 }

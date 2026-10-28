@@ -10,12 +10,15 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use tm_core::sqlstore::SqlStore;
 use tm_core::store::ReadStore;
+use tm_core::vocab::SYS_DERIVED_FROM;
 use tm_core::{
     budget, read, Eid, Error, Executor, ObjectId, Patch, Result, SqlValue, Tag, TermReader,
     TimeRef, Triple, TxHandle as Tx, TxSel, Valid, ValidSel, Value, ViewSpec,
 };
-use tm_n3::vocab::N3_SOURCE;
-use tm_n3::{Fact, Input, ReasonOptions, ReasonResult, RuleSet, RuleSetInfo, Rules, Scope};
+use tm_n3::vocab::{N3_DERIVED_BY, N3_RULE, N3_SOURCE};
+use tm_n3::{
+    Fact, Input, Monotonicity, ReasonOptions, ReasonResult, RuleSet, RuleSetInfo, Rules, Scope,
+};
 use tm_store::dict::TermCache;
 
 use crate::view::View;
@@ -180,6 +183,7 @@ fn load(
     rules: &Rules,
     scope: &Scope,
     clock: i64,
+    exclude_own: bool,
 ) -> Result<Load> {
     // the view's transaction and its instant: the pinned clock (design N7)
     let (t, now) = match spec.tx {
@@ -299,6 +303,23 @@ fn load(
     }
     rows.sort_by_key(|r| r.eid);
     rows.dedup_by_key(|r| r.eid);
+    // materialization recomputes its own conclusions (design N10): the
+    // statements derived from the rule set's live statement, and their support
+    // links and `n3:` labels, are not input
+    if let (true, Some(r)) = (exclude_own, rule_set_statement) {
+        let own = own_conclusions(src, r)?;
+        if !own.is_empty() {
+            let mut labels = Vec::new();
+            for p in [SYS_DERIVED_FROM, N3_DERIVED_BY, N3_RULE] {
+                labels.extend(src.encode(&Value::iri(p))?);
+            }
+            let about_own = |id: ObjectId| Eid::from_oid(id).is_some_and(|e| own.contains(&e));
+            rows.retain(|r| {
+                let label = about_own(r.s) && labels.contains(&r.p);
+                !own.contains(&r.eid) && !label
+            });
+        }
+    }
 
     let mut values: HashMap<ObjectId, Value> = HashMap::new();
     let mut value = |src: &mut dyn Src, id: ObjectId| -> Result<Value> {
@@ -331,6 +352,19 @@ fn load(
         rule_set_statement,
         pruned,
     })
+}
+
+/// The live statements derived from rule-set statement `r`: subjects of live
+/// links `(D sys:derivedFrom r)`.
+fn own_conclusions(src: &mut dyn Src, r: Eid) -> Result<BTreeSet<Eid>> {
+    let Some(df) = src.encode(&Value::iri(SYS_DERIVED_FROM))? else {
+        return Ok(BTreeSet::new());
+    };
+    Ok(src
+        .triples(None, Some(df), Some(r.oid()))?
+        .into_iter()
+        .filter_map(|row| Eid::from_oid(row.s))
+        .collect())
 }
 
 fn system_now() -> i64 {
@@ -384,6 +418,28 @@ impl View<'_> {
     /// ```
     // @tg: implements:: [[openspec:n3-reasoning#Reason over a view]] {since: "2026-10-28"}
     pub fn reason(&self, rules: Rules, opts: &ReasonOptions) -> Result<ReasonResult> {
+        self.run_rules(&rules, opts, false)
+    }
+
+    /// The reasoning of `Db::materialize`: stored rule set `rule_set`, its own
+    /// conclusions excluded from the input, refused before reasoning when it is
+    /// not monotonic (design N10, N11).
+    // @tg: implements:: [[openspec:n3-materialization#Own conclusions are not input]] {since: "2026-10-28"}
+    // @tg: implements:: [[openspec:n3-materialization#Only monotonic rule sets materialize]] {since: "2026-10-28"}
+    pub(crate) fn reason_for_materialization(
+        &self,
+        rule_set: &Value,
+        opts: &ReasonOptions,
+    ) -> Result<ReasonResult> {
+        self.run_rules(&Rules::Stored(rule_set.clone()), opts, true)
+    }
+
+    fn run_rules(
+        &self,
+        rules: &Rules,
+        opts: &ReasonOptions,
+        materialize: bool,
+    ) -> Result<ReasonResult> {
         let spec = self.spec();
         let clock = self.db().map_or_else(system_now, |db| db.now_ms());
         self.op(|| {
@@ -395,7 +451,7 @@ impl View<'_> {
                         fallback: TermReader::new(64),
                         spec,
                     };
-                    load(&mut src, spec, &rules, &opts.scope, clock)
+                    load(&mut src, spec, rules, &opts.scope, clock, materialize)
                 },
                 |r, terms, cache| {
                     let mut src = Kv {
@@ -404,9 +460,22 @@ impl View<'_> {
                         cache,
                         spec,
                     };
-                    load(&mut src, spec, &rules, &opts.scope, clock)
+                    load(&mut src, spec, rules, &opts.scope, clock, materialize)
                 },
             )?;
+            if materialize {
+                match &l.rules.info().monotonicity {
+                    Monotonicity::Monotonic => {}
+                    Monotonicity::NonMonotonic { rule, builtin }
+                    | Monotonicity::ClockDependent { rule, builtin }
+                    | Monotonicity::UntracedPremises { rule, builtin } => {
+                        return Err(Error::N3NotMaterializable {
+                            rule: *rule,
+                            builtin: builtin.clone(),
+                        })
+                    }
+                }
+            }
             if budget::active() {
                 budget::charge_rows(l.facts.len() as u64)?;
                 budget::charge_bytes(l.facts.len() as u64 * 56)?;

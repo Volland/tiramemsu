@@ -1,5 +1,6 @@
 ---
 type: Decision
+openspec: [n3-reasoning, n3-rule-sets, n3-materialization]
 ---
 # Reasoning
 
@@ -111,7 +112,7 @@ N13: `materialize` reasons on a read view outside the writer and writes in one s
 
 - motivated_by:: [[constraints#Single Writer]] {weight: primary, since: "2026-10-28"}
 
-Support liveness, checked by `derive`, makes the race harmless: nothing is written whose grounds are gone, and missed conclusions come back on the next run.
+Support liveness, checked by `derive`, makes the race harmless: nothing is written whose grounds are gone, and missed conclusions come back on the next run. The snapshot and the commit are in [[crates/tiramemsu/src/n3_materialize.rs]]. Conclusions the store cannot hold (a list or formula term, a literal subject, a reserved or non-IRI predicate) are skipped with their dependents and reported as `unstorable`; other write errors, such as schema checks, abort the run.
 
 ## Skolem Nodes
 
@@ -133,7 +134,7 @@ N16: when a run finds a stored derivation with the same content and support over
 
 - motivated_by:: [[constraints#Never Forget]] {weight: primary, since: "2026-10-28"}
 
-A conclusion that stops holding loses support and is retracted, not narrowed. `require_complete` refuses to commit a run that hit a limit.
+A conclusion that stops holding loses support and is retracted, not narrowed. `require_complete` refuses to commit a run that hit a limit (`N3Incomplete`). A statement written earlier in the same run is never widened, since superseding it would retract what the run built on it; the uncovered part becomes a separate, touching statement.
 
 ## Every Surface
 

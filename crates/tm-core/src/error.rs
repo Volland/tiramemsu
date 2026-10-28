@@ -299,13 +299,14 @@ pub enum Error {
         /// The rule set, rendered.
         rule_set: String,
     },
-    /// Materialization of a rule set that uses a non-monotonic or a
-    /// clock-reading builtin (facade feature `n3`).
+    /// Materialization of a rule set that uses a non-monotonic builtin, a
+    /// clock-reading builtin or `list:map` (untraced premises) (facade feature `n3`).
     #[error("rule set cannot be materialized: rule {rule} uses {builtin}")]
     N3NotMaterializable {
         /// The index of the first offending rule in its rule set.
         rule: usize,
-        /// The builtin it uses, as a prefixed name (`log:notIncludes`, `time:localTime`).
+        /// The builtin it uses, as a prefixed name (`log:notIncludes`,
+        /// `time:localTime`, `list:map`).
         builtin: String,
     },
     /// An inference fuse (`{ … } => false`) fired during materialization;
@@ -314,6 +315,16 @@ pub enum Error {
     N3Contradiction {
         /// The index of the fuse rule in its rule set.
         rule: usize,
+    },
+    /// Materialization with `require_complete` of a run that was incomplete (a
+    /// limit was reached or a builtin failed); nothing was written (facade
+    /// feature `n3`).
+    #[error("materialization incomplete: limits {limits:?}, builtin errors {errors:?}")]
+    N3Incomplete {
+        /// The limits reached (`Segments`, `Iterations`, ...), ascending.
+        limits: Vec<String>,
+        /// The builtin failures the reasoner reported.
+        errors: Vec<String>,
     },
     /// A file that is neither a SQLite nor a redb database.
     #[error("{path} is not a database file this build can open (neither SQLite nor redb)")]

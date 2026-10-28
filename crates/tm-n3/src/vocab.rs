@@ -39,6 +39,8 @@ pub const LOG_NOT_INCLUDES: &str = eyeron::ast::LOG_NOT_INCLUDES;
 pub const LOG_COLLECT_ALL_IN: &str = eyeron::ast::LOG_COLLECT_ALL_IN;
 /// `log:forAllIn` (universal check: non-monotonic).
 pub const LOG_FOR_ALL_IN: &str = eyeron::ast::LOG_FOR_ALL_IN;
+/// `list:map` (its proof does not name the facts it read: untraced premises).
+pub const LIST_MAP: &str = eyeron::ast::LIST_MAP;
 
 /// Prefixes every rule text may use without declaring them. The prelude has no
 /// newline, so parse errors keep the line numbers of the caller's text.
@@ -70,6 +72,7 @@ pub(crate) fn builtin_name(iri: &str) -> String {
     for (ns, p) in [
         ("http://www.w3.org/2000/10/swap/log#", "log:"),
         ("http://www.w3.org/2000/10/swap/time#", "time:"),
+        ("http://www.w3.org/2000/10/swap/list#", "list:"),
         (TM, "tm:"),
     ] {
         if let Some(local) = iri.strip_prefix(ns) {

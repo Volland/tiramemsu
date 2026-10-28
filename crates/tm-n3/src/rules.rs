@@ -8,15 +8,15 @@ use eyeron::{Document, Graph, PreparedReasoner, Rule, Term as NTerm, Triple};
 use tm_core::{Error, Result};
 
 use crate::vocab::{
-    builtin_name, is_builtin, LOG_COLLECT_ALL_IN, LOG_FOR_ALL_IN, LOG_NOT_INCLUDES, PRELUDE,
-    TIME_LOCAL_TIME, TM, TM_CONTENT, TM_NOW, TM_RUN, TM_SEGMENT_FROM, TM_SEGMENT_TO, TM_VALID_FROM,
-    TM_VALID_TO,
+    builtin_name, is_builtin, LIST_MAP, LOG_COLLECT_ALL_IN, LOG_FOR_ALL_IN, LOG_NOT_INCLUDES,
+    PRELUDE, TIME_LOCAL_TIME, TM, TM_CONTENT, TM_NOW, TM_RUN, TM_SEGMENT_FROM, TM_SEGMENT_TO,
+    TM_VALID_FROM, TM_VALID_TO,
 };
 
 /// Whether a rule set may be materialized (design N11).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Monotonicity {
-    /// No rule body uses negation, aggregation or the clock.
+    /// No rule body uses negation, aggregation, the clock or `list:map`.
     Monotonic,
     /// A rule body uses `log:notIncludes`, `log:collectAllIn` or `log:forAllIn`.
     NonMonotonic {
@@ -30,6 +30,14 @@ pub enum Monotonicity {
         /// The index of the first such rule.
         rule: usize,
         /// The builtin, as a prefixed name (`time:localTime`, `tm:now`).
+        builtin: String,
+    },
+    /// A rule body uses `list:map`, whose proof does not name the facts it read,
+    /// so a materialized conclusion could not list them as support.
+    UntracedPremises {
+        /// The index of the first such rule.
+        rule: usize,
+        /// The builtin, as a prefixed name (`list:map`).
         builtin: String,
     },
 }
@@ -97,7 +105,7 @@ impl BodyUse {
                 _ => {}
             }
             // `((items) pred) list:map ?out` applies `pred` as a predicate
-            if matches!(&t.p, NTerm::Iri(p) if p == eyeron::ast::LIST_MAP) {
+            if matches!(&t.p, NTerm::Iri(p) if p == LIST_MAP) {
                 if let NTerm::List(args) = &t.s {
                     match args.get(1) {
                         Some(NTerm::Iri(p)) => {
@@ -184,6 +192,7 @@ impl RuleSet {
         let mut virtuals = Virtuals::default();
         let mut non_monotonic = None;
         let mut clock = None;
+        let mut untraced = None;
         for (i, rule) in doc.rules.iter().enumerate() {
             let mut body = BodyUse::default();
             body.graph(&rule.premise);
@@ -219,6 +228,9 @@ impl RuleSet {
                     clock = Some((i, builtin_name(b)));
                 }
             }
+            if untraced.is_none() && has(LIST_MAP) {
+                untraced = Some((i, builtin_name(LIST_MAP)));
+            }
             preds.extend(
                 body.preds
                     .into_iter()
@@ -232,10 +244,12 @@ impl RuleSet {
             virtuals.valid_from = true;
             virtuals.valid_to = true;
         }
-        let monotonicity = match (non_monotonic, clock) {
-            (Some((rule, builtin)), _) => Monotonicity::NonMonotonic { rule, builtin },
-            (None, Some((rule, builtin))) => Monotonicity::ClockDependent { rule, builtin },
-            (None, None) => Monotonicity::Monotonic,
+        // precedence: non-monotonic, then clock-dependent, then untraced premises
+        let monotonicity = match (non_monotonic, clock, untraced) {
+            (Some((rule, builtin)), _, _) => Monotonicity::NonMonotonic { rule, builtin },
+            (None, Some((rule, builtin)), _) => Monotonicity::ClockDependent { rule, builtin },
+            (None, None, Some((rule, builtin))) => Monotonicity::UntracedPremises { rule, builtin },
+            (None, None, None) => Monotonicity::Monotonic,
         };
         let predicates: Vec<String> = preds.into_iter().collect();
         let info = RuleSetInfo {
@@ -350,6 +364,38 @@ mod tests {
         let rs = RuleSet::parse("{ ?x a v:A } => { ?x a v:B } .").unwrap();
         assert_eq!(rs.info().monotonicity, Monotonicity::Monotonic);
         assert_eq!(rs.info().rules, 1);
+    }
+
+    #[test]
+    fn list_map_is_untraced() {
+        let rs =
+            RuleSet::parse("{ ?x v:items ?l. (?l v:double) list:map ?m } => { ?x v:doubled ?m } .")
+                .unwrap();
+        assert_eq!(
+            rs.info().monotonicity,
+            Monotonicity::UntracedPremises {
+                rule: 0,
+                builtin: "list:map".into()
+            }
+        );
+        // the mapped predicate is read
+        assert!(rs
+            .load_predicates()
+            .unwrap()
+            .contains(&"urn:tiramemsu:v:double".to_string()));
+        // clock-dependent takes precedence over untraced premises
+        let rs = RuleSet::parse(
+            "{ ?x v:items ?l. (?l v:double) list:map ?m } => { ?x v:doubled ?m } .\n\
+             { \"\" time:localTime ?t } => { v:run v:at ?t } .",
+        )
+        .unwrap();
+        assert_eq!(
+            rs.info().monotonicity,
+            Monotonicity::ClockDependent {
+                rule: 1,
+                builtin: "time:localTime".into()
+            }
+        );
     }
 
     #[test]

@@ -23,11 +23,11 @@
 
 ## 4. Materialization (`n3-materialization`)
 
-- [ ] 4.1 `Db::materialize(rule_set, &MaterializeOptions) -> Result<MaterializeReport>`: snapshot reasoning excluding own conclusions, refusal of non-monotonic and clock-dependent rule sets, fuse abort, `require_complete`, `dry_run`.
-- [ ] 4.2 Commit in proof order through `derive` with premises + `R`; `n3:derivedBy` and `n3:rule` layers; `stale_support` skipping with dependents.
-- [ ] 4.3 Widening (hull supersede) and existing detection by content + support.
-- [ ] 4.4 Skolem nodes through `upsert_derived(n3:skolem, key, support)`.
-- [ ] 4.5 Annotate implementations with `@tg: implements:: [[openspec:n3-materialization#<Requirement>]]`.
+- [x] 4.1 `Db::materialize(rule_set, &MaterializeOptions) -> Result<MaterializeReport>`: snapshot reasoning excluding own conclusions, refusal of non-monotonic and clock-dependent rule sets, fuse abort, `require_complete`, `dry_run`.
+- [x] 4.2 Commit in proof order through `derive` with premises + `R`; `n3:derivedBy` and `n3:rule` layers; `stale_support` skipping with dependents.
+- [x] 4.3 Widening (hull supersede) and existing detection by content + support.
+- [x] 4.4 Skolem nodes through `upsert_derived(n3:skolem, key, support)`.
+- [x] 4.5 Annotate implementations with `@tg: implements:: [[openspec:n3-materialization#<Requirement>]]`.
 
 ## 5. Surfaces
 
@@ -40,7 +40,7 @@
 
 - [x] 6.1 Conformance: eyeron example corpus (facts loaded into a store, rules passed as text) gives eyeron's expected conclusions.
 - [x] 6.2 Property: for random facts with random intervals and a fixed monotonic rule set, a conclusion of the sweep holds at random `t` iff it is concluded by the `valid_at(t)` snapshot.
-- [ ] 6.3 Property: after `materialize` and random retract/supersede sequences every live conclusion's support is live, and re-materializing reaches the same live set as a fresh materialization of a copy.
+- [x] 6.3 Property: after `materialize` and random retract/supersede sequences every live conclusion's support is live, and re-materializing reaches the same live set as a fresh materialization of a copy.
 - [ ] 6.4 Scenario tests for every scenario in the four delta specs, on SQLite and redb where they write; each annotated `@tg: verifies:: [[openspec:<capability>#<Requirement>#<Scenario>]]`.
 - [ ] 6.5 `tm-bench` scenario: load, pruning and sweep cost against store size and segment count, SQLite and redb.
 
