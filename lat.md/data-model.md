@@ -283,7 +283,7 @@ Cypher names and RDF IRIs map through one configurable `@vocab` base plus a pref
 - **Resolution:** a name with `:` is a declared CURIE (`sys`, `tm`, `rdf`, `rdfs`, `xsd`, `v` and the table) or an absolute IRI, else a `Parse` error. Characters not allowed in an IRI are percent-encoded. See [[crates/tm-core/src/mapping.rs#Vocab#resolve_text]].
 - **Rendering:** an IRI under `@vocab` whose local name has no `:` shows percent-decoded; otherwise the longest matching prefix wins (ties: smallest prefix name); otherwise the full IRI. Rendered names round-trip. See [[crates/tm-core/src/mapping.rs#Vocab#render]].
 - **Configuration:** `Tx::set_vocab` replaces the live vocab statement, and `Tx::set_prefix` declares or redeclares a prefix; redeclaring a built-in name fails with `ReservedNamespace`. See [[crates/tm-core/src/engine/config.rs#BUILTIN_PREFIXES]].
-- SPARQL predeclares `rdf`, `rdfs`, `xsd`, `sys`, `tm`, `v` (the `@vocab`) and every prefix of the table, so `v:name` needs no `PREFIX`. A `PREFIX` in the query overrides a predeclared one.
+- SPARQL predeclares `rdf`, `rdfs`, `xsd`, `sys`, `tm`, `dl`, `v` (the `@vocab`) and every prefix of the table, so `v:name` needs no `PREFIX`. A `PREFIX` in the query overrides a predeclared one.
 - The default `@vocab` is `urn:tiramemsu:v:`. It is set per database as `(sys:db sys:vocab <iri>)`. Prefixes are `(sys:db sys:prefix [sys:prefixName "schema"; sys:prefixIri <https://schema.org/>])`, stored as a small layer.
 
 ### Reserved Namespaces

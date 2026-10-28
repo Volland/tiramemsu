@@ -37,7 +37,11 @@ pub fn check_capabilities(c: Capabilities) -> Result<()> {
 /// # Errors
 ///
 /// `MissingCapability` if the host cannot register functions or virtual tables.
-pub fn install(exec: &mut dyn Executor, ops: &OperatorRegistry) -> Result<()> {
+pub fn install(
+    exec: &mut dyn Executor,
+    ops: &OperatorRegistry,
+    datalog: Option<std::sync::Arc<dyn crate::datalog::DatalogProvider>>,
+) -> Result<()> {
     check_capabilities(exec.capabilities())?;
     let reg = exec
         .registry()
@@ -51,5 +55,6 @@ pub fn install(exec: &mut dyn Executor, ops: &OperatorRegistry) -> Result<()> {
     reg.register_conn_table(crate::text::table_function())?;
     reg.register_conn_table(crate::vector::table_function())?;
     reg.register_conn_table(crate::recall::table_function())?;
+    reg.register_conn_table(crate::datalog::table_function(datalog))?;
     ops.register_all(reg)
 }

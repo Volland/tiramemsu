@@ -97,6 +97,13 @@ pub fn bound_by_non_paths(op: &Op) -> VarSet {
                     out.insert(v.clone());
                 }
             }
+            Op::Datalog(t) => {
+                out.extend(t.outputs.iter().map(|(_, v)| v.clone()));
+                if let Some((f, to)) = &t.valid {
+                    out.insert(f.clone());
+                    out.insert(to.clone());
+                }
+            }
             Op::Recall(t) => {
                 out.insert(t.eid.clone());
                 for v in [&t.score, &t.rank, &t.via].into_iter().flatten() {

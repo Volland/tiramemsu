@@ -25,8 +25,8 @@ use super::encode::{position_ok, value_position_ok, Enc, Pos};
 use super::resolve::resolve_with;
 use super::route::{bound_before, bound_by_non_paths, orient, path_patterns, Orientation};
 use super::{
-    Cell, ExecSource, Node, PAgg, PConst, PExpr, PGraphs, PKey, PLookup, PObj, PPath, PRecall,
-    PTerm, PText, PTriple, PValues, PVector, PVirtual, PVolatile, PlanSource,
+    Cell, ExecSource, Node, PAgg, PConst, PDatalog, PDlProgram, PExpr, PGraphs, PKey, PLookup,
+    PObj, PPath, PRecall, PTerm, PText, PTriple, PValues, PVector, PVirtual, PVolatile, PlanSource,
 };
 use crate::error::invalid;
 use crate::path::ast::nullable;
@@ -369,6 +369,29 @@ impl<'e> Planner<'e> {
                     score: t.score.clone(),
                     rank: t.rank.clone(),
                     confidence: t.confidence.clone(),
+                })
+            }
+            Op::Datalog(t) => {
+                let Some(view) = self.view(&t.view)? else {
+                    return Ok(empty());
+                };
+                let program = match &t.program {
+                    tm_ir::DlProgramRef::Iri(TermOrVar::Const(Value::Iri(s))) => {
+                        PDlProgram::Stored(s.clone())
+                    }
+                    tm_ir::DlProgramRef::Text(x) => PDlProgram::Text(x.clone()),
+                    other => {
+                        return Err(invalid(format!(
+                            "Datalog call needs a program IRI, got {other:?}"
+                        )))
+                    }
+                };
+                Node::Datalog(PDatalog {
+                    program,
+                    goal: t.goal.clone(),
+                    view_text: view_text(&view),
+                    outputs: t.outputs.clone(),
+                    valid: t.valid.clone(),
                 })
             }
             Op::Vector(t) => {

@@ -1,12 +1,12 @@
 ---
 type: Decision
-openspec: [datalog-language, datalog-evaluation, datalog-temporal, datalog-programs, datalog-constraints, datalog-materialization]
+openspec: [datalog-language, datalog-evaluation, datalog-temporal, datalog-programs, datalog-constraints, datalog-materialization, datalog-query-calls]
 ---
 # Datalog
 
 Decisions DL1–DL24 of the Datalog interview of 2026-10-28: a fast Datalog in its own crate, with DatalogMTL over valid time, for queries, reasoning and constraints beside N3.
 
-The four OpenSpec changes of [[datalog#Four Changes]] were written on 2026-10-28. `add-datalog-engine` is implemented in [[crates/tm-datalog/src/lib.rs]] and the facade's [[crates/tiramemsu/src/datalog.rs]] (DL1–DL12, DL16 for storage, DL18–DL21, DL23, DL25, DL26); `add-datalog-constraints` implements DL15 and DL16's enforcement ([[crates/tm-datalog/src/enforce.rs]], [[crates/tiramemsu/src/datalog_enforce.rs]]); `add-datalog-materialization` implements DL13, DL14 and DL21's storage ([[crates/tiramemsu/src/datalog_materialize.rs]], [[crates/tiramemsu/src/materialize.rs]]); DL22 (incremental runs) is not built; `add-datalog-query-calls` follows. N3 stays ([[reasoning]]): it keeps quoted formulas and proof text, and Datalog is the set-at-a-time path to the same derived beliefs.
+The four OpenSpec changes of [[datalog#Four Changes]] were written on 2026-10-28. `add-datalog-engine` is implemented in [[crates/tm-datalog/src/lib.rs]] and the facade's [[crates/tiramemsu/src/datalog.rs]] (DL1–DL12, DL16 for storage, DL18–DL21, DL23, DL25, DL26); `add-datalog-constraints` implements DL15 and DL16's enforcement ([[crates/tm-datalog/src/enforce.rs]], [[crates/tiramemsu/src/datalog_enforce.rs]]); `add-datalog-materialization` implements DL13, DL14 and DL21's storage ([[crates/tiramemsu/src/datalog_materialize.rs]], [[crates/tiramemsu/src/materialize.rs]]); `add-datalog-query-calls` implements DL17 ([[query#Datalog Calls]]); DL22 (incremental runs) is not built. N3 stays ([[reasoning]]): it keeps quoted formulas and proof text, and Datalog is the set-at-a-time path to the same derived beliefs.
 
 ## One Language Three Uses
 
@@ -148,6 +148,8 @@ DL17: Cypher `CALL tiramemsu.datalog.query(program, goal)` and a SPARQL `SERVICE
 
 This follows text recall's table-call pattern: a `tm_datalog` table function on SQLite and a native operator on redb, behind facade features `exec` and `datalog`. It differs from [[reasoning#Every Surface]], where a whole-scope reasoner fits no query; a bound goal is a table. Rejected: separate entry points only, and derived predicates as virtual predicates (per-row calls defeat magic sets).
 
+Implemented by `add-datalog-query-calls` ([[query#Datalog Calls]]): [[crates/tm-exec/src/datalog.rs#call]] (the table function and the `DatalogProvider` trait), [[crates/tm-native/src/exec.rs#Exec#datalog_call]], [[crates/tiramemsu/src/datalog_call.rs#Provider]] and the two lowerings. A query row holds term ids, so a goal value with no dictionary id (a computed string never stored, an invented node) fails the call with `Unsupported`; `View::datalog` returns such values.
+
 ## Own Calls On Every Surface
 
 DL18: Datalog has its own calls, not a language flag on N3's, behind a facade feature `datalog` that is off by default, and every binding, the MCP server and the CLI build with it.
@@ -207,7 +209,7 @@ DL24: the work is a prerequisite and four OpenSpec changes, with enforcement bef
 1. `add-datalog-engine`: the crate (parser, stratification, kernel, probe or load, magic sets, the interval engine with DatalogMTL and Allen, invention, fuses), the read and store ops, `warn` checks, every binding, MCP, the CLI, the benchmark suite and the oracles.
 2. `add-datalog-constraints`: `error` enforcement at commit, `dl:enforced` and the writer cache.
 3. `add-datalog-materialization`: the shared materialize module, reconciliation and DRed.
-4. `add-datalog-query-calls`: the SPARQL `SERVICE` and Cypher `CALL` through `tm_datalog` and a native operator.
+4. `add-datalog-query-calls` (built): the SPARQL `SERVICE` and Cypher `CALL` through `tm_datalog` and a native operator.
 
 Rejected: materialization before constraints, and one change.
 

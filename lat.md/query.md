@@ -492,7 +492,7 @@ SPARQL is parsed by `spargebra` (Oxigraph's parser and algebra) and lowered to t
 - **SPARQL 1.2:** triple terms, reifiers (`~ ?r`) and annotations (`{| … |}`) bind directly to eids. Annotation triples are layer triples whose subject is the eid.
 - **Deviation from RDF 1.2:** the store cannot hold an *unasserted* triple term, because every eid is a stored statement. A triple term or reified triple in inserted data is therefore asserted, and its eid is used. `rdf:reifies` is never stored; it is resolved to the eid.
 - **Updates:** `View::sparql` accepts queries and updates. Updates run only on the current view, and a whole update request is one transaction.
-- **Predeclared prefixes:** `rdf`, `rdfs`, `xsd`, `sys`, `tm`, `v` (the database `@vocab`) and the database prefix table. A `PREFIX` in the query overrides them.
+- **Predeclared prefixes:** `rdf`, `rdfs`, `xsd`, `sys`, `tm`, `dl`, `v` (the database `@vocab`) and the database prefix table. A `PREFIX` in the query overrides them.
 - **Known limits (M2a):** decimal arithmetic and aggregates return `xsd:double`; string functions drop language tags; `AVG` over an empty group is unbound; `xsd:date` drops a timezone; RDF/XML input is not read. 147 of 781 in-scope W3C tests are listed with a reason in `crates/tm-sparql/tests/w3c/expected-deviations.toml`, and the runner fails on any unexpected result. `spargebra` 0.4.7 quirks (right-associative `a - b - c`, `a/b` as a BGP with a generated blank node) are corrected from the query text, not by patching the parser.
 - **Semantics:** `graph_set = SetOfTriples`. Several live eids with the same `(s, p, o)` show as one triple unless the eid is bound. `match_mode = Homomorphism`, `missing = Unbound`.
 - **Implementation:** `tm-sparql` (`crates/tm-sparql`) parses, checks and lowers a text in `prepare`, before any SQL runs. `View::sparql` returns a `SparqlResult`: `Solutions`, `Boolean`, `Graph` (CONSTRUCT) or `Update(TxReport)`. It writes SPARQL JSON and N-Triples, RDF 1.2 N-Triples when a triple term occurs.
@@ -864,6 +864,33 @@ YIELD statement, subject, predicate, text, score, rank, confidence
 
 - **SPARQL:** the `tm:text*` patterns on one subject variable form one recall ([[crates/tm-sparql/src/lower/bgp.rs]]); `GRAPH <g>` and `FROM` restrict it, `SERVICE <tm:asOf/…>` times it, and `GRAPH ?g` around it is `InvalidQuery`. Recall rows add no query provenance.
 - **Cypher:** the procedure ([[crates/tm-cypher/src/exec/text.rs]]) joins the recall with the hit's statement and yields it in node form; `USE AS OF` and the other time clauses apply.
+
+## Datalog Calls
+
+A Datalog goal is a table a SPARQL or Cypher query can join with: the program and goal are constants, the call runs once per query execution, and its rows are those of `View::datalog` on the same view.
+
+Decision DL17 ([[datalog#Goal Calls In SPARQL And Cypher]]) follows text recall's pattern ([[query#Text Recall]]): the IR leaf `DatalogPattern` compiles to the `tm_datalog` table function on SQLite ([[crates/tm-exec/src/datalog.rs#call]]) and runs as a native operator on redb ([[crates/tm-native/src/exec.rs#Exec#datalog_call]]), both through [[crates/tm-exec/src/datalog.rs#run_call]] and the `DatalogProvider` the facade registers when built with `exec` and `datalog` ([[crates/tiramemsu/src/datalog_call.rs#Provider]]). `tm-exec` never depends on `tm-datalog`.
+
+```sparql
+SELECT ?X ?mail ?f ?t WHERE {
+  SERVICE <urn:tiramemsu:dl:query> { [] dl:program v:reporting ; dl:goal "reports(v:alice, X)" ;
+                                       dl:validFrom ?f ; dl:validTo ?t }
+  ?X v:email ?mail }
+```
+
+```cypher
+CALL tiramemsu.datalog.query('v:reporting', 'reports(v:alice, X)') YIELD X, validFrom, validTo
+```
+
+- **SPARQL:** [[crates/tm-sparql/src/lower/datalog.rs#Lowerer#datalog_service]] reads the property list on one subject: `dl:goal` (a string literal) and `dl:program` (an IRI) or `dl:text` (a string), optionally `dl:validFrom` and `dl:validTo` (variables). A variable or missing goal or program, both program forms, or more than 16 goal variables fail with `DatalogCallShape`. `dl` is predeclared.
+- **Cypher:** [[crates/tm-cypher/src/exec/datalog.rs#Exec#exec_datalog_query]] takes a program (an IRI string or `{text: "…"}`) and a goal string, each a literal or a parameter, never a row variable (`DatalogCallShape`). It yields the goal variables, `validFrom` and `validTo`.
+- **Goal variables** are read textually by [[crates/tm-ir/src/op.rs#goal_variables]], because a front end has no Datalog parser: identifiers starting upper-case or `_` outside string literals, `<iri>` references and prefix names, in first-occurrence order, bare `_` skipped. Each binds the query variable of the same name; the provider checks the names against the parsed goal.
+- **Rows:** one per goal row and maximal valid interval; `validFrom` and `validTo` are `xsd:dateTime`, unbound for an open end. The table function returns columns `c0`–`c15` then `validFrom`, `validTo`.
+- **Once per query:** the SQL is an unflattened derived table `(SELECT * FROM tm_datalog(?) LIMIT -1)`, which SQLite materialises once, also inside `OPTIONAL`; the native runner and the Cypher procedure cache the relation per program, goal and view. No outer binding reaches the leaf.
+- **Limit:** a query row holds term ids, so a goal value without a dictionary id (a computed string never stored, a node invented by `exists`) fails the call with `Unsupported` and a message naming the value. Query such a goal with `View::datalog`.
+- **Budget:** the call runs under the query's deadline and cancellation; the provider's derived facts are bounded as for `View::datalog`.
+- **Provenance:** with provenance on, a query containing the call records `ProvenanceGap::DatalogCall` (name `datalogCall`); statements matched by the ordinary patterns are still cited.
+- **Feature gating:** without a registered provider (the facade without `datalog`) the call parses and fails at execution with `Unsupported`.
 
 ## Vector Recall
 

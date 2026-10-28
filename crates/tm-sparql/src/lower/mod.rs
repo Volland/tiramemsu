@@ -8,6 +8,7 @@
 
 pub mod agg;
 pub mod bgp;
+pub mod datalog;
 pub mod expr;
 pub mod path;
 pub mod pattern;

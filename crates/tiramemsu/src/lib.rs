@@ -24,6 +24,8 @@ mod bundle;
 mod cypher;
 #[cfg(feature = "datalog")]
 mod datalog;
+#[cfg(all(feature = "datalog", feature = "exec"))]
+mod datalog_call;
 #[cfg(feature = "datalog")]
 mod datalog_enforce;
 #[cfg(feature = "datalog")]
@@ -52,6 +54,9 @@ pub use bundle::{BundleFormat, BUNDLE_FORMAT};
 pub use cypher::TxCypher;
 #[cfg(feature = "datalog")]
 pub use datalog::TxDatalog;
+#[cfg(all(feature = "datalog", feature = "exec"))]
+#[doc(hidden)]
+pub use datalog_call::{watch_datalog_calls, watched_datalog_calls};
 #[cfg(feature = "datalog")]
 pub use datalog_materialize::{MaterializeProgramOptions, MaterializeProgramReport};
 pub use db::{Db, OpenOptions, Summary};

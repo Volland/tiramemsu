@@ -1321,10 +1321,14 @@ fn build_engine(opts: &OpenOptions) -> Option<Arc<Engine>> {
     for op in &opts.native_operators {
         reg.add(op.clone());
     }
-    Some(Arc::new(
-        Engine::new(opts.planner, reg, opts.term_cache_capacity)
-            .with_parallel_threshold(opts.parallel_threshold),
-    ))
+    let engine = Engine::new(opts.planner, reg, opts.term_cache_capacity)
+        .with_parallel_threshold(opts.parallel_threshold);
+    // goal calls from SPARQL and Cypher (`add-datalog-query-calls`)
+    #[cfg(feature = "datalog")]
+    let engine = engine.with_datalog_provider(Arc::new(crate::datalog_call::Provider {
+        clock: opts.clock.clone(),
+    }));
+    Some(Arc::new(engine))
 }
 
 /// Without the `exec` feature a redb database has no query engine.

@@ -518,3 +518,26 @@ fn core_tier_runs_datalog() {
         .unwrap();
     assert_eq!(r.rows[0].values, [DatalogTerm::Value(v("b"))]);
 }
+
+// datalog-query-calls "Call without the feature": with `sparql` but not `datalog` the
+// service parses and fails at execution with `Unsupported`
+// @tg: verifies:: [[openspec:datalog-query-calls#Feature gating for calls#Call without the feature]] {since: "2026-10-28", level: unit}
+#[test]
+#[cfg(all(feature = "sparql", not(feature = "datalog")))]
+fn datalog_call_without_the_feature_is_unsupported() {
+    let dir = tempfile::tempdir().unwrap();
+    let db = open(&dir, "m.db");
+    db.transact(TxOptions::default(), |tx| {
+        tx.assert(v("a"), v("manager"), v("b"), Valid::ALWAYS)?;
+        Ok(())
+    })
+    .unwrap();
+    let e = db
+        .now()
+        .sparql(
+            "SELECT ?Y { SERVICE <urn:tiramemsu:dl:query> { [] \
+             dl:text \"r(X, Y) :- v:manager(X, Y).\" ; dl:goal \"r(v:a, Y)\" } }",
+        )
+        .unwrap_err();
+    assert!(matches!(e, Error::Unsupported { .. }), "{e:?}");
+}

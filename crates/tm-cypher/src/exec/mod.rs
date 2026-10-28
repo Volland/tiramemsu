@@ -16,6 +16,7 @@ use crate::vocab::Vocab;
 
 pub mod access;
 pub mod agg;
+pub mod datalog;
 pub mod eval;
 pub mod funcs;
 pub mod pattern;
@@ -51,6 +52,8 @@ pub struct Exec<'r> {
     pub(crate) props: HashMap<(String, String, View), Vec<Val>>,
     pub(crate) writer: write::WriteState,
     pub(crate) uid: usize,
+    /// Goal-call relations by program, goal and view (a call runs once).
+    pub(crate) datalog: HashMap<String, Vec<Vec<Val>>>,
 }
 
 /// Converts a supplied parameter to a value.
@@ -111,6 +114,7 @@ pub fn run(
         props: HashMap::new(),
         writer: write::WriteState::default(),
         uid: 0,
+        datalog: HashMap::new(),
     };
     if let Some(cmd) = &prog.schema {
         return ex.run_schema(cmd, params);
@@ -355,6 +359,9 @@ impl Exec<'_> {
         let lname = name.to_ascii_lowercase();
         if lname == text::NAME {
             return self.exec_text_search(rows, args, yields, standalone);
+        }
+        if lname == datalog::NAME {
+            return self.exec_datalog_query(rows, args, yields, standalone);
         }
         if lname == vector::NAME {
             return self.exec_vector_search(rows, args, yields, standalone);

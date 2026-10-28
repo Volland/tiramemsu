@@ -431,6 +431,14 @@ pub enum Error {
         /// The constraint being checked.
         constraint: String,
     },
+    /// A Datalog goal call inside a SPARQL or Cypher query with a shape the call
+    /// does not accept: a goal or program that is not a constant, both a program
+    /// IRI and program text, or a requested variable the goal does not have.
+    #[error("Datalog call: {message}")]
+    DatalogCallShape {
+        /// What is wrong.
+        message: String,
+    },
     /// Storing rules of one language on a node that holds live rules of the other.
     #[error("{node} already holds {existing} rules")]
     RuleLanguageConflict {

@@ -400,6 +400,7 @@ impl<'a> Gen<'a> {
             Node::Virtual(v) => self.virtual_pattern(v, None),
             Node::Volatile(v) => self.volatile(v),
             Node::Text(t) => self.text(t),
+            Node::Datalog(t) => self.datalog(t),
             Node::Vector(t) => self.vector(t),
             Node::Recall(t) => self.recall(t),
             Node::Path(p) => {
@@ -515,6 +516,7 @@ impl<'a> Gen<'a> {
             | Node::Volatile(_)
             | Node::Path(_)
             | Node::Text(_)
+            | Node::Datalog(_)
             | Node::Vector(_)
             | Node::Recall(_) => self.compile(node),
         }

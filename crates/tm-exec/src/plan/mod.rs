@@ -185,6 +185,31 @@ pub struct PText {
     pub confidence: Option<Var>,
 }
 
+/// The program of a planned Datalog call.
+#[derive(Clone, Debug, PartialEq)]
+pub enum PDlProgram {
+    /// A stored program: the node's IRI.
+    Stored(String),
+    /// Program text.
+    Text(String),
+}
+
+/// A Datalog goal call: `tm_datalog(spec)` binds the goal's variables and the
+/// optional interval columns. Evaluated once per execution.
+#[derive(Clone, Debug, PartialEq)]
+pub struct PDatalog {
+    /// The program.
+    pub program: PDlProgram,
+    /// The goal body.
+    pub goal: String,
+    /// View text (as for `tm_path`).
+    pub view_text: String,
+    /// The goal variables and the variables they bind, in column order.
+    pub outputs: Vec<(String, Var)>,
+    /// The interval start and end variables.
+    pub valid: Option<(Var, Var)>,
+}
+
 /// A vector recall: `tm_vector(model, vector, view, graphs, limit)` binds the eid
 /// and the optional similarity, rank and confidence columns.
 #[derive(Clone, Debug, PartialEq)]
@@ -379,6 +404,8 @@ pub enum Node {
     Path(PPath),
     /// A text recall (`tm_text`).
     Text(PText),
+    /// A Datalog goal call (`tm_datalog`).
+    Datalog(PDatalog),
     /// Vector recall through `tm_vector`.
     Vector(PVector),
     /// Hybrid recall through `tm_recall`.
