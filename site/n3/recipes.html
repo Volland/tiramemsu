@@ -42,13 +42,14 @@
 <p class="codefile">v:tenure</p><pre><code><span class="k">@prefix</span> v: &lt;urn:tiramemsu:v:&gt;.
 <span class="k">@prefix</span> tm: &lt;urn:tiramemsu:tm:&gt;.
 <span class="k">@prefix</span> math: &lt;http://www.w3.org/2000/10/swap/math#&gt;.
+<span class="k">@prefix</span> xsd: &lt;http://www.w3.org/2001/XMLSchema#&gt;.
 
 <span class="c"># Closed employments: the interval is in the statement.</span>
 { <span class="v">?e</span> tm:content { <span class="v">?p</span> v:worksAt <span class="v">?c</span> };
      tm:validFrom <span class="v">?from</span>;
      tm:validTo <span class="v">?to</span>.
-  (<span class="v">?to</span> <span class="v">?from</span>) math:difference <span class="v">?seconds</span>.
-  <span class="v">?seconds</span> math:greaterThan <span class="s">63072000</span>          <span class="c"># 2 × 365 days</span>
+  (<span class="v">?to</span> <span class="v">?from</span>) math:difference <span class="v">?tenure</span>.
+  <span class="v">?tenure</span> math:greaterThan <span class="s">"P730D"^^xsd:duration</span>   <span class="c"># 2 × 365 days</span>
 } <span class="k">=&gt;</span> { <span class="v">?p</span> v:longTenureAt <span class="v">?c</span> }.</code></pre>
 <p>For e1 = <code>(v:alice v:worksAt v:acme)</code> valid <code>[2020-01-01, 2023-01-01)</code>, the rule concludes <code>(v:alice v:longTenureAt v:acme)</code>. Under pointwise semantics the conclusion holds while its premise does, so its interval is e1’s, <code>[2020, 2023)</code>. That reads as “during this employment, Alice was a long-tenured employee”. If you want a timeless statement instead, run with <code>TimeMode::Atemporal</code> and the conclusion is unbounded.</p>
 <p>The rule set is monotonic: <code>tm:validFrom</code> and <code>tm:validTo</code> are data, not a clock. It can be materialized, and a correction to e1’s dates retracts the conclusion.</p>
@@ -56,16 +57,17 @@
 <p class="codefile">v:tenure-today</p><pre><code><span class="k">@prefix</span> v: &lt;urn:tiramemsu:v:&gt;.
 <span class="k">@prefix</span> tm: &lt;urn:tiramemsu:tm:&gt;.
 <span class="k">@prefix</span> math: &lt;http://www.w3.org/2000/10/swap/math#&gt;.
+<span class="k">@prefix</span> xsd: &lt;http://www.w3.org/2001/XMLSchema#&gt;.
 
 { <span class="v">?e</span> tm:content { <span class="v">?p</span> v:worksAt <span class="v">?c</span> };
      tm:validFrom <span class="v">?from</span>.
   tm:run tm:now <span class="v">?now</span>.
-  (<span class="v">?now</span> <span class="v">?from</span>) math:difference <span class="v">?seconds</span>.
-  <span class="v">?seconds</span> math:greaterThan <span class="s">63072000</span>
+  (<span class="v">?now</span> <span class="v">?from</span>) math:difference <span class="v">?tenure</span>.
+  <span class="v">?tenure</span> math:greaterThan <span class="s">"P730D"^^xsd:duration</span>
 } <span class="k">=&gt;</span> { <span class="v">?p</span> v:longTenureAt <span class="v">?c</span> }.</code></pre>
 <pre><code><span class="k">let</span> today = db.now().valid_at(ms(<span class="s">"2026-10-28"</span>));   <span class="c">// ms(): your date-to-epoch-ms helper</span>
 <span class="k">let</span> r = today.reason(Rules::Stored(v(<span class="s">"tenure-today"</span>)), &amp;ReasonOptions::default())?;</code></pre>
-<p><strong>Catch.</strong> <code>v:tenure-today</code> is <code>ClockDependent</code>, so <code>materialize</code> refuses it. That is the point: a stored “long tenure” computed from today would silently become wrong. Check how eyeron represents the difference of two <code>xsd:dateTime</code> values before relying on the threshold; the example assumes seconds.</p>
+<p><strong>Catch.</strong> <code>v:tenure-today</code> is <code>ClockDependent</code>, so <code>materialize</code> refuses it. That is the point: a stored “long tenure” computed from today would silently become wrong. The difference of two <code>xsd:dateTime</code> values is an <code>xsd:duration</code> such as <code>"PT94694400S"</code>, and eyeron compares it with another <code>xsd:duration</code> (or with a number of seconds).</p>
 
 <h2 id="colleagues">2. Colleagues who overlapped in time</h2>
 <p><strong>Problem.</strong> Two people are colleagues while both work at the same company. Interval arithmetic in rules is tedious and easy to get wrong.</p>

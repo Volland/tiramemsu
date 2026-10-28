@@ -92,6 +92,7 @@ assert!(matches!(none, <span class="k">Err</span>(Error::UnknownRuleSet { .. }))
     <tr><td><code>Monotonic</code></td><td>none of the builtins below</td><td class="y">runs</td><td class="y">runs</td></tr>
     <tr><td><code>NonMonotonic { rule, builtin }</code></td><td>a body uses <code>log:notIncludes</code>, <code>log:collectAllIn</code> or <code>log:forAllIn</code></td><td class="y">runs</td><td class="n">refused</td></tr>
     <tr><td><code>ClockDependent { rule, builtin }</code></td><td>a body uses <code>time:localTime</code> or <code>tm:now</code></td><td class="y">runs</td><td class="n">refused</td></tr>
+    <tr><td><code>UntracedPremises { rule, builtin }</code></td><td>a body uses <code>list:map</code>, whose proof does not name the facts it read</td><td class="y">runs</td><td class="n">refused</td></tr>
   </tbody>
 </table>
 <p>The classification names the first offending rule by index and the builtin. For example, this rule set is <code>NonMonotonic</code>, naming rule 0 and <code>log:notIncludes</code>:</p>

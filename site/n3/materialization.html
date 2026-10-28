@@ -48,7 +48,7 @@
 <h2>What <code>materialize</code> does</h2>
 <p><code>Db::materialize(rule_set, &amp;MaterializeOptions)</code> runs in two phases. Only the second one holds the writer.</p>
 <ol>
-  <li><strong>Check.</strong> Classify the rule set. A <code>NonMonotonic</code> or <code>ClockDependent</code> rule set fails with <code>N3NotMaterializable { rule, builtin }</code> before anything runs.</li>
+  <li><strong>Check.</strong> Classify the rule set. A <code>NonMonotonic</code>, <code>ClockDependent</code> or <code>UntracedPremises</code> rule set fails with <code>N3NotMaterializable { rule, builtin }</code> before anything runs.</li>
   <li><strong>Snapshot.</strong> Take a read view at <code>t₀</code>. Load the scope, as <code>reason</code> does, but leave out statements derived from this rule set’s own live <code>R</code>. They are what is being recomputed.</li>
   <li><strong>Reason.</strong> Run the sweep of <a href="valid-time.html">chapter 5</a> over the default unbounded window, or the one you give.</li>
   <li><strong>Fuse.</strong> If an inference fuse fired, fail with <code>N3Contradiction { rule }</code>. Nothing is written.</li>
