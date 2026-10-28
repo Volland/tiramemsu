@@ -13,7 +13,7 @@ Volatile values are upserted per `(s, key)` with `updated_at` = the transaction 
 **Goals:**
 - Retracting or correcting evidence retracts what was concluded from it, in the same transaction, visible in previews.
 - Independent assertions never become dependent by accident.
-- A salience score that is deterministic, explainable and free of writes.
+- Conclusions of a rule engine (`add-n3-reasoning`) can be written as derived beliefs: invented nodes stay stable across runs and a conclusion's interval can widen.
 
 **Non-Goals:**
 - Inference, truth maintenance beyond support links, or scheduled decay.
@@ -48,22 +48,25 @@ When supersede computes the cascade set of a root, any derived statement reached
 
 Support links are layers of `D`; their objects are statements, so the bundle's downward closure already includes the supports. `sys:derivedFrom` joins `sys:inGraph` as an engine-owned predicate that bundles keep, and import writes each derived statement through `derive` with its supports mapped to target eids.
 
-### D6. Salience is a pure function of counter, recency and policy
+### D8. Both engines, one oracle
 
-`salience(target) = (1 + ln(1 + count)) · 2^(−age / half_life)`, where `count` is the integer volatile value of `(target, policy.key)` (0 when absent, non-integer, or the view is not now), `age = max(0, now − last)`, and `last` is the latest of the counter's `updated_at` and the newest commit instant of the target's live statements in the view (for a statement target, its own `tm:addedAt`). `now` defaults to the view's instant (now, or the as-of instant) and can be fixed in the policy for reproducibility. The score is computed by one Rust function used by `View::salience`, the `tm_salience` UDF and the Cypher function, and every result can be explained by returning its inputs (`count`, `last`, `age`).
+`derive`, the support cascade, `dependents` and the supersede rule are implemented in the SQL engine (`tm-core`) and in the trait engine (`tm-store`, used by redb), statement for statement, and the existing oracle tests run every new scenario on both, as for every other write ([[backends#One Engine In Two Phases]]).
 
-*Alternatives:* a learned or configurable formula (not explainable, not deterministic across versions); storing scores (writes on read, and history of scores no one asked for).
+### D9. Derived upsert for invented nodes
 
-### D7. `increment_volatile` for access counting
+`Tx::upsert_derived(p, o, support)` finds the node `n` with a live derived key `(n p o)` or creates a new node and writes the key through `derive` with `support`. A rule engine that invents a node for an existential (a Skolem node) calls it with a deterministic key, so re-running the rule reuses the node and `derive` stays idempotent; when the key's support goes, the key is retracted with the conclusions about the node, and the node, which is never deleted, is simply unused. A plain `upsert` key is independent, so the two never share a key statement: `upsert_derived` ignores keys that are not derived from exactly `support`.
 
-Read-modify-write through `set_volatile` races between transactions only in the sense of lost updates inside one writer, which cannot happen with a single writer, but it costs two calls; `Tx::increment_volatile(s, key, by)` upserts `value = value + by` in one statement and sets `updated_at`. Counters stay outside the graph, so access tracking never creates history.
+*Alternatives:* `upsert` with an asserted key (an independent key outlives the conclusions and pins the node forever); a fresh node per run (breaks idempotency).
+
+### D10. Widening a derivation is a supersede
+
+A derived statement's valid interval may be widened by `Tx::supersede` with a `Patch` that changes only the valid time; D4's replay keeps the support links. A rule engine that finds the same content with the same support over a longer interval than the stored one uses this, so a conclusion's interval grows across runs and never shrinks: a conclusion that stops holding loses support and is retracted, not narrowed.
 
 ## Risks / Trade-offs
 
 - [Support cascades can be large] → `max_cascade` applies to the extended walk; `dependents` and dry runs show the full set first.
 - [`sys:one` on a derived predicate retracts independent facts] → Documented; agents should derive into their own predicates or use `confirm`.
 - [Parallel derivations duplicate rows in Cypher's bag view] → Expected: each derivation is a distinct belief; SPARQL's set view shows one triple.
-- [Salience depends on the clock] → `now` can be fixed in the policy; tests fix it.
 
 ## Migration Plan
 
@@ -72,5 +75,4 @@ No format change. `sys:derivedFrom` was previously a `ReservedNamespace` error, 
 ## Open Questions
 
 - Should `Tx::add_support(D, e)` exist to extend a derivation later, or must a new derivation be created?
-- Should salience also count `sys:confirmedBy` confirmations as accesses?
-- Should derived statements carry the deriving method (`(D v:method …)`) by convention or by a required argument?
+- Should derived statements carry the deriving method (`(D v:method …)`) by convention or by a required argument? `add-n3-reasoning` answers it for rule engines by convention: the rule set's statement is one of the supports and `tm:derivedBy` labels the rule.

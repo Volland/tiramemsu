@@ -1054,6 +1054,31 @@ export class Tx {
     return this._push(op, true);
   }
 
+  /**
+   * Asserts the belief (s, p, o) as derived from every statement in `support`: the
+   * statement plus one engine-owned `sys:derivedFrom` link per support. When any support
+   * is retracted or superseded, the belief is retracted with it. Deriving the same content
+   * from the same live supports again returns the existing statement. Returns a Ref.
+   */
+  derive(
+    s: TermInput,
+    p: TermInput,
+    o: TermInput,
+    support: Array<number | Ref>,
+    opts?: Pick<AssertOpts, "validFrom" | "validTo">,
+  ): Ref {
+    const op: Record<string, unknown> = {
+      op: "derive",
+      s: toJson(s),
+      p: toJson(p),
+      o: toJson(o),
+      support: support.map((e) => (isRef(e) ? { ref: (e as Ref)._refName } : e)),
+    };
+    if (opts?.validFrom !== undefined) op.validFrom = timeArg(opts.validFrom);
+    if (opts?.validTo !== undefined) op.validTo = timeArg(opts.validTo);
+    return this._push(op, true);
+  }
+
   /** Retracts the statement with the given eid (and cascades to its layers). */
   retract(eid: number | Ref): void {
     this._ops.push({ op: "retract", eid: isRef(eid) ? { ref: (eid as Ref)._refName } : eid });

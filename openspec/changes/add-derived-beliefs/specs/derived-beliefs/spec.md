@@ -65,3 +65,32 @@ The JSON bridge SHALL accept `derive` as a transaction operation, Node and Pytho
 #### Scenario: MCP read-only mode
 - **WHEN** the MCP server runs with `--read-only`
 - **THEN** `derive` is not listed and calling it fails with `ReadOnly`
+
+### Requirement: Derived upsert
+`Tx::upsert_derived(p, o, support)` SHALL return the node `n` of a live statement `(n p o)` that is derived from exactly the live support set `support`, and otherwise SHALL create a new node `n` and write `(n p o)` through `derive` with `support`. A key that is asserted independently or derived from another support set SHALL NOT be reused. Support validation SHALL be that of `derive`.
+
+#### Scenario: Re-running reuses the node
+- **WHEN** `upsert_derived(v:skolem, "r/1/abc", [e1, R])` runs in two transactions
+- **THEN** both calls return the same node and the second writes nothing
+
+#### Scenario: The key falls with its support
+- **WHEN** a node was created by `upsert_derived(v:skolem, "r/1/abc", [e1])` and e1 is retracted
+- **THEN** the key statement is retracted with kind `cascade`, and a later `upsert_derived(v:skolem, "r/1/abc", [e2])` creates a different node
+
+#### Scenario: An asserted key is not reused
+- **WHEN** `(n0 v:skolem "k")` was asserted directly and `upsert_derived(v:skolem, "k", [e1])` runs
+- **THEN** a new node n1 ≠ n0 is returned
+
+### Requirement: Widening a derivation
+Superseding a live derived statement with a patch that only changes its valid interval SHALL replay its support links onto the new statement, so its support set is unchanged.
+
+#### Scenario: Wider interval keeps support
+- **WHEN** D = `(v:alice v:worksIn v:berlin)` valid `[2020, 2022)` is derived from [e1, R] and is superseded with valid `[2020, 2024)`
+- **THEN** the new statement D′ is live with valid `[2020, 2024)` and links to e1 and R, and D is retracted with kind `supersede`
+
+### Requirement: Derivation in both engines
+`derive`, `upsert_derived`, the support cascade, `dependents` and the supersede rules SHALL behave identically in the SQL engine and the trait engine, and every scenario of this capability SHALL run on SQLite and on redb.
+
+#### Scenario: Oracle agreement
+- **WHEN** the same sequence of derive, retract and supersede operations runs on a SQLite file and a redb file
+- **THEN** both files hold the same rows and every `TxReport` is equal

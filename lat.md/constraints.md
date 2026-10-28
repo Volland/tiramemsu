@@ -12,6 +12,13 @@ Every backend stores the same integers for the same history: statement ids, both
 - constrains:: [[backends#Typed Storage Trait]] {strength: must, source: "paper/layered-bitemporal-graphs.tex"}
 - constrains:: [[backends#Same Logical Database]] {strength: must, source: "paper/layered-bitemporal-graphs.tex"}
 
+## Grounded Memory
+
+A live statement never rests on a retracted one: what refers to a statement, and what was concluded from it, is retracted with it in the same transaction, so memory keeps no conclusion whose grounds are gone.
+
+- constrains:: [[derived-beliefs#Support Links Extend The Referent Relation]] {strength: must, source: "paper/layered-bitemporal-graphs.tex, the ground core and the least grounded retraction"}
+- constrains:: [[derived-beliefs#Idempotent Per Support Set]] {strength: must, source: "paper/layered-bitemporal-graphs.tex"}
+
 ## Crash Consistency
 
 A crash or power loss never leaves a database that fails to open or violates an invariant; at most the newest committed transactions may be lost, and only when the durability mode allows it.

@@ -230,6 +230,21 @@ class TestRetractCascade:
         ops = [e["op"] for e in events]
         assert ops.count("retract") == 2
 
+    def test_derived_belief_falls_with_its_support(self, db: Database) -> None:
+        alice = iri("alice")
+        with db.transact() as tx:
+            e1 = tx.assert_(alice, iri("ordered"), iri("tea"))
+            e2 = tx.assert_(alice, iri("ordered"), iri("tea2"))
+            tx.derive(alice, iri("prefers"), iri("tea"), [e1, e2])
+        # two observations, the belief and its two support links
+        assert len(db.now().triples()) == 5
+
+        with db.transact() as tx:
+            tx.retract(1)
+
+        # the other observation stays; the belief and its links are gone
+        assert len(db.now().triples()) == 1
+
 
 # ---------------------------------------------- (d) speculate keeps nothing
 

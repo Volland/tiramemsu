@@ -89,6 +89,7 @@ fn read_only_refuses_writes_before_a_transaction() {
         ("assert", json!({ "s": "x" })),
         ("confirm", json!({ "eid": eid })),
         ("import_bundle", json!({ "bundle": 1 })),
+        ("derive", json!({ "s": "x" })),
     ] {
         assert_eq!(tool_error(&rpc_call(&mut ro, name, args)), "ReadOnly");
     }
@@ -516,7 +517,7 @@ fn protocol_handshake_and_errors() {
         json!({ "jsonrpc": "2.0", "id": 3, "method": "tools/list" }),
     )
     .unwrap();
-    assert_eq!(r["result"]["tools"].as_array().unwrap().len(), 19);
+    assert_eq!(r["result"]["tools"].as_array().unwrap().len(), 20);
     // protocol errors
     let code = |r: Option<J>| r.unwrap()["error"]["code"].as_i64().unwrap();
     let raw: J = serde_json::from_str(&server.handle("{not json").unwrap()).unwrap();
@@ -783,4 +784,47 @@ fn vector_tool_agrees_with_a_sparql_query() {
         .clone();
     let from_query: Vec<J> = rows.iter().map(|r| r["e"]["stmt"].clone()).collect();
     assert_eq!(hits, from_query, "{q}");
+}
+
+// derived-beliefs "MCP read-only mode", and the write tool itself
+// @tg: verifies:: [[openspec:derived-beliefs#Derive on every surface#MCP read-only mode]] {since: "2026-10-28", level: integration}
+#[test]
+fn derive_is_a_write_tool_hidden_in_read_only_mode() {
+    let dir = tempfile::tempdir().unwrap();
+    let server = open(&dir);
+    let e1 = server
+        .call_tool(
+            "assert",
+            &json!({ "s": v("alice"), "p": v("ordered"), "o": v("tea") }),
+        )
+        .unwrap()["eid"]
+        .clone();
+    let args = json!({ "s": v("alice"), "p": v("prefers"), "o": v("tea"), "support": [e1] });
+    let d = server.call_tool("derive", &args).unwrap();
+    assert_eq!(d["new"], true);
+    let again = server.call_tool("derive", &args).unwrap();
+    assert_eq!(
+        (again["eid"].clone(), again["new"].clone()),
+        (d["eid"].clone(), json!(false))
+    );
+    let deps = server
+        .call_tool("dependents", &json!({ "eid": e1 }))
+        .unwrap();
+    assert!(deps["dependents"].as_array().unwrap().contains(&d["eid"]));
+    // unknown arguments are refused, as for every tool
+    let e = server
+        .call_tool(
+            "derive",
+            &json!({ "s": v("a"), "p": v("b"), "o": 1, "support": [e1], "graph": v("g") }),
+        )
+        .unwrap_err();
+    assert_eq!(e.code, "InvalidArgument");
+    drop(server);
+    let mut ro = Server::open(Config {
+        read_only: true,
+        ..config(&dir)
+    })
+    .unwrap();
+    assert!(ro.tools().iter().all(|t| t["name"] != "derive"));
+    assert_eq!(tool_error(&rpc_call(&mut ro, "derive", args)), "ReadOnly");
 }

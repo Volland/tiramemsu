@@ -87,6 +87,7 @@ struct Tool {
 enum Schema {
     Term,
     Eid,
+    Eids(&'static str),
     Time,
     View,
     Text(&'static str),
@@ -112,6 +113,15 @@ impl Schema {
             Schema::Eid => json!({
                 "type": ["integer", "object"],
                 "description": "A statement id: a number or {\"stmt\": n}.",
+            }),
+            Schema::Eids(d) => json!({
+                "type": "array",
+                "items": {
+                    "type": ["integer", "object"],
+                    "description": "A statement id: a number or {\"stmt\": n}.",
+                },
+                "minItems": 1,
+                "description": d,
             }),
             Schema::Time => json!({
                 "type": ["integer", "string"],
@@ -202,6 +212,29 @@ stays visible in asOf and history views. Returns the new eid.",
                 ),
                 true,
             ),
+        ],
+    },
+    Tool {
+        name: "derive",
+        title: "Derive a belief",
+        description: "Assert the belief (s, p, o) as concluded from the live statements in support: \
+writes the statement and one sys:derivedFrom link per support, in one transaction. When any support is \
+later retracted or corrected, the belief is retracted with it, so a summary never outlives its evidence. \
+Deriving the same content from the same supports again returns the existing statement (new: false); an \
+identical fact asserted independently stays independent. Returns the eid, new and the transaction (t).",
+        writes: true,
+        idempotent: true,
+        args: &[
+            ("s", Schema::Term, true),
+            ("p", Schema::Term, true),
+            ("o", Schema::Term, true),
+            (
+                "support",
+                Schema::Eids("The statements the belief is concluded from (at least one, all live)."),
+                true,
+            ),
+            ("validFrom", Schema::Time, false),
+            ("validTo", Schema::Time, false),
         ],
     },
     Tool {
@@ -639,6 +672,19 @@ fn run(db: &Database, config: &Config, t: &Tool, args: &J) -> Result<J, ToolErro
                 "t": r["t"],
                 "retracted": r["retracted"],
             }))
+        }
+        // @tg: implements:: [[openspec:derived-beliefs#Derive on every surface]] {since: "2026-10-28"}
+        "derive" => {
+            let mut op = Map::new();
+            op.insert("op".into(), json!("derive"));
+            for k in ["s", "p", "o", "support", "validFrom", "validTo"] {
+                if let Some(v) = get(k) {
+                    op.insert(k.into(), v);
+                }
+            }
+            let r = transact(J::Array(vec![J::Object(op)]))?;
+            let d = &r["results"][0];
+            Ok(json!({ "eid": d["eid"], "new": d["new"], "t": r["t"] }))
         }
         "import_bundle" => {
             let bundle = get("bundle").unwrap_or(J::Null);

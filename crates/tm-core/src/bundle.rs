@@ -189,8 +189,25 @@ impl Bundle {
         Ok(())
     }
 
+    /// The supports of every derived statement of the bundle: for each local id
+    /// `d` that is the subject of a `sys:derivedFrom` link to a statement, the
+    /// local ids of those statements, in bundle order.
+    #[doc(hidden)]
+    pub fn supports(&self) -> HashMap<u32, Vec<u32>> {
+        let mut out: HashMap<u32, Vec<u32>> = HashMap::new();
+        for st in &self.statements {
+            if let (BTerm::Stmt(d), BTerm::Stmt(e), Value::Iri(p)) = (&st.s, &st.o, &st.p) {
+                if p == vocab::SYS_DERIVED_FROM {
+                    out.entry(*d).or_default().push(*e);
+                }
+            }
+        }
+        out
+    }
+
     /// Positions in an order where every statement follows the statements it
-    /// references (ties by position), or `None` on a reference cycle.
+    /// references and a derived statement follows its supports (ties by
+    /// position), or `None` on a reference cycle.
     #[doc(hidden)]
     pub fn import_order(&self) -> Option<Vec<usize>> {
         let pos: HashMap<u32, usize> = self
@@ -199,13 +216,16 @@ impl Bundle {
             .enumerate()
             .map(|(i, s)| (s.local, i))
             .collect();
+        let supports = self.supports();
         let refs = |st: &BundleStatement| -> Vec<usize> {
             [&st.s, &st.o]
                 .into_iter()
                 .filter_map(|t| match t {
-                    BTerm::Stmt(r) => pos.get(r).copied(),
+                    BTerm::Stmt(r) => Some(r),
                     _ => None,
                 })
+                .chain(supports.get(&st.local).into_iter().flatten())
+                .filter_map(|r| pos.get(r).copied())
                 .collect()
         };
         let order = topological(self.statements.len(), |i| refs(&self.statements[i]));
@@ -407,7 +427,10 @@ pub fn export_from(src: &mut dyn BundleSource, root: Eid) -> Result<Bundle> {
             Value::Iri(p) => p,
             other => other.to_string(),
         };
-        if p != vocab::SYS_IN_GRAPH && reserved::check_predicate(&p, row.s.tag()?).is_err() {
+        // engine-owned predicates that import writes through their own verbs
+        // (`add_to_graph`, `derive`) travel; other engine bookkeeping does not
+        let travels = p == vocab::SYS_IN_GRAPH || p == vocab::SYS_DERIVED_FROM;
+        if !travels && reserved::check_predicate(&p, row.s.tag()?).is_err() {
             excluded.insert(e, Exclusion::Engine(p));
             continue;
         }

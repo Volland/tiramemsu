@@ -8,6 +8,7 @@
 mod bundle;
 mod cascade;
 mod config;
+mod derive;
 mod embedding;
 mod graph;
 mod ops;

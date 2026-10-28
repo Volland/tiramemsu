@@ -135,6 +135,26 @@ describe("retract cascade and events", () => {
       expect(db.now().triples()).toHaveLength(0);
     } finally { cleanup(dir); }
   });
+
+  it("retracts a derived belief with its support", () => {
+    const { db, dir } = tempDb();
+    try {
+      const r1 = db.transact((tx) => {
+        const e1 = tx.assert(alice, v("ordered"), v("tea"));
+        const e2 = tx.assert(alice, v("ordered"), v("tea2"));
+        tx.derive(alice, v("prefers"), v("tea"), [e1, e2]);
+      });
+      const e1 = (r1.results[0] as { eid: number }).eid;
+      const belief = (r1.results[2] as { eid: number; new: boolean });
+      expect(belief.new).toBe(true);
+
+      const r2 = db.transact((tx) => { tx.retract(e1); });
+      const cascaded = r2.retracted.filter((x) => x.kind === "cascade").map((x) => x.eid);
+      expect(cascaded).toContain(belief.eid);
+      // the other observation stays
+      expect(db.now().triples()).toHaveLength(1);
+    } finally { cleanup(dir); }
+  });
 });
 
 // ---- (d) Speculate keeps nothing ----------------------------------------

@@ -1645,3 +1645,62 @@ fn redb_backend_through_the_bridge() {
     let bad = Database::open(p, &json!({ "backend": "oracle" })).unwrap_err();
     assert_eq!(bad.code(), "InvalidArgument");
 }
+
+// The `derive` transaction op: supports by number or by name, `Existing` on a
+// repeat with the same supports, and the belief falls with a support.
+// @tg: verifies:: [[openspec:derived-beliefs#Derive on every surface]] {since: "2026-10-28", level: integration}
+#[test]
+fn derive_writes_a_belief_that_falls_with_its_support() {
+    let (_d, db) = open();
+    let r = db
+        .call(
+            "transact",
+            &json!({ "ops": [
+                { "op": "assert", "s": v("alice"), "p": v("ordered"), "o": v("tea"), "as": "e1" },
+                { "op": "assert", "s": v("alice"), "p": v("ordered"), "o": v("tea2"), "as": "e2" },
+                { "op": "derive", "s": v("alice"), "p": v("prefers"), "o": v("tea"),
+                  "support": [{"ref": "e1"}, {"ref": "e2"}], "as": "d" },
+                { "op": "assert", "s": {"ref": "d"}, "p": v("confidence"), "o": 0.7 }
+            ]}),
+        )
+        .unwrap();
+    let e1 = r["results"][0]["eid"].clone();
+    let e2 = r["results"][1]["eid"].clone();
+    let d = r["results"][2]["eid"].clone();
+    assert_eq!(r["results"][2]["new"], true);
+    // the belief, its two links and its layer
+    assert_eq!(r["asserted"].as_array().unwrap().len(), 6);
+    let again = db
+        .call(
+            "transact",
+            &json!({ "ops": [
+                { "op": "derive", "s": v("alice"), "p": v("prefers"), "o": v("tea"),
+                  "support": [e2, {"stmt": e1}] }
+            ]}),
+        )
+        .unwrap();
+    assert_eq!(again["results"][0], json!({ "eid": d, "new": false }));
+    let bad = db
+        .call(
+            "transact",
+            &json!({ "ops": [
+                { "op": "derive", "s": v("alice"), "p": v("prefers"), "o": v("tea"), "support": 3 }
+            ]}),
+        )
+        .unwrap_err();
+    assert_eq!(bad.code(), "InvalidArgument");
+    let gone = db
+        .call(
+            "transact",
+            &json!({ "ops": [{ "op": "retract", "eid": e1 }] }),
+        )
+        .unwrap();
+    let kinds: Vec<_> = gone["retracted"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|x| x["eid"] == d)
+        .map(|x| x["kind"].clone())
+        .collect();
+    assert_eq!(kinds, [json!("cascade")]);
+}

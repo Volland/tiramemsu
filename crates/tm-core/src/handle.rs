@@ -97,6 +97,9 @@ pub trait TxOps {
     fn meta(&mut self, p: Obj, o: Obj) -> Result<Eid>;
     fn confirm(&mut self, eid: Eid) -> Result<Eid>;
     fn upsert(&mut self, p: Obj, o: Obj) -> Result<ObjectId>;
+    fn derive(&mut self, s: Obj, p: Obj, o: Obj, valid: Valid, support: &[Eid])
+        -> Result<Asserted>;
+    fn upsert_derived(&mut self, p: Obj, o: Obj, support: &[Eid]) -> Result<ObjectId>;
     fn retract(&mut self, eid: Eid) -> Result<bool>;
     fn retract_matching(
         &mut self,
@@ -185,6 +188,24 @@ macro_rules! forward_tx_ops {
             o: $crate::handle::__Obj,
         ) -> $crate::handle::__Result<$crate::handle::__ObjectId> {
             Self::upsert(self, p, o)
+        }
+        fn derive(
+            &mut self,
+            s: $crate::handle::__Obj,
+            p: $crate::handle::__Obj,
+            o: $crate::handle::__Obj,
+            valid: $crate::handle::__Valid,
+            support: &[$crate::handle::__Eid],
+        ) -> $crate::handle::__Result<$crate::handle::__Asserted> {
+            Self::derive(self, s, p, o, valid, support)
+        }
+        fn upsert_derived(
+            &mut self,
+            p: $crate::handle::__Obj,
+            o: $crate::handle::__Obj,
+            support: &[$crate::handle::__Eid],
+        ) -> $crate::handle::__Result<$crate::handle::__ObjectId> {
+            Self::upsert_derived(self, p, o, support)
         }
         fn retract(&mut self, eid: $crate::handle::__Eid) -> $crate::handle::__Result<bool> {
             Self::retract(self, eid)
@@ -447,6 +468,70 @@ impl<'a> TxHandle<'a> {
     /// The live subject holding `o` for a unique `p`, or a new node.
     pub fn upsert(&mut self, p: impl IntoObj, o: impl IntoObj) -> Result<ObjectId> {
         self.ops.upsert(p.into_obj(), o.into_obj())
+    }
+
+    /// Asserts the belief `(s, p, o)` valid over `valid` as derived from every
+    /// statement in `support`: the statement and one engine-owned link
+    /// `(D sys:derivedFrom e)` per support. When any support is retracted or
+    /// superseded, the belief is retracted with it. Deriving the same content from
+    /// the same live support set again returns `Existing`; anything else creates
+    /// a new statement, so an independently asserted fact never becomes dependent.
+    ///
+    /// # Errors
+    ///
+    /// `InvalidTerm` for an empty `support`, `NotLive` for a support that is not
+    /// live, and the errors of [`TxHandle::create`].
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use tm_core::{vocab::v, Store, StoreOptions, TxHandle, TxOptions, Valid, Value};
+    /// use tm_rusqlite as host;
+    ///
+    /// # let dir = tempfile::tempdir().unwrap();
+    /// # let path = dir.path().join("db");
+    /// let mut store = Store::open(&host::RusqliteHost::new(), &path, StoreOptions::default())?;
+    /// let r = store.transact(TxOptions::default(), |tx| {
+    ///     let mut tx = TxHandle::new(tx);
+    ///     let e1 = tx.assert(Value::iri(v("alice")), Value::iri(v("ordered")), Value::iri(v("tea")), Valid::ALWAYS)?.eid();
+    ///     let d = tx.derive(Value::iri(v("alice")), Value::iri(v("prefers")), Value::iri(v("tea")), Valid::ALWAYS, &[e1])?;
+    ///     assert!(d.is_new());
+    ///     // the same content from the same support is the same belief
+    ///     let again = tx.derive(Value::iri(v("alice")), Value::iri(v("prefers")), Value::iri(v("tea")), Valid::ALWAYS, &[e1])?;
+    ///     assert_eq!(again.eid(), d.eid());
+    ///     Ok(())
+    /// })?;
+    /// assert_eq!(r.asserted.len(), 3); // the evidence, the belief and its link
+    /// # Ok::<(), tm_core::Error>(())
+    /// ```
+    pub fn derive(
+        &mut self,
+        s: impl IntoObj,
+        p: impl IntoObj,
+        o: impl IntoObj,
+        valid: Valid,
+        support: &[Eid],
+    ) -> Result<Asserted> {
+        self.ops
+            .derive(s.into_obj(), p.into_obj(), o.into_obj(), valid, support)
+    }
+
+    /// The node `n` of a live key `(n p o)` derived from exactly the live support
+    /// set `support`, or a new node whose key is written through
+    /// [`TxHandle::derive`]. A rule engine names an invented node this way: a
+    /// re-run reuses it, and its key falls with its support.
+    ///
+    /// # Errors
+    ///
+    /// `InvalidTerm` for a predicate that is not an IRI, and the errors of
+    /// [`TxHandle::derive`].
+    pub fn upsert_derived(
+        &mut self,
+        p: impl IntoObj,
+        o: impl IntoObj,
+        support: &[Eid],
+    ) -> Result<ObjectId> {
+        self.ops.upsert_derived(p.into_obj(), o.into_obj(), support)
     }
 
     /// Retracts a live statement with cascade.

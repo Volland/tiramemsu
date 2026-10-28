@@ -115,6 +115,42 @@ Through the facade, for random layered graphs, `View::dependents(e)`, the dry-ru
 
 Through the facade, the as-of and history views reproduce the dependents of a retracted structure (layer on a layer, a belief, a membership), and a speculation sees its own new layers.
 
+## Derived Beliefs
+
+Beliefs written with support links through `Tx::derive`, on SQLite and redb ([[data-model#Derived Beliefs]]). The tests are in `crates/tiramemsu/tests/derived_beliefs.rs`.
+
+### Support Retraction Retracts The Belief
+
+Retracting one of two supports retracts, in that transaction, the support explicitly and the derived belief, both its links and its layers with kind `cascade`.
+
+### Derivations Are Idempotent Per Support Set
+
+Deriving the same content from the same live supports again, in any order and with repeats, returns `Existing` and writes nothing.
+
+### Dependents Include Derived Beliefs
+
+`dependents(e)` lists the beliefs derived from `e` with their links in cascade order, equals the dry-run retraction, and an as-of view reproduces it after the retraction.
+
+### Supersede Drops Derived Beliefs
+
+Correcting a support retracts the derived belief, its link and its layers with kind `supersede`, replays only the support, and leaves no live statement with the belief's content.
+
+### Derived Answers Go Stale
+
+A saved SPARQL answer citing a derived belief is marked `stale` with cause `supportRetracted` and the belief's cascade retraction as its event when a support is retracted.
+
+### Derivations Round Trip In Bundles
+
+A bundle of a derived belief carries its links and supports; importing it re-derives the belief in the target across backends, and a second import writes nothing.
+
+### Derived Keys Are Reused
+
+`upsert_derived` with the same key and the same supports, in any order, returns the same node in a later transaction and writes nothing.
+
+### Support Cascade Counts Toward The Limit
+
+A support whose retraction reaches its link and its derived belief needs `max_cascade` of three; two fails with `CascadeLimitExceeded`.
+
 ## Fact Bundles
 
 Behaviour of [[data-model#Fact Bundles]]: building a bundle from a view, importing it into another database, and its text forms.

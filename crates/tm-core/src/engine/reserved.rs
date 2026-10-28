@@ -15,8 +15,9 @@ pub fn check_predicate(p_iri: &str, s_tag: Tag) -> Result<()> {
             feature: vocab::SENSITIVE_FEATURE.to_string(),
         });
     }
-    // engine-owned: only GRAPH blocks, WITH and `Tx::add_to_graph` write memberships
-    if p_iri == vocab::SYS_IN_GRAPH {
+    // engine-owned: only GRAPH blocks, WITH and `Tx::add_to_graph` write memberships,
+    // and only `Tx::derive` writes support links
+    if p_iri == vocab::SYS_IN_GRAPH || p_iri == vocab::SYS_DERIVED_FROM {
         return Err(Error::ReservedNamespace(p_iri.to_string()));
     }
     if p_iri.starts_with(vocab::TM) {
@@ -63,6 +64,10 @@ mod tests {
         assert!(matches!(
             check_predicate("urn:tiramemsu:sys:inGraph", Tag::Stmt),
             Err(Error::ReservedNamespace(m)) if m == vocab::SYS_IN_GRAPH
+        ));
+        assert!(matches!(
+            check_predicate("urn:tiramemsu:sys:derivedFrom", Tag::Stmt),
+            Err(Error::ReservedNamespace(m)) if m == vocab::SYS_DERIVED_FROM
         ));
         assert!(check_predicate("urn:tiramemsu:v:name", Tag::Iri).is_ok());
     }

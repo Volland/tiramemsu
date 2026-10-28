@@ -18,3 +18,9 @@ fn random_histories_agree() {
 fn identical_on_a_fixed_history() {
     oracle::fixed_history(Arc::new(MemStore::new()));
 }
+
+// @tg: verifies:: [[openspec:derived-beliefs#Derivation in both engines#Oracle agreement]] {since: "2026-10-28", level: integration}
+#[test]
+fn identical_on_a_derived_history() {
+    oracle::derived_history(Arc::new(MemStore::new()));
+}

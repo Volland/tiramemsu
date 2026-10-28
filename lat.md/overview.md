@@ -46,7 +46,7 @@ Every row is a decision taken in the design interview of 2026-09-29, with the se
 
 Rows D19–D25 were added the same day, after a comparison with oxilite ([[prior-art#oxilite]]) and after measuring SQLite 3.53 plans on the schema ([[query#Physical Planning#Join Ordering]], [[storage#Measured Footprint]]). D26 follows a SQLite versus DuckDB benchmark on the same workload ([[prior-art#DuckDB]]).
 
-D35 was added on 2026-10-01: it reserves origin bits so that agent files can later merge without rewriting ids. D36 was added the same day: a statement can name a graph, so an edge can hold a subgraph. D37–D44 come from the storage-backend interview of 2026-10-27 ([[backends]]).
+D35 was added on 2026-10-01: it reserves origin bits so that agent files can later merge without rewriting ids. D36 was added the same day: a statement can name a graph, so an edge can hold a subgraph. D37–D44 come from the storage-backend interview of 2026-10-27 ([[backends]]). D45–D52 come from the change `add-derived-beliefs` of 2026-10-28 ([[derived-beliefs]]).
 
 | ID | Decision | Specified in |
 |---|---|---|
@@ -97,6 +97,14 @@ D35 was added on 2026-10-01: it reserves origin bits so that agent files can lat
 | D42 | The native runner uses hybrid joins: index nested loop and hash joins with semijoin filters for acyclic parts, worst-case-optimal intersection for cycles | [[backends#Hybrid Join Engine]] |
 | D43 | redb views are MVCC snapshots with no reader pool; large scans run as parallel morsels | [[backends#Snapshot Readers]] |
 | D44 | The backend is detected from the file header; SQLite stays the default; the `tm` CLI | [[backends#Backend Detection and CLI]] |
+| D45 | `sys:derivedFrom` support links are engine-owned and extend the referent relation, so the cascade reaches derived beliefs | [[derived-beliefs#Support Links Extend The Referent Relation]] |
+| D46 | Support is conjunctive within one derivation and disjunctive across parallel derivations | [[derived-beliefs#Conjunctive Within A Derivation]] |
+| D47 | `derive` is idempotent only for the same live support set; independent facts never become dependent | [[derived-beliefs#Idempotent Per Support Set]] |
+| D48 | Supersede of a support drops the derived beliefs it reaches; supersede of a belief replays its links | [[derived-beliefs#Supersede Drops Derived Dependents]] |
+| D49 | Bundles carry derivations and import re-derives them | [[derived-beliefs#Bundles Carry Derivations]] |
+| D50 | Derivation behaves identically in the SQL and the trait engine, checked by the oracle | [[derived-beliefs#Both Engines One Oracle]] |
+| D51 | `upsert_derived` reuses a node only through a key derived from exactly the same support | [[derived-beliefs#Derived Upsert For Invented Nodes]] |
+| D52 | A derived interval widens by supersede, keeping its support | [[derived-beliefs#Widening Is A Supersede]] |
 
 ## Open Inputs
 
@@ -112,6 +120,7 @@ The paper `paper/layered-bitemporal-graphs.tex` formalises this design and prove
 Its central operator is the ground core γ(X), the largest subset of X whose statements' referents all lie in X. Each result is stated against a section of this knowledge graph:
 
 - The cascade retracts exactly X ∖ γ(X∖{e}), the least retraction that keeps memory grounded ([[time-model#Cascade]]).
+- Support links extend the referent relation: the object of a live `(D sys:derivedFrom e)` counts as a referent of `D`. The ground core is the same construction over the extended relation, so the cascade, now also reaching derived beliefs, is still the least grounded retraction; the paper states this as a remark ([[derived-beliefs#Support Links Extend The Referent Relation]]).
 - Every `asOf` view is grounded iff transaction lifetimes nest along references ([[time-model#Transaction Time]]). Valid time does not nest by design. Its largest grounded slice is the intersection of intervals over a statement's support ([[time-model#Valid Time]]).
 - Supersede is an isomorphism on the ground core of its cascade set ([[time-model#Operations#Supersede]]).
 - Metagraphs embed through membership statements that may be named by statements ([[data-model#Named Graphs#Statement Graphs]]). Snapshots commute with the encoding for well-formed temporal metagraphs ([[recipes#Metagraphs]]).

@@ -1,4 +1,4 @@
-//! Recursive retraction over subject and object positions.
+//! Recursive retraction over subject and object positions and support links.
 
 use std::collections::{BTreeSet, HashMap, HashSet};
 
@@ -8,14 +8,19 @@ use crate::error::{Error, Result};
 use crate::exec::SqlValue;
 use crate::id::{Eid, ObjectId};
 use crate::report::RetKind;
+use crate::vocab;
 
 impl Tx<'_> {
     /// The cascade set of `root`: `root` plus every live statement reachable over
-    /// subject and object positions, in BFS order. Fails with
+    /// subject and object positions and over support links (a live `D` with a live
+    /// `(D sys:derivedFrom x)` for a reached `x`), in BFS order. Fails with
     /// `CascadeLimitExceeded` when it would hold more than `max_cascade` statements.
     // @lat: [[time-model#Cascade]]
+    // @tg: implements:: [[openspec:derived-beliefs#Support cascade]] {since: "2026-10-28"}
+    // @tg: implements:: [[openspec:retraction-cascade#Cascade over subject and object positions]] {since: "2026-10-28"}
     pub(crate) fn cascade_set(&mut self, root: Eid) -> Result<Vec<Eid>> {
         let limit = self.opts.max_cascade;
+        let derived_from = self.sys_lookup(vocab::SYS_DERIVED_FROM)?;
         let mut order = vec![root];
         let mut seen: HashSet<Eid> = HashSet::from([root]);
         if order.len() > limit {
@@ -30,14 +35,23 @@ impl Tx<'_> {
             level = order.len();
             for chunk in frontier.chunks(IN_CHUNK) {
                 let list = placeholders(chunk.len());
-                let sql = format!(
+                let mut sql = format!(
                     "SELECT s, eid FROM triple WHERE s IN ({list}) AND t_ret IS NULL \
                      UNION SELECT o, eid FROM triple WHERE o IN ({list}) AND t_ret IS NULL"
                 );
-                let params: Vec<SqlValue> = chunk
+                let mut params: Vec<SqlValue> = chunk
                     .iter()
                     .map(|e| SqlValue::Integer(e.oid().raw()))
                     .collect();
+                if let Some(df) = derived_from {
+                    // the support rule: a live link (D sys:derivedFrom x) reaches D
+                    sql.push_str(&format!(
+                        " UNION SELECT l.o, l.s FROM triple l JOIN triple d ON d.eid = l.s \
+                         WHERE l.o IN ({list}) AND l.p = ?{} AND l.t_ret IS NULL AND d.t_ret IS NULL",
+                        chunk.len() + 1
+                    ));
+                    params.push(SqlValue::Integer(df.raw()));
+                }
                 let mut children: HashMap<i64, BTreeSet<i64>> = HashMap::new();
                 for r in self.exec.rows(&sql, &params)? {
                     if let (Some(parent), Some(eid)) = (r[0].as_i64(), r[1].as_i64()) {

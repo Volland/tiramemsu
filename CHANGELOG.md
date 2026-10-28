@@ -9,6 +9,21 @@ OpenSpec changes in `openspec/changes/archive/`.
 
 ## [Unreleased]
 
+Derived beliefs with support (`openspec/changes/add-derived-beliefs/`). No file format change: support links are ordinary statements.
+
+### Added
+
+- **`Tx::derive(s, p, o, valid, support)`:** asserts a belief with one engine-owned link `(D sys:derivedFrom e)` per supporting statement. Re-deriving the same content from the same live supports returns `Existing`; any other derive creates a statement, so an independently asserted fact never becomes dependent, and parallel derivations stand for alternative grounds.
+- **`Tx::upsert_derived(p, o, support)`:** finds or creates a node by a key derived from `support`, so invented (Skolem) nodes are reused across runs and their key falls with its support.
+- **Support cascade:** retracting a support retracts the beliefs derived from it in the same transaction (kind `cascade`), recursively; `View::dependents`, dry runs, `max_cascade` and saved-answer invalidation follow the same rule.
+- **Supersede:** correcting a support retracts the beliefs derived from it without replaying them; correcting a belief (for example widening its valid interval) keeps its support links.
+- **Bundles** carry derivations and import re-derives them through `derive`.
+- **Surfaces:** the JSON bridge transaction op `derive`, Node `tx.derive`, Python `tx.derive` and the MCP write tool `derive` (hidden in read-only mode). Both the SQL engine and the trait engine (redb) implement it, checked by the oracle.
+
+### Changed
+
+- **`sys:derivedFrom` is engine-owned:** asserting or creating it directly fails with `ReservedNamespace` (it was already in the reserved `sys:` namespace).
+
 ## [0.8.1] - 2026-10-27
 
 Faster native runner on redb (`openspec/changes/archive/2026-10-27-tune-native-runner/`). No file format, API or answer changes.

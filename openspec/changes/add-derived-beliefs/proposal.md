@@ -1,12 +1,12 @@
-# Derived beliefs with support, and read-time salience
+# Derived beliefs with support
 
-Target release: **0.6 — Agent recall**. Source: `docs/feature-roadmap.md#0.6` ("Consolidation helpers", "Salience without forgetting").
+Target release: **0.6 — Agent recall**. Source: `docs/feature-roadmap.md#0.6` ("Consolidation helpers"). Read-time salience, first proposed here, was split into `add-read-time-salience` on 2026-10-28; this change is the prerequisite of `add-n3-reasoning`.
 
 ## Why
 
 Agents consolidate memory: they summarise twenty observations into one belief, infer a preference from repeated behavior, or store a computed answer. Today such a belief is an ordinary assertion. When its evidence is later retracted or corrected, the summary stays live and nothing marks it, so memory quietly keeps conclusions whose grounds are gone. The roadmap's sketch assumed that the existing cascade would handle this if summaries carried `sys:derivedFrom` links. It does not: the cascade (`crates/tm-core/src/engine/cascade.rs#cascade_set`) follows statements whose subject or object is a retracted eid, so retracting the support `e1` retracts the link `(D sys:derivedFrom e1)` (its object is `e1`) but not the summary `D`, whose subject is a node. The engine needs one rule more.
 
-Agents also need to rank what to bring back. The store holds access patterns only as volatile values (`volatile(s, key, value, updated_at)`, `crates/tm-core/src/engine/volatile.rs`) and recency as `tm:addedAt`, but has no way to combine them into a score, and the never-forget rule means forgetting cannot be the answer: low-salience memory should rank lower, not disappear.
+A rule engine (`add-n3-reasoning`) has the same need at scale: each conclusion rests on the facts and the rule that produced it, and must fall when any of them goes.
 
 ## What Changes
 
@@ -16,14 +16,15 @@ Agents also need to rank what to bring back. The store holds access patterns onl
 - **Saved answers** that cited a derived statement go `Stale` through the existing `supportRetracted` cause when the support cascade retracts it; no change to saved-answer code is needed beyond tests.
 - **Bundles** carry derivations (the links are layers, and their objects are in the downward closure) and import re-derives them through `derive`.
 - **Surfaces:** JSON bridge transaction op `derive`, Node `Tx.derive`, Python `TxBuilder.derive`, MCP tool `derive` (a write tool, hidden in read-only mode); SPARQL and Cypher read `sys:derivedFrom` like any predicate (it is engine-owned, so direct writes are `ReservedNamespace`).
-- **Read-time salience.** A deterministic score `salience = (1 + ln(1 + count)) · 2^(−age / half_life)` per node or statement, where `count` is an integer volatile counter under a chosen key, and `age` is `now` minus the latest of the counter's `updated_at` and the newest `tm:addedAt` of the target's live statements. It is exposed as `View::salience(targets, &SaliencePolicy)`, SPARQL `tm:salience(?x, <counterKey>, "P7D"^^xsd:dayTimeDuration)`, Cypher `tiramemsu.salience(x, {key, halfLife})`, and the bridge op `salience`, usable in `ORDER BY` and `FILTER`. `Tx::increment_volatile(s, key, by)` records an access atomically. Salience never writes and never retracts.
+- **`Tx::upsert_derived(p, o, support)`** finds or creates a node by a key that is itself derived from `support`, so a rule engine's invented (Skolem) nodes are reused across runs and their key falls with their support.
+- **Widening.** Superseding a derived statement with only a new valid interval keeps its support; a rule engine widens a conclusion's interval this way.
+- **Both engines.** Everything above is implemented in the SQL engine (`tm-core`) and the trait engine (`tm-store`, redb), with the oracle tests on both.
 
 ## Capabilities
 
 ### New Capabilities
 
-- `derived-beliefs`: the `derive` verb, support links, idempotency rules, supersede and bundle behavior.
-- `read-time-salience`: the salience score, its policy, query functions and the volatile counter increment.
+- `derived-beliefs`: the `derive` and `upsert_derived` verbs, support links, idempotency rules, supersede, widening and bundle behavior.
 
 ### Modified Capabilities
 
@@ -32,15 +33,12 @@ Agents also need to rank what to bring back. The store holds access patterns onl
 
 ## Impact
 
-- **`crates/tm-core`:** `src/vocab.rs` (`SYS_DERIVED_FROM`), `src/engine/reserved.rs` (engine-owned like `sys:inGraph`), new `src/engine/derive.rs` (`Tx::derive`), `src/engine/cascade.rs` (`cascade_set` adds `D` when a `sys:derivedFrom` link to a member is reached), `src/engine/supersede.rs` (drop derived statements reached through support, propagate exclusion to their dependents, as at lines ~176–210), `src/read.rs#dependents` (same rule), `src/bundle.rs` and `src/engine/bundle.rs` (keep links, import through `derive`), `src/engine/volatile.rs` (`increment_volatile`), new `src/salience.rs` (score and policy, pure function shared by all surfaces).
-- **`crates/tm-exec`:** `src/udf.rs` (`tm_salience` scalar UDF over count, age and half-life), `src/sqlgen/expr.rs` (join of `volatile` and the newest `t_add` instant), `crates/tm-ir/src/expr.rs` (`Func::Salience`).
-- **`crates/tm-sparql`:** `src/lower/expr.rs` (`tm:salience`); **`crates/tm-cypher`:** `src/exec/funcs.rs`, `src/funcs.rs`.
-- **Facade, bindings, MCP:** `crates/tiramemsu/src/view.rs` (`View::salience`), `bindings/json/src/{tx,read}.rs` (`derive`, `incrementVolatile`, `salience`), Node, Python, `crates/tiramemsu-mcp/src/tools.rs` (`derive`).
+- **`crates/tm-core` (SQL engine) and `crates/tm-store` (trait engine):** `vocab.rs` (`SYS_DERIVED_FROM`), `engine/reserved.rs` (engine-owned like `sys:inGraph`), new `engine/derive.rs` (`Tx::derive`, `Tx::upsert_derived`), `engine/cascade.rs` (the cascade adds `D` when a live `sys:derivedFrom` link to a member is reached), `engine/supersede.rs` (drop derived statements reached through support; replay links when the derived statement is the root), `read.rs#dependents` (same rule), bundle export and import.
+- **Facade, bindings, MCP:** `crates/tiramemsu` `Tx::derive`/`upsert_derived`, `bindings/json/src/tx.rs` (`derive`), Node, Python, `crates/tiramemsu-mcp/src/tools.rs` (`derive`).
 - **Formal model:** `paper/` and `lat.md/overview.md#Formal Model` note that support links extend the referent relation, so the cascade remains the least grounded retraction under it.
-- **Not affected:** storage format (support links are ordinary statements; salience is computed). `add-hybrid-recall` (another change) may use the salience score as an evidence component; this change only provides it.
+- **Not affected:** storage format (support links are ordinary statements).
 
 ## Non-goals
 
 - No summarisation, inference or rule engine in the store; the caller decides what to derive and from what.
-- No automatic decay that retracts or hides anything.
 - No disjunctive support inside one derivation (use parallel derivations).

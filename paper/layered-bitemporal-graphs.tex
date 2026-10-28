@@ -560,6 +560,22 @@ the set of ends of the regular path $(\hat{}\,\sys{subject}\mid\hat{}\,\sys{obje
 from $e$. Both equivalences are checked by property tests in the
 implementation.
 
+\begin{remark}[Support links extend the referent relation]\label{rem:support}
+A derived belief $D$, such as a summary concluded from statements
+$e_1,\dots,e_k$, is about a node, so no support $e_i$ is a referent of $D$ and
+the cascade of $e_i$ would not reach it. The implementation records each
+support as an engine-owned statement $\ell_i=(D,\sys{derivedFrom},e_i)$ and
+counts the object of a link as a referent of its subject: $D\refs e_i$ whenever
+$S$ holds such a link. With this extended relation every definition above
+applies unchanged, and Theorem~\ref{thm:cascade} holds as stated: retracting a
+support retracts its link, $D$, the other links of $D$ and the layers on $D$,
+and this is again the least retraction that keeps memory grounded. The read
+equivalence becomes the path
+$(\hat{}\,\sys{subject}\mid\hat{}\,\sys{object}\mid\hat{}\,\sys{derivedFrom})^{*}$.
+Two derivations of the same content are distinct occurrences, so support is
+conjunctive within one derivation and disjunctive across derivations.
+\end{remark}
+
 \subsection{Snapshots are grounded exactly when lifetimes nest}
 
 \begin{theorem}[Transaction-time nesting]\label{thm:nesting}

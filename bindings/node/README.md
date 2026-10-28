@@ -112,6 +112,7 @@ A view chooses when you look and when the fact was true. Every read takes a view
 | `retract(eid)` | Ends belief in a statement and every layer about it |
 | `retractMatching({ s?, p?, o? })` | Retracts every live match |
 | `supersede(eid, { o?, validFrom?, validTo? })` | Corrects a statement and replays its layers on the new one |
+| `derive(s, p, o, support, { validFrom?, validTo? })` | Asserts a belief derived from the `support` statements; retracting or correcting any of them retracts the belief |
 | `confirm(eid)` | Records that another source agrees |
 | `meta(p, o)`, `upsert(p, o)`, `newNode()` | Transaction metadata, unique upsert, an anonymous node |
 | `addToGraph(eid, g)`, `removeFromGraph`, `clearGraph`, `createGraph`, `dropGraph` | Named graphs as tags on statements. A statement (`stmt(eid)` or a `Ref`) can name a graph, so an edge can hold a subgraph |

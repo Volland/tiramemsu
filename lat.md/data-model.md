@@ -1,3 +1,6 @@
+---
+openspec: [derived-beliefs]
+---
 # Data Model
 
 Everything is a triple with its own identity (eid). Properties, relationships, labels, schema, provenance and bookkeeping are all triples; eids can be the subject or object of other triples.
@@ -157,10 +160,10 @@ A fact bundle moves a belief with its evidence from one database file to another
 Eids, node ids and transaction numbers are local to a file, so a bundle names its statements by bundle-local ids and travels as values. The type is [[crates/tm-core/src/bundle.rs#Bundle]]: ordered statements `{local, s, p, o, valid}` where a position is a `Value`, a local statement id or a local anonymous-node label, plus the root's local id.
 
 - **Members:** the root's [[time-model#Cascade#Dependents]] in the view (its layers, the beliefs that cite it, its memberships), plus the downward closure: every visible statement a member references in `s` or `o`, transitively, so no imported layer dangles. The dependents of that evidence are not taken, or the bundle would grow into the whole connected component.
-- **Left out, with whatever references them:** statements whose `s` or `o` is a transaction (numbers are local to a file: `sys:confirmedBy`, tx metadata); predicates a user write cannot repeat, i.e. engine bookkeeping such as `sys:supersedes` (`sys:inGraph` is kept, import writes it through `add_to_graph`); statements that reference a statement outside the view. A root that falls under these rules is `Unsupported`; an invisible root is `NotLive`.
+- **Left out, with whatever references them:** statements whose `s` or `o` is a transaction (numbers are local to a file: `sys:confirmedBy`, tx metadata); predicates a user write cannot repeat, i.e. engine bookkeeping such as `sys:supersedes` (`sys:inGraph` is kept, import writes it through `add_to_graph`; `sys:derivedFrom` is kept, import writes it through `derive`); statements that reference a statement outside the view. A root that falls under these rules is `Unsupported`; an invisible root is `NotLive`.
 - **Order:** references first, ties by source eid, reference-cycle members last; local ids are positions. The same view of the same data gives an equal bundle, so output is stable.
 - **Anonymous nodes:** `NODE` and `BNODE` ids become bundle-local labels, never skolem IRIs (`urn:tiramemsu:node:5` would name node 5 of the target). Import mints one fresh `NODE` per label, so a node shared by two statements stays shared. As with RDF blank nodes, importing twice mints twice; the `NODE`/`BNODE` distinction is not carried.
-- **Import:** references first, `sys:inGraph` through `add_to_graph`, everything else through `assert` with its valid time, in the caller's transaction. So a second import changes nothing, a root fact already present (same content, overlapping valid time) takes the layers on its existing eid, parallel edges with equal content collapse into one statement, schema checks of the target apply, and any failure rolls the whole transaction back. The report maps each local id to `(eid, new)`.
+- **Import:** references first (a derived statement after its supports), `sys:inGraph` through `add_to_graph`, a statement with support links through `derive` with its supports mapped to their eids here ([[data-model#Derived Beliefs]]), everything else through `assert` with its valid time, in the caller's transaction. So a second import changes nothing, a root fact already present (same content, overlapping valid time) takes the layers on its existing eid, parallel edges with equal content collapse into one statement, schema checks of the target apply, and any failure rolls the whole transaction back. The report maps each local id to `(eid, new)`.
 - **Cycles:** a reference cycle (e7 about e8 about e7) is exported but import fails with `Unsupported("bundle with a reference cycle")` before writing. Supersede replays cycles by pre-allocating eids, but that is create semantics, and finding an equal cycle in the target is a subgraph-isomorphism question.
 - **Not carried:** transaction time (imported statements get the importing transaction), lifetimes and history, and transaction metadata.
 
@@ -185,6 +188,22 @@ See [[crates/tiramemsu/src/bundle.rs#BundleFormat]].
 - **Explicit application:** a preview reserves nothing. Applying is the ordinary write `tx.import_bundle(&bundle)`, which revalidates against the database as it is then and either commits atomically or fails with the schema error. No source is chosen silently, and bundles remain interchange, not replica-log synchronization.
 
 The facade code is [[crates/tiramemsu/src/review.rs#Db#preview_bundle]]; `Tx::id_usage` reports the allocated ids.
+
+## Derived Beliefs
+
+A derived belief is an ordinary statement `D` written with one engine-owned link `(D sys:derivedFrom e)` per supporting statement, so retracting or correcting any support retracts the belief in the same transaction.
+
+`Tx::derive(s, p, o, valid, support)` writes it; the decisions behind it are [[derived-beliefs]].
+
+- **Support:** non-empty, every member a live statement (`InvalidTerm`, `NotLive` otherwise). Supports may themselves be derived, so beliefs chain. Links are valid always and written in ascending support order after `D`.
+- **Conjunctive and disjunctive:** one derivation falls when any support goes; the same content derived twice from different supports is two statements, and stays live while one derivation stands ([[derived-beliefs#Conjunctive Within A Derivation]]).
+- **Idempotent per support set:** deriving the same content with an overlapping interval from exactly the same live supports returns `Existing(D)`; anything else creates a statement, also over an identical fact asserted independently, which never acquires links ([[derived-beliefs#Idempotent Per Support Set]]). Schema checks apply to `D` as to `create`.
+- **Engine-owned links:** asserting, creating or superseding `sys:derivedFrom` directly is `ReservedNamespace`. SPARQL and Cypher read the links like any `sys:` predicate, by name.
+- **Cascade and supersede:** see [[time-model#Cascade]] and [[time-model#Operations#Supersede]]. Correcting a support drops the belief (not replayed); correcting the belief, for example widening its interval, replays its links.
+- **Derived keys:** `Tx::upsert_derived(p, o, support)` returns the node of a live key `(n p o)` derived from exactly `support`, or a new node whose key is written through `derive`, so a rule engine's invented nodes are reused across runs and their keys fall with their support ([[derived-beliefs#Derived Upsert For Invented Nodes]]).
+- **Surfaces:** the facade `Tx::derive` and `Tx::upsert_derived`, the JSON bridge transaction op `derive` (`support` is a list of eids or refs), Node `tx.derive`, Python `tx.derive` and the MCP write tool `derive`, hidden in read-only mode ([[bindings#JSON Bridge#Operations]]).
+
+Both engines implement it, the SQL engine in `crates/tm-core/src/engine/derive.rs` and the trait engine in `crates/tm-store/src/engine/derive.rs` ([[derived-beliefs#Both Engines One Oracle]]).
 
 ## ObjectId
 
@@ -271,7 +290,7 @@ These namespaces belong to the engine. User data cannot assert `sys:` predicates
 
 | Prefix | IRI | Use |
 |---|---|---|
-| `sys:` | `urn:tiramemsu:sys:` | Engine bookkeeping: `supersedes`, `confirmedBy`, `inGraph`, `Graph`, `reason`, `author`, schema flags, vocab, prefixes, virtual `subject`/`object` hops |
+| `sys:` | `urn:tiramemsu:sys:` | Engine bookkeeping: `supersedes`, `confirmedBy`, `inGraph`, `derivedFrom`, `Graph`, `reason`, `author`, schema flags, vocab, prefixes, virtual `subject`/`object` hops |
 | `tm:` | `urn:tiramemsu:tm:` | Time IRIs and functions in queries: `tm:asOf/…`, `tm:validAt/…`, `tm:history`, `tm:txAdded` |
 | `v:` | `urn:tiramemsu:v:` (default) | User vocabulary |
 | — | `urn:tiramemsu:node:` / `urn:tiramemsu:bnode:` | Skolem IRIs for anonymous nodes |

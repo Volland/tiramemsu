@@ -44,6 +44,8 @@ pub enum Op {
     Prefix(u8, u8),
     Model(u8),
     Embed(u8, u8),
+    Derive(u8, u8, u8, u8, u8),
+    UpsertDerived(u8, u8, u8),
     Fail,
 }
 
@@ -109,6 +111,8 @@ fn op() -> impl Strategy<Value = Op> {
         1 => (b(), b()).prop_map(|(a, c)| Op::Prefix(a, c)),
         1 => b().prop_map(Op::Model),
         1 => (b(), b()).prop_map(|(a, c)| Op::Embed(a, c)),
+        3 => (b(), b(), b(), b(), b()).prop_map(|(a, c, d, e, f)| Op::Derive(a, c, d, e, f)),
+        1 => (b(), b(), b()).prop_map(|(a, c, d)| Op::UpsertDerived(a, c, d)),
         1 => Just(Op::Fail),
     ]
 }
@@ -250,6 +254,17 @@ macro_rules! apply_fn {
                     if let Some(e) = pick(*e) {
                         let x = f32::from(*x % 4);
                         tx.set_embedding(e, Value::iri(v("model")), &[1.0, x])?;
+                    }
+                }
+                Op::Derive(s, p, o, a, b) => {
+                    if let (Some(a), Some(b)) = (pick(*a), pick(*b)) {
+                        let support = if a == b { vec![a] } else { vec![a, b] };
+                        tx.derive(subject(*s), predicate(*p), object(*o), valid(*o), &support)?;
+                    }
+                }
+                Op::UpsertDerived(p, o, a) => {
+                    if let Some(a) = pick(*a) {
+                        tx.upsert_derived(predicate(*p), object(*o), &[a])?;
                     }
                 }
                 Op::Fail => return Err(Error::custom("body failed")),
@@ -664,6 +679,50 @@ pub fn random_histories_with(make: impl Fn() -> Arc<dyn Backend>, text: bool) {
     });
 }
 
+/// A fixed history of derivations: derive, re-derive, a parallel derivation, a
+/// derived key, a supersede of a support and of a derived statement (widening),
+/// and a retraction of a support, with every report and the final state equal.
+pub fn derived_history(backend: Arc<dyn Backend>) {
+    let mut pair = Pair::new_with(backend, false);
+    let plans = [
+        // known: 0..=3 base facts
+        vec![
+            Op::Assert(0, 0, 3, 0),
+            Op::Assert(0, 0, 11, 0),
+            Op::Assert(1, 1, 3, 0),
+            Op::Assert(2, 2, 3, 0),
+        ],
+        // 4 = D from [0, 1], 5, 6 its links; again (Existing); 7 = D2 from [2], 8 its link
+        vec![
+            Op::Derive(3, 1, 19, 0, 1),
+            Op::Derive(3, 1, 19, 1, 0),
+            Op::Derive(3, 1, 19, 2, 2),
+        ],
+        // a layer on D, a derived key, then the same key again
+        vec![
+            Op::AssertOnStmt(4, 2, 1),
+            Op::UpsertDerived(3, 1, 3),
+            Op::UpsertDerived(3, 1, 3),
+        ],
+        // correcting a support drops D; widening D2 keeps its link
+        vec![Op::Supersede(0, 9, 3)],
+        vec![Op::Supersede(7, 19, 3)],
+        // retracting a support retracts the derived key
+        vec![Op::Retract(3)],
+        vec![Op::Retract(2)],
+    ];
+    for ops in plans {
+        let (a, b) = pair.run(&TxPlan {
+            ops,
+            dry_run: false,
+            max_cascade: 10_000,
+        });
+        assert!(a.is_ok(), "{a:?}");
+        assert_eq!(a, b);
+    }
+    pair.compare_state();
+}
+
 /// A fixed history touching every operation kind.
 pub fn fixed_history(backend: Arc<dyn Backend>) {
     fixed_history_with(backend, true)
@@ -688,6 +747,8 @@ pub fn fixed_history_with(backend: Arc<dyn Backend>, text: bool) {
         vec![Op::Retract(1), Op::Volatile(2, 3, true)],
         vec![Op::Model(0), Op::Embed(0, 2)],
         vec![Op::Prefix(0, 1), Op::Vocab(1), Op::Upsert(1, 1)],
+        vec![Op::Derive(2, 2, 3, 0, 1), Op::UpsertDerived(3, 3, 0)],
+        vec![Op::Retract(0)],
     ];
     for ops in plans {
         let (a, b) = pair.run(&TxPlan {
