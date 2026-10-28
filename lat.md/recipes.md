@@ -208,6 +208,19 @@ SELECT ?g ?x WHERE { GRAPH ?g { v:alice v:knows+ ?x } }   # one row set per grap
 
 Membership is read in the path's own view, so under `asOf` the walk follows the graph as it was. `View::path_with` takes `PathArgs { graphs: Some(vec![g]), .. }`, and `tm_path` a sixth `graphs` argument. See [[query#Physical Planning#Path Engine]].
 
+## Who Is Above Me
+
+A Datalog goal inside a SPARQL query: the recursive question ("who is above Alice in the reporting chain") is answered by a stored program, and the rest of the query joins its rows with an ordinary pattern ([[datalog#Goal Calls In SPARQL And Cypher]], [[query#Datalog Calls]]).
+
+```sparql
+SELECT ?X ?mail ?f ?t WHERE {
+  SERVICE <urn:tiramemsu:dl:query> { [] dl:program v:reporting ; dl:goal "reports(v:alice, X)" ;
+                                       dl:validFrom ?f ; dl:validTo ?t }
+  ?X v:email ?mail }
+```
+
+`v:reporting` is stored once with `store_program` (`reports(X, Y) :- v:manager(X, Y). reports(X, Z) :- reports(X, Y), v:manager(Y, Z).`). Each row carries the interval over which Alice reports to `?X`, and managers without an email drop out of the join. The call runs once per query, also inside `OPTIONAL`. The test is `goal_joined_with_a_pattern` in [[crates/tiramemsu/tests/datalog_calls.rs]]; it uses a fixed goal, and combining the call with text recall has no test yet.
+
 ## Metagraphs
 
 A metagraph needs edges that are vertices and vertices that are containers. Statement ids give the first, and graphs as tags give the second, for nodes and for statements ([[data-model#Named Graphs#Statement Graphs]]).
