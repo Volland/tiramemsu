@@ -6,6 +6,8 @@
 
 ## 2. Here
 
+- [x] 2.0 Interim: pin the workspace to the PR branch on `Volland/eyeron` (`e762581`) with `default-features = false`, so no build links `ureq`/`ring` (the 0.9.0 linux-aarch64 wheel failed on `ring`).
+
 - [ ] 2.1 Switch the workspace dependency to the registry with `default-features = false`; remove `publish = false` from `tm-n3`.
 - [ ] 2.2 Replace the `time:localTime` rewrite with `ReasonerOptions::now`; annotate with `@tg: implements:: [[openspec:eyeron-dependency#Clock from options]]`.
 - [ ] 2.3 Tests for both scenarios, annotated with `@tg: verifies::`.

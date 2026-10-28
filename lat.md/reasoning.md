@@ -22,7 +22,7 @@ N2: eyeron is to be published upstream with `ureq` behind a feature and a `now` 
 
 - motivated_by:: [[constraints#Publishable Crates]] {weight: primary, since: "2026-10-28"}
 
-Cargo refuses to publish a crate with any git dependency, optional ones included, so the facade cannot be published with its `n3` feature while the pin stays. Vendoring was rejected: it would make this project the maintainer of a fast-moving reasoner.
+Cargo refuses to publish a crate with any git dependency, optional ones included, so the facade cannot be published with its `n3` feature while the pin stays. The pin is the branch of eyereasoner/eyeron#25 on the project fork, with `default-features = false`: the 0.9.0 linux-aarch64 wheel failed to cross-compile `ring`, which only eyeron's HTTP client pulled in, so the pin leaves that client out of every build. Vendoring was rejected: it would make this project the maintainer of a fast-moving reasoner.
 
 ## Optional Crate
 

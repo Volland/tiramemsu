@@ -36,7 +36,7 @@ Derived beliefs with support (`openspec/changes/archive/2026-10-28-add-derived-b
 
 ### Publishing
 
-- npm (`@tiramemsu/node`) and PyPI (`tiramemsu`) ship 0.9.0 with N3 reasoning.
+- npm (`@tiramemsu/node`) and PyPI (`tiramemsu`) ship 0.9.0 with N3 reasoning. The tag's linux-aarch64 wheel failed to cross-compile `ring`, which only eyeron's HTTP client pulled in; the wheels were rebuilt from the next commit, which pins eyeron to the branch of eyereasoner/eyeron#25 without that client (no other change).
 - On crates.io, 0.9.0 covers the crates below the facade (`tm-core`, `tm-store`, `tm-redb`, `tm-rusqlite`, `tm-ir`, `tm-exec`, `tm-native`, `tm-sparql`, `tm-cypher`, `tm-wasm`). `tiramemsu`, `tiramemsu-json`, `tiramemsu-mcp` and `tiramemsu-cli` depend, at least optionally, on `tm-n3`, whose reasoner eyeron is a git dependency, and Cargo refuses to publish them; they stay at 0.8.1 there until eyeron is on crates.io (proposed upstream in eyereasoner/eyeron#25).
 ## [0.8.1] - 2026-10-27
 

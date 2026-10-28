@@ -1,7 +1,7 @@
 # eyeron conformance subset
 
 Examples and their expected output (`output/`) copied from
-[eyeron](https://github.com/eyereasoner/eyeron) at commit `c4adb8c`
+[eyeron](https://github.com/eyereasoner/eyeron) at commit `c4adb8c` (they still pass on the pinned `e762581`, eyereasoner/eyeron#25 on upstream `804488d`)
 (`examples/` and `examples/output/`), MIT license, copyright Jos De Roo,
 KNoWS office of IDLab, Ghent University - imec (see `LICENSE-eyeron.md`).
 
