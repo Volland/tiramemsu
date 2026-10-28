@@ -217,6 +217,23 @@ Materialization evaluates on a read view *outside* the writer and takes the sing
 
 Every call evaluates the whole program on a snapshot and writes only the difference. **Incremental materialization is not built.** The design (decision DL22 in `lat.md/datalog.md`) is DRed-style: seed the next run from the statements added since the last labelled run, and re-derive only what the cascade retracted since. The label `dl:materialized` is written so that such a run has its base, but the engine today keeps no state between runs and always recomputes. For a large store with small changes, that is the next piece of work, not something this article can claim.
 
+## A goal inside a SPARQL or Cypher query
+
+Memory questions rarely stay in one language. "Who is above Alice in the reporting chain, and what is their email?" is a recursive question (Datalog) joined with a plain pattern (SPARQL). A goal with constants is a small, bounded table, so it can sit inside a query as one.
+
+```
+SELECT ?X ?mail ?f ?t WHERE {
+  SERVICE <urn:tiramemsu:dl:query> { [] dl:program v:reporting ; dl:goal "reports(v:alice, X)" ;
+                                       dl:validFrom ?f ; dl:validTo ?t }
+  ?X v:email ?mail }
+```
+
+The program is a stored one (`dl:program`) or inline text (`dl:text`). The goal's variables bind the query's variables of the same name, and `dl:validFrom` and `dl:validTo` receive the interval of each row, unbound for an open end. Cypher has the same call as a procedure: `CALL tiramemsu.datalog.query('v:reporting', 'reports(v:alice, X)') YIELD X, validFrom, validTo`. The test `goal_joined_with_a_pattern` runs the SPARQL form on both engines and gets the managers above Alice who have an email, and not the one who does not.
+
+Three rules keep this predictable. The program and goal must be constants or parameters, never a column of the surrounding query, so the call cannot turn into one Datalog run per row: it is evaluated once per query execution, also inside `OPTIONAL` (the test `optional_side_runs_once` counts the evaluations: one, for 1,001 outer rows, on both engines). It runs in the query's own snapshot and under its deadline. And the rows are exactly those of `View::datalog` on the same view; `three_surfaces_agree` checks the Rust call, SPARQL and Cypher against each other on SQLite and redb.
+
+One limit is real. A query row holds term ids, so a goal value the store has no id for, such as a string the rules computed or a node an `exists` head invented, fails the call with `Unsupported` and a message naming the value. Ask such a goal through `View::datalog`, which has no such limit. The one randomised comparison of the three surfaces is not written; the test above uses a fixed goal with several intervals.
+
 ## How it compares with N3 in the same store
 
 Tiramemsu keeps both languages, because they are different instruments. They share the machinery that matters for memory: a stored program is a node whose text is a statement (`n3:source` for rule sets, `dl:source` for Datalog programs), editing is a supersede, `as_of` runs use the program believed at that time, and materialized conclusions are derived beliefs with support that includes the program statement. The commit core was extracted into one module that both use, and N3's materialization tests ran unchanged afterwards. A node cannot hold both: mixing them fails with `RuleLanguageConflict`.
@@ -241,7 +258,7 @@ Not measured yet, and so not claimed: the RDFS and OWL 2 RL subset on WatDiv, a 
 
 ## Using it
 
-Datalog sits behind the facade feature `datalog`, off by default. The Rust calls are `View::datalog`, `View::datalog_reason` (conclusions shaped like N3's), `View::check`, `View::program_info`, `View::explain_datalog`, `TxDatalog::store_program`, `TxDatalog::enforce` and `Db::materialize_program`. The JSON bridge has the matching ops (`datalog`, `datalogReason`, `check`, `programInfo`, `explainDatalog`, `storeProgram`, `enforce`, `materializeProgram`), so Node, Python and the browser build have them, the MCP server offers `datalog_query`, `check_constraints`, `store_program`, `enforce_program` and `materialize_program`, and the CLI has `tm datalog`, `tm check`, `tm program put|show|enforce|unenforce` and `tm materialize-program`. SPARQL and Cypher only read what was materialized; a `SERVICE` and `CALL` for single goals are the next change, `add-datalog-query-calls`, and are not part of what is described here.
+Datalog sits behind the facade feature `datalog`, off by default. The Rust calls are `View::datalog`, `View::datalog_reason` (conclusions shaped like N3's), `View::check`, `View::program_info`, `View::explain_datalog`, `TxDatalog::store_program`, `TxDatalog::enforce` and `Db::materialize_program`. The JSON bridge has the matching ops (`datalog`, `datalogReason`, `check`, `programInfo`, `explainDatalog`, `storeProgram`, `enforce`, `materializeProgram`), so Node, Python and the browser build have them, the MCP server offers `datalog_query`, `check_constraints`, `store_program`, `enforce_program` and `materialize_program`, and the CLI has `tm datalog`, `tm check`, `tm program put|show|enforce|unenforce` and `tm materialize-program`. Materialized conclusions are ordinary statements that every query language reads; a single goal can also be called from inside a SPARQL or Cypher query, as described above.
 
 ## What this adds up to
 

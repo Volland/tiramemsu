@@ -1,6 +1,6 @@
 # Article: Datalog over time
 
-A long read (about 4,400 words, no images, no tables) on Tiramemsu's Datalog engine `tm-datalog`: DatalogMTL operators and the 13 Allen relations over valid-time interval sets, stratified negation and aggregates, constraints enforced at commit (`ConstraintViolated`), stored programs materialized as derived beliefs with support, reconciliation, and a comparison with N3 reasoning in the same store. It says plainly that incremental materialization is not built and that two of the benchmark gates are not met.
+A long read (about 4,900 words, no images, no tables) on Tiramemsu's Datalog engine `tm-datalog`: DatalogMTL operators and the 13 Allen relations over valid-time interval sets, stratified negation and aggregates, constraints enforced at commit (`ConstraintViolated`), stored programs materialized as derived beliefs with support, reconciliation, goal calls from SPARQL and Cypher, and a comparison with N3 reasoning in the same store. It says plainly that incremental materialization is not built and that two of the benchmark gates are not met.
 
 It appears on Substack, from this folder, and on the website as `site/articles/datalog-temporal-reasoning.html`.
 
