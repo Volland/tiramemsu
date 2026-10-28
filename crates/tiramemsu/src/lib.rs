@@ -26,6 +26,8 @@ mod cypher;
 mod datalog;
 #[cfg(feature = "datalog")]
 mod datalog_enforce;
+#[cfg(feature = "datalog")]
+mod datalog_materialize;
 mod db;
 mod import;
 #[cfg(any(feature = "n3", feature = "datalog"))]
@@ -50,6 +52,8 @@ pub use bundle::{BundleFormat, BUNDLE_FORMAT};
 pub use cypher::TxCypher;
 #[cfg(feature = "datalog")]
 pub use datalog::TxDatalog;
+#[cfg(feature = "datalog")]
+pub use datalog_materialize::{MaterializeProgramOptions, MaterializeProgramReport};
 pub use db::{Db, OpenOptions, Summary};
 pub use import::{BulkImport, ImportProgress, ImportSummary};
 #[cfg(feature = "n3")]

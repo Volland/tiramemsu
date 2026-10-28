@@ -745,6 +745,31 @@ enforcement statement (eid, null when turned off) and the transaction (t).",
             ),
         ],
     },
+    #[cfg(feature = "datalog")]
+    Tool {
+        name: "materialize_program",
+        title: "Materialize a Datalog program",
+        description: "Run the stored Datalog program program on a snapshot and write its conclusions as derived \
+beliefs, in one transaction: each conclusion is supported by its premises and by the program statement, so it \
+is retracted when a premise is retracted or corrected, or when the program is edited. Re-runs reuse existing \
+conclusions, widen their valid time and reconcile their support. Conclusions that cannot be stored are \
+reported as unstorable, and needsRerunAfterWrites lists the predicates the run's own writes feed. dryRun \
+reports what would be written and writes nothing. An unknown program is refused (UnknownProgram).",
+        writes: true,
+        idempotent: true,
+        args: &[
+            ("program", Schema::Iri(PROGRAM), true),
+            ("scope", Schema::Object(SCOPE), false),
+            ("window", Schema::Object(WINDOW), false),
+            ("limits", Schema::Object(DL_LIMITS), false),
+            (
+                "requireComplete",
+                Schema::Flag("Refuse to write when the run is incomplete."),
+                false,
+            ),
+            ("dryRun", Schema::Flag("Report what would be written and write nothing."), false),
+        ],
+    },
 ];
 
 #[cfg(feature = "n3")]
@@ -1222,6 +1247,19 @@ fn run(db: &Database, config: &Config, t: &Tool, args: &J) -> Result<J, ToolErro
             let op = json!({ "op": "enforce", "program": get("program"), "on": on });
             let r = transact(json!([op]))?;
             Ok(json!({ "eid": r["results"][0]["eid"], "on": on, "t": r["t"] }))
+        }
+        // @tg: implements:: [[openspec:datalog-materialization#Materialization surfaces]]
+        #[cfg(feature = "datalog")]
+        "materialize_program" => {
+            let mut c = Map::new();
+            c.insert("stored".into(), get("program").unwrap_or(J::Null));
+            for k in ["scope", "window", "limits", "requireComplete", "dryRun"] {
+                if let Some(v) = get(k) {
+                    c.insert(k.into(), v);
+                }
+            }
+            c.insert("budget".into(), budget.clone());
+            Ok(db.call("materializeProgram", &J::Object(c))?)
         }
         other => Err(ToolError::arg(format!("unknown tool {other:?}"))),
     }

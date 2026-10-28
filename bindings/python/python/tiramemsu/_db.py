@@ -1743,6 +1743,49 @@ class Database:
         r["unstorable"] = [_conclusion(c) for c in r["unstorable"]]
         return r
 
+    def materialize_program(
+        self,
+        program: Any,
+        *,
+        scope: Any = None,
+        window: Any = None,
+        limits: Optional[Dict[str, int]] = None,
+        require_complete: bool = False,
+        dry_run: bool = False,
+        budget: Optional[QueryBudget] = None,
+    ) -> Dict[str, Any]:
+        """Run the stored Datalog program *program* (an IRI string or a term) and write its
+        conclusions as derived beliefs in one transaction, supported by their premises and
+        the program statement. A re-run reports what already exists. With *dry_run*,
+        reports what would be written and writes nothing; an unknown program raises
+        ``UnknownProgram``. Returns ``{"program", "programStatement", "reasonedAt",
+        "report", "derived", "existing", "widened", "reconciled", "skolems",
+        "staleSupport", "unstorable", "needsRerunAfterWrites", "status", "limits",
+        "dryRun"}``.
+        """
+        args = _datalog_args(
+            {}, None, program, scope, window, None, limits, None, False, None, None,
+            require_complete,
+        )
+        if dry_run:
+            args["dryRun"] = True
+        if budget is not None:
+            args["budget"] = budget._to_json()
+        r: Dict[str, Any] = json.loads(_call(self._native, "materializeProgram", json.dumps(args)))
+        _program_node(r, "program")
+        r["skolems"] = [term_from_json(s) for s in r["skolems"]]
+        for key in ("staleSupport", "unstorable"):
+            r[key] = [
+                {
+                    **c,
+                    "s": _datalog_term(c["s"]),
+                    "p": term_from_json(c["p"]),
+                    "o": _datalog_term(c["o"]),
+                }
+                for c in r[key]
+            ]
+        return r
+
     def optimize(self) -> None:
         """Refresh query-planner statistics after large imports."""
         _call(self._native, "optimize", "")

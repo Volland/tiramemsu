@@ -96,7 +96,7 @@ N11: rule sets that use negation as failure, aggregates, the clock or `list:map`
 
 - motivated_by:: [[constraints#Never Forget]] {weight: primary, since: "2026-10-28"}
 
-Adding a fact can invalidate a non-monotonic conclusion, and the cascade only reacts to retractions, so stored conclusions would stop being grounded. `list:map` is monotonic, but eyeron's proof records only the builtin triple, not the facts it read, so its conclusions would be stored with incomplete support (class `UntracedPremises`). Reconciliation by diffing runs is an open follow-up.
+Adding a fact can invalidate a non-monotonic conclusion, and the cascade only reacts to retractions, so stored conclusions would stop being grounded. `list:map` is monotonic, but eyeron's proof records only the builtin triple, not the facts it read, so its conclusions would be stored with incomplete support (class `UntracedPremises`). Reconciliation by diffing runs is an open follow-up for N3; Datalog programs have it ([[datalog#Shared Materialization With Reconciliation]]).
 
 ## Merge By Support
 

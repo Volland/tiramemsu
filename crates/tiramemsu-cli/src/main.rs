@@ -134,6 +134,9 @@ enum Cmd {
     /// Check the constraints of a Datalog program and print the violations.
     #[cfg(feature = "datalog")]
     Check(datalog::CheckArgs),
+    /// Write a stored Datalog program's conclusions as derived beliefs.
+    #[cfg(feature = "datalog")]
+    MaterializeProgram(datalog::MaterializeProgramArgs),
     /// Store, print and enforce Datalog programs.
     #[cfg(feature = "datalog")]
     Program {
@@ -419,6 +422,8 @@ fn run(cmd: Cmd) -> Result<()> {
         Cmd::Datalog(a) => datalog::datalog(a),
         #[cfg(feature = "datalog")]
         Cmd::Check(a) => datalog::check(a),
+        #[cfg(feature = "datalog")]
+        Cmd::MaterializeProgram(a) => datalog::materialize_program(a),
         #[cfg(feature = "datalog")]
         Cmd::Program { cmd } => datalog::programs(cmd),
         Cmd::Compact { file } => {

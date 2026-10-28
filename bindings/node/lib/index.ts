@@ -853,6 +853,48 @@ export interface MaterializeReport {
   dryRun: boolean;
 }
 
+/** Options for `Database.materializeProgram`. */
+export interface MaterializeProgramOptions {
+  /** The statements loaded (default: the whole view). */
+  scope?: ReasonScope;
+  /** The valid-time window conclusions are derived in (default: unbounded). */
+  window?: { from?: Date | number | string; to?: Date | number | string };
+  limits?: DatalogLimits;
+  /** Refuse to write when the run is incomplete. */
+  requireComplete?: boolean;
+  /** Report what would be written and write nothing. */
+  dryRun?: boolean;
+  budget?: QueryBudget;
+}
+
+/** A conclusion of `Database.materializeProgram` (an unstorable or stale-support one). */
+export type MaterializedConclusion = DatalogConclusion;
+
+/** The result of `Database.materializeProgram`. */
+export interface MaterializeProgramReport {
+  program: Term;
+  programStatement: number;
+  /** The transaction the Datalog snapshot was taken at. */
+  reasonedAt: number;
+  /** The commit, or `null` when nothing was written. */
+  report: Omit<Report, "results" | "refs"> | null;
+  derived: number[];
+  existing: number[];
+  widened: Array<{ old: number; new: number }>;
+  /** Derived statements whose support changed and were re-linked. */
+  reconciled: number[];
+  skolems: Term[];
+  /** Conclusions whose support is stale. */
+  staleSupport: MaterializedConclusion[];
+  /** Conclusions skipped because a term cannot be stored. */
+  unstorable: MaterializedConclusion[];
+  /** Predicates whose rules read what the run writes; run again after those writes. */
+  needsRerunAfterWrites: string[];
+  status: "complete" | "incomplete";
+  limits: string[];
+  dryRun: boolean;
+}
+
 function ruleSetJson(rs: RuleSetInput): unknown {
   return typeof rs === "string" ? rs : toJson(rs);
 }
@@ -2090,6 +2132,33 @@ export class Database {
       skolems: (r.skolems as unknown[]).map(fromJson),
       staleSupport: (r.staleSupport as Array<Record<string, unknown>>).map(decodeConclusion),
       unstorable: (r.unstorable as Array<Record<string, unknown>>).map(decodeConclusion),
+    };
+  }
+
+  /**
+   * Runs the stored Datalog program `program` on a snapshot and writes its conclusions as
+   * derived beliefs in one transaction, supported by their premises and the program
+   * statement. A re-run reports what already exists. With `dryRun`, reports what would be
+   * written and writes nothing. An unknown program is refused (`UnknownProgram`).
+   */
+  materializeProgram(program: ProgramInput, opts?: MaterializeProgramOptions): MaterializeProgramReport {
+    const args = scopeArgs({ stored: programJson(program) }, opts);
+    if (opts?.requireComplete) args.requireComplete = true;
+    if (opts?.dryRun) args.dryRun = true;
+    if (opts?.budget) args.budget = opts.budget;
+    const r = callNative(this._db, "materializeProgram", args) as Record<string, unknown>;
+    const decode = (c: Record<string, unknown>): MaterializedConclusion => ({
+      ...(c as unknown as MaterializedConclusion),
+      s: datalogTerm(c.s),
+      p: fromJson(c.p),
+      o: datalogTerm(c.o),
+    });
+    return {
+      ...(r as unknown as MaterializeProgramReport),
+      program: fromJson(r.program),
+      skolems: (r.skolems as unknown[]).map(fromJson),
+      staleSupport: (r.staleSupport as Array<Record<string, unknown>>).map(decode),
+      unstorable: (r.unstorable as Array<Record<string, unknown>>).map(decode),
     };
   }
 

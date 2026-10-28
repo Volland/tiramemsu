@@ -53,6 +53,7 @@ enum LocalVal {
 struct Local {
     by_value: FxHashMap<String, Id>,
     by_key: FxHashMap<(u32, Vec<Id>), Id>,
+    keys: Vec<(u32, Vec<Id>)>,
     vals: Vec<LocalVal>,
 }
 
@@ -134,8 +135,19 @@ impl Terms {
             .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         let id = ObjectId::from_unsigned(Tag::Iri, LOCAL_BASE + l.vals.len() as u64).raw();
         l.vals.push(LocalVal::Invented(n));
+        l.keys.push(key.clone());
         l.by_key.insert(key, id);
         id
+    }
+
+    /// The `(rule, frontier values)` key node `n` was invented for.
+    pub fn invent_key(&self, n: u64) -> Option<(u32, Vec<Id>)> {
+        self.local
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .keys
+            .get(n as usize)
+            .cloned()
     }
 
     /// The number of nodes invented so far.

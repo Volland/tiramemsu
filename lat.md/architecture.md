@@ -436,6 +436,12 @@ The pages are plain HTML with one stylesheet (`site/style.css`), light and dark 
 
 Its working example is the sanitized trace of the Claude Code session that wrote it (`code/trace.json`, made by `code/extract-trace.py`). `code/cteg-demo.mjs` loads that trace through the Node binding and runs every SPARQL query the article quotes, writing `code/queries.out.txt`; `code/gen-figures.py` draws the data figures from the same trace. The queries use reifiers, `tm:validFrom`, `tm:addedAt`, `validAt`, `asOf` and `SERVICE <urn:tiramemsu:tm:timeRespecting>` ([[query#Temporal Syntax]], [[query#Temporal Path Syntax]]), so a change there means re-running the demo and updating the article. With `RECORDER=sparql` the demo records the trace through SPARQL valid-time writes ([[query#Front Ends#SPARQL#Valid Time Writes]]), and it reads transactions in Cypher ([[query#Front Ends#Cypher#Statement Ids And Transactions]]). `build-site.py` rebuilds the site page and copies its SVGs to `site/assets/cteg/`.
 
+### Datalog Article
+
+`article/datalog/` holds a third long read, on temporal Datalog and its materialization ([[datalog]]), published on Substack and as `site/articles/datalog-temporal-reasoning.html`.
+
+Its programs come from the tests `crates/tiramemsu/tests/datalog.rs`, `datalog_constraints.rs` and `datalog_materialization.rs`, and its numbers from `bench/datalog/README.md`, so a change to those, or to the status of incremental runs (decision DL22, not built), should be reflected there. `build-site.py` rebuilds the page.
+
 ## Crate Documentation and Publishing
 
 Each crate's `README.md` is its crates.io page and, through `#![doc = include_str!("../README.md")]`, its crate-level rustdoc, so every Rust block in it is a doctest.

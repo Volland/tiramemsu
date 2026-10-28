@@ -24,6 +24,13 @@ fn system_now() -> i64 {
 
 impl View<'_> {
     // @tg: implements:: [[openspec:optional-query-frontends#Optional Datalog feature]] {since: "2026-10-28"}
+    pub(crate) fn with_store_pub<R>(
+        &self,
+        f: impl Fn(&dyn ReadStore, i64) -> Result<R>,
+    ) -> Result<R> {
+        self.with_store(f)
+    }
+
     fn with_store<R>(&self, f: impl Fn(&dyn ReadStore, i64) -> Result<R>) -> Result<R> {
         let clock = self.db().map_or_else(system_now, |db| db.now_ms());
         self.op(|| {

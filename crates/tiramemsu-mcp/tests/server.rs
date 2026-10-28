@@ -522,7 +522,7 @@ fn protocol_handshake_and_errors() {
     )
     .unwrap();
     let n3_tools = if cfg!(feature = "n3") { 3 } else { 0 };
-    let datalog_tools = if cfg!(feature = "datalog") { 4 } else { 0 };
+    let datalog_tools = if cfg!(feature = "datalog") { 5 } else { 0 };
     assert_eq!(
         r["result"]["tools"].as_array().unwrap().len(),
         20 + n3_tools + datalog_tools
@@ -1047,12 +1047,21 @@ fn read_only_mcp_hides_datalog_writes() {
         .collect();
     assert!(names.iter().any(|n| n == "datalog_query"));
     assert!(names.iter().any(|n| n == "check_constraints"));
-    assert!(names.iter().all(|n| n != "store_program"));
+    assert!(names
+        .iter()
+        .all(|n| n != "store_program" && n != "materialize_program"));
     let before = counters(&ro);
     let r = rpc_call(
         &mut ro,
         "store_program",
         json!({ "program": "urn:x", "text": REPORTS }),
+    );
+    assert_eq!(tool_error(&r), "ReadOnly");
+    assert_eq!(counters(&ro), before);
+    let r = rpc_call(
+        &mut ro,
+        "materialize_program",
+        json!({ "program": "urn:tiramemsu:v:reporting" }),
     );
     assert_eq!(tool_error(&r), "ReadOnly");
     assert_eq!(counters(&ro), before);
@@ -1178,6 +1187,69 @@ fn datalog_query_store_program_and_check_tools() {
             json!({ "program": REPORTS, "file": "/tmp/x" })
         ),
         "PathNotAllowed"
+    );
+}
+
+// materialize_program writes a stored program's conclusions as derived beliefs:
+// dryRun writes nothing, a run derives them, a re-run finds them existing, and an
+// unknown program or a stray argument is refused.
+// @tg: verifies:: [[openspec:datalog-materialization#Materialization surfaces]] {level: integration}
+#[cfg(feature = "datalog")]
+#[test]
+fn materialize_program_tool() {
+    let dir = tempfile::tempdir().unwrap();
+    let server = open(&dir);
+    chain(&server);
+    server
+        .call_tool(
+            "store_program",
+            &json!({
+                "program": "urn:tiramemsu:v:chain",
+                "text": "v:reportsTo(X, Y) :- v:manager(X, Y).\n\
+                         v:reportsTo(X, Z) :- v:reportsTo(X, Y), v:manager(Y, Z).\n",
+            }),
+        )
+        .unwrap();
+    let before = counters(&server);
+    let dry = server
+        .call_tool(
+            "materialize_program",
+            &json!({ "program": "urn:tiramemsu:v:chain", "dryRun": true }),
+        )
+        .unwrap();
+    assert_eq!(dry["dryRun"], true);
+    assert_eq!(dry["derived"].as_array().unwrap().len(), 3, "{dry}");
+    assert_eq!(counters(&server), before);
+    let r = server
+        .call_tool(
+            "materialize_program",
+            &json!({ "program": "urn:tiramemsu:v:chain", "requireComplete": true }),
+        )
+        .unwrap();
+    assert_eq!(r["derived"].as_array().unwrap().len(), 3);
+    assert_eq!(r["status"], "complete");
+    let again = server
+        .call_tool(
+            "materialize_program",
+            &json!({ "program": "urn:tiramemsu:v:chain" }),
+        )
+        .unwrap();
+    assert!(again["derived"].as_array().unwrap().is_empty());
+    assert_eq!(again["existing"].as_array().unwrap().len(), 3);
+    let err = |args: J| {
+        server
+            .call_tool("materialize_program", &args)
+            .unwrap_err()
+            .code
+    };
+    assert_eq!(
+        err(json!({ "program": "urn:tiramemsu:v:none" })),
+        "UnknownProgram"
+    );
+    assert_eq!(err(json!({})), "InvalidArgument");
+    assert_eq!(
+        err(json!({ "program": "urn:tiramemsu:v:chain", "text": "x" })),
+        "InvalidArgument"
     );
 }
 

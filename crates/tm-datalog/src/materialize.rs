@@ -6,9 +6,9 @@
 //! earlier items. Plain-named relations are not stored: a premise on one is
 //! replaced by that fact's own support.
 
-use rustc_hash::{FxHashMap, FxHashSet};
+use rustc_hash::FxHashMap;
 use tm_core::store::ReadStore;
-use tm_core::{Eid, Error, ObjectId, Result, Valid, ValidSel, Value, ViewSpec};
+use tm_core::{Eid, Error, ObjectId, Result, Valid, ValidSel, ViewSpec};
 use tm_store::read::View;
 
 use crate::eval::{Engine, EvalOptions, Prem};
@@ -54,6 +54,9 @@ pub struct Plan {
     pub items: Vec<Item>,
     /// The IRI relations of non-monotonic strata (reconciled).
     pub reconciled_predicates: Vec<String>,
+    /// A stable label per invented node, indexed by its number in the items'
+    /// `Term::Invented`: the rule and the values it was invented for.
+    pub invented: Vec<String>,
     /// The view's transaction.
     pub t: u64,
     /// Completion.
@@ -70,13 +73,14 @@ fn ext(x: i64) -> Option<i64> {
 /// Plans the materialization of `program` over `spec`, without the stored
 /// statements `exclude` (the program's own earlier conclusions).
 // @tg: implements:: [[openspec:datalog-materialization#Valid time of materialized conclusions]] {since: "2026-10-28"}
+// @tg: implements:: [[openspec:datalog-materialization#Own conclusions are not input]] {since: "2026-10-28", confidence: partial}
 pub fn plan(
     store: &dyn ReadStore,
     spec: &ViewSpec,
     clock: i64,
     program: &Program,
     opts: &DatalogOptions,
-    exclude: FxHashSet<i64>,
+    exclude: Vec<i64>,
 ) -> Result<Plan> {
     let text = match program {
         Program::Text(t) => t.clone(),
@@ -108,7 +112,8 @@ pub fn plan(
         _ => TimeView::Valid,
     };
     let terms = Terms::new();
-    let stored = Stored::new(view, None, exclude, time);
+    let scope = crate::run::scope_eids(store, &view, &opts.scope)?;
+    let stored = Stored::new(view, scope, exclude.into_iter().collect(), time);
     let mut eng = Engine::new(
         &prog,
         store,
@@ -336,9 +341,25 @@ pub fn plan(
         tm_core::TxSel::AsOf(tm_core::TimeRef::Tx(t)) => t,
         _ => tm_store::read::last_t(store)?,
     };
-    let _ = Value::Bool(true);
+    let mut invented = Vec::new();
+    for n in 0..terms.invented_count() {
+        let label = match terms.invent_key(n) {
+            Some((rule, vals)) => {
+                // the key ends with the position of the `exists` variable, not a term
+                let (pos, frontier) = vals.split_last().map_or((0, &[][..]), |(p, f)| (*p, f));
+                let mut parts = Vec::new();
+                for &x in frontier {
+                    parts.push(terms.value(store, x)?.to_string());
+                }
+                format!("{rule}:{pos}:{}", parts.join(","))
+            }
+            None => n.to_string(),
+        };
+        invented.push(label);
+    }
     Ok(Plan {
         items,
+        invented,
         reconciled_predicates: reconciled,
         t,
         status,

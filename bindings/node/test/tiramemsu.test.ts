@@ -939,6 +939,47 @@ describe("Datalog", () => {
     } finally { cleanup(dir); }
   });
 
+  it("materializes a stored Datalog program as derived beliefs", () => {
+    const { db, dir } = tempDb();
+    try {
+      const manager = v("manager");
+      db.transact((tx) => {
+        tx.assert(v("alice"), manager, v("bob"));
+        tx.assert(v("bob"), manager, v("carol"));
+        tx.storeProgram(
+          "urn:tiramemsu:v:reporting",
+          "v:reportsTo(X, Y) :- v:manager(X, Y).\nv:reportsTo(X, Z) :- v:reportsTo(X, Y), v:manager(Y, Z).\n",
+        );
+      });
+      const reportsTo = () =>
+        db.now().triples().filter((t) => (t.p as { iri: string }).iri === "urn:tiramemsu:v:reportsTo");
+      const before = db.now().triples().length;
+      const dry = db.materializeProgram("urn:tiramemsu:v:reporting", { dryRun: true });
+      expect(dry.dryRun).toBe(true);
+      expect(dry.derived).toHaveLength(3);
+      expect(dry.program).toEqual(v("reporting"));
+      expect(db.now().triples()).toHaveLength(before);
+      expect(reportsTo()).toHaveLength(0);
+
+      const real = db.materializeProgram(v("reporting"), { requireComplete: true });
+      expect(real.derived).toHaveLength(3);
+      expect(real.status).toBe("complete");
+      expect(real.report).not.toBeNull();
+            expect(reportsTo()).toHaveLength(3);
+
+      const again = db.materializeProgram("urn:tiramemsu:v:reporting");
+      expect(again.derived).toHaveLength(0);
+      expect(again.existing).toHaveLength(3);
+
+      try {
+        db.materializeProgram("urn:tiramemsu:v:none");
+        throw new Error("expected UnknownProgram");
+      } catch (err) {
+        expect((err as TiramemsuError).code).toBe("UnknownProgram");
+      }
+    } finally { cleanup(dir); }
+  });
+
   it("checks constraints and reports violations", () => {
     const { db, dir } = tempDb();
     try {

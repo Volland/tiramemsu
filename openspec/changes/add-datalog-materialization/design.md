@@ -4,7 +4,7 @@ See proposal.md. `crates/tiramemsu/src/n3_materialize.rs` implements N3 material
 
 ## Goals / Non-Goals
 
-**Goals:** one materialization core for both languages; non-monotonic strata stored and kept consistent at every run; run cost proportional to change for monotonic strata.
+**Goals:** one materialization core for both languages; non-monotonic strata stored and kept consistent at every run.
 
 **Non-Goals:** keeping conclusions consistent between runs for non-monotonic strata (reported, not enforced); multiple stored derivations per conclusion.
 
@@ -35,14 +35,9 @@ For each non-monotonic stratum, the run computes the program's live conclusions 
 
 `(tx dl:reconciled program)` with `(tx dl:reconciledCount n)` and `(tx dl:materialized program)` are statements about the reified transaction. Retractions keep `ret_kind` 0. No format change.
 
-### DL22 refined. Incremental base from the transaction label
+### DL22 is not part of this change
 
-DL22 named a `dl:materializedAt` statement on the program; it is a transaction label instead, so runs do not supersede a statement each time. The base `t₁` is the latest transaction carrying `(tx dl:materialized program)` with `t₁ ≥ t_add(R)`. The engine receives the program's live conclusions as the initial relations and the statements with `t_add > t₁` as the first delta (the program's own conclusions excluded); semi-naive continues from there. Rederivation: the program's conclusions with `t_ret > t₁` and `ret_kind = cascade` are re-asked as goals with demand rewriting; those still derivable are written again with their new support.
-
-- motivated_by:: [[datalog#Incremental By DRed]] {weight: primary}
-- supersedes:: [[datalog#Incremental By DRed]] {reason: "the run record is a transaction label, not a statement on the program"}
-
-*Alternatives:* a warm in-memory engine (memory held, work after every commit).
+Incremental evaluation (a delta of added statements seeding semi-naive from the program's live conclusions, with rederivation of what the cascade retracted) needs engine support that is not built; each run evaluates in full on a snapshot and writes only the difference through the commit core, so a re-run asserts nothing. The transaction label `(tx dl:materialized program)` is written already so that a later incremental run has its base.
 
 ### Fragments and support
 

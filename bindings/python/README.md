@@ -138,6 +138,7 @@ Times accept a `datetime`, a `date`, epoch milliseconds or an RFC 3339 string. `
 | `view.reason(rules, rule_set=, scope=, window=, time=, max_segments=, proof_n3=, limits=)`, `db.reason(...)` | N3 conclusions with valid time and proofs; nothing is written |
 | `view.rule_set_info(rule_set)`, `db.rule_set_info(rule_set)` | A stored rule set's text, statement, rule count and monotonicity |
 | `db.materialize(rule_set, scope=, window=, require_complete=, dry_run=)` | Writes a rule set's conclusions as derived beliefs; `dry_run` writes nothing |
+| `db.materialize_program(program, scope=, window=, limits=, require_complete=, dry_run=)` | Writes a stored Datalog program's conclusions as derived beliefs; a re-run reports them `existing`; `dry_run` writes nothing |
 | `view.datalog(goal, program, stored=, scope=, window=, time=, limits=, demand=, proof=, access=, require_complete=)`, `db.datalog(...)` | Datalog goal rows with their valid intervals (and proofs); nothing is written |
 | `view.datalog_reason(program, stored=, include_relations=, ...)`, `db.datalog_reason(...)` | The triples a Datalog program concludes that are not stored |
 | `view.program_info(program, stored=)`, `db.program_info(...)` | A program's text, rule and goal counts, constraints and strata |

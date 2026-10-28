@@ -471,7 +471,7 @@ impl Database {
     /// reason with N3 rules; without it they fail with `Unsupported`. With the
     /// feature `datalog`, the reads `datalog` (`program` or `stored`, `goal`,
     /// `scope`, `window`, `time`, `limits`, `demand`, `proof`, `access`,
-    /// `parallelThreshold`, `requireComplete`), `datalogReason`
+    /// `parallelThreshold`, `requireComplete`), `materializeProgram` (`stored`, `scope`, `window`, `limits`, `requireComplete`, `dryRun`, `budget`), `datalogReason`
     /// (`includeRelations`), `programInfo`, `explainDatalog` and `check` (`only`)
     /// and the transaction op `storeProgram` (`program`, `text`) run Datalog;
     /// without it they fail with `Unsupported`.
@@ -532,6 +532,21 @@ impl Database {
                         .run(|| materialize(&self.db, args).map_err(value::into_core))
                         .map_err(BindError::from),
                     None => materialize(&self.db, args),
+                }
+            }
+            "materializeProgram" => {
+                let (budget, _entry) = self.budget(args.get("budget"))?;
+                let call = || -> Res<J> {
+                    #[cfg(feature = "datalog")]
+                    return datalog::materialize_program(&self.db, args);
+                    #[cfg(not(feature = "datalog"))]
+                    return Err(no_datalog());
+                };
+                match &budget {
+                    Some(b) => b
+                        .run(|| call().map_err(value::into_core))
+                        .map_err(BindError::from),
+                    None => call(),
                 }
             }
             "with" => tx::with(&self.db, args),

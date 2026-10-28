@@ -134,3 +134,47 @@ fn bridge_refusal_carries_violations() {
         .unwrap();
     assert_eq!(ok["constraintChecks"], 0);
 }
+
+// materializeProgram through the bridge: derive, no-op re-run, dry run
+#[test]
+fn bridge_materialize_program() {
+    let (_d, db) = open();
+    chain(&db);
+    let text = "v:reportsTo(X, Y) :- v:manager(X, Y).\nv:reportsTo(X, Z) :- v:reportsTo(X, Y), v:manager(Y, Z).";
+    db.call(
+        "transact",
+        &json!({ "ops": [ { "op": "storeProgram", "program": "urn:tiramemsu:v:p", "text": text } ] }),
+    )
+    .unwrap();
+    let dry = db
+        .call(
+            "materializeProgram",
+            &json!({ "stored": "urn:tiramemsu:v:p", "dryRun": true }),
+        )
+        .unwrap();
+    assert_eq!(dry["derived"].as_array().unwrap().len(), 3);
+    assert_eq!(dry["dryRun"], true);
+    let r = db
+        .call(
+            "materializeProgram",
+            &json!({ "stored": "urn:tiramemsu:v:p" }),
+        )
+        .unwrap();
+    assert_eq!(r["derived"].as_array().unwrap().len(), 3);
+    assert_eq!(r["status"], "complete");
+    let again = db
+        .call(
+            "materializeProgram",
+            &json!({ "stored": "urn:tiramemsu:v:p" }),
+        )
+        .unwrap();
+    assert_eq!(again["existing"].as_array().unwrap().len(), 3);
+    assert_eq!(again["report"]["asserted"].as_array().unwrap().len(), 1);
+    let err = db
+        .call(
+            "materializeProgram",
+            &json!({ "stored": "urn:tiramemsu:v:none" }),
+        )
+        .unwrap_err();
+    assert_eq!(err.code(), "UnknownProgram");
+}

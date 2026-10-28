@@ -357,7 +357,11 @@ fn is_node(id: ObjectId) -> bool {
 }
 
 /// The eids a scope admits (`None`: every statement).
-fn scope_eids(store: &dyn ReadStore, view: &View, scope: &Scope) -> Result<Option<FxHashSet<Id>>> {
+pub(crate) fn scope_eids(
+    store: &dyn ReadStore,
+    view: &View,
+    scope: &Scope,
+) -> Result<Option<FxHashSet<Id>>> {
     match scope {
         Scope::All => Ok(None),
         Scope::Graphs(graphs) => {

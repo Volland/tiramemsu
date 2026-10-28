@@ -82,6 +82,7 @@ fn stdio_session_end_to_end() {
             "check_constraints",
             "store_program",
             "enforce_program",
+            "materialize_program",
         ]);
     }
     assert_eq!(names, expected);

@@ -1206,6 +1206,33 @@ ONE_CEO = "constraint one_ceo error :- v:role(X, v:CEO), v:role(Y, v:CEO), X != 
 
 
 class TestDatalog:
+    def test_materialize_program(self, db: Database) -> None:
+        with db.transact() as tx:
+            tx.assert_(iri("alice"), iri("manager"), iri("bob"))
+            tx.assert_(iri("bob"), iri("manager"), iri("carol"))
+            tx.store_program(
+                "urn:tiramemsu:v:reporting",
+                "v:reportsTo(X, Y) :- v:manager(X, Y).\n"
+                "v:reportsTo(X, Z) :- v:reportsTo(X, Y), v:manager(Y, Z).\n",
+            )
+
+        def reports_to() -> int:
+            return len([t for t in db.now().triples() if t.p == iri("reportsTo")])
+
+        before = len(db.now().triples())
+        dry = db.materialize_program("urn:tiramemsu:v:reporting", dry_run=True)
+        assert dry["dryRun"] is True and len(dry["derived"]) == 3
+        assert dry["program"] == iri("reporting")
+        assert len(db.now().triples()) == before and reports_to() == 0
+        real = db.materialize_program(iri("reporting"), require_complete=True)
+        assert len(real["derived"]) == 3 and real["status"] == "complete"
+        assert reports_to() == 3
+        again = db.materialize_program("urn:tiramemsu:v:reporting")
+        assert again["derived"] == [] and len(again["existing"]) == 3
+        with pytest.raises(TiramemsuError) as e:
+            db.materialize_program("urn:tiramemsu:v:none")
+        assert e.value.code == "UnknownProgram"
+
     # @tg: verifies:: [[openspec:datalog-programs#Datalog read surfaces#Bridge goal query]] {since: "2026-10-28", level: integration}
     def test_goal_over_text_and_a_stored_program(self, db: Database) -> None:
         with db.transact() as tx:

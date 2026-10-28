@@ -78,6 +78,8 @@ pub(crate) struct Outcome {
 /// Writes `items` in order (they reference only earlier items).
 // @tg: implements:: [[openspec:datalog-materialization#Materialize a program]] {since: "2026-10-28", confidence: partial}
 // @tg: implements:: [[openspec:datalog-materialization#Snapshot then commit]] {since: "2026-10-28"}
+// @tg: implements:: [[openspec:datalog-materialization#Invented nodes]] {since: "2026-10-28"}
+// @tg: implements:: [[openspec:datalog-materialization#Valid time of materialized conclusions]] {since: "2026-10-28"}
 pub(crate) fn commit(
     tx: &mut Tx<'_>,
     items: &[MItem],

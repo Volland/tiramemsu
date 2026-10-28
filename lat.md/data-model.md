@@ -205,6 +205,8 @@ A derived belief is an ordinary statement `D` written with one engine-owned link
 
 Both engines implement it, the SQL engine in `crates/tm-core/src/engine/derive.rs` and the trait engine in `crates/tm-store/src/engine/derive.rs` ([[derived-beliefs#Both Engines One Oracle]]).
 
+Rule languages write them through one commit core: N3 rule sets and stored Datalog programs derive each conclusion with its premises and the rules' statement as support ([[reasoning#Rules Are Support]], [[datalog#Shared Materialization With Reconciliation]]).
+
 ## ObjectId
 
 Every value in `s`, `p`, `o` and `eid` is a signed 64-bit integer: a 60-bit payload shifted left by 4, OR-ed with a 4-bit tag in the low bits.

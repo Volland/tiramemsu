@@ -1,12 +1,12 @@
 ---
 type: Decision
-openspec: [datalog-language, datalog-evaluation, datalog-temporal, datalog-programs, datalog-constraints]
+openspec: [datalog-language, datalog-evaluation, datalog-temporal, datalog-programs, datalog-constraints, datalog-materialization]
 ---
 # Datalog
 
 Decisions DL1–DL24 of the Datalog interview of 2026-10-28: a fast Datalog in its own crate, with DatalogMTL over valid time, for queries, reasoning and constraints beside N3.
 
-The four OpenSpec changes of [[datalog#Four Changes]] were written on 2026-10-28. `add-datalog-engine` is implemented in [[crates/tm-datalog/src/lib.rs]] and the facade's [[crates/tiramemsu/src/datalog.rs]] (DL1–DL12, DL16 for storage, DL18–DL21, DL23, DL25, DL26); `add-datalog-constraints` implements DL15 and DL16's enforcement ([[crates/tm-datalog/src/enforce.rs]], [[crates/tiramemsu/src/datalog_enforce.rs]]); `add-datalog-materialization` and `add-datalog-query-calls` follow. N3 stays ([[reasoning]]): it keeps quoted formulas and proof text, and Datalog is the set-at-a-time path to the same derived beliefs.
+The four OpenSpec changes of [[datalog#Four Changes]] were written on 2026-10-28. `add-datalog-engine` is implemented in [[crates/tm-datalog/src/lib.rs]] and the facade's [[crates/tiramemsu/src/datalog.rs]] (DL1–DL12, DL16 for storage, DL18–DL21, DL23, DL25, DL26); `add-datalog-constraints` implements DL15 and DL16's enforcement ([[crates/tm-datalog/src/enforce.rs]], [[crates/tiramemsu/src/datalog_enforce.rs]]); `add-datalog-materialization` implements DL13, DL14 and DL21's storage ([[crates/tiramemsu/src/datalog_materialize.rs]], [[crates/tiramemsu/src/materialize.rs]]); DL22 (incremental runs) is not built; `add-datalog-query-calls` follows. N3 stays ([[reasoning]]): it keeps quoted formulas and proof text, and Datalog is the set-at-a-time path to the same derived beliefs.
 
 ## One Language Three Uses
 
@@ -114,7 +114,7 @@ DL13: `materialize_program` shares N3's path (support with the program statement
 - motivated_by:: [[reasoning#Rules Are Support]] {weight: primary, since: "2026-10-28"}
 - motivated_by:: [[reasoning#Snapshot Then Commit]] {weight: primary, since: "2026-10-28"}
 
-The common parts move out of [[crates/tiramemsu/src/n3_materialize.rs]] into a module both languages use. Reconciliation diffs a run against the program's live conclusions and retracts those no longer derived; the report marks such strata `needs_rerun_after_writes`, because a later write can invalidate them before the next run. This closes N11's open follow-up for Datalog ([[reasoning#Monotonic Materialization]]). Rejected: refusing non-monotonic strata as N3 does, and storing every derivation.
+The common parts moved out of [[crates/tiramemsu/src/n3_materialize.rs]] into [[crates/tiramemsu/src/materialize.rs]], which both languages use; N3's tests ran unchanged. Reconciliation diffs a run against the program's live conclusions and retracts those no longer derived; the report marks such strata `needs_rerun_after_writes` (the predicates they conclude), because a later write can invalidate them before the next run. This closes N11's open follow-up for Datalog ([[reasoning#Monotonic Materialization]]). Rejected: refusing non-monotonic strata as N3 does, and storing every derivation.
 
 ## Reconciliation Is An Explicit Retraction
 
@@ -122,7 +122,7 @@ DL14: a reconciliation retracts through `Tx::retract`, so `ret_kind` is 0 and th
 
 - motivated_by:: [[constraints#Never Forget]] {weight: primary, since: "2026-10-28"}
 
-No storage format change: `RetKind::from_i64` knows 0 to 3 only, so a new kind would lock older binaries out of newer files.
+No storage format change: `RetKind::from_i64` knows 0 to 3 only, so a new kind would lock older binaries out of newer files. As built, a run that retracts anything also writes `(tx dl:reconciledCount n)`, and every run writes `(tx dl:materialized program)`.
 
 ## Warn And Error Constraints
 
@@ -187,7 +187,9 @@ DL22: the engine keeps no state between runs; a materialize transaction carries 
 - motivated_by:: [[datalog#Shared Materialization With Reconciliation]] {weight: primary, since: "2026-10-28"}
 - motivated_by:: [[reasoning#Merge By Support]] {weight: secondary, since: "2026-10-28"}
 
-The record is a transaction label rather than a statement on the program, so runs do not supersede a statement each time (refined while writing `add-datalog-materialization`). The program's live conclusions are loaded as the full relation. A conclusion retracted through its one stored support is re-checked with a goal query, DRed's rederive step. Non-monotonic strata recompute and reconcile, `full: true` forces a full run, and a property test checks incremental against full. Rejected: always recomputing and a warm in-memory engine updated on each commit.
+The record is a transaction label rather than a statement on the program, so runs do not supersede a statement each time (refined while writing `add-datalog-materialization`). The program's live conclusions are loaded as the full relation. A conclusion retracted through its one stored support is re-checked with a goal query, DRed's rederive step. Non-monotonic strata recompute and reconcile, `full: true` forces a full run, and a property test checks incremental against full.
+
+Not built. `materialize_program` evaluates the whole program on a snapshot on every call and writes only the difference, so a re-run asserts nothing but the label; evaluating from a delta needs the engine to seed semi-naive from added statements over existing conclusions, which is a change of its own. The label of DL14 is written so that such a run has its base. Rejected: always recomputing and a warm in-memory engine updated on each commit.
 
 ## Sequential On Wasm
 

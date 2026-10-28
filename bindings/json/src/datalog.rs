@@ -11,9 +11,11 @@ use serde_json::{json, Map, Value as J};
 use tiramemsu::{
     CheckResult, DatalogAccess, DatalogConclusion, DatalogFact, DatalogLimits, DatalogOptions,
     DatalogPremise, DatalogProgram, DatalogProof, DatalogResult, DatalogScope, DatalogStatus,
-    DatalogTerm, DatalogTime, Eid, ProgramInfo, Tx, TxDatalog, Valid, Value, View,
+    DatalogTerm, DatalogTime, Db, Eid, MaterializeProgramOptions, MaterializeProgramReport,
+    ProgramInfo, Tag, Tx, TxDatalog, Valid, Value, View,
 };
 
+use crate::read::report_json;
 use crate::value::{time_from_json, value_from_json, value_to_json};
 use crate::{arg, Res};
 
@@ -381,4 +383,62 @@ pub fn enforce(tx: &mut Tx<'_>, op: &J) -> Res<Option<Eid>> {
     let node = node_from_json(op.get("program").unwrap_or(&J::Null))?;
     let on = flag(op, "on", true)?;
     Ok(tx.enforce(node, on)?)
+}
+
+/// The JSON form of a [`MaterializeProgramReport`]: `{program, programStatement,
+/// reasonedAt, report, derived, existing, widened: [{old, new}], reconciled,
+/// skolems, staleSupport, unstorable, needsRerunAfterWrites, status, limits,
+/// dryRun}`.
+pub fn materialize_json(db: &Db, r: &MaterializeProgramReport) -> Res<J> {
+    let ids = |v: &[Eid]| v.iter().map(|e| e.n()).collect::<Vec<_>>();
+    let (status, limits) = status_json(&r.status);
+    let skolems = r
+        .skolems
+        .iter()
+        .map(|id| {
+            if matches!(id.tag(), Ok(Tag::Node)) {
+                Ok(value_to_json(&Value::Node(id.unsigned_payload())))
+            } else {
+                Ok(value_to_json(&db.now().decode(*id)?))
+            }
+        })
+        .collect::<Res<Vec<_>>>()?;
+    Ok(json!({
+        "program": value_to_json(&r.program),
+        "programStatement": r.program_statement.n(),
+        "reasonedAt": r.reasoned_at,
+        "report": r.commit.as_ref().map_or(J::Null, report_json),
+        "derived": ids(&r.derived),
+        "existing": ids(&r.existing),
+        "widened": r.widened.iter().map(|(o, n)| json!({ "old": o.n(), "new": n.n() })).collect::<Vec<_>>(),
+        "reconciled": ids(&r.reconciled),
+        "skolems": skolems,
+        "staleSupport": r.stale_support.iter().map(conclusion_json).collect::<Vec<_>>(),
+        "unstorable": r.unstorable.iter().map(conclusion_json).collect::<Vec<_>>(),
+        "needsRerunAfterWrites": r.needs_rerun_after_writes,
+        "status": status,
+        "limits": limits,
+        "dryRun": r.dry_run,
+    }))
+}
+
+/// The database operation `materializeProgram`: `stored` (the program node),
+/// `scope`, `window`, `limits`, `requireComplete` and `dryRun`.
+// @tg: implements:: [[openspec:datalog-materialization#Materialization surfaces]] {since: "2026-10-28"}
+pub fn materialize_program(db: &Db, args: &J) -> Res<J> {
+    let node = node_from_json(
+        args.get("stored")
+            .or_else(|| args.get("program"))
+            .unwrap_or(&J::Null),
+    )?;
+    let o = options(args)?;
+    let opts = MaterializeProgramOptions {
+        scope: o.scope,
+        window: o.window,
+        limits: o.limits,
+        require_complete: o.require_complete,
+        dry_run: flag(args, "dryRun", false)?,
+    };
+    let r = db.materialize_program(&node, &opts)?;
+    materialize_json(db, &r)
 }

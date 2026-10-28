@@ -1,5 +1,5 @@
-//! `tm datalog`, `tm check` and `tm program put|show|enforce|unenforce`
-//! (feature `datalog`).
+//! `tm datalog`, `tm check`, `tm materialize-program` and
+//! `tm program put|show|enforce|unenforce` (feature `datalog`).
 //!
 //! A program argument is a file of Datalog text, or, when no such file exists,
 //! the IRI of a program stored with `tm program put`. Instants and windows are
@@ -75,6 +75,29 @@ pub struct CheckArgs {
     #[command(flatten)]
     run: RunArgs,
     /// Print JSON (the bridge's `check` result) instead of text.
+    #[arg(long)]
+    json: bool,
+}
+
+/// `tm materialize-program`.
+#[derive(Args)]
+pub struct MaterializeProgramArgs {
+    file: PathBuf,
+    /// The stored program (an IRI; a file of text cannot be materialized).
+    program: String,
+    /// Materialize conclusions inside this valid-time window (`<from>..<to>`).
+    #[arg(long)]
+    valid_during: Option<String>,
+    /// Read the members of this named graph (repeatable).
+    #[arg(long = "graph")]
+    graphs: Vec<String>,
+    /// Refuse to write when the run is incomplete.
+    #[arg(long)]
+    require_complete: bool,
+    /// Report what would be derived and write nothing.
+    #[arg(long)]
+    dry_run: bool,
+    /// Print JSON (the bridge's `materializeProgram` report) instead of text.
     #[arg(long)]
     json: bool,
 }
@@ -304,6 +327,98 @@ pub fn check(a: CheckArgs) -> Result<()> {
         status(&r.status),
         r.t
     );
+    Ok(())
+}
+
+/// `tm materialize-program`: writes a stored program's conclusions as derived
+/// beliefs; with `--dry-run`, lists them and writes nothing.
+// @tg: implements:: [[openspec:datalog-materialization#Materialization surfaces]]
+pub fn materialize_program(a: MaterializeProgramArgs) -> Result<()> {
+    let db = open(&a.file)?;
+    if Path::new(&a.program).is_file() || !a.program.contains(':') {
+        return Err(usage(format!(
+            "{}: materialization needs the IRI of a stored program (see `tm program put`)",
+            a.program
+        )));
+    }
+    let stored = Value::iri(a.program.clone());
+    let mut opts = MaterializeProgramOptions {
+        require_complete: a.require_complete,
+        dry_run: a.dry_run,
+        ..MaterializeProgramOptions::default()
+    };
+    if !a.graphs.is_empty() {
+        opts.scope = DatalogScope::Graphs(a.graphs.iter().map(|g| Value::iri(g.clone())).collect());
+    }
+    if let Some(w) = &a.valid_during {
+        opts.window = Some(window(w)?);
+    }
+    let r = db.materialize_program(&stored, &opts)?;
+    if a.json {
+        let j = tiramemsu_json::datalog::materialize_json(&db, &r).map_err(|e| match e {
+            tiramemsu_json::BindError::Db(e) => e,
+            tiramemsu_json::BindError::Arg(m) => usage(m),
+        })?;
+        print_json(&j);
+        return Ok(());
+    }
+    if r.dry_run {
+        // what would be derived: the conclusions not yet in memory
+        let preview = db.now().datalog_reason(
+            &DatalogProgram::Stored(stored),
+            &DatalogOptions {
+                scope: opts.scope.clone(),
+                window: opts.window,
+                limits: opts.limits,
+                ..DatalogOptions::default()
+            },
+        )?;
+        for c in &preview.conclusions {
+            println!(
+                "({} {} {})  {}",
+                term(&c.s),
+                reasoning::value(PREFIXES, &c.p),
+                term(&c.o),
+                interval(&c.valid)
+            );
+        }
+    }
+    let list = |label: &str, eids: Vec<u64>| {
+        if !eids.is_empty() {
+            let ids: Vec<String> = eids.iter().map(u64::to_string).collect();
+            println!("{label}: stmts {}", ids.join(", "));
+        }
+    };
+    if !r.dry_run {
+        list("derived", r.derived.iter().map(|e| e.n()).collect());
+    }
+    list("existing", r.existing.iter().map(|e| e.n()).collect());
+    list("widened", r.widened.iter().map(|(_, n)| n.n()).collect());
+    list("reconciled", r.reconciled.iter().map(|e| e.n()).collect());
+    if !r.needs_rerun_after_writes.is_empty() {
+        println!(
+            "rerun after writes to: {}",
+            r.needs_rerun_after_writes.join(", ")
+        );
+    }
+    let verb = if r.dry_run { "would derive" } else { "derived" };
+    eprintln!(
+        "{}: {verb} {}, existing {}, widened {}, reconciled {}, stale support {}, unstorable {} ({}, reasoned at t={})",
+        a.program,
+        r.derived.len(),
+        r.existing.len(),
+        r.widened.len(),
+        r.reconciled.len(),
+        r.stale_support.len(),
+        r.unstorable.len(),
+        status(&r.status),
+        r.reasoned_at
+    );
+    match (&r.commit, r.dry_run) {
+        (_, true) => eprintln!("dry run: nothing written"),
+        (Some(c), false) => eprintln!("committed t={}", c.t.0),
+        (None, false) => eprintln!("nothing to write"),
+    }
     Ok(())
 }
 

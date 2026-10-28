@@ -349,6 +349,40 @@ fn reporting(dir: &Path, backend: &str) -> (String, String) {
     (f, program)
 }
 
+// datalog-materialization "CLI dry run": prints what would be derived and
+// leaves the file as it was.
+// @tg: verifies:: [[openspec:datalog-materialization#Materialization surfaces#CLI dry run]] {level: integration}
+#[cfg(feature = "datalog")]
+#[test]
+fn cli_materialize_program_dry_run() {
+    let d = tempfile::tempdir().unwrap();
+    let (f, _) = reporting(d.path(), "sqlite");
+    let chain = p(d.path(), "chain.dl");
+    std::fs::write(
+        &chain,
+        "v:reportsTo(X, Y) :- v:manager(X, Y).\nv:reportsTo(X, Z) :- v:reportsTo(X, Y), v:manager(Y, Z).\n",
+    )
+    .unwrap();
+    let iri = "urn:tiramemsu:v:reporting";
+    ok(&["program", "put", &f, iri, &chain]);
+    let before = info(Path::new(&f));
+    let o = tm(&["materialize-program", &f, iri, "--dry-run"]);
+    assert_eq!(o.status.code(), Some(0));
+    let out = String::from_utf8_lossy(&o.stdout);
+    assert!(out.contains("(v:alice v:reportsTo v:carol)"), "{out}");
+    let err = String::from_utf8_lossy(&o.stderr);
+    assert!(err.contains("would derive 3"), "{err}");
+    assert!(err.contains("dry run: nothing written"), "{err}");
+    assert_eq!(info(Path::new(&f)), before);
+    let done = tm(&["materialize-program", &f, iri, "--require-complete"]);
+    assert!(String::from_utf8_lossy(&done.stderr).contains("derived 3"));
+    let again = tm(&["materialize-program", &f, iri]);
+    assert!(String::from_utf8_lossy(&again.stderr).contains("derived 0, existing 3"));
+    let o = tm(&["materialize-program", &f, "urn:tiramemsu:v:none"]);
+    assert_eq!(o.status.code(), Some(1));
+    assert!(String::from_utf8_lossy(&o.stderr).starts_with("UnknownProgram:"));
+}
+
 // datalog-programs "CLI goal query", on both backends.
 // @tg: verifies:: [[openspec:datalog-programs#Datalog read surfaces#CLI goal query]] {level: integration}
 #[cfg(feature = "datalog")]

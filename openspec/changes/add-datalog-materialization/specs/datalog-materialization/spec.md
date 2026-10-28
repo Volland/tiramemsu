@@ -1,11 +1,11 @@
 ## Purpose
 
-Materializing Datalog programs as derived beliefs: what is written and with which support, how valid time, widening and invented nodes work, how non-monotonic strata are reconciled and how runs become incremental.
+Materializing Datalog programs as derived beliefs: what is written and with which support, how valid time, widening and invented nodes work, and how non-monotonic strata are reconciled.
 
 ## ADDED Requirements
 
 ### Requirement: Materialize a program
-`Db::materialize_program(program, &MaterializeProgramOptions)` SHALL evaluate the live stored program over a read view taken at `t₀` (scope, window and limits as for `datalog_reason`) and write, in one write transaction through `derive` and in proof order, every conclusion whose predicate is a stored-predicate IRI. Each conclusion SHALL be derived with support = the eids of its stored premises, the eids written for its derived premises and the eid of the program's live `dl:source` statement `R`, and SHALL receive the layers `(D dl:derivedBy program)` and `(D dl:rule i)`. The transaction SHALL carry `(tx dl:materialized program)`. The report SHALL list `reasoned_at`, the commit's `TxReport`, the derived, existing, widened, reconciled, `stale_support` and `unstorable` conclusions, the strata with `needs_rerun_after_writes`, whether the run was incremental, and the status. With `dry_run` nothing SHALL be committed.
+`Db::materialize_program(program, &MaterializeProgramOptions)` SHALL evaluate the live stored program over a read view taken at `t₀` (scope, window and limits as for `datalog_reason`) and write, in one write transaction through `derive` and in proof order, every conclusion whose predicate is a stored-predicate IRI. Each conclusion SHALL be derived with support = the eids of its stored premises, the eids written for its derived premises and the eid of the program's live `dl:source` statement `R`, and SHALL receive the layers `(D dl:derivedBy program)` and `(D dl:rule i)`. The transaction SHALL carry `(tx dl:materialized program)`. The report SHALL list `reasoned_at`, the commit's `TxReport`, the derived, existing, widened, reconciled, `stale_support` and `unstorable` conclusions, the predicates of non-monotonic strata as `needs_rerun_after_writes`, and the status. With `dry_run` nothing SHALL be committed.
 
 #### Scenario: Materialized chain
 - **WHEN** e1 = `(alice manager bob)` and e2 = `(bob manager carol)` are live and a program with `ex:reportsTo(X, Y) :- ex:manager(X, Y).` and `ex:reportsTo(X, Z) :- ex:reportsTo(X, Y), ex:manager(Y, Z).` is materialized
@@ -67,6 +67,10 @@ Each maximal interval fragment of a conclusion that rests on one derivation SHAL
 - **WHEN** a program is materialized with window `[2020, 2022)`, then without a window, over facts valid `[2020, 2024)`
 - **THEN** the conclusion is first valid `[2020, 2022)` and then superseded to `[2020, 2024)` with the same support, reported as widened
 
+#### Scenario: Require complete
+- **WHEN** a run reaches `max_facts` with `require_complete`
+- **THEN** `materialize_program` fails with `DatalogIncomplete` and nothing is written
+
 ### Requirement: Snapshot then commit
 Evaluation SHALL run outside the writer; only the commit holds it. A conclusion whose support is no longer live at commit time SHALL be skipped together with every conclusion that depends on it and reported in `stale_support`, without failing the run.
 
@@ -81,23 +85,8 @@ A node invented by `exists` SHALL become the node returned by `upsert_derived(dl
 - **WHEN** `exists M: ex:assignedManager(X, M) :- rdf:type(X, ex:Employee), not ex:manager(X, _).` is materialized twice for `bob`
 - **THEN** both runs use the same node and the second asserts no new `ex:assignedManager` statement
 
-### Requirement: Incremental runs
-When the program's live `R` has a previous materialize transaction `t₁` (the latest carrying `(tx dl:materialized program)` after `R` was asserted) and `full` is not set, a run SHALL evaluate monotonic strata from the program's live conclusions as already derived plus the statements added after `t₁`, and SHALL re-derive each conclusion of the program retracted after `t₁` by the cascade when another derivation of it exists in the snapshot. Non-monotonic strata SHALL be evaluated fully and reconciled. The live set after an incremental run SHALL equal the live set after a full run on the same snapshot. `full: true` SHALL force a full run.
-
-#### Scenario: Added edge extends the closure
-- **WHEN** the chain program was materialized and `(carol manager dave)` is asserted, then the program is materialized again
-- **THEN** the run is incremental, derives `(carol reportsTo dave)`, `(bob reportsTo dave)` and `(alice reportsTo dave)`, and reports the others as untouched
-
-#### Scenario: Rederivation after losing one support
-- **WHEN** `(a reach c)` was stored with support through `b`, a second path through `d` exists, the edge through `b` is retracted, and the program is materialized again
-- **THEN** `(a reach c)` is live again with support through `d`
-
-#### Scenario: Incremental equals full
-- **WHEN** random histories interleave writes and incremental runs, and a copy of each snapshot is materialized with `full: true`
-- **THEN** the live conclusions, their intervals and their supports' contents are equal
-
 ### Requirement: Materialization surfaces
-The JSON bridge SHALL accept a database op `materializeProgram` (`program`, `scope`, `window`, `limits`, `full`, `requireComplete`, `dryRun`, `budget`); Node, Python and wasm SHALL expose it; the MCP server SHALL offer a write tool `materialize_program`, absent in read-only mode; the CLI SHALL offer `tm materialize-program <file> <program> [--full] [--dry-run] [--require-complete] [--window <from>..<to>] [--graph <iri>]…`.
+The JSON bridge SHALL accept a database op `materializeProgram` (`program`, `scope`, `window`, `limits`, `requireComplete`, `dryRun`, `budget`); Node, Python and wasm SHALL expose it; the MCP server SHALL offer a write tool `materialize_program`, absent in read-only mode; the CLI SHALL offer `tm materialize-program <file> <program> [--dry-run] [--require-complete] [--window <from>..<to>] [--graph <iri>]…`.
 
 #### Scenario: CLI dry run
 - **WHEN** `tm materialize-program mem.db ex:reporting --dry-run` runs

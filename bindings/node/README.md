@@ -140,6 +140,7 @@ A view chooses when you look and when the fact was true. Every read takes a view
 | `view.reason({ rules? \| ruleSet?, scope?, window?, time?, maxSegments?, proofN3?, limits? })`, `db.reason(...)` | N3 conclusions with valid time and proofs; nothing is written |
 | `view.ruleSetInfo(ruleSet)`, `db.ruleSetInfo(ruleSet)` | A stored rule set's text, statement, rule count and monotonicity |
 | `db.materialize(ruleSet, { scope?, window?, requireComplete?, dryRun? })` | Writes a rule set's conclusions as derived beliefs; `dryRun` writes nothing |
+| `db.materializeProgram(program, { scope?, window?, limits?, requireComplete?, dryRun? })` | Writes a stored Datalog program's conclusions as derived beliefs; a re-run reports them `existing`; `dryRun` writes nothing |
 | `view.datalog({ program? \| stored?, goal?, scope?, window?, time?, limits?, demand?, proof?, access?, requireComplete? })`, `db.datalog(...)` | Datalog goal rows with their valid intervals (and proofs); nothing is written |
 | `view.datalogReason({ program? \| stored?, includeRelations?, ... })`, `db.datalogReason(...)` | The triples a Datalog program concludes that are not stored |
 | `view.programInfo({ program? \| stored? })`, `db.programInfo(...)` | A program's text, rule and goal counts, constraints and strata |
