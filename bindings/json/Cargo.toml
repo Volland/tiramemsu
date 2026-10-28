@@ -16,8 +16,18 @@ rust-version.workspace = true
 tiramemsu = { workspace = true, features = ["sparql", "cypher", "redb"] }
 serde_json = "1"
 
+[features]
+# N3 reasoning (`reason`, `ruleSetInfo`, `storeRules`, `materialize`; OpenSpec
+# change `add-n3-reasoning`). Off by default; the Node, Python and wasm
+# bindings, the MCP server and the CLI turn it on.
+n3 = ["tiramemsu/n3"]
+
 [dev-dependencies]
 tempfile = "3"
+
+[[test]]
+name = "n3"
+required-features = ["n3"]
 
 # No `[lints] workspace = true`: the binding crates above this one expand napi and
 # pyo3 macros, which generate `unsafe`, and the workspace forbids it.

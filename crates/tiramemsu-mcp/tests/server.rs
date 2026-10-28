@@ -100,21 +100,22 @@ fn read_only_refuses_writes_before_a_transaction() {
         .iter()
         .map(|t| t["name"].as_str().unwrap().to_string())
         .collect();
-    assert_eq!(
-        names,
-        [
-            "query",
-            "dependents",
-            "export_bundle",
-            "conflicts",
-            "preview_bundle",
-            "text_search",
-            "vector_search",
-            "recall",
-            "unembedded",
-            "saved_answers"
-        ]
-    );
+    let mut expected = vec![
+        "query",
+        "dependents",
+        "export_bundle",
+        "conflicts",
+        "preview_bundle",
+        "text_search",
+        "vector_search",
+        "recall",
+        "unembedded",
+        "saved_answers",
+    ];
+    if cfg!(feature = "n3") {
+        expected.push("reason");
+    }
+    assert_eq!(names, expected);
     for name in ["save_answer", "check_answers", "refresh_answer"] {
         assert_eq!(tool_error(&rpc_call(&mut ro, name, json!({}))), "ReadOnly");
     }
@@ -517,7 +518,11 @@ fn protocol_handshake_and_errors() {
         json!({ "jsonrpc": "2.0", "id": 3, "method": "tools/list" }),
     )
     .unwrap();
-    assert_eq!(r["result"]["tools"].as_array().unwrap().len(), 20);
+    let n3_tools = if cfg!(feature = "n3") { 3 } else { 0 };
+    assert_eq!(
+        r["result"]["tools"].as_array().unwrap().len(),
+        20 + n3_tools
+    );
     // protocol errors
     let code = |r: Option<J>| r.unwrap()["error"]["code"].as_i64().unwrap();
     let raw: J = serde_json::from_str(&server.handle("{not json").unwrap()).unwrap();
@@ -827,4 +832,163 @@ fn derive_is_a_write_tool_hidden_in_read_only_mode() {
     .unwrap();
     assert!(ro.tools().iter().all(|t| t["name"] != "derive"));
     assert_eq!(tool_error(&rpc_call(&mut ro, "derive", args)), "ReadOnly");
+}
+
+#[cfg(feature = "n3")]
+const SOCRATES: &str = "{ ?x a v:Human } => { ?x a v:Mortal }.";
+
+#[cfg(feature = "n3")]
+fn human(server: &Server, who: &str) -> J {
+    server
+        .call_tool(
+            "assert",
+            &json!({ "s": v(who), "p": { "iri": "http://www.w3.org/1999/02/22-rdf-syntax-ns#type" },
+                     "o": v("Human") }),
+        )
+        .unwrap()["eid"]
+        .clone()
+}
+
+// n3-rule-sets "MCP read-only mode hides rule writes"
+// @tg: verifies:: [[openspec:n3-rule-sets#Rule-set surfaces#MCP read-only mode hides rule writes]] {since: "2026-10-28", level: integration}
+#[cfg(feature = "n3")]
+#[test]
+fn mcp_read_only_mode_hides_rule_writes() {
+    let dir = tempfile::tempdir().unwrap();
+    {
+        let server = open(&dir);
+        human(&server, "socrates");
+        server
+            .call_tool(
+                "store_rules",
+                &json!({ "ruleSet": "urn:tiramemsu:v:mortality", "n3": SOCRATES }),
+            )
+            .unwrap();
+    }
+    let mut ro = Server::open(Config {
+        read_only: true,
+        ..config(&dir)
+    })
+    .unwrap();
+    let names: Vec<String> = ro
+        .tools()
+        .iter()
+        .map(|t| t["name"].as_str().unwrap().to_string())
+        .collect();
+    assert!(names.iter().any(|n| n == "reason"));
+    assert!(names
+        .iter()
+        .all(|n| n != "store_rules" && n != "materialize"));
+    let before = counters(&ro);
+    for (name, args) in [
+        ("store_rules", json!({ "ruleSet": "urn:x", "n3": SOCRATES })),
+        (
+            "materialize",
+            json!({ "ruleSet": "urn:tiramemsu:v:mortality" }),
+        ),
+    ] {
+        assert_eq!(tool_error(&rpc_call(&mut ro, name, args)), "ReadOnly");
+    }
+    assert_eq!(counters(&ro), before);
+    // reasoning reads, so it runs in read-only mode
+    let r = ro
+        .call_tool("reason", &json!({ "ruleSet": "urn:tiramemsu:v:mortality" }))
+        .unwrap();
+    assert_eq!(r["conclusions"].as_array().unwrap().len(), 1);
+    assert_eq!(r["view"], json!({ "kind": "now" }));
+}
+
+// The N3 tools: store_rules (idempotent for equal text), reason with text and
+// with the stored rule set, strict arguments and typed errors.
+// @tg: verifies:: [[openspec:n3-reasoning#Reasoning surfaces]] {since: "2026-10-28", level: integration}
+#[cfg(feature = "n3")]
+#[test]
+fn reason_and_store_rules_tools() {
+    let dir = tempfile::tempdir().unwrap();
+    let server = open(&dir);
+    let e1 = human(&server, "socrates");
+    let r = server
+        .call_tool("reason", &json!({ "rules": SOCRATES }))
+        .unwrap();
+    assert_eq!(r["conclusions"][0]["o"], v("Mortal"), "{r}");
+    assert_eq!(
+        r["conclusions"][0]["proof"]["premises"],
+        json!([{ "eid": e1 }])
+    );
+    let args = json!({ "ruleSet": "urn:tiramemsu:v:mortality", "n3": SOCRATES });
+    let s1 = server.call_tool("store_rules", &args).unwrap();
+    assert_eq!(s1["changed"], true);
+    let s2 = server.call_tool("store_rules", &args).unwrap();
+    assert_eq!(
+        (s2["eid"].clone(), s2["changed"].clone()),
+        (s1["eid"].clone(), json!(false))
+    );
+    let stored = server
+        .call_tool(
+            "reason",
+            &json!({ "ruleSet": v("mortality"), "view": { "kind": "now" }, "time": "atemporal" }),
+        )
+        .unwrap();
+    assert_eq!(stored["ruleSetStatement"], s1["eid"]);
+    assert_eq!(stored["conclusions"][0]["proof"]["ruleSet"], v("mortality"));
+    let err = |name: &str, args: J| server.call_tool(name, &args).unwrap_err().code;
+    assert_eq!(err("reason", json!({ "rules": "{ ?x a" })), "N3Parse");
+    assert_eq!(
+        err("reason", json!({ "ruleSet": "urn:tiramemsu:v:none" })),
+        "UnknownRuleSet"
+    );
+    assert_eq!(
+        err("store_rules", json!({ "ruleSet": "urn:x", "n3": "{ ?x a" })),
+        "N3Parse"
+    );
+    assert_eq!(
+        err("reason", json!({ "rules": SOCRATES, "dryRun": true })),
+        "InvalidArgument"
+    );
+    assert_eq!(
+        err("store_rules", json!({ "n3": SOCRATES })),
+        "InvalidArgument"
+    );
+    assert_eq!(
+        err(
+            "materialize",
+            json!({ "ruleSet": "urn:x", "file": "/tmp/x" })
+        ),
+        "PathNotAllowed"
+    );
+}
+
+// n3-materialization surfaces: the MCP write tool, with a dry run first.
+// @tg: verifies:: [[openspec:n3-materialization#Materialization surfaces]] {since: "2026-10-28", level: integration}
+#[cfg(feature = "n3")]
+#[test]
+#[ignore = "needs real materialize"]
+fn materialize_tool() {
+    let dir = tempfile::tempdir().unwrap();
+    let server = open(&dir);
+    human(&server, "socrates");
+    server
+        .call_tool(
+            "store_rules",
+            &json!({ "ruleSet": "urn:tiramemsu:v:mortality", "n3": SOCRATES }),
+        )
+        .unwrap();
+    let before = counters(&server);
+    let dry = server
+        .call_tool(
+            "materialize",
+            &json!({ "ruleSet": "urn:tiramemsu:v:mortality", "dryRun": true }),
+        )
+        .unwrap();
+    assert_eq!(dry["dryRun"], true);
+    assert_eq!(dry["derived"].as_array().unwrap().len(), 1);
+    assert_eq!(counters(&server), before);
+    let r = server
+        .call_tool(
+            "materialize",
+            &json!({ "ruleSet": "urn:tiramemsu:v:mortality", "requireComplete": true }),
+        )
+        .unwrap();
+    assert_eq!(r["derived"].as_array().unwrap().len(), 1);
+    assert_eq!(r["status"], "complete");
 }

@@ -51,31 +51,32 @@ fn stdio_session_end_to_end() {
         .iter()
         .map(|t| t["name"].as_str().unwrap())
         .collect();
-    assert_eq!(
-        names,
-        [
-            "assert",
-            "confirm",
-            "supersede",
-            "derive",
-            "query",
-            "dependents",
-            "export_bundle",
-            "import_bundle",
-            "conflicts",
-            "preview_bundle",
-            "text_search",
-            "define_embedding_model",
-            "set_embedding",
-            "vector_search",
-            "recall",
-            "unembedded",
-            "save_answer",
-            "saved_answers",
-            "check_answers",
-            "refresh_answer"
-        ]
-    );
+    let mut expected = vec![
+        "assert",
+        "confirm",
+        "supersede",
+        "derive",
+        "query",
+        "dependents",
+        "export_bundle",
+        "import_bundle",
+        "conflicts",
+        "preview_bundle",
+        "text_search",
+        "define_embedding_model",
+        "set_embedding",
+        "vector_search",
+        "recall",
+        "unembedded",
+        "save_answer",
+        "saved_answers",
+        "check_answers",
+        "refresh_answer",
+    ];
+    if cfg!(feature = "n3") {
+        expected.extend(["reason", "store_rules", "materialize"]);
+    }
+    assert_eq!(names, expected);
     let call = |id: u64, name: &str, args: J| {
         json!({ "jsonrpc": "2.0", "id": id, "method": "tools/call",
                 "params": { "name": name, "arguments": args } })

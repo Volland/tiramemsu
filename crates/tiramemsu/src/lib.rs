@@ -26,6 +26,8 @@ mod import;
 #[cfg(feature = "n3")]
 // @tg: implements:: [[openspec:optional-query-frontends#Optional N3 reasoning feature]] {since: "2026-10-28"}
 mod n3;
+#[cfg(feature = "n3")]
+mod n3_materialize;
 mod pool;
 mod review;
 #[cfg(all(feature = "sparql", feature = "cypher"))]
@@ -43,6 +45,8 @@ pub use db::{Db, OpenOptions, Summary};
 pub use import::{BulkImport, ImportProgress, ImportSummary};
 #[cfg(feature = "n3")]
 pub use n3::TxN3;
+#[cfg(feature = "n3")]
+pub use n3_materialize::{MaterializeOptions, MaterializeReport};
 pub use review::{BundlePreview, PreviewScope};
 #[cfg(all(feature = "sparql", feature = "cypher"))]
 pub use saved::{

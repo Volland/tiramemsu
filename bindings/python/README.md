@@ -115,6 +115,7 @@ A view chooses when you look and when the fact was true. Every read takes a view
 | `derive(s, p, o, support, valid_from=, valid_to=)` | Asserts a belief derived from the `support` statements; retracting or correcting any of them retracts the belief |
 | `add_to_graph(eid, g)`, `remove_from_graph`, `clear_graph`, `create_graph`, `drop_graph` | Named graphs as tags on statements. A statement (`Stmt(eid)` or a `Ref`) can name a graph, so an edge can hold a subgraph |
 | `import_bundle(bundle)` | Imports a bundle from `view.bundle`, possibly read from another database; returns a `Ref` to the imported root, and its entry in `tx.report.results` lists the imported statements |
+| `store_rules(rule_set, n3)` | Stores N3 rules as a rule set; new text supersedes the live version |
 | `cypher(text, params=None)` | A Cypher query that may write, inside the same transaction |
 
 Times accept a `datetime`, a `date`, epoch milliseconds or an RFC 3339 string. `db.transact(dry_run=True)` reports what would happen and commits nothing. `db.speculate(ops, queries)` applies changes hypothetically, runs queries on the result, and keeps nothing.
@@ -132,6 +133,9 @@ Times accept a `datetime`, a `date`, epoch milliseconds or an RFC 3339 string. `
 | `view.bundle(eid)` | The statement with its layers and evidence, as a `tiramemsu-bundle/1` dict |
 | `view.conflicts(s=, p=, limit=, confidence=, source=)` | `Conflict`s: overlapping distinct values with `overlaps` and each statement's `ConflictEvidence`; nothing is written |
 | `view.events(since=0)` | The change log after a transaction |
+| `view.reason(rules, rule_set=, scope=, window=, time=, max_segments=, proof_n3=, limits=)`, `db.reason(...)` | N3 conclusions with valid time and proofs; nothing is written |
+| `view.rule_set_info(rule_set)`, `db.rule_set_info(rule_set)` | A stored rule set's text, statement, rule count and monotonicity |
+| `db.materialize(rule_set, scope=, window=, require_complete=, dry_run=)` | Writes a rule set's conclusions as derived beliefs; `dry_run` writes nothing |
 | `view.graphs()`, `view.graph_members(g)`, `view.values(s, key)` | Named graphs and values |
 
 `expr` is SPARQL property-path syntax with the predeclared prefixes `v:`, `sys:`, `tm:`, `rdf:` and `xsd:`, for example `v:knows+`. SPARQL supports RDF 1.2 annotations: `{| v:confidence ?c |}` reads a layer.

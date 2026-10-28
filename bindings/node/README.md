@@ -117,6 +117,7 @@ A view chooses when you look and when the fact was true. Every read takes a view
 | `meta(p, o)`, `upsert(p, o)`, `newNode()` | Transaction metadata, unique upsert, an anonymous node |
 | `addToGraph(eid, g)`, `removeFromGraph`, `clearGraph`, `createGraph`, `dropGraph` | Named graphs as tags on statements. A statement (`stmt(eid)` or a `Ref`) can name a graph, so an edge can hold a subgraph |
 | `importBundle(bundle)` | Imports a bundle from `view.bundle`, possibly read from another database; returns a `Ref` to the imported root |
+| `storeRules(ruleSet, n3)` | Stores N3 rules as a rule set; new text supersedes the live version |
 | `cypher(text, params?)` | A Cypher query that may write, inside the same transaction |
 
 `opts` takes `validFrom`, `validTo` (a `Date`, epoch milliseconds or an RFC 3339 string) and `onExisting: "confirm"`. `transact(fn, { dryRun: true })` reports what would happen and commits nothing. `db.speculate(fn, queries)` applies changes hypothetically, runs queries on the result, and keeps nothing.
@@ -134,6 +135,9 @@ A view chooses when you look and when the fact was true. Every read takes a view
 | `view.bundle(eid)` | The statement with its layers and evidence, as `tiramemsu-bundle/1` JSON |
 | `view.conflicts({ s?, p?, limit?, confidence?, source? })` | `Conflict`s: overlapping distinct values with `overlaps` and each statement's evidence; nothing is written |
 | `view.events(since?)` | The change log after a transaction |
+| `view.reason({ rules? \| ruleSet?, scope?, window?, time?, maxSegments?, proofN3?, limits? })`, `db.reason(...)` | N3 conclusions with valid time and proofs; nothing is written |
+| `view.ruleSetInfo(ruleSet)`, `db.ruleSetInfo(ruleSet)` | A stored rule set's text, statement, rule count and monotonicity |
+| `db.materialize(ruleSet, { scope?, window?, requireComplete?, dryRun? })` | Writes a rule set's conclusions as derived beliefs; `dryRun` writes nothing |
 | `view.graphs()`, `view.graphMembers(g)`, `view.values(s, key)` | Named graphs and values |
 
 `expr` is SPARQL property-path syntax with the predeclared prefixes `v:`, `sys:`, `tm:`, `rdf:` and `xsd:`, for example `v:knows+`. SPARQL supports RDF 1.2 annotations: `{| v:confidence ?c |}` reads a layer.

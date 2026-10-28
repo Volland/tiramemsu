@@ -315,6 +315,15 @@ pub enum Error {
         /// The index of the fuse rule in its rule set.
         rule: usize,
     },
+    /// `require_complete` materialization of an incomplete reasoning run;
+    /// nothing was written (facade feature `n3`).
+    #[error("reasoning run incomplete: limits {limits:?}, errors {errors:?}")]
+    N3Incomplete {
+        /// The limits reached.
+        limits: Vec<String>,
+        /// The builtin errors reported.
+        errors: Vec<String>,
+    },
     /// A file that is neither a SQLite nor a redb database.
     #[error("{path} is not a database file this build can open (neither SQLite nor redb)")]
     UnknownFormat {

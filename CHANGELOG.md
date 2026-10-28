@@ -9,6 +9,20 @@ OpenSpec changes in `openspec/changes/archive/`.
 
 ## [Unreleased]
 
+N3 reasoning on every surface (`openspec/changes/add-n3-reasoning/`, tasks 5 and 6.5).
+
+### Added
+
+- **JSON bridge** (feature `n3`): the reads `reason` and `ruleSetInfo`, the transaction op `storeRules` and the operation `materialize`, with the error codes `N3Parse`, `UnknownRuleSet`, `N3NotMaterializable`, `N3Contradiction` and `N3Incomplete`.
+- **Node and Python:** `reason` and `ruleSetInfo` / `rule_set_info` on views and databases, `materialize` on databases, `storeRules` / `store_rules` on transactions. The wasm package builds the bridge with `n3`.
+- **MCP:** the read tool `reason` and the write tools `store_rules` and `materialize`, left out in read-only mode (feature `n3`, on by default).
+- **CLI:** `tm reason`, `tm rules put|show` and `tm materialize` (feature `n3`, on by default).
+- **Benchmark:** the `tm-bench` reasoning scenario (feature `n3`, `examples/reason.rs`): load, pruning and sweep cost against store size and validity bounds, on SQLite and redb.
+
+### Publishing
+
+- `tiramemsu-mcp` and `tiramemsu-cli` enable `n3` by default, and the facade already has the optional `tm-n3` dependency, so none of them can be published until `tm-n3` and eyeron are on crates.io (`publish-eyeron-dependency`).
+
 Derived beliefs with support (`openspec/changes/add-derived-beliefs/`). No file format change: support links are ordinary statements.
 
 ### Added

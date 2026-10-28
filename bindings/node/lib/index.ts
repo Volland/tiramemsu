@@ -708,6 +708,170 @@ export type TimeRef = { tx: number } | { instant: Date | number | string };
 
 type ViewJson = { kind: string; tx?: number; instant?: number | string; validAt?: number | string };
 
+// ---- N3 reasoning ----------------------------------------------------------
+
+/** A rule set: an IRI as a plain string, or a term. */
+export type RuleSetInput = string | TermInput;
+
+/** The statements a reasoning run loads: everything, named graphs, or seeds with hops. */
+export type ReasonScope =
+  | "all"
+  | { graphs: TermInput[] }
+  | { seeds: { nodes: TermInput[]; hops?: number } };
+
+/** The reasoner's limits for each run. */
+export interface ReasonLimits {
+  maxIterations?: number;
+  maxMatchSteps?: number;
+  maxBackwardDepth?: number;
+  maxTermBytes?: number;
+}
+
+/** Options shared by `reason` and `materialize`. */
+export interface ReasonScopeOptions {
+  /** The statements loaded (default: the whole view). */
+  scope?: ReasonScope;
+  /** The valid-time window conclusions are reported in (default: unbounded). */
+  window?: { from?: Date | number | string; to?: Date | number | string };
+  /** The most valid-time segments a run reasons over (default 1024). */
+  maxSegments?: number;
+  limits?: ReasonLimits;
+}
+
+/** Options for `View.reason`: exactly one of `rules` (N3 text) and `ruleSet`. */
+export interface ReasonOptions extends ReasonScopeOptions {
+  rules?: string;
+  ruleSet?: RuleSetInput;
+  /** `pointwise` (default) respects valid time; `atemporal` ignores it. */
+  time?: "pointwise" | "atemporal";
+  /** Add the reasoner's N3 proof text. */
+  proofN3?: boolean;
+}
+
+/** A conclusion term: a stored term, or a node the rule invented, a list or a formula. */
+export type ConclusionTerm =
+  | Term
+  | { blank: string }
+  | { list: ConclusionTerm[] }
+  | { formula: string };
+
+/** A premise of a conclusion: a loaded statement or an earlier conclusion (by index). */
+export type Premise = { eid: number } | { conclusion: number };
+
+/** One conclusion with the valid time it holds over and its proof. */
+export interface Conclusion {
+  s: ConclusionTerm;
+  p: ConclusionTerm;
+  o: ConclusionTerm;
+  validFrom: number | null;
+  validTo: number | null;
+  proof: { ruleSet: Term | null; rule: number; premises: Premise[] };
+}
+
+/** The result of `View.reason`. */
+export interface ReasonResult {
+  conclusions: Conclusion[];
+  /** The view's transaction number. */
+  t: number;
+  /** The pinned clock (epoch ms). */
+  now: number;
+  loaded: number;
+  pruned: boolean;
+  segments: number;
+  status: "complete" | "incomplete";
+  /** The limits reached when incomplete (`segments`, `iterations`, ...). */
+  limits: string[];
+  errors: string[];
+  contradiction: { rule: number; instance: string[]; validFrom: number | null; validTo: number | null } | null;
+  ruleSet: Term | null;
+  ruleSetStatement: number | null;
+  proofN3: string | null;
+}
+
+/** A stored rule set as a view sees it (`View.ruleSetInfo`). */
+export interface RuleSetInfo {
+  ruleSet: Term;
+  statement: number;
+  text: string;
+  rules: number;
+  monotonicity:
+    | { kind: "monotonic" }
+    | { kind: "nonMonotonic" | "clockDependent" | "untracedPremises"; rule: number; builtin: string };
+  predicates: string[];
+  variablePredicate: boolean;
+}
+
+/** Options for `Database.materialize`. */
+export interface MaterializeOptions extends ReasonScopeOptions {
+  /** Refuse to write when the run is incomplete. */
+  requireComplete?: boolean;
+  /** Report what would be written and write nothing. */
+  dryRun?: boolean;
+  budget?: QueryBudget;
+}
+
+/** The result of `Database.materialize`. */
+export interface MaterializeReport {
+  ruleSet: Term;
+  rulesStatement: number;
+  /** The transaction the reasoning snapshot was taken at. */
+  reasonedAt: number;
+  /** The commit, or `null` when nothing was written. */
+  report: Omit<Report, "results" | "refs"> | null;
+  derived: number[];
+  existing: number[];
+  widened: Array<{ old: number; new: number }>;
+  skolems: Term[];
+  staleSupport: Conclusion[];
+  /** Conclusions skipped because a term cannot be stored (a list, a formula, a literal subject, ...). */
+  unstorable: Conclusion[];
+  status: "complete" | "incomplete";
+  limits: string[];
+  dryRun: boolean;
+}
+
+function ruleSetJson(rs: RuleSetInput): unknown {
+  return typeof rs === "string" ? rs : toJson(rs);
+}
+
+function scopeArgs(args: Record<string, unknown>, opts?: ReasonScopeOptions): Record<string, unknown> {
+  if (!opts) return args;
+  const s = opts.scope;
+  if (s !== undefined) {
+    if (s === "all") args.scope = "all";
+    else if ("graphs" in s) args.scope = { graphs: s.graphs.map(toJson) };
+    else args.scope = { seeds: { nodes: s.seeds.nodes.map(toJson), hops: s.seeds.hops } };
+  }
+  if (opts.window) {
+    const w: Record<string, unknown> = {};
+    if (opts.window.from !== undefined) w.from = timeArg(opts.window.from);
+    if (opts.window.to !== undefined) w.to = timeArg(opts.window.to);
+    args.window = w;
+  }
+  if (opts.maxSegments !== undefined) args.maxSegments = opts.maxSegments;
+  if (opts.limits) args.limits = opts.limits;
+  return args;
+}
+
+function conclusionTerm(j: unknown): ConclusionTerm {
+  if (j !== null && typeof j === "object") {
+    if ("list" in j) return { list: (j as { list: unknown[] }).list.map(conclusionTerm) };
+    if ("blank" in j || "formula" in j) return j as ConclusionTerm;
+  }
+  return fromJson(j);
+}
+
+function decodeConclusion(c: Record<string, unknown>): Conclusion {
+  const proof = c.proof as { ruleSet: unknown; rule: number; premises: Premise[] };
+  return {
+    ...(c as unknown as Conclusion),
+    s: conclusionTerm(c.s),
+    p: conclusionTerm(c.p),
+    o: conclusionTerm(c.o),
+    proof: { ...proof, ruleSet: proof.ruleSet === null ? null : fromJson(proof.ruleSet) },
+  };
+}
+
 /**
  * An immutable view of the database at a point in transaction time, optionally
  * filtered by valid time. All queries run through a view.
@@ -978,6 +1142,35 @@ export class View {
       callNative(this._db, "values", { ...this._base(), s: toJson(s), key: toJson(key) }) as unknown[]
     ).map(fromJson);
   }
+
+  /**
+   * Runs N3 rules (`rules` text, or a `ruleSet` stored with `Tx.storeRules`) over this view
+   * and returns what follows, with proofs; writes nothing. A conclusion holds at an instant
+   * only if it follows from the statements valid then; a `validAt` view reasons over one
+   * snapshot, and an `asOf` view over memory (and rules) as believed then.
+   */
+  reason(opts: ReasonOptions): ReasonResult {
+    const args = scopeArgs({ ...this._base() }, opts);
+    if (opts.rules !== undefined) args.rules = opts.rules;
+    if (opts.ruleSet !== undefined) args.ruleSet = ruleSetJson(opts.ruleSet);
+    if (opts.time !== undefined) args.time = opts.time;
+    if (opts.proofN3) args.proofN3 = true;
+    const r = callNative(this._db, "reason", args) as Record<string, unknown>;
+    return {
+      ...(r as unknown as ReasonResult),
+      conclusions: (r.conclusions as Array<Record<string, unknown>>).map(decodeConclusion),
+      ruleSet: r.ruleSet === null ? null : fromJson(r.ruleSet),
+    };
+  }
+
+  /** A stored rule set as this view sees it: its text, statement, rule count and classification. */
+  ruleSetInfo(ruleSet: RuleSetInput): RuleSetInfo {
+    const r = callNative(this._db, "ruleSetInfo", {
+      ...this._base(),
+      ruleSet: ruleSetJson(ruleSet),
+    }) as Record<string, unknown>;
+    return { ...(r as unknown as RuleSetInfo), ruleSet: fromJson(r.ruleSet) };
+  }
 }
 
 // ---- Transaction ---------------------------------------------------------
@@ -1196,6 +1389,16 @@ export class Tx {
    */
   importBundle(bundle: Bundle): Ref {
     return this._push({ op: "importBundle", bundle }, true);
+  }
+
+  /**
+   * Stores N3 rule text as the rule set `ruleSet`: one statement `(ruleSet n3:source "<n3>")`.
+   * New text supersedes the live version (its materialized conclusions are retracted);
+   * equal text returns the live statement. Text that does not parse fails the transaction
+   * with `N3Parse`. Returns a Ref to the rule-set statement.
+   */
+  storeRules(ruleSet: RuleSetInput, n3: string): Ref {
+    return this._push({ op: "storeRules", ruleSet: ruleSetJson(ruleSet), n3 }, true);
   }
 
   /** Runs a Cypher write statement inside this transaction. */
@@ -1445,6 +1648,38 @@ export class Database {
     const args: Record<string, unknown> = { bundle };
     if (budget) args.budget = budget;
     return callNative(this._db, "previewBundle", args) as BundlePreview;
+  }
+
+  /** `View.reason` on the live database (`now()`). */
+  reason(opts: ReasonOptions): ReasonResult {
+    return this.now().reason(opts);
+  }
+
+  /** `View.ruleSetInfo` on the live database (`now()`). */
+  ruleSetInfo(ruleSet: RuleSetInput): RuleSetInfo {
+    return this.now().ruleSetInfo(ruleSet);
+  }
+
+  /**
+   * Reasons with the stored rule set `ruleSet` on a snapshot and writes its conclusions as
+   * derived beliefs in one transaction, supported by their premises and the rule-set
+   * statement. Non-monotonic and clock-reading rule sets are refused
+   * (`N3NotMaterializable`); a fired inference fuse aborts (`N3Contradiction`). With
+   * `dryRun`, reports what would be written and writes nothing.
+   */
+  materialize(ruleSet: RuleSetInput, opts?: MaterializeOptions): MaterializeReport {
+    const args = scopeArgs({ ruleSet: ruleSetJson(ruleSet) }, opts);
+    if (opts?.requireComplete) args.requireComplete = true;
+    if (opts?.dryRun) args.dryRun = true;
+    if (opts?.budget) args.budget = opts.budget;
+    const r = callNative(this._db, "materialize", args) as Record<string, unknown>;
+    return {
+      ...(r as unknown as MaterializeReport),
+      ruleSet: fromJson(r.ruleSet),
+      skolems: (r.skolems as unknown[]).map(fromJson),
+      staleSupport: (r.staleSupport as Array<Record<string, unknown>>).map(decodeConclusion),
+      unstorable: (r.unstorable as Array<Record<string, unknown>>).map(decodeConclusion),
+    };
   }
 
   /** Refreshes the query planner's statistics (run after large imports). */

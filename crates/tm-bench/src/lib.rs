@@ -10,6 +10,8 @@
 
 pub mod engine;
 pub mod gen;
+#[cfg(feature = "n3")]
+pub mod reason;
 pub mod report;
 pub mod suite;
 

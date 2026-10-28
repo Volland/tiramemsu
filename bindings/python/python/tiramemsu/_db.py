@@ -65,6 +65,82 @@ def _vector_json(vector: Any) -> List[float]:
 _UNSET: Any = object()
 
 
+# ------------------------------------------------------------------- N3 reasoning helpers
+
+_LIMIT_KEYS = {
+    "max_iterations": "maxIterations",
+    "max_match_steps": "maxMatchSteps",
+    "max_backward_depth": "maxBackwardDepth",
+    "max_term_bytes": "maxTermBytes",
+}
+
+
+def _rule_set_json(rule_set: Any) -> Any:
+    """A rule set: a plain ``str`` is its IRI, anything else is a term."""
+    if isinstance(rule_set, str):
+        return rule_set
+    return term_to_json(rule_set)
+
+
+def _scope_args(
+    args: Dict[str, Any],
+    scope: Any,
+    window: Any,
+    max_segments: Optional[int],
+    limits: Optional[Dict[str, int]],
+) -> Dict[str, Any]:
+    """The scope, window, segment and limit arguments of ``reason`` and ``materialize``."""
+    if scope is not None:
+        if scope == "all":
+            args["scope"] = "all"
+        elif "graphs" in scope:
+            args["scope"] = {"graphs": [term_to_json(g) for g in scope["graphs"]]}
+        elif "seeds" in scope:
+            seeds = scope["seeds"]
+            out: Dict[str, Any] = {"nodes": [term_to_json(n) for n in seeds["nodes"]]}
+            if seeds.get("hops") is not None:
+                out["hops"] = seeds["hops"]
+            args["scope"] = {"seeds": out}
+        else:
+            raise TypeError('scope must be "all", {"graphs": [...]} or {"seeds": {...}}')
+    if window is not None:
+        start, end = window
+        w: Dict[str, Any] = {}
+        if start is not None:
+            w["from"] = time_to_json(start)
+        if end is not None:
+            w["to"] = time_to_json(end)
+        args["window"] = w
+    if max_segments is not None:
+        args["maxSegments"] = max_segments
+    if limits:
+        args["limits"] = {_LIMIT_KEYS.get(k, k): v for k, v in limits.items()}
+    return args
+
+
+def _conclusion_term(j: Any) -> Any:
+    """A conclusion term: a stored term, or ``{"blank"}``, ``{"list"}``, ``{"formula"}``."""
+    if isinstance(j, dict):
+        if "list" in j:
+            return {"list": [_conclusion_term(x) for x in j["list"]]}
+        if "blank" in j or "formula" in j:
+            return j
+    return term_from_json(j)
+
+
+def _conclusion(c: Dict[str, Any]) -> Dict[str, Any]:
+    proof = dict(c["proof"])
+    if proof.get("ruleSet") is not None:
+        proof["ruleSet"] = term_from_json(proof["ruleSet"])
+    return {
+        **c,
+        "s": _conclusion_term(c["s"]),
+        "p": _conclusion_term(c["p"]),
+        "o": _conclusion_term(c["o"]),
+        "proof": proof,
+    }
+
+
 def _path_row(r: Dict[str, Any]) -> PathRow:
     """Decode one row of the bridge's ``path`` operation."""
     return PathRow(
@@ -395,6 +471,20 @@ class TxBuilder:
         """
         name = self._fresh()
         self._ops.append({"op": "importBundle", "bundle": bundle, "as": name})
+        return Ref(name)
+
+    def store_rules(self, rule_set: Any, n3: str) -> Ref:
+        """Store N3 rule text as the rule set *rule_set* (an IRI ``str`` or a term).
+
+        Writes one statement ``(rule_set n3:source "<n3>")``. New text supersedes the
+        live version (its materialized conclusions are retracted); equal text returns the
+        live statement. Text that does not parse fails the transaction with ``N3Parse``.
+        Returns a :class:`Ref` to the rule-set statement.
+        """
+        name = self._fresh()
+        self._ops.append(
+            {"op": "storeRules", "ruleSet": _rule_set_json(rule_set), "n3": n3, "as": name}
+        )
         return Ref(name)
 
     def cypher(self, text: str, params: Optional[Dict[str, Any]] = None) -> None:
@@ -934,6 +1024,54 @@ class View:
         )
         return [term_from_json(v) for v in items]
 
+    def reason(
+        self,
+        rules: Optional[str] = None,
+        *,
+        rule_set: Any = None,
+        scope: Any = None,
+        window: Any = None,
+        time: Optional[str] = None,
+        max_segments: Optional[int] = None,
+        proof_n3: bool = False,
+        limits: Optional[Dict[str, int]] = None,
+    ) -> Dict[str, Any]:
+        """Run N3 rules over this view and return what follows, with proofs; writes nothing.
+
+        Give the rules as N3 text (*rules*) or name a rule set stored with
+        :meth:`TxBuilder.store_rules` (*rule_set*). A conclusion holds at an instant only if
+        it follows from the statements valid then. *scope* is ``"all"``,
+        ``{"graphs": [...]}`` or ``{"seeds": {"nodes": [...], "hops": n}}``; *window* is a
+        ``(from, to)`` pair (either may be ``None``); *time* is ``"pointwise"`` (default) or
+        ``"atemporal"``. Returns ``{"conclusions", "t", "now", "loaded", "pruned",
+        "segments", "status", "limits", "errors", "contradiction", "ruleSet",
+        "ruleSetStatement", "proofN3"}``; each conclusion is ``{"s", "p", "o",
+        "validFrom", "validTo", "proof": {"ruleSet", "rule", "premises"}}``.
+        """
+        args = _scope_args({}, scope, window, max_segments, limits)
+        if rules is not None:
+            args["rules"] = rules
+        if rule_set is not None:
+            args["ruleSet"] = _rule_set_json(rule_set)
+        if time is not None:
+            args["time"] = time
+        if proof_n3:
+            args["proofN3"] = True
+        r: Dict[str, Any] = json.loads(self._call("reason", args))
+        r["conclusions"] = [_conclusion(c) for c in r["conclusions"]]
+        if r.get("ruleSet") is not None:
+            r["ruleSet"] = term_from_json(r["ruleSet"])
+        return r
+
+    def rule_set_info(self, rule_set: Any) -> Dict[str, Any]:
+        """A stored rule set as this view sees it: ``{"ruleSet", "statement", "text",
+        "rules", "monotonicity", "predicates", "variablePredicate"}``."""
+        r: Dict[str, Any] = json.loads(
+            self._call("ruleSetInfo", {"ruleSet": _rule_set_json(rule_set)})
+        )
+        r["ruleSet"] = term_from_json(r["ruleSet"])
+        return r
+
 
 # --------------------------------------------------------------------------- Database
 
@@ -1248,6 +1386,51 @@ class Database:
         return bundle_preview_from_json(
             json.loads(_call(self._native, "previewBundle", json.dumps(args)))
         )
+
+    def reason(self, rules: Optional[str] = None, **kwargs: Any) -> Dict[str, Any]:
+        """:meth:`View.reason` on the live database (:meth:`now`)."""
+        return self.now().reason(rules, **kwargs)
+
+    def rule_set_info(self, rule_set: Any) -> Dict[str, Any]:
+        """:meth:`View.rule_set_info` on the live database (:meth:`now`)."""
+        return self.now().rule_set_info(rule_set)
+
+    def materialize(
+        self,
+        rule_set: Any,
+        *,
+        scope: Any = None,
+        window: Any = None,
+        max_segments: Optional[int] = None,
+        limits: Optional[Dict[str, int]] = None,
+        require_complete: bool = False,
+        dry_run: bool = False,
+        budget: Optional[QueryBudget] = None,
+    ) -> Dict[str, Any]:
+        """Reason with the stored rule set *rule_set* and write its conclusions as derived
+        beliefs in one transaction, supported by their premises and the rule-set statement.
+
+        Non-monotonic and clock-reading rule sets raise ``N3NotMaterializable``; a fired
+        inference fuse raises ``N3Contradiction``. With *dry_run*, reports what would be
+        written and writes nothing. Returns ``{"ruleSet", "rulesStatement",
+        "reasonedAt", "report", "derived", "existing", "widened", "skolems",
+        "staleSupport", "unstorable", "status", "limits", "dryRun"}``.
+        """
+        args = _scope_args(
+            {"ruleSet": _rule_set_json(rule_set)}, scope, window, max_segments, limits
+        )
+        if require_complete:
+            args["requireComplete"] = True
+        if dry_run:
+            args["dryRun"] = True
+        if budget is not None:
+            args["budget"] = budget._to_json()
+        r: Dict[str, Any] = json.loads(_call(self._native, "materialize", json.dumps(args)))
+        r["ruleSet"] = term_from_json(r["ruleSet"])
+        r["skolems"] = [term_from_json(s) for s in r["skolems"]]
+        r["staleSupport"] = [_conclusion(c) for c in r["staleSupport"]]
+        r["unstorable"] = [_conclusion(c) for c in r["unstorable"]]
+        return r
 
     def optimize(self) -> None:
         """Refresh query-planner statistics after large imports."""

@@ -31,10 +31,10 @@
 
 ## 5. Surfaces
 
-- [ ] 5.1 JSON bridge feature `n3`: read op `reason`, tx op `storeRules`, db op `materialize`.
-- [ ] 5.2 Node, Python, wasm wrappers (enable `n3` in each binding).
-- [ ] 5.3 MCP tools `reason` (read), `store_rules`, `materialize` (write, hidden in read-only mode, `additionalProperties: false`).
-- [ ] 5.4 CLI `tm reason`, `tm rules put|show`, `tm materialize`.
+- [x] 5.1 JSON bridge feature `n3`: read op `reason`, tx op `storeRules`, db op `materialize`.
+- [x] 5.2 Node, Python, wasm wrappers (enable `n3` in each binding).
+- [x] 5.3 MCP tools `reason` (read), `store_rules`, `materialize` (write, hidden in read-only mode, `additionalProperties: false`).
+- [x] 5.4 CLI `tm reason`, `tm rules put|show`, `tm materialize`.
 
 ## 6. Tests
 
@@ -42,7 +42,7 @@
 - [x] 6.2 Property: for random facts with random intervals and a fixed monotonic rule set, a conclusion of the sweep holds at random `t` iff it is concluded by the `valid_at(t)` snapshot.
 - [ ] 6.3 Property: after `materialize` and random retract/supersede sequences every live conclusion's support is live, and re-materializing reaches the same live set as a fresh materialization of a copy.
 - [ ] 6.4 Scenario tests for every scenario in the four delta specs, on SQLite and redb where they write; each annotated `@tg: verifies:: [[openspec:<capability>#<Requirement>#<Scenario>]]`.
-- [ ] 6.5 `tm-bench` scenario: load, pruning and sweep cost against store size and segment count, SQLite and redb.
+- [x] 6.5 `tm-bench` scenario: load, pruning and sweep cost against store size and segment count, SQLite and redb.
 
 ## 7. Documentation and site
 

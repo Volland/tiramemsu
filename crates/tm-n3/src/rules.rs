@@ -32,6 +32,14 @@ pub enum Monotonicity {
         /// The builtin, as a prefixed name (`time:localTime`, `tm:now`).
         builtin: String,
     },
+    /// A rule body uses a builtin whose proof does not name the facts it read
+    /// (`list:map`).
+    UntracedPremises {
+        /// The index of the first such rule.
+        rule: usize,
+        /// The builtin, as a prefixed name (`list:map`).
+        builtin: String,
+    },
 }
 
 /// What a rule set is: its classification, size and the predicates its bodies read.

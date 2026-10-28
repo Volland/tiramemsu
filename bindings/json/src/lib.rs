@@ -29,8 +29,14 @@
 //! its result and report later events as `recheck` or `stale` marks. See
 //! [`tiramemsu::SavedAnswer`].
 //!
+//! N3 reasoning (feature `n3`): the reads `reason` and `ruleSetInfo`, the
+//! transaction op `storeRules` and the database operation `materialize`; see
+//! the `n3` module. Without the feature they fail with `Unsupported`.
+//!
 // @lat: [[api#Bindings]]
 
+#[cfg(feature = "n3")]
+pub mod n3;
 mod read;
 mod saved;
 mod tx;
@@ -131,6 +137,11 @@ impl BindError {
                 Error::BackendMismatch { .. } => "BackendMismatch",
                 Error::AlreadyExists(_) => "AlreadyExists",
                 Error::BackendNotCompiled { .. } => "BackendNotCompiled",
+                Error::N3Parse { .. } => "N3Parse",
+                Error::UnknownRuleSet { .. } => "UnknownRuleSet",
+                Error::N3NotMaterializable { .. } => "N3NotMaterializable",
+                Error::N3Contradiction { .. } => "N3Contradiction",
+                Error::N3Incomplete { .. } => "N3Incomplete",
                 Error::Custom(_) => "Custom",
                 _ => "Error",
             },
@@ -420,12 +431,17 @@ impl Database {
     /// Saved answers are `saveAnswer` (`name`, `language`, `text`, `params`,
     /// `view`, `budget`), `savedAnswer` (`name`), `savedAnswers`,
     /// `checkSavedAnswers` (the new invalidations), `refreshAnswer` (`name`,
-    /// `budget`) and `deleteSavedAnswer` (`name`).
+    /// `budget`) and `deleteSavedAnswer` (`name`). With the feature `n3`, the
+    /// reads `reason` (`rules` or `ruleSet`, `scope`, `window`, `time`,
+    /// `maxSegments`, `proofN3`, `limits`) and `ruleSetInfo` (`ruleSet`), the
+    /// transaction op `storeRules` and `materialize` (`ruleSet`, `scope`,
+    /// `window`, `maxSegments`, `limits`, `requireComplete`, `dryRun`, `budget`)
+    /// reason with N3 rules; without it they fail with `Unsupported`.
     pub fn call(&self, op: &str, args: &J) -> Res<J> {
         match op {
             "sparql" | "cypher" | "triples" | "path" | "events" | "graphs" | "graphMembers"
             | "values" | "dependents" | "bundle" | "textSearch" | "vectorSearch" | "recall"
-            | "unembedded" | "explainSparql" | "conflicts" => {
+            | "unembedded" | "explainSparql" | "conflicts" | "reason" | "ruleSetInfo" => {
                 let view = read::view_from_json(&self.db, args.get("view").unwrap_or(&J::Null))?;
                 let (budget, _entry) = self.budget(args.get("budget"))?;
                 match &budget {
@@ -470,6 +486,15 @@ impl Database {
                     None => tx::preview_bundle(&self.db, args),
                 }
             }
+            "materialize" => {
+                let (budget, _entry) = self.budget(args.get("budget"))?;
+                match &budget {
+                    Some(b) => b
+                        .run(|| materialize(&self.db, args).map_err(value::into_core))
+                        .map_err(BindError::from),
+                    None => materialize(&self.db, args),
+                }
+            }
             "with" => tx::with(&self.db, args),
             "optimize" => {
                 self.db.optimize()?;
@@ -510,6 +535,25 @@ impl Database {
             .map(|j| j.to_string())
             .map_err(|e| e.to_json().to_string())
     }
+}
+
+/// `materialize`, or `Unsupported` in a build without the feature `n3`.
+fn materialize(db: &Db, args: &J) -> Res<J> {
+    #[cfg(feature = "n3")]
+    return n3::materialize(db, args);
+    #[cfg(not(feature = "n3"))]
+    {
+        let _ = (db, args);
+        Err(no_n3())
+    }
+}
+
+/// The error of an N3 operation in a build without the feature `n3`.
+#[cfg(not(feature = "n3"))]
+pub(crate) fn no_n3() -> BindError {
+    BindError::Db(Error::unsupported(
+        "N3 reasoning (the JSON bridge was built without the feature `n3`)",
+    ))
 }
 
 pub(crate) fn tx_options(j: &J) -> Res<TxOptions> {

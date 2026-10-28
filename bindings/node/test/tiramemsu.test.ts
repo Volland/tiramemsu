@@ -819,3 +819,63 @@ describe("vector recall", () => {
     }
   });
 });
+
+// ---- N3 reasoning ----------------------------------------------------------
+
+describe("N3 reasoning", () => {
+  const rdfType = iri("http://www.w3.org/1999/02/22-rdf-syntax-ns#type");
+  const socrates = "{ ?x a v:Human } => { ?x a v:Mortal } .";
+
+  // @tg: verifies:: [[openspec:n3-reasoning#Reasoning surfaces]] {since: "2026-10-28", level: integration}
+  it("reasons with rule text and with a stored rule set", () => {
+    const { db, dir } = tempDb();
+    try {
+      db.transact((tx) => { tx.assert(v("socrates"), rdfType, v("Human")); });
+      const r = db.reason({ rules: socrates });
+      expect(r.conclusions).toHaveLength(1);
+      expect(r.conclusions[0].o).toEqual(v("Mortal"));
+      expect(r.conclusions[0].proof).toEqual({ ruleSet: null, rule: 0, premises: [{ eid: 1 }] });
+      expect(r.status).toBe("complete");
+      expect(r.pruned).toBe(true);
+      // reasoning writes nothing
+      expect(db.now().triples()).toHaveLength(1);
+
+      const stored = db.transact((tx) => { tx.storeRules("urn:tiramemsu:v:mortality", socrates); });
+      const rs = (stored.results[0] as { eid: number }).eid;
+      const again = db.now().reason({ ruleSet: v("mortality"), time: "atemporal" });
+      expect(again.ruleSetStatement).toBe(rs);
+      expect(again.conclusions[0].proof.ruleSet).toEqual(v("mortality"));
+      const info = db.ruleSetInfo("urn:tiramemsu:v:mortality");
+      expect(info.text).toBe(socrates);
+      expect(info.monotonicity).toEqual({ kind: "monotonic" });
+
+      expect(() => db.reason({ rules: "{ ?x a" })).toThrowError(/N3 parse error/);
+      try {
+        db.reason({ ruleSet: "urn:tiramemsu:v:none" });
+        throw new Error("expected UnknownRuleSet");
+      } catch (e) {
+        expect((e as TiramemsuError).code).toBe("UnknownRuleSet");
+      }
+      const none = db.now().reason({ rules: socrates, scope: { graphs: [v("g")] }, window: { from: "2020-01-01" } });
+      expect(none.conclusions).toHaveLength(0);
+    } finally { cleanup(dir); }
+  });
+
+  it.skip("materializes a rule set, with a dry run first (needs real materialize)", () => {
+    const { db, dir } = tempDb();
+    try {
+      db.transact((tx) => {
+        tx.assert(v("socrates"), rdfType, v("Human"));
+        tx.storeRules("urn:tiramemsu:v:mortality", socrates);
+      });
+      const before = db.now().triples().length;
+      const dry = db.materialize("urn:tiramemsu:v:mortality", { dryRun: true });
+      expect(dry.dryRun).toBe(true);
+      expect(dry.derived).toHaveLength(1);
+      expect(db.now().triples()).toHaveLength(before);
+      const r = db.materialize("urn:tiramemsu:v:mortality", { requireComplete: true });
+      expect(r.derived).toHaveLength(1);
+      expect(r.status).toBe("complete");
+    } finally { cleanup(dir); }
+  });
+});

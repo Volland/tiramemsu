@@ -226,6 +226,12 @@ pub fn run(view: &View<'_>, op: &str, args: &J) -> Res<J> {
         }
         "conflicts" => conflicts(view, args),
         "explainSparql" => Ok(explain_json(&view.explain_sparql(str_arg(args, "text")?)?)),
+        #[cfg(feature = "n3")]
+        "reason" => crate::n3::reason(view, args),
+        #[cfg(feature = "n3")]
+        "ruleSetInfo" => crate::n3::rule_set_info(view, args),
+        #[cfg(not(feature = "n3"))]
+        "reason" | "ruleSetInfo" => Err(crate::no_n3()),
         other => Err(arg(format!("unknown read operation {other:?}"))),
     }
 }
