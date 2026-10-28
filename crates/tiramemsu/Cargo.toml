@@ -22,6 +22,7 @@ tm-exec = { workspace = true, optional = true }
 tm-native = { workspace = true, optional = true }
 tm-sparql = { workspace = true, optional = true }
 tm-cypher = { workspace = true, optional = true }
+tm-n3 = { workspace = true, optional = true }
 lru = "0.18"
 serde_json = "1"
 
@@ -100,6 +101,11 @@ cypher = ["exec", "dep:tm-cypher"]
 # The redb storage backend (`Backend::Redb`, `tm-redb`): files are detected by
 # their header; without this feature opening a redb file is `BackendNotCompiled`.
 redb = ["dep:tm-redb"]
+# N3 reasoning with eyeron (`View::reason`, `View::rule_set_info`,
+# `TxN3::store_rules`; OpenSpec change `add-n3-reasoning`). Off by default and
+# independent of `exec`: the core tier can reason. eyeron is a git dependency
+# until it is on crates.io, so a build with this feature cannot be published.
+n3 = ["dep:tm-n3"]
 
 [lints]
 workspace = true

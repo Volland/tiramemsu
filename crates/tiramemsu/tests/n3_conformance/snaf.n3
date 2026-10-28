@@ -1,0 +1,20 @@
+# Checking absence within a reasoning scope
+#
+# Alice loves Bob, and Bob is a person. An N3 rule combines that person
+# fact with a scoped absence test for a hate statement and derives the
+# example's explicit Nobody conclusion.
+
+@prefix log: <http://www.w3.org/2000/10/swap/log#> .
+@prefix : <http://example.org/> .
+
+:Alice :loves :Bob .
+:Bob a :Person .
+
+{
+    ?SCOPE log:notIncludes {
+        :Alice :hates ?X
+    } .
+    ?X a :Person .
+} => {
+    :Alice :hates :Nobody .
+} .

@@ -1,0 +1,25 @@
+# A simple backward rule
+#
+# The numbers five and three are compared using a relation defined by a
+# backward rule. When the numeric comparison succeeds, a forward rule
+# records the answer.
+#
+# See <https://www.w3.org/2000/10/swap/doc/tutorial-1.pdf>
+
+@prefix math: <http://www.w3.org/2000/10/swap/math#> .
+@prefix log: <http://www.w3.org/2000/10/swap/log#> .
+@prefix : <http://example.org/#> .
+
+# something is more interesting if it is greater
+{
+    ?X :moreInterestingThan ?Y .
+} <= {
+    ?X math:greaterThan ?Y .
+} .
+
+# derivation (forward)
+{
+    5 :moreInterestingThan 3 .
+} => {
+    5 :isIndeedMoreInterestingThan 3 .
+} .

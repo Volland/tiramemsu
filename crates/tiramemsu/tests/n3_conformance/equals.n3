@@ -1,0 +1,16 @@
+# Matching an equality statement
+#
+# An N3 equality statement connects two names. Eyeron exposes it as
+# owl:sameAs, allowing a forward rule to recognize the statement and derive
+# the test result.
+
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix : <http://example.org/socrates#> .
+
+:X = :Y .
+
+{
+    :X owl:sameAs :Y
+} => {
+    :test :is true
+} .

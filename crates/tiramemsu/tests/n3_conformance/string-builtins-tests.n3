@@ -1,0 +1,158 @@
+# Checking text operations
+#
+# Small N3 rules exercise concatenation, search, comparison, formatting,
+# and other text operations. Eyeron derives a pass marker when a built-in
+# call matches its expected result.
+
+@prefix : <https://eyereasoner.github.io/ns#> .
+@prefix string: <http://www.w3.org/2000/10/swap/string#> .
+@prefix log: <http://www.w3.org/2000/10/swap/log#> .
+@prefix list: <http://www.w3.org/2000/10/swap/list#> .
+@prefix math: <http://www.w3.org/2000/10/swap/math#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+# Each rule checks one builtin and, if it behaves as specified,
+# derives a single marker triple:
+# :ok_string_<name>_1 a :Pass .
+# string:concatenation
+{
+    ("hello" " " "world!") string:concatenation "hello world!" .
+} => {
+    :ok_string_concatenation_1 a :Pass .
+} .
+
+# string:contains
+{
+    "hello world!" string:contains "llo worl" .
+} => {
+    :ok_string_contains_1 a :Pass .
+} .
+
+# string:containsIgnoringCase
+{
+    "hello world!" string:containsIgnoringCase "lLO woRl" .
+} => {
+    :ok_string_containsIgnoringCase_1 a :Pass .
+} .
+
+# string:endsWith
+{
+    "hello world!" string:endsWith "orld!" .
+} => {
+    :ok_string_endsWith_1 a :Pass .
+} .
+
+# string:equalIgnoringCase
+{
+    "hello world!" string:equalIgnoringCase "hELLo wORld!" .
+} => {
+    :ok_string_equalIgnoringCase_1 a :Pass .
+} .
+
+# string:format
+{
+    ("%s://%s/%s" "https" "w3c.github.io" "N3/spec/") string:format "https://w3c.github.io/N3/spec/" .
+} => {
+    :ok_string_format_1 a :Pass .
+} .
+
+{
+    ("%5s" "x") string:format "    x" .
+} => {
+    :ok_string_format_2 a :Pass .
+} .
+
+{
+    ("%-5s" "x") string:format "x    " .
+} => {
+    :ok_string_format_3 a :Pass .
+} .
+
+{
+    ("%.3s" "abcdef") string:format "abc" .
+} => {
+    :ok_string_format_4 a :Pass .
+} .
+
+{
+    ("%05d" 42) string:format "00042" .
+} => {
+    :ok_string_format_5 a :Pass .
+} .
+
+{
+    ("%5.1f" 12.0) string:format " 12.0" .
+} => {
+    :ok_string_format_6 a :Pass .
+} .
+
+# string:greaterThan
+{
+    "Penguin" string:greaterThan "Cat" .
+} => {
+    :ok_string_greaterThan_1 a :Pass .
+} .
+
+# string:lessThan
+{
+    "Cat" string:lessThan "Penguin" .
+} => {
+    :ok_string_lessThan_1 a :Pass .
+} .
+
+# string:matches
+{
+    "hello world!" string:matches ".*(l)+o wo.*" .
+} => {
+    :ok_string_matches_1 a :Pass .
+} .
+
+# string:notEqualIgnoringCase
+{
+    "hello world!" string:notEqualIgnoringCase "hELLo dunia!" .
+} => {
+    :ok_string_notEqualIgnoringCase_1 a :Pass .
+} .
+
+# string:notGreaterThan
+{
+    "Cat" string:notGreaterThan "Penguin" .
+} => {
+    :ok_string_notGreaterThan_1 a :Pass .
+} .
+
+# string:notLessThan
+{
+    "Penguin" string:notLessThan "Cat" .
+} => {
+    :ok_string_notLessThan_1 a :Pass .
+} .
+
+# string:notMatches
+{
+    "hello world!" string:notMatches ".*(l)+o dunia.*" .
+} => {
+    :ok_string_notMatches_1 a :Pass .
+} .
+
+# string:replace
+{
+    ("fofof bar" "of" "baz") string:replace "fbazbaz bar" .
+} => {
+    :ok_string_replace_1 a :Pass .
+} .
+
+# string:scrape
+# (extracts the first capturing group)
+{
+    ("id=abc&x=123&y=zzz" "x=([0-9]+)") string:scrape "123" .
+} => {
+    :ok_string_scrape_1 a :Pass .
+} .
+
+# string:startsWith
+{
+    "hello world!" string:startsWith "hello" .
+} => {
+    :ok_string_startsWith_1 a :Pass .
+} .

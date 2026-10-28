@@ -32,7 +32,7 @@ Memory that only stores what it was told cannot say what follows from it. Notati
 ## Impact
 
 - **New crate `crates/tm-n3`:** mapping, pruning, segment sweep, eyeron driver, proofs, monotonicity check. Workspace dependency `eyeron` pinned to a git commit until `publish-eyeron-dependency` lands; `tm-n3` is `publish = false` until then.
-- **`crates/tiramemsu`:** feature `n3`; `View::reason`, `Tx::store_rules`, `Db::materialize` (`src/n3.rs`).
+- **`crates/tiramemsu`:** feature `n3`; `View::reason`, `TxN3::store_rules`, `Db::materialize` (`src/n3.rs`).
 - **Bindings, MCP, CLI:** `bindings/json` (feature `n3`, ops), `bindings/node`, `bindings/python`, `bindings/wasm`, `crates/tiramemsu-mcp/src/tools.rs`, `crates/tiramemsu-cli`.
 - **lat.md:** new `lat.md/reasoning.md` (typed `Decision`), `lat.md/architecture.md#Crates`, `lat.md/tests.md` (N3 sections), `lat.md/time-model.md#Valid Time` (reference). Binding decisions: [[time-model#Valid Time]], [[data-model#Named Graphs]], the never-forget rule, [[query#Query Budgets]], [[backends#One Engine In Two Phases]].
 - **Site:** a reasoning page and a mini book on N3 reasoning with tiramemsu.

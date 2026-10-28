@@ -1,0 +1,5 @@
+@prefix : <http://example.org/> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+
+:CatOwner rdfs:subClassOf :AnimalOwner .
+:milo a :Cat .

@@ -37,6 +37,8 @@ N4: a run loads one scope (whole view, named graphs, or seeds within a number of
 
 - motivated_by:: [[constraints#Read Performance First]] {weight: primary, since: "2026-10-28"}
 
+A variable predicate inside the object formula of `tm:content` does not turn pruning off: those formulas describe statements already loaded, and a rule set that reads `tm:content`, `tm:validFrom` or `tm:validTo` also loads, by eid, the statements its loaded statements are about. The loader is [[crates/tiramemsu/src/n3.rs]] and the analysis [[crates/tm-n3/src/rules.rs]].
+
 Graph scopes reuse [[data-model#Named Graphs]], so one agent's or one session's beliefs can be reasoned over alone, as in [[recipes#Reasoning Inside One Graph]]. Lazy loading through a callback from eyeron is deferred until the benchmark shows loading dominates.
 
 ## Pointwise Valid Time
@@ -89,11 +91,11 @@ Reasoning on every commit was rejected because it would put a reasoner inside th
 
 ## Monotonic Materialization
 
-N11: rule sets that use negation as failure, aggregates or the clock are refused by `materialize`; `reason` accepts them. A fired inference fuse aborts `materialize`.
+N11: rule sets that use negation as failure, aggregates, the clock or `list:map` are refused by `materialize`; `reason` accepts them. A fired inference fuse aborts `materialize`.
 
 - motivated_by:: [[constraints#Never Forget]] {weight: primary, since: "2026-10-28"}
 
-Adding a fact can invalidate a non-monotonic conclusion, and the cascade only reacts to retractions, so stored conclusions would stop being grounded. Reconciliation by diffing runs is an open follow-up.
+Adding a fact can invalidate a non-monotonic conclusion, and the cascade only reacts to retractions, so stored conclusions would stop being grounded. `list:map` is monotonic, but eyeron's proof records only the builtin triple, not the facts it read, so its conclusions would be stored with incomplete support (class `UntracedPremises`). Reconciliation by diffing runs is an open follow-up.
 
 ## Merge By Support
 

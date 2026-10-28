@@ -1,0 +1,97 @@
+# Checking list operations
+#
+# Small rules test list concatenation, membership, indexing, splitting, and
+# other list operations. Eyeron derives a pass marker for each N3 built-in
+# call whose expected result matches.
+
+@prefix : <https://eyereasoner.github.io/ns#> .
+@prefix list: <http://www.w3.org/2000/10/swap/list#> .
+@prefix log: <http://www.w3.org/2000/10/swap/log#> .
+
+# list:append
+# ( (1 2) (3 4) ) list:append (1 2 3 4) .
+{
+    ((1 2) (3 4)) list:append (1 2 3 4) .
+} => {
+    :ok_list_append_1 a :Pass .
+} .
+
+# list:first
+# (1 2 3 4) list:first 1 .
+{
+    (1 2 3 4) list:first 1 .
+} => {
+    :ok_list_first_1 a :Pass .
+} .
+
+# list:in
+# "cat" list:in ( "dog" "penguin" "cat" ) .
+{
+    "cat" list:in ("dog" "penguin" "cat") .
+} => {
+    :ok_list_in_1 a :Pass .
+} .
+
+# list:iterate
+# ("dog" "penguin" "cat") list:iterate (?index "cat") .
+{
+    ("dog" "penguin" "cat") list:iterate (?index "cat") .
+} => {
+    :ok_list_iterate_1 a :Pass .
+} .
+
+# list:last
+# (1 2 3 4) list:last 4 .
+{
+    (1 2 3 4) list:last 4 .
+} => {
+    :ok_list_last_1 a :Pass .
+} .
+
+# list:length
+# (1 2 3 4) list:length 4 .
+{
+    (1 2 3 4) list:length 4 .
+} => {
+    :ok_list_length_1 a :Pass .
+} .
+
+# list:member
+# ("dog" "penguin" "cat") list:member "cat" .
+{
+    ("dog" "penguin" "cat") list:member "cat" .
+} => {
+    :ok_list_member_1 a :Pass .
+} .
+
+# list:memberAt
+# (("dog" "penguin" "cat") 2) list:memberAt "cat" .
+{
+    (("dog" "penguin" "cat") 2) list:memberAt "cat" .
+} => {
+    :ok_list_memberAt_1 a :Pass .
+} .
+
+# list:remove
+# (("dog" "penguin" "cat" "penguin") "penguin") list:remove ("dog" "cat") .
+{
+    (("dog" "penguin" "cat" "penguin") "penguin") list:remove ("dog" "cat") .
+} => {
+    :ok_list_remove_1 a :Pass .
+} .
+
+# list:rest
+# (1 2 3 4) list:rest (2 3 4) .
+{
+    (1 2 3 4) list:rest (2 3 4) .
+} => {
+    :ok_list_rest_1 a :Pass .
+} .
+
+# list:firstRest
+# (1 2 3 4) list:firstRest (1 (2 3 4)) .
+{
+    (1 2 3 4) list:firstRest (1 (2 3 4)) .
+} => {
+    :ok_list_firstRest_1 a :Pass .
+} .

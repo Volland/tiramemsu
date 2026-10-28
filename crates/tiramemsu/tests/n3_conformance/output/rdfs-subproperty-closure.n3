@@ -1,0 +1,8 @@
+@prefix : <http://example.org/> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+
+:motherOf rdfs:subPropertyOf :ancestorOf .
+:motherOf rdfs:domain :Person .
+:motherOf rdfs:range :Person .
+:alice :parentOf :bob .
+:alice :ancestorOf :bob .

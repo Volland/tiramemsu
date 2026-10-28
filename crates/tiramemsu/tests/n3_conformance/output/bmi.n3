@@ -1,0 +1,10 @@
+@prefix : <http://example/> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+:case :bmi 22.724403484408533 .
+:case :healthyMin 58.6154 .
+:case :healthyMax 78.89316 .
+:case :bmiRounded 22.72 .
+:case :category "normal" .
+:case :healthyMinRounded 58.6 .
+:case :healthyMaxRounded 78.9 .

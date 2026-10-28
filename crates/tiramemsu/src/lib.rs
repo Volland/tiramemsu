@@ -7,7 +7,8 @@
            reduced feature set.\n\n\
            The cargo features of this crate are `exec` (the shared query engine: IR, \
            planner, paths, LFTJ), `sparql` and `cypher` (the query front ends, each \
-           implying `exec`); the default enables both front ends. Without them the \
+           implying `exec`); the default enables both front ends; `n3` adds N3 \
+           reasoning (`View::reason`) and `redb` the redb backend. Without them the \
            core tier remains: [`Db`], [`View`] reads, transactions, fact bundles with \
            [`BundleFormat`], text recall, conflict review, bulk import and budgets. \
            See the README's *Cargo features* section for the full table."
@@ -22,6 +23,9 @@ mod bundle;
 mod cypher;
 mod db;
 mod import;
+#[cfg(feature = "n3")]
+// @tg: implements:: [[openspec:optional-query-frontends#Optional N3 reasoning feature]] {since: "2026-10-28"}
+mod n3;
 mod pool;
 mod review;
 #[cfg(all(feature = "sparql", feature = "cypher"))]
@@ -37,6 +41,8 @@ pub use bundle::{BundleFormat, BUNDLE_FORMAT};
 pub use cypher::TxCypher;
 pub use db::{Db, OpenOptions, Summary};
 pub use import::{BulkImport, ImportProgress, ImportSummary};
+#[cfg(feature = "n3")]
+pub use n3::TxN3;
 pub use review::{BundlePreview, PreviewScope};
 #[cfg(all(feature = "sparql", feature = "cypher"))]
 pub use saved::{
@@ -89,6 +95,15 @@ pub use tm_exec::{
 pub use tm_ir as ir;
 #[cfg(feature = "exec")]
 pub use tm_ir::{IrQuery, Params, PathCompleteness, PathMode};
+/// The N3 reasoning crate (`tm-n3`) and its reasoner (`n3_engine::eyeron`).
+#[cfg(feature = "n3")]
+pub use tm_n3 as n3_engine;
+#[cfg(feature = "n3")]
+pub use tm_n3::{
+    Conclusion, Contradiction, Limit as ReasonLimit, Limits as ReasonLimits, Monotonicity, Premise,
+    Proof, ReasonOptions, ReasonResult, RuleSetInfo, Rules, Scope as ReasonScope,
+    Status as ReasonStatus, SupportKey, Term as N3Term, TimeMode,
+};
 #[cfg(feature = "sparql")]
 pub use tm_sparql as sparql_frontend;
 #[cfg(feature = "sparql")]

@@ -1,0 +1,53 @@
+# Classifying every value of a restricted property
+#
+# A cat owner has a pet, and cat is a subclass of animal. Explicit N3 rules
+# interpret the supplied OWL restriction facts to derive value types and
+# related restriction consequences.
+
+@prefix : <http://example.org/> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix list: <http://www.w3.org/2000/10/swap/list#> .
+@prefix log: <http://www.w3.org/2000/10/swap/log#> .
+
+# Sample data
+:CatOwner owl:onProperty :hasPet ;
+    owl:allValuesFrom :Cat .
+:alice a :CatOwner ;
+    :hasPet :milo .
+:Cat rdfs:subClassOf :Animal .
+:AnimalOwner owl:onProperty :hasPet ;
+    owl:allValuesFrom :Animal .
+
+# Inference rules
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+
+{
+    ?C owl:allValuesFrom ?Y .
+    ?C owl:onProperty ?P .
+    ?U a ?C .
+    ?U ?P ?V
+} => {
+    ?V a ?Y
+} .
+
+{
+    ?C owl:allValuesFrom ?Y .
+    ?C owl:onProperty ?P .
+    ?D owl:allValuesFrom ?Z .
+    ?D owl:onProperty ?P .
+    ?Y rdfs:subClassOf ?Z
+} => {
+    ?C rdfs:subClassOf ?D
+} .
+
+{
+    ?C owl:allValuesFrom ?Y .
+    ?C owl:onProperty ?P .
+    ?D owl:allValuesFrom ?Y .
+    ?D owl:onProperty ?Q .
+    ?P rdfs:subPropertyOf ?Q
+} => {
+    ?C rdfs:subClassOf ?D
+} .

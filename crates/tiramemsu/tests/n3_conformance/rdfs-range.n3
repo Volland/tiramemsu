@@ -1,0 +1,25 @@
+# Inferring an object's class from a property range
+#
+# The teaches property has Subject as its range, and Alice teaches logic.
+# An explicit N3 rule follows that range declaration to derive that logic
+# is a subject.
+
+@prefix : <http://example.org/> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix list: <http://www.w3.org/2000/10/swap/list#> .
+@prefix log: <http://www.w3.org/2000/10/swap/log#> .
+
+# Sample data
+:teaches rdfs:range :Subject .
+:alice :teaches :logic .
+
+# Inference rules
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+
+{
+    ?P rdfs:range ?C .
+    ?X ?P ?Y
+} => {
+    ?Y a ?C
+} .

@@ -1,0 +1,30 @@
+# Finding ancestors on demand
+#
+# Three parent links connect four people. Recursive backward N3 rules
+# answer ancestor questions, and a forward rule records everyone reachable
+# from the first person.
+
+@prefix : <urn:example#> .
+
+:a :parent :b .
+:b :parent :c .
+:c :parent :d .
+
+{
+    ?x :ancestor ?y
+} <= {
+    ?x :parent ?y
+} .
+
+{
+    ?x :ancestor ?z
+} <= {
+    ?x :parent ?y .
+    ?y :ancestor ?z
+} .
+
+{
+    :a :ancestor ?who
+} => {
+    :a :reaches ?who
+} .

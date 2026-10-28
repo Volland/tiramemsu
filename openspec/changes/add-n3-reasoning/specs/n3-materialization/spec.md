@@ -34,7 +34,7 @@ A run SHALL NOT load statements derived from its own rule set's live `R`. Statem
 - **THEN** B's conclusion has A's conclusion among its supports, and re-materializing A changes nothing
 
 ### Requirement: Only monotonic rule sets materialize
-`materialize` SHALL fail with `N3NotMaterializable { rule, builtin }` for a rule set classified `NonMonotonic` or `ClockDependent`, before reasoning, and SHALL fail with `N3Contradiction { rule }` before writing when an inference fuse fires.
+`materialize` SHALL fail with `N3NotMaterializable { rule, builtin }` for a rule set classified `NonMonotonic`, `ClockDependent` or `UntracedPremises`, before reasoning, and SHALL fail with `N3Contradiction { rule }` before writing when an inference fuse fires.
 
 #### Scenario: Negation refused
 - **WHEN** `materialize` runs a rule set that uses `log:notIncludes`

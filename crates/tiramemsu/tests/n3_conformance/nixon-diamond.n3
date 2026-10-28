@@ -1,0 +1,38 @@
+# A default confronted by explicit contrary evidence
+#
+# Nixon is both a Quaker and a Republican in a small default model. N3
+# rules derive a nonpacifist classification and guard the pacifist default
+# with a scoped absence test.
+
+@base <https://eyereasoner.github.io/eye/reasoning/nixon-diamond/nixon-diamond.n3> .
+@prefix log: <http://www.w3.org/2000/10/swap/log#> .
+@prefix ex: <http://example.org/nixon#> .
+
+# Facts
+ex:RichardNixon a ex:Quaker, ex:Republican .
+
+# Rule 1  (lower priority)  – “Usually Quakers are pacifist”
+# Fires only when NON-pacifism has **not** already been derived for ?x
+{
+    ?x a ex:Quaker .
+    ?SCOPE log:notIncludes {
+        ?x a ex:NonPacifist
+    } .
+    # SNAF guard
+} => {
+    ?x a ex:Pacifist
+} .
+
+# Rule 2  (higher priority)  – “Usually Republicans are NOT pacifist”
+{
+    ?x a ex:Republican
+} => {
+    ?x a ex:NonPacifist
+} .
+
+# query
+{
+    ?x a ?y
+} log:query {
+    ?x a ?y
+} .

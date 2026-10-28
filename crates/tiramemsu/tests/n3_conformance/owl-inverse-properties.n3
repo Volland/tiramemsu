@@ -1,0 +1,39 @@
+# Following a parent relationship in reverse
+#
+# Parent-of and child-of are declared inverse properties. Explicit N3 rules
+# derive reverse-direction statements and the symmetric inverse declaration
+# from the supplied family links.
+
+@prefix : <http://example.org/> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix list: <http://www.w3.org/2000/10/swap/list#> .
+@prefix log: <http://www.w3.org/2000/10/swap/log#> .
+
+# Sample data
+:parentOf owl:inverseOf :childOf .
+:alice :parentOf :bob .
+:carol :childOf :dave .
+
+# Inference rules
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+
+{
+    ?P owl:inverseOf ?Q .
+    ?S ?P ?O
+} => {
+    ?O ?Q ?S
+} .
+
+{
+    ?P owl:inverseOf ?Q .
+    ?S ?Q ?O
+} => {
+    ?O ?P ?S
+} .
+
+{
+    ?P owl:inverseOf ?Q
+} => {
+    ?Q owl:inverseOf ?P
+} .

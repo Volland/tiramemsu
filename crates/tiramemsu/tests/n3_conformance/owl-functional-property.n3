@@ -1,0 +1,33 @@
+# Equating values of a functional property
+#
+# Alice has two names for her birthplace, which is declared functional. An
+# explicit N3 rule derives that the two places are owl:sameAs and includes
+# a fuse for a stated difference.
+
+@prefix : <http://example.org/> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix list: <http://www.w3.org/2000/10/swap/list#> .
+@prefix log: <http://www.w3.org/2000/10/swap/log#> .
+
+# Sample data
+:birthplace a owl:FunctionalProperty .
+:alice :birthplace :Ghent, :Gent .
+
+# Inference rules
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+
+{
+    ?P a owl:FunctionalProperty .
+    ?S ?P ?X .
+    ?S ?P ?Y
+} => {
+    ?X owl:sameAs ?Y
+} .
+
+{
+    ?P a owl:FunctionalProperty .
+    ?S ?P ?X .
+    ?S ?P ?Y .
+    ?X owl:differentFrom ?Y
+} => false .

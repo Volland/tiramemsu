@@ -1,0 +1,48 @@
+# Following a chain of classes
+#
+# Cat is a subclass of mammal, which is a subclass of animal. Explicit N3
+# rules extend the class hierarchy and derive inherited memberships and
+# related range consequences.
+
+@prefix : <http://example.org/> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix list: <http://www.w3.org/2000/10/swap/list#> .
+@prefix log: <http://www.w3.org/2000/10/swap/log#> .
+
+# Sample data
+:Cat rdfs:subClassOf :Mammal .
+:Mammal rdfs:subClassOf :Animal .
+:milo a :Cat .
+:pet rdfs:range :Cat .
+
+# Inference rules
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+
+{
+    ?C rdfs:subClassOf ?D .
+    ?X a ?C
+} => {
+    ?X a ?D
+} .
+
+{
+    ?C rdfs:subClassOf ?D .
+    ?D rdfs:subClassOf ?E
+} => {
+    ?C rdfs:subClassOf ?E
+} .
+
+{
+    ?C rdfs:subClassOf ?D .
+    ?P rdfs:domain ?C
+} => {
+    ?P rdfs:domain ?D
+} .
+
+{
+    ?C rdfs:subClassOf ?D .
+    ?P rdfs:range ?C
+} => {
+    ?P rdfs:range ?D
+} .

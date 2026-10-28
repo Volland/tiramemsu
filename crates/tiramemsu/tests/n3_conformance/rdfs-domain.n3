@@ -1,0 +1,25 @@
+# Inferring a subject's class from a property domain
+#
+# The teaches property has Teacher as its domain, and Alice teaches logic.
+# An explicit N3 rule follows that domain declaration to derive that Alice
+# is a teacher.
+
+@prefix : <http://example.org/> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix list: <http://www.w3.org/2000/10/swap/list#> .
+@prefix log: <http://www.w3.org/2000/10/swap/log#> .
+
+# Sample data
+:teaches rdfs:domain :Teacher .
+:alice :teaches :logic .
+
+# Inference rules
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+
+{
+    ?P rdfs:domain ?C .
+    ?X ?P ?Y
+} => {
+    ?X a ?C
+} .

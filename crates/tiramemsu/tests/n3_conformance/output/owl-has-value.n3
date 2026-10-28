@@ -1,0 +1,4 @@
+@prefix : <http://example.org/> .
+
+:alice :citizenship :Belgium .
+:bob a :Belgian .

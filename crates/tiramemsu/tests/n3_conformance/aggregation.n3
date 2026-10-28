@@ -1,0 +1,40 @@
+# Adding sensor readings
+#
+# Three sensors report values, including a repeated value. Eyeron collects
+# all three readings into a list and derives their count and total with
+# scoped collection and a recursive backward rule.
+
+@prefix list: <http://www.w3.org/2000/10/swap/list#> .
+@prefix math: <http://www.w3.org/2000/10/swap/math#> .
+@prefix log: <http://www.w3.org/2000/10/swap/log#> .
+@prefix : <https://eyereasoner.github.io/eyepl/examples/aggregation#> .
+
+:sensor_a :reading 10 .
+:sensor_b :reading 15 .
+:sensor_c :reading 10 .
+
+{
+    () :total 0
+} <= true .
+
+{
+    ?list :total ?total
+} <= {
+    ?list list:firstRest (?first ?rest) .
+    ?rest :total ?tail .
+    (?first ?tail) math:sum ?total .
+} .
+
+{
+    (
+        ?value {
+            ?sensor :reading ?value
+        }
+        ?allValues
+    ) log:collectAllIn ?SCOPE .
+    ?allValues list:length ?count .
+    ?allValues :total ?total .
+} => {
+    :query :count ?count .
+    :query :total ?total .
+} .

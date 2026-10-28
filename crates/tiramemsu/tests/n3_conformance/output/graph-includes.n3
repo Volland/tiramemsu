@@ -1,0 +1,5 @@
+@prefix : <http://example.org/> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+:subset :holds true .
+:existentialGeneralisation :holds true .

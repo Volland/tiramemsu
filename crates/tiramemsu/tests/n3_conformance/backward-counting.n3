@@ -1,0 +1,24 @@
+# Counting with a backward rule
+#
+# Alice can count to one. A recursive backward rule reduces a larger
+# counting goal to smaller goals, and a forward rule records that she can
+# count to ten.
+
+@base <https://eyereasoner.github.io/eye/reasoning/bcrule/example4.n3> .
+@prefix math: <http://www.w3.org/2000/10/swap/math#> .
+@prefix : <http://example.org/#> .
+
+:alice :canCountTo 1 .
+{
+    ?x :canCountTo ?s .
+} <= {
+    ?s math:greaterThan 1 .
+    (?s 1) math:difference ?n .
+    ?x :canCountTo ?n .
+} .
+
+{
+    :alice :canCountTo 10
+} => {
+    :TEST :PASS 1
+} .

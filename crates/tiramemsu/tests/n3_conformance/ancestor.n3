@@ -1,0 +1,24 @@
+# Finding ancestors from parent links
+#
+# A family contains a chain of parent relationships. Forward N3 rules
+# derive direct and indirect ancestors, showing how a recursive rule builds
+# on earlier conclusions.
+
+@prefix : <https://eyereasoner.github.io/eyepl/examples/ancestor#> .
+
+:alice :parent :bob .
+:bob :parent :carol .
+:carol :parent :dana .
+
+{
+    ?x :parent ?y
+} => {
+    ?x :ancestor ?y
+} .
+
+{
+    ?x :parent ?y .
+    ?y :ancestor ?z
+} => {
+    ?x :ancestor ?z
+} .

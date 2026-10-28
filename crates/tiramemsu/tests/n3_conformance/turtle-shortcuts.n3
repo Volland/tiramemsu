@@ -1,0 +1,22 @@
+# Using predicate and object lists
+#
+# Alice knows two people and has a score; Bob has another score. N3 rules
+# filter the scores and derive relationship facts, while the data
+# illustrates semicolon and comma shortcuts.
+
+@prefix math: <http://www.w3.org/2000/10/swap/math#> .
+@prefix : <http://example/> .
+
+:alice :knows :bob, :carol ;
+    :score 8 .
+
+:bob :score 3 .
+
+{
+    ?person :knows ?friend .
+    ?person :score ?score .
+    ?score math:notLessThan 5
+} => {
+    ?friend :knownBy ?person ;
+        :scoredFor ?score
+} .

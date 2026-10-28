@@ -1,0 +1,26 @@
+[package]
+name = "tm-n3"
+description = "Tiramemsu N3 reasoning: eyeron over a scope of a view, aware of valid and transaction time"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+readme = "README.md"
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
+rust-version.workspace = true
+# eyeron is a git dependency until it is on crates.io (OpenSpec change
+# `publish-eyeron-dependency`), and Cargo refuses to publish a crate with one.
+publish = false
+
+[dependencies]
+tm-core = { workspace = true }
+eyeron = { workspace = true }
+
+[dev-dependencies]
+proptest = "1"
+
+[lints]
+workspace = true

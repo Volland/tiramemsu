@@ -1,0 +1,5 @@
+@prefix : <https://eyereasoner.github.io/eyepl/examples/aggregation#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+:query :count 3 .
+:query :total 35 .

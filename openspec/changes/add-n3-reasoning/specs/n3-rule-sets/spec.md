@@ -1,7 +1,7 @@
 ## ADDED Requirements
 
 ### Requirement: Store a rule set
-`Tx::store_rules(rule_set, n3)` SHALL parse `n3` and, if it parses, assert `R = (rule_set n3:source "<n3>")`, where `n3:` is `urn:tiramemsu:n3:`. When a live `n3:source` statement for `rule_set` exists with different text, it SHALL be superseded by the new text; with equal text the call SHALL return the existing statement. Text that does not parse SHALL fail with `N3Parse` and leave no trace. `Rules::Stored(rule_set)` SHALL read the live `n3:source` of `rule_set` in the reasoning view and fail with `UnknownRuleSet` when there is none.
+`TxN3::store_rules(rule_set, n3)`, an extension trait on the facade `Tx` like `TxCypher`, SHALL parse `n3` and, if it parses, assert `R = (rule_set n3:source "<n3>")`, where `n3:` is `urn:tiramemsu:n3:`. When a live `n3:source` statement for `rule_set` exists with different text, it SHALL be superseded by the new text; with equal text the call SHALL return the existing statement. Text that does not parse SHALL fail with `N3Parse` and leave no trace. `Rules::Stored(rule_set)` SHALL read the live `n3:source` of `rule_set` in the reasoning view and fail with `UnknownRuleSet` when there is none.
 
 #### Scenario: Store and reason
 - **WHEN** `store_rules(v:mortality, "{ ?x a v:Human } => { ?x a v:Mortal }.")` commits and `reason(Rules::Stored(v:mortality))` runs
@@ -23,7 +23,7 @@ Editing a rule set SHALL be a supersede, so `as_of(t)` reasons with the rule set
 - **THEN** it runs version A
 
 ### Requirement: Monotonicity check
-Parsing a rule set SHALL classify it: `Monotonic`, `NonMonotonic { rule, builtin }` when a rule body uses `log:notIncludes`, `log:collectAllIn` or `log:forAllIn`, or `ClockDependent { rule, builtin }` when it uses `time:localTime` or `tm:now`. `View::rule_set_info(rule_set)` SHALL report the classification, the rule count and the predicates its bodies use.
+Parsing a rule set SHALL classify it: `Monotonic`, `NonMonotonic { rule, builtin }` when a rule body uses `log:notIncludes`, `log:collectAllIn` or `log:forAllIn`, `ClockDependent { rule, builtin }` when it uses `time:localTime` or `tm:now`, or `UntracedPremises { rule, builtin }` when it uses `list:map`, whose proof does not name the facts it read. Non-monotonic takes precedence over clock-dependent, and clock-dependent over untraced premises. `View::rule_set_info(rule_set)` SHALL report the classification, the rule count and the predicates its bodies use.
 
 #### Scenario: Negation is detected
 - **WHEN** a rule set contains `{ ?x a v:Employee. ?SCOPE log:notIncludes { ?x v:manager ?m } } => { ?x a v:Unmanaged }`

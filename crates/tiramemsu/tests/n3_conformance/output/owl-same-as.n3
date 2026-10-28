@@ -1,0 +1,10 @@
+@prefix : <http://example.org/> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+
+:robert owl:sameAs :bob .
+:bob owl:sameAs :rob .
+:bob owl:sameAs :bob .
+:robert owl:sameAs :robert .
+:rob owl:sameAs :robert .
+:rob owl:sameAs :rob .
+:rob owl:sameAs :bob .

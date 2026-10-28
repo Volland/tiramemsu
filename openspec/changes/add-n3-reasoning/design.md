@@ -80,7 +80,7 @@ Materialization derives every conclusion with support = its fact premises (eids)
 
 ### N11. Monotonic rule sets only for materialization
 
-A static check over rule bodies classifies a rule set: `log:notIncludes`, `log:collectAllIn` and `log:forAllIn` make it non-monotonic; `time:localTime` and `tm:now` make it clock-dependent. `materialize` refuses both with `N3NotMaterializable { rule, builtin }`; `reason` accepts every builtin. A fired inference fuse (`=> false`) is reported by `reason` as a contradiction and aborts `materialize` with `N3Contradiction` before anything is written.
+A static check over rule bodies classifies a rule set: `log:notIncludes`, `log:collectAllIn` and `log:forAllIn` make it non-monotonic; `time:localTime` and `tm:now` make it clock-dependent; `list:map`, whose proof does not list the facts it read, makes its premises untraced. `materialize` refuses all three with `N3NotMaterializable { rule, builtin }`; `reason` accepts every builtin. A fired inference fuse (`=> false`) is reported by `reason` as a contradiction and aborts `materialize` with `N3Contradiction` before anything is written.
 
 *Alternatives:* reconcile by diffing runs (stored conclusions become "grounded as of the last run"; needs a new retraction kind); allow and document staleness.
 

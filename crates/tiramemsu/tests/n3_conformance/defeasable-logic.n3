@@ -1,0 +1,60 @@
+# A bird-flight default with an exception
+#
+# Birds normally fly, while penguins are marked abnormal in this model. N3
+# rules use scoped absence tests to apply the default only when its
+# exception is absent.
+
+@base <https://eyereasoner.github.io/eye/reasoning/defeasable-logic/defeasable-logic.n3> .
+@prefix : <http://example.org/defeasible#> .
+@prefix log: <http://www.w3.org/2000/10/swap/log#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+# Strict facts
+:tweety a :Bird .
+:polly a :Penguin .
+
+# Taxonomy: every penguin is a bird
+{
+    ?X a :Penguin
+} => {
+    ?X a :Bird
+} .
+
+# Defeater: penguins are abnormal with respect to flying
+{
+    ?X a :Penguin
+} => {
+    ?X :abnormal true
+} .
+
+# Defeasible default: birds (normally) fly
+# The rule fires **only if** the current KB *does not* include
+# { ?X :abnormal true }  — that is SNAF via log:notIncludes.
+{
+    ?X a :Bird .
+    ?SCOPE log:notIncludes {
+        ?X :abnormal true
+    } .
+} => {
+    ?X :flies true .
+} .
+
+# Closed-world *no-fly* conclusion
+# “If X is a bird and the current knowledge base does NOT already
+# contain { X :flies true } then assert { X :flies false }.”
+{
+    ?X a :Bird .
+    ?SCOPE log:notIncludes {
+        ?X :flies true
+    } .
+} => {
+    ?X :flies false
+} .
+
+# query
+{
+    ?X :flies ?Y
+} log:query {
+    ?X :flies ?Y
+} .

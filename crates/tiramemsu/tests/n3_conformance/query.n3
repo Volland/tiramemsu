@@ -1,0 +1,24 @@
+# Deriving ancestors in a small family
+#
+# Three parent links describe two family branches. Recursive forward N3
+# rules derive direct and indirect ancestors, making the inferred
+# relationships available as output.
+
+@prefix : <https://eyereasoner.github.io/eyepl/examples/query#> .
+
+:alice :parentOf :bob .
+:bob :parentOf :carol .
+:dora :parentOf :emma .
+
+{
+    ?x :parentOf ?y
+} => {
+    ?x :ancestorOf ?y
+} .
+
+{
+    ?x :parentOf ?y .
+    ?y :ancestorOf ?z
+} => {
+    ?x :ancestorOf ?z
+} .

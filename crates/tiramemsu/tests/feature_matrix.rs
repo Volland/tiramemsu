@@ -382,3 +382,71 @@ fn default_surface_keeps_every_frontend() {
         .unwrap();
     assert!(saved.is_fresh());
 }
+
+// optional-query-frontends "Default build has no reasoner": the `n3` feature is
+// off by default and is the only way `tm-n3` (and with it eyeron) enters the
+// build; `scripts/feature-matrix.sh default deps` checks the resolved tree
+// @tg: verifies:: [[openspec:optional-query-frontends#Optional N3 reasoning feature#Default build has no reasoner]] {since: "2026-10-28", level: unit}
+#[test]
+fn default_build_has_no_reasoner() {
+    let manifest: toml::Value = toml::from_str(include_str!("../Cargo.toml")).unwrap();
+    let features = &manifest["features"];
+    let default: Vec<&str> = features["default"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|f| f.as_str().unwrap())
+        .collect();
+    assert!(!default.contains(&"n3"));
+    let n3: Vec<&str> = features["n3"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|f| f.as_str().unwrap())
+        .collect();
+    assert_eq!(n3, ["dep:tm-n3"], "n3 does not enable exec");
+    assert_eq!(
+        manifest["dependencies"]["tm-n3"]["optional"].as_bool(),
+        Some(true)
+    );
+    for (name, list) in features.as_table().unwrap() {
+        if name != "n3" {
+            assert!(
+                !list
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .any(|f| f.as_str() == Some("dep:tm-n3") || f.as_str() == Some("n3")),
+                "feature {name} pulls in the reasoner"
+            );
+        }
+    }
+}
+
+// optional-query-frontends "Core tier with reasoning": with `--no-default-features
+// --features n3` the core tier reasons (`scripts/feature-matrix.sh n3` checks
+// that `tm-exec` is absent from that tree)
+// @tg: verifies:: [[openspec:optional-query-frontends#Optional N3 reasoning feature#Core tier with reasoning]] {since: "2026-10-28", level: unit}
+#[test]
+#[cfg(feature = "n3")]
+fn core_tier_reasons() {
+    let dir = tempfile::tempdir().unwrap();
+    let db = open(&dir, "m.db");
+    db.transact(TxOptions::default(), |tx| {
+        tx.store_rules(v("mortality"), "{ ?x a v:Human } => { ?x a v:Mortal } .")?;
+        tx.assert(
+            v("socrates"),
+            Value::iri(vocab::RDF_TYPE),
+            v("Human"),
+            Valid::ALWAYS,
+        )?;
+        Ok(())
+    })
+    .unwrap();
+    let r = db
+        .now()
+        .reason(Rules::Stored(v("mortality")), &ReasonOptions::default())
+        .unwrap();
+    assert_eq!(r.conclusions.len(), 1);
+    assert_eq!(r.conclusions[0].o, N3Term::Value(v("Mortal")));
+}

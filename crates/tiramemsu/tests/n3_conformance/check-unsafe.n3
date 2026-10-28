@@ -1,0 +1,15 @@
+# An unbound rule conclusion
+#
+# A rule recognizes that Alice knows Bob but leaves its conclusion's person
+# variable unbound. Eyeron derives no new fact, illustrating how this
+# unsafe conclusion is handled.
+
+@prefix : <https://eyereasoner.github.io/eyepl/examples/check-unsafe#> .
+
+:alice :knows :bob .
+
+{
+    :alice :knows :bob
+} => {
+    ?someone a :Seen
+} .

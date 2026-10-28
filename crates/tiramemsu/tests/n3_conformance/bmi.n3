@@ -1,0 +1,98 @@
+# Calculating an illustrative body mass index
+#
+# A sample weight and height are converted into body mass index and an
+# adult category. N3 arithmetic also derives a weight band for that height;
+# this is an example, not medical advice.
+
+@prefix math: <http://www.w3.org/2000/10/swap/math#> .
+@prefix : <http://example/> .
+
+:input :weight 72.0 ;
+    :height 178.0 .
+
+{
+    :input :weight ?weight ;
+        :height ?heightCm .
+    (?heightCm 100.0) math:quotient ?meters .
+    (?meters ?meters) math:product ?heightSquared .
+    (?weight ?heightSquared) math:quotient ?bmi .
+    (18.5 ?heightSquared) math:product ?healthyMin .
+    (24.9 ?heightSquared) math:product ?healthyMax .
+} => {
+    :case :bmi ?bmi ;
+        :healthyMin ?healthyMin ;
+        :healthyMax ?healthyMax
+} .
+
+{
+    :case :bmi ?bmi .
+    (?bmi 100.0) math:product ?bmiScaled .
+    ?bmiScaled math:rounded ?bmiInt .
+    (?bmiInt 100.0) math:quotient ?bmiRounded .
+} => {
+    :case :bmiRounded ?bmiRounded
+} .
+
+{
+    :case :healthyMin ?min .
+    (?min 10.0) math:product ?minScaled .
+    ?minScaled math:rounded ?minInt .
+    (?minInt 10.0) math:quotient ?minRounded .
+} => {
+    :case :healthyMinRounded ?minRounded
+} .
+
+{
+    :case :healthyMax ?max .
+    (?max 10.0) math:product ?maxScaled .
+    ?maxScaled math:rounded ?maxInt .
+    (?maxInt 10.0) math:quotient ?maxRounded .
+} => {
+    :case :healthyMaxRounded ?maxRounded
+} .
+
+{
+    :case :bmi ?bmi .
+    ?bmi math:lessThan 18.5
+} => {
+    :case :category "underweight"
+} .
+
+{
+    :case :bmi ?bmi .
+    ?bmi math:notLessThan 18.5 .
+    ?bmi math:lessThan 25.0
+} => {
+    :case :category "normal"
+} .
+
+{
+    :case :bmi ?bmi .
+    ?bmi math:notLessThan 25.0 .
+    ?bmi math:lessThan 30.0
+} => {
+    :case :category "overweight"
+} .
+
+{
+    :case :bmi ?bmi .
+    ?bmi math:notLessThan 30.0 .
+    ?bmi math:lessThan 35.0
+} => {
+    :case :category "obesity_i"
+} .
+
+{
+    :case :bmi ?bmi .
+    ?bmi math:notLessThan 35.0 .
+    ?bmi math:lessThan 40.0
+} => {
+    :case :category "obesity_ii"
+} .
+
+{
+    :case :bmi ?bmi .
+    ?bmi math:notLessThan 40.0
+} => {
+    :case :category "obesity_iii"
+} .

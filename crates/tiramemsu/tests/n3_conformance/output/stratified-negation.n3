@@ -1,0 +1,5 @@
+@prefix : <https://eyereasoner.github.io/eyepl/examples/stratified-negation#> .
+
+:alice a :Blocked .
+:carol a :Blocked .
+:bob a :Eligible .

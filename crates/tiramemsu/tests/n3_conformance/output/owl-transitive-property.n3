@@ -1,0 +1,5 @@
+@prefix : <http://example.org/> .
+
+:alice :ancestor :carol .
+:bob :ancestor :dave .
+:alice :ancestor :dave .

@@ -1,0 +1,21 @@
+# Selecting people who are not blocked
+#
+# Two people are known and one is marked blocked. An N3 rule uses
+# log:notIncludes to derive eligibility for people whose blocked
+# classification is absent from the current reasoning scope.
+
+@prefix log: <http://www.w3.org/2000/10/swap/log#> .
+@prefix : <https://eyereasoner.github.io/eyepl/examples/negation#> .
+
+:alice a :Person .
+:bob a :Person .
+:bob a :Blocked .
+
+{
+    ?x a :Person .
+    ?SCOPE log:notIncludes {
+        ?x a :Blocked
+    } .
+} => {
+    ?x a :Eligible
+} .

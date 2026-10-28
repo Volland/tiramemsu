@@ -1,0 +1,9 @@
+@prefix : <http://example.org/> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+:out :year 2023 .
+:out :month 4 .
+:out :day 1 .
+:out :minute 6 .
+:out :second 4 .
+:out :tz "Z" .

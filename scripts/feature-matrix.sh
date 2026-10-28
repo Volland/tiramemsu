@@ -3,7 +3,7 @@
 #
 #   scripts/feature-matrix.sh <combo> [deps|check|test|handoff|all]
 #
-# combo: core | exec | sparql | cypher | default | bindings (deps only)
+# combo: core | exec | sparql | cypher | n3 | default | bindings (deps only)
 #   deps   assert the normal dependency tree of `tiramemsu` (`cargo tree -e normal`):
 #          which query crates and parsers are present and which are absent
 #   check  `cargo check` of the library, tests and examples in this combination
@@ -14,7 +14,7 @@
 #   all    deps, check, test, then handoff (the default)
 set -euo pipefail
 
-combo="${1:?usage: feature-matrix.sh <core|exec|sparql|cypher|default|bindings> [deps|check|test|handoff|all]}"
+combo="${1:?usage: feature-matrix.sh <core|exec|sparql|cypher|n3|default|bindings> [deps|check|test|handoff|all]}"
 step="${2:-all}"
 packages=(tiramemsu)
 
@@ -22,6 +22,13 @@ case "$combo" in
   core)
     flags=(--no-default-features)
     present=(tm-core tm-rusqlite)
+    absent=(tm-ir tm-exec tm-sparql tm-cypher spargebra peg open-cypher tm-n3 eyeron)
+    ;;
+  n3)
+    # N3 reasoning on the core tier (OpenSpec change `add-n3-reasoning`): the
+    # reasoner without the query engine
+    flags=(--no-default-features --features n3)
+    present=(tm-core tm-rusqlite tm-n3 eyeron)
     absent=(tm-ir tm-exec tm-sparql tm-cypher spargebra peg open-cypher)
     ;;
   exec)
@@ -42,7 +49,8 @@ case "$combo" in
   default)
     flags=()
     present=(tm-core tm-rusqlite tm-ir tm-exec tm-sparql spargebra tm-cypher open-cypher)
-    absent=()
+    # the reasoner is off by default
+    absent=(tm-n3 eyeron)
     ;;
   bindings)
     # the JSON bridge, the MCP server and the Node and Python bindings ship the

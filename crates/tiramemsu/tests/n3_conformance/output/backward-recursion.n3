@@ -1,0 +1,5 @@
+@prefix : <urn:example#> .
+
+:a :reaches :b .
+:a :reaches :c .
+:a :reaches :d .

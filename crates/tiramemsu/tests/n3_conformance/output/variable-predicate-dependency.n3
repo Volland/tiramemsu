@@ -1,0 +1,4 @@
+@prefix : <https://eyereasoner.github.io/eyepl/examples/variable-predicate-dependency#> .
+
+:a a :Derived .
+:a a :Blocked .

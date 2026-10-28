@@ -1,0 +1,13 @@
+@prefix : <https://eyereasoner.github.io/ns#> .
+
+:ok_list_append_1 a :Pass .
+:ok_list_first_1 a :Pass .
+:ok_list_in_1 a :Pass .
+:ok_list_iterate_1 a :Pass .
+:ok_list_last_1 a :Pass .
+:ok_list_length_1 a :Pass .
+:ok_list_member_1 a :Pass .
+:ok_list_memberAt_1 a :Pass .
+:ok_list_remove_1 a :Pass .
+:ok_list_rest_1 a :Pass .
+:ok_list_firstRest_1 a :Pass .

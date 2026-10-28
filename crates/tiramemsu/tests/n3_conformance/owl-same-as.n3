@@ -1,0 +1,36 @@
+# Extending equality links
+#
+# Three names are connected through owl:sameAs statements. Explicit N3
+# rules derive symmetric and transitive equality links and include a fuse
+# for a contradictory difference statement.
+
+@prefix : <http://example.org/> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix list: <http://www.w3.org/2000/10/swap/list#> .
+@prefix log: <http://www.w3.org/2000/10/swap/log#> .
+
+# Sample data
+:bob owl:sameAs :robert .
+:robert owl:sameAs :rob .
+
+# Inference rules
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+
+{
+    ?X owl:sameAs ?Y
+} => {
+    ?Y owl:sameAs ?X
+} .
+
+{
+    ?X owl:sameAs ?Y .
+    ?Y owl:sameAs ?Z
+} => {
+    ?X owl:sameAs ?Z
+} .
+
+{
+    ?X owl:sameAs ?Y .
+    ?X owl:differentFrom ?Y
+} => false .

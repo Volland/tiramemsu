@@ -1,0 +1,20 @@
+# An inference fuse involving a quoted rule
+#
+# The example states that a liar classification would imply false and also
+# rejects that very rule. Matching the quoted implication triggers an N3
+# inference fuse and stops the run.
+#
+# expect-exit: 65
+
+@prefix : <https://eyereasoner.github.io/ns#> .
+@prefix log: <http://www.w3.org/2000/10/swap/log#> .
+
+{
+    :Alice a :Liar
+} => false .
+
+{
+    {
+        :Alice a :Liar
+    } => false
+} => false .

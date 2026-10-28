@@ -1,0 +1,29 @@
+# Checking every subtask
+#
+# A composite task lists three completed subtasks. An N3 rule uses
+# log:forAllIn to test that each listed subtask meets the completion
+# condition and derives a result when all do.
+
+@prefix : <http://example.org/#> .
+@prefix log: <http://www.w3.org/2000/10/swap/log#> .
+
+:c a :CompositeTask ;
+    :subTask :s1, :s2, :s3 .
+
+:s1 :state :Completed .
+:s2 :state :Completed .
+:s3 :state :Completed .
+
+{
+    ?c a :CompositeTask .
+    (
+        {
+            ?c :subTask ?s
+        }
+        {
+            ?s :state :Completed
+        }
+    ) log:forAllIn _:t .
+} => {
+    :result :is true .
+} .

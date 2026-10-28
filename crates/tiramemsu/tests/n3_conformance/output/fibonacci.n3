@@ -1,0 +1,4 @@
+@prefix : <https://eyereasoner.github.io/eyepl/examples/fibonacci#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+:query :fib 832040 .

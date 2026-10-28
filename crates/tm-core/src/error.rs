@@ -284,6 +284,37 @@ pub enum Error {
         /// The name that was looked up.
         name: String,
     },
+    /// N3 rule text that does not parse (facade feature `n3`).
+    #[error("N3 parse error at line {line}: {message}")]
+    N3Parse {
+        /// The 1-based line of the error (0 when the parser gave no position).
+        line: usize,
+        /// What was wrong.
+        message: String,
+    },
+    /// `Rules::Stored` names a rule set without a live `n3:source` statement in
+    /// the reasoning view (facade feature `n3`).
+    #[error("unknown rule set: {rule_set}")]
+    UnknownRuleSet {
+        /// The rule set, rendered.
+        rule_set: String,
+    },
+    /// Materialization of a rule set that uses a non-monotonic or a
+    /// clock-reading builtin (facade feature `n3`).
+    #[error("rule set cannot be materialized: rule {rule} uses {builtin}")]
+    N3NotMaterializable {
+        /// The index of the first offending rule in its rule set.
+        rule: usize,
+        /// The builtin it uses, as a prefixed name (`log:notIncludes`, `time:localTime`).
+        builtin: String,
+    },
+    /// An inference fuse (`{ … } => false`) fired during materialization;
+    /// nothing was written (facade feature `n3`).
+    #[error("inference fuse fired: rule {rule}")]
+    N3Contradiction {
+        /// The index of the fuse rule in its rule set.
+        rule: usize,
+    },
     /// A file that is neither a SQLite nor a redb database.
     #[error("{path} is not a database file this build can open (neither SQLite nor redb)")]
     UnknownFormat {

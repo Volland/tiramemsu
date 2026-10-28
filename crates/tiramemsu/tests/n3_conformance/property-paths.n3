@@ -1,0 +1,23 @@
+# Combining and reversing parent links
+#
+# Two parent facts form a short family chain. Ordinary N3 rules join two
+# links to derive a grandparent and reverse a link to derive a has-parent
+# relationship.
+
+@prefix : <http://example/> .
+
+:a :parentOf :b .
+:b :parentOf :c .
+
+{
+    ?x :parentOf ?y .
+    ?y :parentOf ?z
+} => {
+    ?x :grandparentOf ?z
+} .
+
+{
+    ?x :parentOf ?y
+} => {
+    ?y :hasParent ?x
+} .

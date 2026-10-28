@@ -1,0 +1,24 @@
+# Matching Unicode escapes and a negative number
+#
+# A string contains a Unicode escape, and a temperature change is negative.
+# N3 rules recognize the decoded text and use a numeric comparison to
+# derive a below-zero classification.
+
+@prefix math: <http://www.w3.org/2000/10/swap/math#> .
+@prefix : <https://eyereasoner.github.io/eyepl/examples/unicode-and-signed-numbers#> .
+
+:sample :text "AB\U00000043" .
+:thermo :delta -12 .
+
+{
+    :sample :text "ABC"
+} => {
+    :sample a :UnicodeDecoded
+} .
+
+{
+    :thermo :delta ?d .
+    ?d math:lessThan 0 .
+} => {
+    :thermo a :BelowZero
+} .

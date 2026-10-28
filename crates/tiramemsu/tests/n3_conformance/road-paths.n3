@@ -1,0 +1,43 @@
+# Building routes between cities
+#
+# One-way road links connect a small city network. Backward N3 rules follow
+# those links and construct path lists for the requested trips.
+
+@prefix : <http://example.org/#> .
+@prefix log: <http://www.w3.org/2000/10/swap/log#> .
+
+:paris :oneway :orleans .
+:paris :oneway :chartres .
+:paris :oneway :amiens .
+:orleans :oneway :blois .
+:orleans :oneway :bourges .
+:blois :oneway :tours .
+:chartres :oneway :lemans .
+:lemans :oneway :angers .
+:lemans :oneway :tours .
+:angers :oneway :nantes .
+
+{
+    ?A :oneway ?B .
+} => {
+    ?A :path ?B .
+} .
+
+{
+    ?A :path ?B .
+    ?B :path ?C .
+} => {
+    ?A :path ?C .
+} .
+
+{
+    ?A :path :nantes .
+} => {
+    ?A :path :nantes .
+} .
+
+{
+    ?A :path :nantes .
+} log:query {
+    ?A :path :nantes .
+} .

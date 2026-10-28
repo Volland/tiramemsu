@@ -1,0 +1,7 @@
+@prefix : <http://example.org/#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+:test1 :is true .
+:test2 :is true .
+:test3 :is true .
+:test4 :is true .

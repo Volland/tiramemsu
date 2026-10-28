@@ -1,0 +1,4 @@
+@prefix : <http://example.org/expression-eval#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+:Root :result 12 .

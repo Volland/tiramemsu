@@ -1,0 +1,25 @@
+# Following a negative dependency cycle
+#
+# One rule derives a classification when a blocked label is absent, and
+# another derives that blocked label from the classification. The N3
+# example exposes the resulting behavior of the scoped absence test.
+
+@prefix log: <http://www.w3.org/2000/10/swap/log#> .
+@prefix : <https://eyereasoner.github.io/eyepl/examples/variable-predicate-dependency#> .
+
+:a :source :blocked .
+
+{
+    ?x :source :blocked .
+    ?SCOPE log:notIncludes {
+        ?x a :Blocked
+    } .
+} => {
+    ?x a :Derived
+} .
+
+{
+    ?x a :Derived
+} => {
+    ?x a :Blocked
+} .

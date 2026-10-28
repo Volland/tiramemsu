@@ -1,0 +1,7 @@
+@prefix : <http://example/> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+:bob :knownBy :alice .
+:bob :scoredFor 8 .
+:carol :knownBy :alice .
+:carol :scoredFor 8 .

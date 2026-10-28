@@ -1,0 +1,39 @@
+# Matching backward-rule calls
+#
+# A fact uses one property and a backward rule exposes it through another.
+# Forward rules test fully specified and partly variable calls, showing how
+# backward answers bind rule variables.
+
+@base <https://eyereasoner.github.io/eye/reasoning/bcrule/example1.n3> .
+@prefix : <http://example.org/#> .
+
+:a :b :c .
+{
+    ?s :B ?o
+} <= {
+    ?s :b ?o
+} .
+
+{
+    ?s :B ?o
+} => {
+    :TEST :PASS 1.1
+} .
+
+{
+    :a :B :c
+} => {
+    :TEST :PASS 1.2
+} .
+
+{
+    :a :B ?o
+} => {
+    :TEST :PASS 1.3
+} .
+
+{
+    ?s :B :c
+} => {
+    :TEST :PASS 1.4
+} .

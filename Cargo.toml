@@ -34,6 +34,10 @@ tm-cypher = { path = "crates/tm-cypher", version = "0.8.1" }
 tiramemsu-json = { path = "bindings/json", version = "0.8.1" }
 tiramemsu-mcp = { path = "crates/tiramemsu-mcp", version = "0.8.1" }
 tm-wasm = { path = "crates/tm-wasm", version = "0.8.1" }
+tm-n3 = { path = "crates/tm-n3", version = "0.8.1" }
+# The N3 reasoner, pinned to a git commit until it is on crates.io (OpenSpec
+# change `publish-eyeron-dependency`); `tm-n3` is `publish = false` meanwhile.
+eyeron = { git = "https://github.com/eyereasoner/eyeron", rev = "c4adb8c15315f7ea0325c5b901989f19a14ccc78", default-features = false }
 
 # The storage engine is optimised even in dev builds: redb is pure Rust, and an
 # unoptimised B-tree makes the redb test suites ten times slower (SQLite is
@@ -42,4 +46,9 @@ tm-wasm = { path = "crates/tm-wasm", version = "0.8.1" }
 opt-level = 3
 
 [profile.dev.package.tm-redb]
+opt-level = 3
+
+# The N3 reasoner is optimised in dev builds too: its conformance corpus runs
+# in the test suite.
+[profile.dev.package.eyeron]
 opt-level = 3

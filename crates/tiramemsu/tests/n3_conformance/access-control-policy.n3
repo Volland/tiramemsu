@@ -1,0 +1,82 @@
+# Checking an access policy
+#
+# A request must satisfy required fields, include an allowed option, and
+# avoid forbidden fields. Eyeron checks these conditions with backward
+# rules and scoped tests over the request facts.
+
+@base <https://eyereasoner.github.io/eye/reasoning/access-control-policy/acp.n3> .
+
+# Access control policy example
+@prefix list: <http://www.w3.org/2000/10/swap/list#> .
+@prefix log: <http://www.w3.org/2000/10/swap/log#> .
+@prefix : <http://example.org/#> .
+
+:test1 :policy :PolicyX ;
+    :has :A, :B, :C .
+
+:PolicyX a :Policy ;
+    :allOf :A, :B ;
+    :anyOf :C ;
+    :noneOf :D .
+
+{
+    ?Pol :pass :allOfTest .
+} <= {
+    ?Test :policy ?Pol .
+    ?Pol a :Policy .
+    (
+        {
+            ?Pol :allOf ?Field
+        }
+        {
+            ?Test :has ?Field
+        }
+    ) log:forAllIn ?X .
+} .
+
+{
+    ?Pol :pass :anyOfTest .
+} <= {
+    ?Test :policy ?Pol .
+    ?Pol a :Policy .
+    (
+        ?Field {
+            ?Pol :anyOf ?Field .
+            ?Test :has ?Field
+        }
+        ?List
+    ) log:collectAllIn ?X .
+    ?List list:length ?L .
+    ?L log:notEqualTo 0 .
+} .
+
+{
+    ?Pol :pass :noneOfTest .
+} <= {
+    ?Test :policy ?Pol .
+    ?Pol a :Policy .
+    (
+        ?Field {
+            ?Pol :noneOf ?Field .
+            ?Test :has ?Field
+        }
+        ?List
+    ) log:collectAllIn ?X .
+    ?List list:length ?L .
+    ?L log:equalTo 0 .
+} .
+
+# Query
+@prefix : <http://example.org/#> .
+@prefix log: <http://www.w3.org/2000/10/swap/log#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+{
+    ?Pol a :Policy .
+    ?Pol :pass :allOfTest .
+    ?Pol :pass :anyOfTest .
+    ?Pol :pass :noneOfTest .
+} log:query {
+    :test :for ?Pol .
+    :test :is true .
+} .

@@ -1,0 +1,5 @@
+@prefix : <http://example/> .
+
+:a :grandparentOf :c .
+:b :hasParent :a .
+:c :hasParent :b .

@@ -1,0 +1,17 @@
+# Stopping on an explicit contradiction
+#
+# One stone is described as both black and white. An N3 rule concludes
+# false when it finds that combination, causing an inference fuse to stop
+# the run.
+#
+# expect-exit: 65
+
+@prefix : <https://eyereasoner.github.io/ns#> .
+
+:stone :color :black .
+:stone :color :white .
+
+{
+    ?X :color :black .
+    ?X :color :white .
+} => false .

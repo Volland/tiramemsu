@@ -128,6 +128,7 @@ The Rust workspace is split by layer so each front end compiles against the IR o
 | `tm-exec` | Planner/router, SQL codegen, path operator, the table functions `tm_path`, `tm_text` and the opt-in `tm_lftj` | `tm-ir`, `tm-core` |
 | `tm-sparql` | SPARQL 1.1 (+1.2 annotations) → IR, results as SPARQL JSON/terms | `spargebra`, `tm-ir` |
 | `tm-cypher` | openCypher subset + extensions → IR, results as Cypher values | a Cypher parser, `tm-ir` |
+| `tm-n3` | N3 reasoning with eyeron over facts handed to it: term mapping, rule analysis and pruning sets, the pointwise valid-time sweep, proofs and support keys; never touches a store ([[reasoning]]) | `tm-core`, `eyeron` (git pin until published) |
 | `tiramemsu` | Facade: `Db`, `View`, `Tx`, results, reader pool, budgets, bulk import, saved answers, conflict review and previews; the only crate bindings use | `tm-core`, `tm-rusqlite`; the others behind cargo features ([[architecture#Crates#Cargo Features]]) |
 | `tiramemsu-json` (`bindings/json`) | The JSON bridge: one `Database` with `call(op, args)`, shared by every binding ([[bindings#JSON Bridge]]) | `tiramemsu` with `sparql` and `cypher` |
 | `tiramemsu-mcp` | Local stdio MCP server with typed memory tools ([[api#MCP Tools]]) | `tiramemsu-json`, `tiramemsu` |
@@ -205,13 +206,14 @@ The facade's query engine and front ends are optional dependencies (`add-optiona
 | `sparql` | `View::sparql*`, `SparqlResult`, `Solutions`; implies `exec` | `tm-sparql`, `spargebra`, `peg` |
 | `cypher` | `View::cypher`, `Db::cypher_write*`, `TxCypher`; implies `exec` | `tm-cypher`, `open-cypher` |
 | `redb` | `Backend::Redb`: create, open and convert redb files; queries on them need `exec` | `tm-redb`, `redb` |
+| `n3` | `View::reason`, `View::rule_set_info`, `TxN3::store_rules`, `Db::materialize`; off by default, independent of `exec` ([[reasoning#Optional Crate]]) | `tm-n3`, `eyeron` |
 | `default` | `sparql` + `cypher`, and saved answers, which store queries of both languages | all |
 
 - **Serialisation is not parsing.** The RDF terms and the N-Triples writer moved from `tm-sparql` to [[crates/tm-core/src/rdf.rs#render]] and [[crates/tm-core/src/rdf.rs#write_ntriples]], which `tm-sparql` re-exports, so bundle N-Triples and JSON need no front end.
 - **No engine without `exec`.** The facade's engine type is uninhabited and [[crates/tiramemsu/src/db.rs#open_engine]] installs nothing, so a core build behaves like `query_engine: false` with the options absent.
 - **Disabled APIs are absent**, not runtime errors, and the file format does not depend on the features. The JSON bridge, the MCP server and the bindings enable `sparql` and `cypher` explicitly.
 - **Compatibility.** Until 0.2 the `sparql` feature only switched the SPARQL side of the differential suite and `default-features = false` still built both front ends; the facade README documents the migration.
-- **Checks.** `scripts/feature-matrix.sh` asserts each combination's `cargo tree -e normal`, checks and tests it, and hands one file between it and the default build; the CI `features` job runs it for core, exec, sparql, cypher, default and the bindings ([[tests#Optional Query Frontends]]).
+- **Checks.** `scripts/feature-matrix.sh` asserts each combination's `cargo tree -e normal`, checks and tests it, and hands one file between it and the default build; the CI `features` job runs it for core, exec, sparql, cypher, n3, default and the bindings ([[tests#Optional Query Frontends]]).
 
 ## Executor
 

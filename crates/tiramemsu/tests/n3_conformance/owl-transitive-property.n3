@@ -1,0 +1,28 @@
+# Extending an ancestor relationship
+#
+# An ancestor property is declared transitive, with a chain of three links.
+# An explicit N3 rule combines adjacent links to derive the indirect
+# ancestor relationships.
+
+@prefix : <http://example.org/> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix list: <http://www.w3.org/2000/10/swap/list#> .
+@prefix log: <http://www.w3.org/2000/10/swap/log#> .
+
+# Sample data
+:ancestor a owl:TransitiveProperty .
+:alice :ancestor :bob .
+:bob :ancestor :carol .
+:carol :ancestor :dave .
+
+# Inference rules
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+
+{
+    ?P a owl:TransitiveProperty .
+    ?S ?P ?X .
+    ?X ?P ?O .
+} => {
+    ?S ?P ?O
+} .
