@@ -1,0 +1,173 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Recipes: Reasoning with N3 in Tiramemsu</title>
+<meta name="description" content="Tenure from validity, colleagues who overlapped, trusted facts, layered rule sets, contradiction fuses and previewing a rule edit.">
+<link rel="icon" href="../assets/logo.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../style.css">
+<link rel="stylesheet" href="book.css">
+</head>
+<body>
+<header class="top"><div class="wrap">
+  <a class="brand" href="../"><img src="../assets/logo.svg" alt="">Tiramemsu</a>
+  <nav class="menu"><a href="../#features">Features</a><a href="../#matrix">Matrix</a><a href="../#start">Quick start</a><a href="./">N3 book</a><a href="../articles/">Articles</a><a href="../paper/">Papers</a><a href="https://github.com/Volland/tiramemsu">GitHub</a></nav>
+</div></header>
+
+<div class="book">
+<nav class="book-toc" aria-label="Chapters">
+  <a class="book-home" href="./">Reasoning with N3</a>
+  <ol>
+    <li><a href="why-rules.html"><span class="n">01</span>Why rules in memory</a></li>
+    <li><a href="n3-in-15-minutes.html"><span class="n">02</span>N3 in fifteen minutes</a></li>
+    <li><a href="memory-as-n3.html"><span class="n">03</span>Your memory as N3</a></li>
+    <li><a href="transaction-time.html"><span class="n">04</span>Transaction time</a></li>
+    <li><a href="valid-time.html"><span class="n">05</span>Valid time</a></li>
+    <li><a href="rule-sets.html"><span class="n">06</span>Rule sets as memory</a></li>
+    <li><a href="materialization.html"><span class="n">07</span>Materialization</a></li>
+    <li><a href="recipes.html" aria-current="page"><span class="n">08</span>Recipes</a></li>
+    <li><a href="reference.html"><span class="n">09</span>Reference</a></li>
+  </ol>
+</nav>
+<article class="post chapter">
+<p class="book-crumb"><a href="./">Reasoning with N3</a> · Chapter 8 of 9</p>
+<p class="kicker"><span>Chapter 8</span></p>
+<h1>Recipes</h1>
+<p class="lede">Seven worked problems. Each one shows the rules, the call, what comes back and the catch.</p>
+<p class="recipe-index"><a href="#tenure">1. Tenure from validity</a> · <a href="#colleagues">2. Colleagues who overlapped</a> · <a href="#trusted">3. Trusted facts</a> · <a href="#layered">4. Layered rule sets</a> · <a href="#fuse">5. Contradiction fuses</a> · <a href="#preview">6. Previewing a rule edit</a> · <a href="#explain">7. Explaining a past conclusion</a></p>
+
+<h2 id="tenure">1. Tenure longer than two years</h2>
+<p><strong>Problem.</strong> Mark people who stayed at an employer for more than two years. The employment facts already carry valid time. Nobody should have to copy dates into extra properties.</p>
+<p class="codefile">v:tenure</p><pre><code><span class="k">@prefix</span> v: &lt;urn:tiramemsu:v:&gt;.
+<span class="k">@prefix</span> tm: &lt;urn:tiramemsu:tm:&gt;.
+<span class="k">@prefix</span> math: &lt;http://www.w3.org/2000/10/swap/math#&gt;.
+
+<span class="c"># Closed employments: the interval is in the statement.</span>
+{ <span class="v">?e</span> tm:content { <span class="v">?p</span> v:worksAt <span class="v">?c</span> };
+     tm:validFrom <span class="v">?from</span>;
+     tm:validTo <span class="v">?to</span>.
+  (<span class="v">?to</span> <span class="v">?from</span>) math:difference <span class="v">?seconds</span>.
+  <span class="v">?seconds</span> math:greaterThan <span class="s">63072000</span>          <span class="c"># 2 × 365 days</span>
+} <span class="k">=&gt;</span> { <span class="v">?p</span> v:longTenureAt <span class="v">?c</span> }.</code></pre>
+<p>For e1 = <code>(v:alice v:worksAt v:acme)</code> valid <code>[2020-01-01, 2023-01-01)</code>, the rule concludes <code>(v:alice v:longTenureAt v:acme)</code>. Under pointwise semantics the conclusion holds while its premise does, so its interval is e1’s, <code>[2020, 2023)</code>. That reads as “during this employment, Alice was a long-tenured employee”. If you want a timeless statement instead, run with <code>TimeMode::Atemporal</code> and the conclusion is unbounded.</p>
+<p>The rule set is monotonic: <code>tm:validFrom</code> and <code>tm:validTo</code> are data, not a clock. It can be materialized, and a correction to e1’s dates retracts the conclusion.</p>
+<p><strong>Open employments</strong> have no <code>tm:validTo</code>, so the rule above skips them. Their tenure depends on today, which makes it a question for <code>reason</code>, asked on a snapshot of the present:</p>
+<p class="codefile">v:tenure-today</p><pre><code><span class="k">@prefix</span> v: &lt;urn:tiramemsu:v:&gt;.
+<span class="k">@prefix</span> tm: &lt;urn:tiramemsu:tm:&gt;.
+<span class="k">@prefix</span> math: &lt;http://www.w3.org/2000/10/swap/math#&gt;.
+
+{ <span class="v">?e</span> tm:content { <span class="v">?p</span> v:worksAt <span class="v">?c</span> };
+     tm:validFrom <span class="v">?from</span>.
+  tm:run tm:now <span class="v">?now</span>.
+  (<span class="v">?now</span> <span class="v">?from</span>) math:difference <span class="v">?seconds</span>.
+  <span class="v">?seconds</span> math:greaterThan <span class="s">63072000</span>
+} <span class="k">=&gt;</span> { <span class="v">?p</span> v:longTenureAt <span class="v">?c</span> }.</code></pre>
+<pre><code><span class="k">let</span> today = db.now().valid_at(ms(<span class="s">"2026-10-28"</span>));   <span class="c">// ms(): your date-to-epoch-ms helper</span>
+<span class="k">let</span> r = today.reason(Rules::Stored(v(<span class="s">"tenure-today"</span>)), &amp;ReasonOptions::default())?;</code></pre>
+<p><strong>Catch.</strong> <code>v:tenure-today</code> is <code>ClockDependent</code>, so <code>materialize</code> refuses it. That is the point: a stored “long tenure” computed from today would silently become wrong. Check how eyeron represents the difference of two <code>xsd:dateTime</code> values before relying on the threshold; the example assumes seconds.</p>
+
+<h2 id="colleagues">2. Colleagues who overlapped in time</h2>
+<p><strong>Problem.</strong> Two people are colleagues while both work at the same company. Interval arithmetic in rules is tedious and easy to get wrong.</p>
+<p class="codefile">v:colleagues</p><pre><code><span class="k">@prefix</span> v: &lt;urn:tiramemsu:v:&gt;.
+<span class="k">@prefix</span> log: &lt;http://www.w3.org/2000/10/swap/log#&gt;.
+
+{ <span class="v">?a</span> v:worksAt <span class="v">?c</span>. <span class="v">?b</span> v:worksAt <span class="v">?c</span>. <span class="v">?a</span> log:notEqualTo <span class="v">?b</span> } <span class="k">=&gt;</span> { <span class="v">?a</span> v:colleagueOf <span class="v">?b</span> }.</code></pre>
+<p>The rule says nothing about time, and it does not need to. With these facts:</p>
+<ul>
+  <li>Alice at Acme <code>[2019, 2023)</code></li>
+  <li>Bob at Acme <code>[2021, 2025)</code></li>
+  <li>Carol at Acme from <code>2024</code></li>
+</ul>
+<p>the sweep gives exactly the overlaps: Alice and Bob are colleagues <code>[2021, 2023)</code>, Bob and Carol <code>[2024, 2025)</code>, in both directions. Alice and Carol never are. Each conclusion rests on the two employment statements and the rule set. If Bob’s start date is corrected, his colleague conclusions go with the old fact, and the next run writes them with the new overlap.</p>
+<p><strong>Catch.</strong> Every employment start and end is a cut. A company with thousands of staff changes over decades makes many segments. Scope the run to a company with <code>ReasonScope::Seeds</code>, or use a window.</p>
+
+<h2 id="trusted">3. Trusted facts from confidence layers</h2>
+<p><strong>Problem.</strong> Downstream rules and queries should only use employment facts the agent is confident about. Confidence is a layer on the fact.</p>
+<p class="codefile">v:trust</p><pre><code><span class="k">@prefix</span> v: &lt;urn:tiramemsu:v:&gt;.
+<span class="k">@prefix</span> tm: &lt;urn:tiramemsu:tm:&gt;.
+<span class="k">@prefix</span> math: &lt;http://www.w3.org/2000/10/swap/math#&gt;.
+
+{ <span class="v">?e</span> v:confidence <span class="v">?c</span>.
+  <span class="v">?c</span> math:greaterThan <span class="s">0.8</span>.
+  <span class="v">?e</span> tm:content { <span class="v">?s</span> v:worksAt <span class="v">?o</span> }
+} <span class="k">=&gt;</span> { <span class="v">?s</span> v:trustedWorksAt <span class="v">?o</span> }.</code></pre>
+<p>With e1 = <code>(v:alice v:worksAt v:acme)</code> carrying the layer <code>(e1 v:confidence 0.9)</code>, and <code>(v:bob v:worksAt v:globex)</code> carrying 0.6, only Alice’s fact becomes <code>(v:alice v:trustedWorksAt v:acme)</code>. Its premises are the layer and e1. Materialize it, then lower Alice’s confidence to 0.5 with <code>supersede</code>: the old layer is a support, so the trusted fact is retracted in that transaction, and the next run does not derive it again.</p>
+<p><strong>Catch.</strong> Name the predicate inside <code>tm:content</code>. <code>{ ?s ?p ?o }</code> there would turn pruning off and load the whole scope (<a href="memory-as-n3.html#pruning">chapter 3</a>). Write one rule per predicate you trust.</p>
+
+<h2 id="layered">4. Layered rule sets</h2>
+<p><strong>Problem.</strong> Some conclusions build on others. Keep each step in its own rule set, so an edit to one step retracts only what depends on it.</p>
+<p class="codefile">v:where-people-work</p><pre><code><span class="k">@prefix</span> v: &lt;urn:tiramemsu:v:&gt;.
+
+{ <span class="v">?p</span> v:worksAt <span class="v">?c</span>. <span class="v">?c</span> v:locatedIn <span class="v">?l</span> } <span class="k">=&gt;</span> { <span class="v">?p</span> v:worksIn <span class="v">?l</span> }.</code></pre>
+<p class="codefile">v:countries</p><pre><code><span class="k">@prefix</span> v: &lt;urn:tiramemsu:v:&gt;.
+
+{ <span class="v">?p</span> v:worksIn <span class="v">?city</span>. <span class="v">?city</span> v:inCountry <span class="v">?k</span> } <span class="k">=&gt;</span> { <span class="v">?p</span> v:worksInCountry <span class="v">?k</span> }.</code></pre>
+<pre><code>db.materialize(v(<span class="s">"where-people-work"</span>), &amp;MaterializeOptions::default())?;
+db.materialize(v(<span class="s">"countries"</span>), &amp;MaterializeOptions::default())?;</code></pre>
+<p>Each <code>v:worksInCountry</code> conclusion rests on a <code>v:worksIn</code> conclusion, a <code>v:inCountry</code> fact and the <code>v:countries</code> rule set. Retract an employment and both levels fall. Edit <code>v:countries</code> and only the upper level is retracted. Edit <code>v:where-people-work</code> and both levels are retracted, because the upper conclusions rest on the lower ones.</p>
+<p><strong>Catch.</strong> Order matters. Materialize from the bottom up. A rule set reads the conclusions of others as they are when it runs, and does not run them.</p>
+
+<h2 id="fuse">5. Contradiction detection with a fuse</h2>
+<p><strong>Problem.</strong> Nobody can be an employee and a contractor of the same company at the same time. Find violations, and keep inconsistent data from producing conclusions.</p>
+<p class="codefile">v:contracts</p><pre><code><span class="k">@prefix</span> v: &lt;urn:tiramemsu:v:&gt;.
+
+{ <span class="v">?x</span> v:employeeOf <span class="v">?c</span>. <span class="v">?x</span> v:contractorOf <span class="v">?c</span> } <span class="k">=&gt;</span> <span class="k">false</span>.</code></pre>
+<p>Because of pointwise semantics, the fuse fires only for overlapping intervals. Bob, a contractor of Acme <code>[2019, 2021)</code> and an employee from 2021, is fine. Carol, listed as both during 2024, is not. <code>reason</code> reports the contradiction with the rule and the instance:</p>
+<pre><code><span class="k">let</span> r = db.now().reason(Rules::Stored(v(<span class="s">"contracts"</span>)), &amp;ReasonOptions::default())?;
+<span class="k">if</span> <span class="k">let</span> <span class="k">Some</span>(x) = &amp;r.contradiction {
+    println!(<span class="s">"rule {} fired for {:?}"</span>, x.rule, x.instance);   <span class="c">// carol, acme</span>
+}</code></pre>
+<p>Put the fuse in the same rule set as the rules that derive from these facts, and <code>materialize</code> becomes a consistency gate. A fired fuse fails it with <code>N3Contradiction</code> before anything is written:</p>
+<pre><code><span class="k">match</span> db.materialize(v(<span class="s">"staffing"</span>), &amp;MaterializeOptions::default()) {
+    <span class="k">Err</span>(Error::N3Contradiction { rule, .. }) =&gt; println!(<span class="s">"inconsistent data, rule {rule}; nothing written"</span>),
+    other =&gt; { other?; }
+}</code></pre>
+<p><strong>Catch.</strong> A fuse sees only what the run loads. Scoped or pruned runs check only their part of memory.</p>
+
+<h2 id="preview">6. Previewing a rule edit</h2>
+<p><strong>Problem.</strong> Before you change a rule set, see what the change will retract and what the new version will conclude.</p>
+<p>Everything the current version produced rests on its statement <code>R</code>, so <code>dependents(R)</code> lists it: every conclusion, its links and labels, and the conclusions of other rule sets built on top. Find <code>R</code> with a query, or keep the eid <code>store_rules</code> returned.</p>
+<pre><code><span class="k">PREFIX</span> n3: &lt;urn:tiramemsu:n3:&gt;
+<span class="k">SELECT</span> <span class="v">?r</span> <span class="k">WHERE</span> { v:where-people-work n3:source <span class="v">?text</span> ~ <span class="v">?r</span> }</code></pre>
+<pre><code><span class="c">// What goes: everything that rests on the current version.</span>
+<span class="k">let</span> at_stake = db.now().dependents(r)?;
+println!(<span class="s">"{} statements rest on the current rules"</span>, at_stake.len());
+
+<span class="c">// The same, as the exact report of the edit, without committing it.</span>
+<span class="k">let</span> dry = db.transact(TxOptions { dry_run: <span class="k">true</span>, ..TxOptions::default() }, |tx| {
+    tx.store_rules(v(<span class="s">"where-people-work"</span>), NEW_TEXT)?;
+    <span class="k">Ok</span>(())
+})?;
+println!(<span class="s">"{:?}"</span>, dry.retracted);              <span class="c">// old conclusions, kind Supersede</span>
+
+<span class="c">// What comes: the new version's conclusions, read-only.</span>
+<span class="k">let</span> next = db.now().reason(Rules::Text(NEW_TEXT.into()), &amp;ReasonOptions::default())?;</code></pre>
+<p><strong>Catch.</strong> <code>dependents</code> is never truncated. On a large rule set the list can be long. Compare its length with your own limit before acting on it.</p>
+
+<h2 id="explain">7. Explaining a past conclusion</h2>
+<p><strong>Problem.</strong> An agent acted on a conclusion last month. It has since been retracted. What did it rest on?</p>
+<p>Nothing was deleted. The conclusion, its support links and its labels are all in history. On an <code>as_of</code> view from before the retraction they are live, and the same query that explains a current conclusion explains the old one:</p>
+<pre><code><span class="k">PREFIX</span> n3: &lt;urn:tiramemsu:n3:&gt;
+<span class="k">SELECT</span> <span class="v">?rules</span> <span class="v">?premise</span> <span class="k">WHERE</span> {
+  <span class="k">SERVICE</span> &lt;urn:tiramemsu:tm:asOf/150&gt; {
+    v:alice v:worksIn v:berlin ~ <span class="v">?d</span> .
+    <span class="v">?d</span> n3:derivedBy <span class="v">?rules</span> ;
+       sys:derivedFrom <span class="v">?premise</span> .
+  }
+}</code></pre>
+<p>The premises include the rule-set statement of the version that was live at transaction 150. The history query of <a href="rule-sets.html">chapter 6</a> gives its text.</p>
+<nav class="chapter-nav" aria-label="Chapter navigation">
+  <a class="prev" href="materialization.html"><span>← Chapter 7</span>Materialization</a>
+  <a class="next" href="reference.html"><span>Chapter 9 →</span>Reference</a>
+</nav>
+</article>
+</div>
+
+<footer><div class="wrap">
+  <span>Tiramemsu · MIT OR Apache-2.0 · <a href="https://github.com/Volland/tiramemsu">github.com/Volland/tiramemsu</a></span>
+  <span><a href="../">Home</a> · <a href="./">N3 book</a> · <a href="../articles/">Articles</a></span>
+  <span><a href="../impressum.html">Impressum</a> · <a href="../datenschutz.html">Datenschutz</a> · <a href="../agb.html">AGB</a></span>
+</div></footer>
+</body>
+</html>

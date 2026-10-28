@@ -1,0 +1,180 @@
+From f166f7a512c65b15daaccaa5be438e99ec1b9724 Mon Sep 17 00:00:00 2001
+From: Volodymyr Pavlyshyn <pavlyshyn@tiramemsu.com>
+Date: Wed, 28 Oct 2026 13:18:21 +0100
+Subject: [PATCH] Add ReasonerOptions::now and a cli feature gating ureq and
+ the binaries
+
+Library users that reason over a past state, or need reproducible runs,
+can pin the instant time:localTime reports. The HTTP client is only
+used by the command-line programs, so it moves behind a default-on cli
+feature; default-features = false gives a library with no network
+dependency.
+---
+ Cargo.toml            | 12 +++++++++++-
+ src/reasoner.rs       | 44 ++++++++++++++++++++++++++++++++++++++++++-
+ tests/pinned_clock.rs | 23 ++++++++++++++++++++++
+ 3 files changed, 77 insertions(+), 2 deletions(-)
+ create mode 100644 tests/pinned_clock.rs
+
+diff --git a/Cargo.toml b/Cargo.toml
+index 91e409f..86043bc 100644
+--- a/Cargo.toml
++++ b/Cargo.toml
+@@ -17,16 +17,19 @@ crate-type = ["rlib", "cdylib"]
+ name = "eyeron"
+ path = "src/main.rs"
+ test = false
++required-features = ["cli"]
+ 
+ [[bin]]
+ name = "w3c_rdf"
+ path = "src/w3c_rdf.rs"
+ test = false
++required-features = ["cli"]
+ 
+ [[bin]]
+ name = "eyeron-playground-build"
+ path = "tools/build_playground.rs"
+ test = false
++required-features = ["cli"]
+ 
+ [[test]]
+ name = "w3c_rdf"
+@@ -50,7 +53,14 @@ regex = "1"
+ serde_json = "1"
+ 
+ [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+-ureq = "3"
++# Only the binaries fetch URLs; the library does no I/O.
++ureq = { version = "3", optional = true }
++
++[features]
++default = ["cli"]
++# The command-line programs and their HTTP client. Library users can turn it
++# off with `default-features = false`.
++cli = ["dep:ureq"]
+ 
+ [target.'cfg(target_arch = "wasm32")'.dependencies]
+ wasm-bindgen = "0.2"
+diff --git a/src/reasoner.rs b/src/reasoner.rs
+index 2ab9240..de5718d 100644
+--- a/src/reasoner.rs
++++ b/src/reasoner.rs
+@@ -136,6 +136,8 @@ impl SearchBudget {
+             // `result.derived`/`.is_complete()`/`.errors` off this nested
+             // run's result -- never `.explicit`/`.explicit_sources`.
+             include_explicit: false,
++            // Inherit the outer run's pinned clock (see `ClockOverride`).
++            now: None,
+         }
+     }
+ 
+@@ -936,6 +938,10 @@ pub struct ReasonerOptions {
+     /// since proof reconstruction needs it -- never silently produces a
+     /// proof that can't find its own explicit support.
+     pub include_explicit: bool,
++    /// The instant `time:localTime` reports, in milliseconds since the Unix
++    /// epoch. `None` reads the wall clock. Embedders that reason over a past
++    /// state, or that need reproducible runs, pin it here.
++    pub now: Option<i64>,
+ }
+ 
+ impl Default for ReasonerOptions {
+@@ -958,6 +964,7 @@ impl Default for ReasonerOptions {
+             trace: false,
+             proof: false,
+             include_explicit: true,
++            now: None,
+         }
+     }
+ }
+@@ -1181,6 +1188,7 @@ fn reason_with_plan(
+     agenda_index: &AgendaIndex,
+     axioms: &[usize],
+ ) -> ReasonerResult {
++    let _clock = ClockOverride::set(options.now);
+     // Borrowed until a rule reifies itself as data mid-run (rare -- see
+     // `rule_from_triple`/`pending_rules` below) and has to be appended: only
+     // that path pays for an owned copy of the rule set and a rebuilt agenda.
+@@ -6247,7 +6255,7 @@ fn eval_time_builtin(pred: &str, left: &Term, right: &Term, bindings: &Bindings)
+         if !matches!(resolved, Term::Var(_) | Term::Blank(_)) {
+             return if datetime_seconds(&resolved).is_some() { vec![bindings.clone()] } else { Vec::new() };
+         }
+-        let Some((seconds, millis)) = current_unix_time() else { return Vec::new(); };
++        let Some((seconds, millis)) = run_unix_time() else { return Vec::new(); };
+         let value = typed_literal(format_datetime_utc(seconds, millis), XSD_DATE_TIME);
+         let mut b = bindings.clone();
+         return if unify_term(right, &value, &mut b) { vec![canonicalize_owned(b)] } else { Vec::new() };
+@@ -6452,6 +6460,40 @@ fn format_datetime_utc(seconds: i64, millis: u32) -> String {
+     format!("{year:04}-{month:02}-{day:02}T{:02}:{:02}:{:02}.{millis:03}+00:00", sod / 3600, sod % 3600 / 60, sod % 60)
+ }
+ 
++thread_local! {
++    /// `ReasonerOptions::now` for the run in progress on this thread.
++    static NOW_OVERRIDE: std::cell::Cell<Option<i64>> = const { std::cell::Cell::new(None) };
++}
++
++/// Installs `ReasonerOptions::now` for one run and restores the previous
++/// value when dropped, so nested runs (`log:conclusion`) see the same clock.
++struct ClockOverride(Option<i64>);
++
++impl ClockOverride {
++    fn set(now: Option<i64>) -> Self {
++        let previous = NOW_OVERRIDE.with(|c| c.get());
++        if now.is_some() {
++            NOW_OVERRIDE.with(|c| c.set(now));
++        }
++        ClockOverride(previous)
++    }
++}
++
++impl Drop for ClockOverride {
++    fn drop(&mut self) {
++        let previous = self.0;
++        NOW_OVERRIDE.with(|c| c.set(previous));
++    }
++}
++
++/// The pinned clock if a run set one, else the wall clock.
++fn run_unix_time() -> Option<(i64, u32)> {
++    if let Some(ms) = NOW_OVERRIDE.with(|c| c.get()) {
++        return Some((ms.div_euclid(1000), ms.rem_euclid(1000) as u32));
++    }
++    current_unix_time()
++}
++
+ /// The current wall-clock time as `(unix seconds, milliseconds)`. `SystemTime::now()`
+ /// panics unconditionally on `wasm32-unknown-unknown` (there is no clock
+ /// syscall without a JS bridge), so the wasm32 build instead calls through
+diff --git a/tests/pinned_clock.rs b/tests/pinned_clock.rs
+new file mode 100644
+index 0000000..5e013cc
+--- /dev/null
++++ b/tests/pinned_clock.rs
+@@ -0,0 +1,23 @@
++//! `ReasonerOptions::now` pins the clock `time:localTime` reads.
++
++use eyeron::{parse_n3, reason_document, result_to_string, ReasonerOptions};
++
++const RULE: &str = "@prefix time: <http://www.w3.org/2000/10/swap/time#>.\n\
++{ \"\" time:localTime ?t } => { <urn:x> <urn:at> ?t }.\n";
++
++#[test]
++fn pinned_clock_is_reported_by_local_time() {
++    let doc = parse_n3(RULE, None).unwrap();
++    let options = ReasonerOptions { now: Some(1_700_000_000_123), ..ReasonerOptions::default() };
++    let out = result_to_string(&doc.prefixes, &reason_document(&doc, &options).derived);
++    assert!(out.contains("2023-11-14T22:13:20.123"), "{out}");
++}
++
++#[test]
++fn pinned_clock_is_reproducible() {
++    let doc = parse_n3(RULE, None).unwrap();
++    let options = ReasonerOptions { now: Some(42_000), ..ReasonerOptions::default() };
++    let a = result_to_string(&doc.prefixes, &reason_document(&doc, &options).derived);
++    let b = result_to_string(&doc.prefixes, &reason_document(&doc, &options).derived);
++    assert_eq!(a, b);
++}
+-- 
+2.49.0
+

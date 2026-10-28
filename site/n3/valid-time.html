@@ -1,0 +1,185 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Time, part 2: valid time: Reasoning with N3 in Tiramemsu</title>
+<meta name="description" content="Facts that were never true at the same time never combine: pointwise semantics, the segment sweep and episodes.">
+<link rel="icon" href="../assets/logo.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../style.css">
+<link rel="stylesheet" href="book.css">
+</head>
+<body>
+<header class="top"><div class="wrap">
+  <a class="brand" href="../"><img src="../assets/logo.svg" alt="">Tiramemsu</a>
+  <nav class="menu"><a href="../#features">Features</a><a href="../#matrix">Matrix</a><a href="../#start">Quick start</a><a href="./">N3 book</a><a href="../articles/">Articles</a><a href="../paper/">Papers</a><a href="https://github.com/Volland/tiramemsu">GitHub</a></nav>
+</div></header>
+
+<div class="book">
+<nav class="book-toc" aria-label="Chapters">
+  <a class="book-home" href="./">Reasoning with N3</a>
+  <ol>
+    <li><a href="why-rules.html"><span class="n">01</span>Why rules in memory</a></li>
+    <li><a href="n3-in-15-minutes.html"><span class="n">02</span>N3 in fifteen minutes</a></li>
+    <li><a href="memory-as-n3.html"><span class="n">03</span>Your memory as N3</a></li>
+    <li><a href="transaction-time.html"><span class="n">04</span>Transaction time</a></li>
+    <li><a href="valid-time.html" aria-current="page"><span class="n">05</span>Valid time</a></li>
+    <li><a href="rule-sets.html"><span class="n">06</span>Rule sets as memory</a></li>
+    <li><a href="materialization.html"><span class="n">07</span>Materialization</a></li>
+    <li><a href="recipes.html"><span class="n">08</span>Recipes</a></li>
+    <li><a href="reference.html"><span class="n">09</span>Reference</a></li>
+  </ol>
+</nav>
+<article class="post chapter">
+<p class="book-crumb"><a href="./">Reasoning with N3</a> · Chapter 5 of 9</p>
+<p class="kicker"><span>Chapter 5</span></p>
+<h1>Time, part 2: valid time</h1>
+<p class="lede">Valid time says when a fact held in the world. A rule must never combine two facts that were never true at the same time. This chapter shows how tiramemsu makes sure of that, and what it costs.</p>
+<h2>The trap</h2>
+<p>Memory holds two facts with valid times:</p>
+<ul>
+  <li><code>(v:alice v:worksAt v:acme)</code>, valid <code>[2020, 2022)</code></li>
+  <li><code>(v:acme v:locatedIn v:berlin)</code>, valid <code>[2024, ∞)</code></li>
+</ul>
+<p>and the rule from chapter 1:</p>
+<p class="codefile">where-people-work.n3</p><pre><code><span class="k">@prefix</span> v: &lt;urn:tiramemsu:v:&gt;.
+
+{ <span class="v">?p</span> v:worksAt <span class="v">?c</span>. <span class="v">?c</span> v:locatedIn <span class="v">?l</span> } <span class="k">=&gt;</span> { <span class="v">?p</span> v:worksIn <span class="v">?l</span> }.</code></pre>
+<p>A reasoner that ignores valid time joins the two triples and concludes that Alice works in Berlin. But Alice left Acme two years before Acme was in Berlin. At no instant were both facts true, so at no instant does the conclusion follow. Tiramemsu concludes nothing.</p>
+<p>The error is easy to make and hard to notice. Agent memories are full of facts with lifetimes: jobs, addresses, owners, prices, team memberships. A join across lifetimes produces confident nonsense.</p>
+
+<h2>Pointwise semantics</h2>
+<div class="note"><strong>The rule.</strong> A conclusion holds at instant <em>t</em> if and only if it follows from the loaded statements that are valid at <em>t</em>.</div>
+<p>Everything else in this chapter follows from that sentence. Change the first fact to <code>[2020, 2025)</code> and the two facts overlap during 2024. The only conclusion is <code>(v:alice v:worksIn v:berlin)</code> with interval <code>[2024, 2025)</code>, the intersection. No rule has to mention time for this to happen.</p>
+<p>It also holds for rules that look for something missing, which is where intersecting intervals after the fact would go wrong. Bob is an employee for all time and has a manager from 2023:</p>
+<p class="codefile">unmanaged.n3</p><pre><code><span class="k">@prefix</span> v: &lt;urn:tiramemsu:v:&gt;.
+<span class="k">@prefix</span> log: &lt;http://www.w3.org/2000/10/swap/log#&gt;.
+
+{ <span class="v">?x</span> a v:Employee. <span class="v">?SCOPE</span> log:notIncludes { <span class="v">?x</span> v:manager <span class="v">?m</span> } } <span class="k">=&gt;</span> { <span class="v">?x</span> a v:Unmanaged }.</code></pre>
+<p>Pointwise, Bob is unmanaged at every instant before 2023 and at none after. The conclusion is <code>(v:bob rdf:type v:Unmanaged)</code> with interval <code>(−∞, 2023)</code>. A reasoner run once over all facts would find the manager and conclude nothing at all.</p>
+
+<h2>The segment sweep</h2>
+<p>Instants are too many to try one by one. They do not need to be. Between two consecutive valid-time bounds, the set of valid statements does not change, so neither do the conclusions. A run therefore:</p>
+<ol>
+  <li>takes its window, by default the whole timeline;</li>
+  <li>cuts it at every <code>v_from</code> and <code>v_to</code> of the loaded statements that falls inside it;</li>
+  <li>runs eyeron once per segment, over the statements valid throughout that segment;</li>
+  <li>merges a conclusion across adjacent segments when its content <em>and</em> its support are the same in both.</li>
+</ol>
+<figure class="fig">
+<div class="fig-scroll">
+<svg viewBox="0 0 720 290" role="img" aria-labelledby="sw-title sw-desc">
+  <title id="sw-title">The segment sweep</title>
+  <desc id="sw-desc">Statement e1, Alice works at Acme, is valid from 2020 to 2025. Statement e2, Acme is located in Berlin, is valid from 2024 on. Their bounds cut the timeline at 2020, 2024 and 2025 into four segments: before 2020 nothing is valid; from 2020 to 2024 only e1; from 2024 to 2025 both; from 2025 on only e2. The rule fires only in the segment where both hold, so Alice works in Berlin is concluded for 2024 to 2025.</desc>
+  <g class="lbl">
+    <text x="12" y="54">e1 · alice worksAt acme</text>
+    <text x="12" y="94">e2 · acme locatedIn berlin</text>
+    <text x="12" y="154">segments</text>
+    <text x="12" y="204">alice worksIn berlin</text>
+  </g>
+  <rect class="bar-a" x="310" y="42" width="275" height="14" rx="3"/>
+  <rect class="bar-b" x="530" y="82" width="166" height="14" rx="3"/>
+  <path class="open" d="M700 83 l7 6 l-7 6"/>
+  <line class="cut" x1="310" y1="26" x2="310" y2="226"/>
+  <line class="cut" x1="530" y1="26" x2="530" y2="226"/>
+  <line class="cut" x1="585" y1="26" x2="585" y2="226"/>
+  <g class="seg">
+    <rect x="202" y="136" width="106" height="28" rx="5"/>
+    <rect x="312" y="136" width="216" height="28" rx="5"/>
+    <rect class="seg-hit" x="532" y="136" width="51" height="28" rx="5"/>
+    <rect x="587" y="136" width="111" height="28" rx="5"/>
+  </g>
+  <g class="mut mid">
+    <text x="255" y="155">nothing</text>
+    <text x="420" y="155">e1 only: no match</text>
+    <text class="ink" x="557" y="155">e1 e2</text>
+    <text x="642" y="155">e2 only</text>
+  </g>
+  <rect class="bar-hl" x="530" y="192" width="55" height="14" rx="3"/>
+  <text class="hl" x="594" y="204">[2024, 2025)</text>
+  <line class="ax" x1="200" y1="245" x2="705" y2="245"/>
+  <g class="mut tick">
+    <line class="ax" x1="200" y1="241" x2="200" y2="249"/><text x="200" y="266">2018</text>
+    <line class="ax" x1="255" y1="241" x2="255" y2="249"/><text x="255" y="266">2019</text>
+    <line class="ax" x1="310" y1="241" x2="310" y2="249"/><text x="310" y="266">2020</text>
+    <line class="ax" x1="365" y1="241" x2="365" y2="249"/><text x="365" y="266">2021</text>
+    <line class="ax" x1="420" y1="241" x2="420" y2="249"/><text x="420" y="266">2022</text>
+    <line class="ax" x1="475" y1="241" x2="475" y2="249"/><text x="475" y="266">2023</text>
+    <line class="ax" x1="530" y1="241" x2="530" y2="249"/><text x="530" y="266">2024</text>
+    <line class="ax" x1="585" y1="241" x2="585" y2="249"/><text x="585" y="266">2025</text>
+    <line class="ax" x1="640" y1="241" x2="640" y2="249"/><text x="640" y="266">2026</text>
+    <line class="ax" x1="695" y1="241" x2="695" y2="249"/><text x="695" y="266">2027</text>
+  </g>
+  <text class="mut" x="12" y="266">valid time →</text>
+</svg>
+</div>
+<figcaption>Every valid-time bound of a loaded statement cuts the timeline. The rule runs once per segment, over the statements valid throughout it. It fires only where e1 and e2 are both valid.</figcaption>
+</figure>
+<p>The result reports the number of segments as <code>segments</code>. Statements with no valid time are valid in every segment and add no cuts. A memory that never uses valid time is one segment, one run.</p>
+
+<h2>Episodes</h2>
+<p>Step 4 merges only when the support is identical. That keeps conclusions honest when the same thing follows for different reasons:</p>
+<ul>
+  <li><code>(v:alice v:team v:a)</code>, valid <code>[2020, 2022)</code></li>
+  <li><code>(v:alice v:team v:b)</code>, valid <code>[2022, 2024)</code></li>
+  <li><code>(v:a v:locatedIn v:berlin)</code> and <code>(v:b v:locatedIn v:berlin)</code>, valid always</li>
+</ul>
+<p class="codefile">teams.n3</p><pre><code><span class="k">@prefix</span> v: &lt;urn:tiramemsu:v:&gt;.
+
+{ <span class="v">?p</span> v:team <span class="v">?t</span>. <span class="v">?t</span> v:locatedIn <span class="v">?l</span> } <span class="k">=&gt;</span> { <span class="v">?p</span> v:worksIn <span class="v">?l</span> }.</code></pre>
+<p>Alice worked in Berlin from 2020 to 2024 without a break. But the first two years rest on team <code>v:a</code> and the last two on team <code>v:b</code>. Tiramemsu reports two conclusions, <code>[2020, 2022)</code> and <code>[2022, 2024)</code>, each with its own premises. These are two <strong>episodes</strong>, the same way memory keeps two episodes of a fact. If the membership in team <code>v:a</code> is retracted, the first episode goes and the second stays.</p>
+
+<h2>Snapshots</h2>
+<p>Often you only care about one instant. A <code>valid_at</code> view is one snapshot: a single run over the statements valid at that instant, no sweep. Every conclusion gets the interval <code>[t, t + 1 ms)</code>, because that is all the run can vouch for.</p>
+<pre><code><span class="c">// ms(): your date-to-epoch-ms helper</span>
+<span class="k">let</span> june = db.now().valid_at(ms(<span class="s">"2024-06-01"</span>));
+<span class="k">let</span> r = june.reason(Rules::Stored(v(<span class="s">"where-people-work"</span>)), &amp;ReasonOptions::default())?;
+<span class="c">// (v:alice v:worksIn v:berlin), valid [2024-06-01, 2024-06-01 + 1 ms)</span></code></pre>
+<pre><code><span class="k">tm</span> reason memory.db --rule-set urn:tiramemsu:v:where-people-work --valid-at 1717200000000   <span class="c"># 2024-06-01</span></code></pre>
+<p>Snapshots combine with transaction time. <code>db.as_of(TimeRef::Tx(150)).valid_at(t)</code> asks what followed, at instant <em>t</em> in the world, from what was known at transaction 150.</p>
+
+<h2>Validity as data</h2>
+<p>Sometimes a rule needs the interval itself, not just the guarantee. <code>tm:validFrom</code> and <code>tm:validTo</code> (<a href="memory-as-n3.html">chapter 3</a>) give a statement’s bounds as <code>xsd:dateTime</code>. For e1 valid <code>[2020-01-01, 2023-01-01)</code>, a rule binding <code>?e tm:validFrom ?a. ?e tm:validTo ?b</code> sees <code>"2020-01-01T00:00:00Z"^^xsd:dateTime</code> and <code>"2023-01-01T00:00:00Z"^^xsd:dateTime</code>. <a href="recipes.html#tenure">Recipe 1</a> computes tenure this way.</p>
+<p>During a sweep, each segment also offers its own bounds as <code>tm:run tm:segmentFrom ?f</code> and <code>tm:run tm:segmentTo ?t</code> (bounded ends only). Use them sparingly: a conclusion that mentions a segment bound differs from segment to segment, so it never merges.</p>
+<p>These are data, not filters. A conclusion computed from <code>tm:validFrom</code> still holds only while its premises are valid. The pointwise rule always applies.</p>
+
+<h2>Windows</h2>
+<p>The <code>window</code> option, unbounded by default, limits the sweep to part of the timeline. Cuts outside it are ignored, and conclusions are clipped to it:</p>
+<pre><code><span class="k">let</span> in_2020s = ReasonOptions {
+    window: Valid::between(ms(<span class="s">"2020-01-01"</span>), ms(<span class="s">"2030-01-01"</span>)),
+    ..ReasonOptions::default()
+};</code></pre>
+<pre><code><span class="k">tm</span> reason memory.db --rule-set urn:tiramemsu:v:where-people-work --valid-during 1577836800000..1893456000000</code></pre>
+<h2>Cost and the segment limit</h2>
+<p>A sweep costs about one reasoner run per segment. Three things keep that small:</p>
+<ul>
+  <li><strong>Pruning.</strong> Only loaded statements cut the timeline, and only statements whose predicates the rules use are loaded (<a href="memory-as-n3.html#pruning">chapter 3</a>).</li>
+  <li><strong>Scopes and windows.</strong> Fewer statements and a shorter timeline mean fewer cuts.</li>
+  <li><strong><code>max_segments</code></strong>, 1 024 by default. Past it, the run stops and reports <code>Incomplete { limits: [Segments] }</code>. Every conclusion it did report is sound for the segments that ran. It is never a guess.</li>
+</ul>
+
+<h2>Opting out</h2>
+<p><code>time: TimeMode::Atemporal</code> ignores valid time. Every loaded statement takes part in one run, and conclusions are reported unbounded. Use it for data whose valid times do not mean anything to the rule, or when you really mean “ever, at any time”. It must be asked for by name, because the default should never be the trap.</p>
+<table>
+  <thead><tr><th>You want</th><th>Use</th><th>Runs</th></tr></thead>
+  <tbody>
+    <tr><td>What follows at one instant</td><td>a <code>valid_at(t)</code> view</td><td>one</td></tr>
+    <tr><td>When each conclusion held, all time</td><td>the default, <code>TimeMode::Pointwise</code></td><td>one per segment</td></tr>
+    <tr><td>When each conclusion held, in a period</td><td>the default with a <code>window</code></td><td>one per segment in the window</td></tr>
+    <tr><td>What follows if time is ignored</td><td><code>TimeMode::Atemporal</code></td><td>one</td></tr>
+  </tbody>
+</table>
+<nav class="chapter-nav" aria-label="Chapter navigation">
+  <a class="prev" href="transaction-time.html"><span>← Chapter 4</span>Time, part 1: transaction time</a>
+  <a class="next" href="rule-sets.html"><span>Chapter 6 →</span>Rule sets as memory</a>
+</nav>
+</article>
+</div>
+
+<footer><div class="wrap">
+  <span>Tiramemsu · MIT OR Apache-2.0 · <a href="https://github.com/Volland/tiramemsu">github.com/Volland/tiramemsu</a></span>
+  <span><a href="../">Home</a> · <a href="./">N3 book</a> · <a href="../articles/">Articles</a></span>
+  <span><a href="../impressum.html">Impressum</a> · <a href="../datenschutz.html">Datenschutz</a> · <a href="../agb.html">AGB</a></span>
+</div></footer>
+</body>
+</html>

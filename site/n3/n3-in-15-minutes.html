@@ -1,0 +1,187 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>N3 in fifteen minutes: Reasoning with N3 in Tiramemsu</title>
+<meta name="description" content="Facts, formulas, rules, variables, builtins, backward rules and inference fuses: enough N3 to read every example.">
+<link rel="icon" href="../assets/logo.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../style.css">
+<link rel="stylesheet" href="book.css">
+</head>
+<body>
+<header class="top"><div class="wrap">
+  <a class="brand" href="../"><img src="../assets/logo.svg" alt="">Tiramemsu</a>
+  <nav class="menu"><a href="../#features">Features</a><a href="../#matrix">Matrix</a><a href="../#start">Quick start</a><a href="./">N3 book</a><a href="../articles/">Articles</a><a href="../paper/">Papers</a><a href="https://github.com/Volland/tiramemsu">GitHub</a></nav>
+</div></header>
+
+<div class="book">
+<nav class="book-toc" aria-label="Chapters">
+  <a class="book-home" href="./">Reasoning with N3</a>
+  <ol>
+    <li><a href="why-rules.html"><span class="n">01</span>Why rules in memory</a></li>
+    <li><a href="n3-in-15-minutes.html" aria-current="page"><span class="n">02</span>N3 in fifteen minutes</a></li>
+    <li><a href="memory-as-n3.html"><span class="n">03</span>Your memory as N3</a></li>
+    <li><a href="transaction-time.html"><span class="n">04</span>Transaction time</a></li>
+    <li><a href="valid-time.html"><span class="n">05</span>Valid time</a></li>
+    <li><a href="rule-sets.html"><span class="n">06</span>Rule sets as memory</a></li>
+    <li><a href="materialization.html"><span class="n">07</span>Materialization</a></li>
+    <li><a href="recipes.html"><span class="n">08</span>Recipes</a></li>
+    <li><a href="reference.html"><span class="n">09</span>Reference</a></li>
+  </ol>
+</nav>
+<article class="post chapter">
+<p class="book-crumb"><a href="./">Reasoning with N3</a> · Chapter 2 of 9</p>
+<p class="kicker"><span>Chapter 2</span></p>
+<h1>N3 in fifteen minutes</h1>
+<p class="lede">Notation3 is Turtle with two additions: graphs you can quote, and rules that turn one quoted graph into another. This chapter covers enough of it to read and write every rule in this book.</p>
+<div class="note"><strong>The reasoner.</strong> Tiramemsu runs N3 with <a href="https://github.com/eyereasoner/eyeron">eyeron</a>, a native Rust N3 reasoner by Jos De Roo, released under the MIT license. It comes from the same author as the <a href="https://github.com/eyereasoner/eye">EYE</a> reasoner. eyeron returns, with every conclusion, the rule and the premises it used. That is what lets tiramemsu tie conclusions to statement ids. Credit for the reasoning itself goes there.</div>
+
+<h2>Facts</h2>
+<p>A fact is a triple: subject, predicate, object, then a full stop. Names are IRIs, usually shortened with a prefix. <code>a</code> is short for <code>rdf:type</code>. A semicolon repeats the subject, a comma repeats subject and predicate.</p>
+<pre><code><span class="k">@prefix</span> v: &lt;urn:tiramemsu:v:&gt;.
+<span class="k">@prefix</span> xsd: &lt;http://www.w3.org/2001/XMLSchema#&gt;.
+
+v:socrates a v:Human.
+v:alice v:worksAt v:acme;
+    v:name <span class="s">"Alice"</span>;
+    v:age <span class="s">34</span>.
+v:acme v:locatedIn v:berlin, v:europe.
+v:e1 v:validFrom <span class="s">"2020-01-01T00:00:00Z"^^xsd:dateTime</span>.</code></pre>
+<p>Literals are strings, numbers, booleans, or typed values such as <code>"2020-01-01T00:00:00Z"^^xsd:dateTime</code>. Every prefix used must be declared with <code>@prefix</code>. The examples in this book always declare them, so every block is a complete N3 document you can paste into a file.</p>
+<p>The prefixes you will see:</p>
+<table>
+  <thead><tr><th>Prefix</th><th>IRI</th><th>Used for</th></tr></thead>
+  <tbody>
+    <tr><td><code>v:</code></td><td><code>urn:tiramemsu:v:</code></td><td>your own vocabulary, as in the rest of the site</td></tr>
+    <tr><td><code>tm:</code></td><td><code>urn:tiramemsu:tm:</code></td><td>virtual predicates the reasoner provides, never stored (<a href="memory-as-n3.html">chapter 3</a>)</td></tr>
+    <tr><td><code>n3:</code></td><td><code>urn:tiramemsu:n3:</code></td><td>stored rule sets and labels on conclusions (<a href="rule-sets.html">chapter 6</a>)</td></tr>
+    <tr><td><code>math:</code></td><td><code>http://www.w3.org/2000/10/swap/math#</code></td><td>arithmetic and comparison builtins</td></tr>
+    <tr><td><code>string:</code></td><td><code>http://www.w3.org/2000/10/swap/string#</code></td><td>string builtins</td></tr>
+    <tr><td><code>log:</code></td><td><code>http://www.w3.org/2000/10/swap/log#</code></td><td>equality, scoped negation, collecting</td></tr>
+    <tr><td><code>list:</code></td><td><code>http://www.w3.org/2000/10/swap/list#</code></td><td>list builtins</td></tr>
+    <tr><td><code>time:</code></td><td><code>http://www.w3.org/2000/10/swap/time#</code></td><td>the clock</td></tr>
+  </tbody>
+</table>
+
+<h2>Formulas</h2>
+<p>Curly braces quote a graph. <code>{ v:socrates a v:Human }</code> is a single term that stands for that graph. It does not assert the triple inside. A formula can be the subject or object of a triple, which is how N3 talks about statements:</p>
+<pre><code><span class="k">@prefix</span> v: &lt;urn:tiramemsu:v:&gt;.
+
+v:plato v:said { v:socrates a v:Human }.</code></pre>
+<p>This says Plato said something. It does not say Socrates is human. Formulas are how rules are written, and, in <a href="memory-as-n3.html">chapter 3</a>, how tiramemsu shows a rule what a statement says.</p>
+
+<h2>Rules</h2>
+<p>A rule is a triple whose subject and object are formulas and whose predicate is <code>=&gt;</code>, read “implies”. The left formula is the <strong>body</strong>, the right one the <strong>head</strong>.</p>
+<p class="codefile">socrates.n3</p><pre><code><span class="k">@prefix</span> v: &lt;urn:tiramemsu:v:&gt;.
+
+v:socrates a v:Human.
+{ <span class="v">?x</span> a v:Human } <span class="k">=&gt;</span> { <span class="v">?x</span> a v:Mortal }.</code></pre>
+<p>Names that start with <code>?</code> are <strong>variables</strong>. A variable is universally quantified over its rule: for every <code>?x</code> that makes the body true, the head is true. A body with several triples is a conjunction. All of them must match, with the same value for the same variable.</p>
+<p>A reasoner applies the rules to the facts, adds what they conclude, and repeats until nothing new appears. This is <strong>forward chaining</strong>. Rules feed each other:</p>
+<pre><code><span class="k">@prefix</span> v: &lt;urn:tiramemsu:v:&gt;.
+
+{ <span class="v">?x</span> a v:Human } <span class="k">=&gt;</span> { <span class="v">?x</span> a v:Mortal }.
+{ <span class="v">?x</span> a v:Mortal } <span class="k">=&gt;</span> { <span class="v">?x</span> v:has v:lifespan }.</code></pre>
+<p>From <code>v:socrates a v:Human</code> the reasoner concludes <code>v:socrates a v:Mortal</code>, then <code>v:socrates v:has v:lifespan</code>. The second conclusion rests on the first. Tiramemsu keeps that chain when it writes them (<a href="materialization.html">chapter 7</a>).</p>
+
+<h3>Inventing a node</h3>
+<p>A blank node in a head, written <code>_:name</code>, means “there exists something”. Each time the rule fires, the reasoner invents a node for it:</p>
+<pre><code><span class="k">@prefix</span> v: &lt;urn:tiramemsu:v:&gt;.
+
+{ <span class="v">?x</span> a v:Employee } <span class="k">=&gt;</span> { <span class="v">?x</span> v:manager _:m. _:m a v:Manager }.</code></pre>
+<p>Bob is an employee, so Bob has some manager, and that manager is a manager. Nobody knows who. An invented node is called a <em>Skolem</em> node. Writing one to memory needs care, because running the rule twice must not invent two managers. <a href="materialization.html#skolem">Chapter 7</a> shows how tiramemsu keeps it stable.</p>
+
+<h2>Builtins</h2>
+<p>Some predicates compute instead of match. They are called <strong>builtins</strong>, and their prefixes say what they work on. A builtin in a body succeeds or fails like any other triple, and may bind variables.</p>
+<p class="codefile">builtins.n3</p><pre><code><span class="k">@prefix</span> v: &lt;urn:tiramemsu:v:&gt;.
+<span class="k">@prefix</span> math: &lt;http://www.w3.org/2000/10/swap/math#&gt;.
+<span class="k">@prefix</span> string: &lt;http://www.w3.org/2000/10/swap/string#&gt;.
+<span class="k">@prefix</span> log: &lt;http://www.w3.org/2000/10/swap/log#&gt;.
+
+<span class="c"># Comparison: adults are at least 18.</span>
+{ <span class="v">?p</span> v:age <span class="v">?a</span>. <span class="v">?a</span> math:greaterThan <span class="s">17</span> } <span class="k">=&gt;</span> { <span class="v">?p</span> a v:Adult }.
+
+<span class="c"># Arithmetic: the subject is a list of inputs, the object the result.</span>
+{ <span class="v">?o</span> v:net <span class="v">?n</span>; v:tax <span class="v">?t</span>. (<span class="v">?n</span> <span class="v">?t</span>) math:sum <span class="v">?g</span> } <span class="k">=&gt;</span> { <span class="v">?o</span> v:gross <span class="v">?g</span> }.
+
+<span class="c"># Strings.</span>
+{ <span class="v">?p</span> v:first <span class="v">?f</span>; v:last <span class="v">?l</span>. (<span class="v">?f</span> <span class="s">" "</span> <span class="v">?l</span>) string:concatenation <span class="v">?full</span> } <span class="k">=&gt;</span> { <span class="v">?p</span> v:fullName <span class="v">?full</span> }.
+{ <span class="v">?p</span> v:title <span class="v">?t</span>. <span class="v">?t</span> string:startsWith <span class="s">"Dr"</span> } <span class="k">=&gt;</span> { <span class="v">?p</span> a v:Doctor }.
+
+<span class="c"># Term equality.</span>
+{ <span class="v">?a</span> v:worksAt <span class="v">?c</span>. <span class="v">?b</span> v:worksAt <span class="v">?c</span>. <span class="v">?a</span> log:notEqualTo <span class="v">?b</span> } <span class="k">=&gt;</span> { <span class="v">?a</span> v:sharesEmployerWith <span class="v">?b</span> }.</code></pre>
+<p>Some builtins look at more than one fact at a time. They need extra care in a memory, because adding a fact can make their answer false:</p>
+<p class="codefile">careful.n3</p><pre><code><span class="k">@prefix</span> v: &lt;urn:tiramemsu:v:&gt;.
+<span class="k">@prefix</span> log: &lt;http://www.w3.org/2000/10/swap/log#&gt;.
+<span class="k">@prefix</span> list: &lt;http://www.w3.org/2000/10/swap/list#&gt;.
+<span class="k">@prefix</span> time: &lt;http://www.w3.org/2000/10/swap/time#&gt;.
+
+<span class="c"># Scoped negation: an employee with no known manager.</span>
+{ <span class="v">?x</span> a v:Employee. <span class="v">?SCOPE</span> log:notIncludes { <span class="v">?x</span> v:manager <span class="v">?m</span> } } <span class="k">=&gt;</span> { <span class="v">?x</span> a v:Unmanaged }.
+
+<span class="c"># Collecting: the members of a team, and how many there are.</span>
+{ <span class="v">?team</span> a v:Team.
+  (<span class="v">?p</span> { <span class="v">?p</span> v:memberOf <span class="v">?team</span> } <span class="v">?members</span>) log:collectAllIn <span class="v">?SCOPE</span>.
+  <span class="v">?members</span> list:length <span class="v">?n</span>
+} <span class="k">=&gt;</span> { <span class="v">?team</span> v:size <span class="v">?n</span> }.
+
+<span class="c"># The clock.</span>
+{ <span class="s">""</span> time:localTime <span class="v">?t</span> } <span class="k">=&gt;</span> { v:run v:at <span class="v">?t</span> }.</code></pre>
+<p><code>log:notIncludes</code> succeeds when the formula is <em>not</em> found in the scope it is asked about. Add a manager for Bob and the conclusion “Bob is unmanaged” becomes false. That is <strong>non-monotonic</strong>: more facts, fewer conclusions. <code>log:collectAllIn</code> and <code>log:forAllIn</code> are non-monotonic in the same way. <code>time:localTime</code> returns the current time, so its answer depends on when you ask.</p>
+<p>Tiramemsu treats these three kinds differently:</p>
+<table>
+  <thead><tr><th>Builtins</th><th>Class</th><th><code>reason</code></th><th><code>materialize</code></th></tr></thead>
+  <tbody>
+    <tr><td><code>math:</code>, <code>string:</code>, <code>list:</code>, <code>log:equalTo</code>, <code>log:notEqualTo</code></td><td>Monotonic</td><td class="y">yes</td><td class="y">yes</td></tr>
+    <tr><td><code>log:notIncludes</code>, <code>log:collectAllIn</code>, <code>log:forAllIn</code></td><td>Non-monotonic</td><td class="y">yes</td><td class="n">refused</td></tr>
+    <tr><td><code>time:localTime</code>, <code>tm:now</code></td><td>Clock-dependent</td><td class="y">yes</td><td class="n">refused</td></tr>
+  </tbody>
+</table>
+<p>Why the refusals: <a href="rule-sets.html#monotonicity">chapter 6</a>. In short, a stored conclusion is kept honest by its supports. Supports can be retracted. A fact that was <em>absent</em> cannot be, so nothing would retract the conclusion when that fact arrives.</p>
+
+<h2>Backward rules</h2>
+<p><code>&lt;=</code> writes a rule the other way round: the head is on the left. A backward rule is not run eagerly. It is used on demand, when another rule’s body asks for its head. This suits recursive definitions that would otherwise flood the result:</p>
+<p class="codefile">ancestors.n3</p><pre><code><span class="k">@prefix</span> v: &lt;urn:tiramemsu:v:&gt;.
+
+{ <span class="v">?x</span> v:ancestor <span class="v">?y</span> } <span class="k">&lt;=</span> { <span class="v">?x</span> v:parent <span class="v">?y</span> }.
+{ <span class="v">?x</span> v:ancestor <span class="v">?z</span> } <span class="k">&lt;=</span> { <span class="v">?x</span> v:parent <span class="v">?y</span>. <span class="v">?y</span> v:ancestor <span class="v">?z</span> }.
+
+<span class="c"># Only this forward rule produces conclusions. It asks for ancestors on demand.</span>
+{ <span class="v">?x</span> v:ancestor v:ada } <span class="k">=&gt;</span> { <span class="v">?x</span> a v:AdaDescendant }.</code></pre>
+<p>In tiramemsu, backward rules run over the statements loaded for the run, never over the whole store. Chapter 3 explains what gets loaded.</p>
+
+<h2>Inference fuses</h2>
+<p>A rule whose head is <code>false</code> is an <strong>inference fuse</strong>. If its body ever matches, the facts contradict each other:</p>
+<p class="codefile">fuse.n3</p><pre><code><span class="k">@prefix</span> v: &lt;urn:tiramemsu:v:&gt;.
+
+{ <span class="v">?x</span> a v:Cat. <span class="v">?x</span> a v:Dog } <span class="k">=&gt;</span> <span class="k">false</span>.</code></pre>
+<p><code>reason</code> reports a fired fuse as a contradiction, naming the rule and the instance that fired it. <code>materialize</code> stops before writing anything. <a href="recipes.html#fuse">Recipe 5</a> uses a fuse as a consistency gate.</p>
+
+<h2>What the reasoner returns</h2>
+<p>For every conclusion eyeron returns the rule that produced it, the premises it matched and the variable bindings. It also reports whether it finished or hit one of its limits, and whether a fuse fired. Tiramemsu turns premises back into statement ids. A conclusion’s proof looks like <code>{ rule_set, rule: 0, premises: [e1] }</code>. On request, eyeron’s own N3 proof text comes along too.</p>
+
+<h2>Try it</h2>
+<p>Load the fact into a memory, keep the rule in its own file, and ask the command line. Here the fact is in a Turtle file, <code>socrates.ttl</code>, holding <code>&lt;urn:tiramemsu:v:socrates&gt; a &lt;urn:tiramemsu:v:Human&gt; .</code></p>
+<p class="codefile">mortality.n3</p><pre><code><span class="k">@prefix</span> v: &lt;urn:tiramemsu:v:&gt;.
+
+{ <span class="v">?x</span> a v:Human } <span class="k">=&gt;</span> { <span class="v">?x</span> a v:Mortal }.</code></pre>
+<pre><code><span class="k">tm</span> create memory.db
+<span class="k">tm</span> import memory.db socrates.ttl
+<span class="k">tm</span> reason memory.db --rules mortality.n3
+<span class="c"># (v:socrates rdf:type v:Mortal)   rule 0   premises [e1]</span></code></pre>
+<p>The rule file holds only rules. The facts come from memory. The next chapter shows exactly what a rule sees there.</p>
+<nav class="chapter-nav" aria-label="Chapter navigation">
+  <a class="prev" href="why-rules.html"><span>← Chapter 1</span>Why rules in agent memory</a>
+  <a class="next" href="memory-as-n3.html"><span>Chapter 3 →</span>Your memory as N3</a>
+</nav>
+</article>
+</div>
+
+<footer><div class="wrap">
+  <span>Tiramemsu · MIT OR Apache-2.0 · <a href="https://github.com/Volland/tiramemsu">github.com/Volland/tiramemsu</a></span>
+  <span><a href="../">Home</a> · <a href="./">N3 book</a> · <a href="../articles/">Articles</a></span>
+  <span><a href="../impressum.html">Impressum</a> · <a href="../datenschutz.html">Datenschutz</a> · <a href="../agb.html">AGB</a></span>
+</div></footer>
+</body>
+</html>

@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Materialization: Reasoning with N3 in Tiramemsu</title>
+<meta name="description" content="Writing conclusions as derived beliefs that fall with their premises and their rules.">
+<link rel="icon" href="../assets/logo.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../style.css">
+<link rel="stylesheet" href="book.css">
+</head>
+<body>
+<header class="top"><div class="wrap">
+  <a class="brand" href="../"><img src="../assets/logo.svg" alt="">Tiramemsu</a>
+  <nav class="menu"><a href="../#features">Features</a><a href="../#matrix">Matrix</a><a href="../#start">Quick start</a><a href="./">N3 book</a><a href="../articles/">Articles</a><a href="../paper/">Papers</a><a href="https://github.com/Volland/tiramemsu">GitHub</a></nav>
+</div></header>
+
+<div class="book">
+<nav class="book-toc" aria-label="Chapters">
+  <a class="book-home" href="./">Reasoning with N3</a>
+  <ol>
+    <li><a href="why-rules.html"><span class="n">01</span>Why rules in memory</a></li>
+    <li><a href="n3-in-15-minutes.html"><span class="n">02</span>N3 in fifteen minutes</a></li>
+    <li><a href="memory-as-n3.html"><span class="n">03</span>Your memory as N3</a></li>
+    <li><a href="transaction-time.html"><span class="n">04</span>Transaction time</a></li>
+    <li><a href="valid-time.html"><span class="n">05</span>Valid time</a></li>
+    <li><a href="rule-sets.html"><span class="n">06</span>Rule sets as memory</a></li>
+    <li><a href="materialization.html" aria-current="page"><span class="n">07</span>Materialization</a></li>
+    <li><a href="recipes.html"><span class="n">08</span>Recipes</a></li>
+    <li><a href="reference.html"><span class="n">09</span>Reference</a></li>
+  </ol>
+</nav>
+<article class="post chapter">
+<p class="book-crumb"><a href="./">Reasoning with N3</a> · Chapter 7 of 9</p>
+<p class="kicker"><span>Chapter 7</span></p>
+<h1>Materialization</h1>
+<p class="lede"><code>materialize</code> writes what a rule set concludes as derived beliefs. Each one rests on its premises and on the rule set, and is retracted the moment any of them goes.</p>
+<h2>Derived beliefs in one minute</h2>
+<p>Materialization stands on one verb from the change <code>add-derived-beliefs</code>: <code>Tx::derive(s, p, o, valid, support)</code>. It asserts a statement <code>D</code> and, for each supporting statement <code>e</code>, an engine-owned link <code>(D sys:derivedFrom e)</code>. The rules that matter here:</p>
+<ul>
+  <li><strong>Support cascades.</strong> When a support of a live derived statement is retracted, by any operation, the derived statement is retracted in the same transaction, recursively.</li>
+  <li><strong>Conjunctive within, disjunctive across.</strong> One derivation falls when <em>any</em> of its supports goes. Two derivations of the same content from different supports are two statements, and the content stays live while either stands.</li>
+  <li><strong>Idempotent for the same support.</strong> Deriving the same content from the same live support set returns the existing statement. A different support set, or an identical fact asserted independently, gives a new statement, so an observed fact never becomes dependent by accident.</li>
+  <li><strong>Correcting a support drops what rests on it.</strong> Superseding a support retracts its derived statements with kind <code>supersede</code> and does not replay them, since they were computed from the old content.</li>
+</ul>
+<p><code>sys:derivedFrom</code> is engine-owned: you cannot assert it directly. <code>View::dependents</code>, dry runs and <code>max_cascade</code> all follow support links, so “what breaks if I retract this” includes every conclusion drawn from it.</p>
+
+<h2>What <code>materialize</code> does</h2>
+<p><code>Db::materialize(rule_set, &amp;MaterializeOptions)</code> runs in two phases. Only the second one holds the writer.</p>
+<ol>
+  <li><strong>Check.</strong> Classify the rule set. A <code>NonMonotonic</code> or <code>ClockDependent</code> rule set fails with <code>N3NotMaterializable { rule, builtin }</code> before anything runs.</li>
+  <li><strong>Snapshot.</strong> Take a read view at <code>t₀</code>. Load the scope, as <code>reason</code> does, but leave out statements derived from this rule set’s own live <code>R</code>. They are what is being recomputed.</li>
+  <li><strong>Reason.</strong> Run the sweep of <a href="valid-time.html">chapter 5</a> over the default unbounded window, or the one you give.</li>
+  <li><strong>Fuse.</strong> If an inference fuse fired, fail with <code>N3Contradiction { rule }</code>. Nothing is written.</li>
+  <li><strong>Commit.</strong> Open one write transaction and write the conclusions in proof order through <code>derive</code>. Support is the conclusion’s loaded premises, the eids just written for its derived premises, and <code>R</code>. Two layers name where it came from: <code>(D n3:derivedBy rule_set)</code> and <code>(D n3:rule i)</code>.</li>
+  <li><strong>Report</strong> what was derived, what already existed, what was widened and what was skipped.</li>
+</ol>
+
+<h2>Socrates, materialized</h2>
+<pre><code><span class="k">use</span> tiramemsu::{MaterializeOptions, TxN3};
+
+<span class="c">// e1 = (v:socrates rdf:type v:Human) was asserted earlier.</span>
+db.transact(TxOptions::default(), |tx| { tx.store_rules(v(<span class="s">"mortality"</span>), MORTALITY)?; <span class="k">Ok</span>(()) })?;
+
+<span class="k">let</span> report = db.materialize(v(<span class="s">"mortality"</span>), &amp;MaterializeOptions::default())?;
+println!(<span class="s">"reasoned at {}  committed tx {}"</span>, report.reasoned_at, report.tx.t);
+println!(<span class="s">"derived {:?}  existing {:?}"</span>, report.derived, report.existing);</code></pre>
+<p>Memory now holds a conclusion <code>D = (v:socrates rdf:type v:Mortal)</code> with two support links, <code>(D sys:derivedFrom e1)</code> and <code>(D sys:derivedFrom R)</code>, and the label <code>(D n3:derivedBy v:mortality)</code>. Here it is, with a second rule set built on top of it:</p>
+<figure class="fig">
+<div class="fig-scroll">
+<svg viewBox="0 0 720 380" role="img" aria-labelledby="sg-title sg-desc">
+  <title id="sg-title">The support graph of a materialized conclusion</title>
+  <desc id="sg-desc">Conclusion D, Socrates is mortal, has support links to the fact e1, Socrates is human, and to R, the statement holding the mortality rule set. Labels on D name the rule set and the rule index but are not support. A second conclusion D2, Socrates has a lifespan, produced by another rule set, has support links to D and to that rule set's statement. Retracting e1 or editing R retracts D, and with it D2.</desc>
+  <defs>
+    <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path class="ah" d="M0 0 L10 5 L0 10 z"/>
+    </marker>
+  </defs>
+  <g class="node node-fact"><rect x="20" y="24" width="270" height="48" rx="10"/>
+    <text x="36" y="53"><tspan class="b">e1</tspan>  v:socrates a v:Human</text></g>
+  <g class="node node-rule"><rect x="430" y="24" width="270" height="48" rx="10"/>
+    <text x="446" y="53"><tspan class="b">R</tspan>  v:mortality n3:source "…"</text></g>
+  <g class="node node-concl"><rect x="225" y="150" width="270" height="48" rx="10"/>
+    <text x="241" y="179"><tspan class="b">D</tspan>  v:socrates a v:Mortal</text></g>
+  <g class="node node-concl"><rect x="225" y="282" width="270" height="48" rx="10"/>
+    <text x="241" y="311"><tspan class="b">D2</tspan>  v:socrates v:has v:lifespan</text></g>
+  <g class="node node-rule"><rect x="560" y="282" width="140" height="48" rx="10"/>
+    <text x="576" y="311"><tspan class="b">R₂</tspan>  v:lifespans</text></g>
+  <path class="edge" d="M300 150 L190 74" marker-end="url(#ah)"/>
+  <path class="edge" d="M420 150 L530 74" marker-end="url(#ah)"/>
+  <path class="edge" d="M360 282 L360 200" marker-end="url(#ah)"/>
+  <path class="edge" d="M495 306 L557 306" marker-end="url(#ah)"/>
+  <g class="mut small">
+    <text x="128" y="118">sys:derivedFrom</text>
+    <text x="482" y="118">sys:derivedFrom</text>
+    <text x="368" y="246">sys:derivedFrom</text>
+  </g>
+  <path class="edge-label" d="M495 174 L512 174"/>
+  <g class="node node-label"><rect x="512" y="152" width="196" height="44" rx="8"/>
+    <text class="small" x="524" y="170">n3:derivedBy v:mortality</text>
+    <text class="small" x="524" y="187">n3:rule 0</text></g>
+  <g class="hl small">
+    <text x="20" y="232">retract e1, or edit R:</text>
+    <text x="20" y="250">D is retracted, and D2 with it,</text>
+    <text x="20" y="268">in the same transaction</text>
+  </g>
+  <g class="mut small">
+    <path class="edge" d="M20 360 L60 360" marker-end="url(#ah)"/>
+    <text x="70" y="364">support: the cascade follows it</text>
+    <path class="edge-label" d="M330 360 L370 360"/>
+    <text x="380" y="364">label: names the rule, not support</text>
+  </g>
+</svg>
+</div>
+<figcaption>Every arrow is a stored statement <code>(D sys:derivedFrom x)</code>. Losing any support retracts the conclusion, and the cascade continues to whatever rests on it.</figcaption>
+</figure>
+<h2>Conclusions fall with premises and rules</h2>
+<p><strong>A premise goes.</strong> Retract e1. In the same transaction, the link to e1 is retracted because its object is e1. <code>D</code> is retracted because it lost a support. Then <code>D</code>’s other link and its labels go, because their subject is <code>D</code>. All but e1 get kind <code>cascade</code>.</p>
+<pre><code><span class="k">let</span> rep = db.transact(TxOptions::default(), |tx| { tx.retract(e1)?; <span class="k">Ok</span>(()) })?;
+<span class="c">// rep.retracted: (e1, Explicit), and with kind Cascade: both support links,</span>
+<span class="c">// D, (D n3:derivedBy v:mortality) and (D n3:rule 0)</span></code></pre>
+<p>Correcting e1 with <code>supersede</code> does the same with kind <code>supersede</code>: the corrected fact is replayed, and the conclusion drawn from the old one is not.</p>
+<p><strong>A rule goes.</strong> Store a new version of <code>v:mortality</code>. That supersedes <code>R</code>, and every conclusion resting on <code>R</code> is retracted with kind <code>supersede</code> in that transaction. The next <code>materialize</code> writes the conclusions of the new version. Retracting <code>R</code> outright retracts them the same way.</p>
+<p>There is no window in which old rules’ conclusions sit next to new rules. A conclusion is in memory only while everything it was drawn from is.</p>
+
+<h2>Labels are not support</h2>
+<p><code>n3:derivedBy</code> and <code>n3:rule</code> say which rule set and which rule produced a conclusion. They are layers on <code>D</code>, for querying. Grounding comes from the <code>sys:derivedFrom</code> links alone. Both are ordinary data, so SPARQL reads them:</p>
+<pre><code><span class="k">PREFIX</span> n3: &lt;urn:tiramemsu:n3:&gt;
+<span class="c"># Who is mortal according to v:mortality, and on what grounds?</span>
+<span class="k">SELECT</span> <span class="v">?who</span> <span class="v">?premise</span> <span class="k">WHERE</span> {
+  <span class="v">?who</span> a v:Mortal ~ <span class="v">?d</span> .
+  <span class="v">?d</span> n3:derivedBy v:mortality ;
+     sys:derivedFrom <span class="v">?premise</span> .
+}</code></pre>
+<p>The premises include <code>R</code> itself, so the answer also says which version of the rules was used.</p>
+
+<h2>Rule sets layer</h2>
+<p>A run never loads the conclusions of its own rule set. Conclusions of <em>other</em> rule sets are ordinary statements, so rule sets build on each other:</p>
+<p class="codefile">v:mortality</p><pre><code><span class="k">@prefix</span> v: &lt;urn:tiramemsu:v:&gt;.
+
+{ <span class="v">?x</span> a v:Human } <span class="k">=&gt;</span> { <span class="v">?x</span> a v:Mortal }.</code></pre>
+<p class="codefile">v:lifespans</p><pre><code><span class="k">@prefix</span> v: &lt;urn:tiramemsu:v:&gt;.
+
+{ <span class="v">?x</span> a v:Mortal } <span class="k">=&gt;</span> { <span class="v">?x</span> v:has v:lifespan }.</code></pre>
+<p>Materialize <code>v:mortality</code>, then <code>v:lifespans</code>. The second conclusion, D2 in the figure, has <code>D</code> among its supports. Retract e1 and both fall. Materialize <code>v:mortality</code> again and nothing changes. Order matters: run the lower rule set first.</p>
+
+<h2>Re-running and widening</h2>
+<p>Materialization is idempotent. Run it twice with no other writes and the second run reports every conclusion as <em>existing</em>. Its commit asserts nothing.</p>
+<p>A conclusion’s interval can grow. Say the facts are valid <code>[2020, 2024)</code>, and a first run used the window <code>[2020, 2022)</code>. It wrote a conclusion for <code>[2020, 2022)</code>. A second run without a window finds the same content from the same support over <code>[2020, 2024)</code>. It supersedes the stored conclusion to the hull of the two intervals and reports it as <em>widened</em>. The support links are replayed, so the conclusion still rests on the same statements.</p>
+<ul>
+  <li>Same content and support, interval contained in the stored one: <strong>existing</strong>.</li>
+  <li>Same content and support, interval overlapping or touching without being contained: <strong>widened</strong> to the hull.</li>
+  <li>Same content, different support: a <strong>separate statement</strong>, another episode or another derivation.</li>
+</ul>
+<p>Intervals grow across runs and never shrink. A conclusion that stops holding is not narrowed. It loses a support and is retracted.</p>
+
+<h2 id="skolem">Invented nodes</h2>
+<p>A blank node in a rule head invents a node (<a href="n3-in-15-minutes.html">chapter 2</a>). Written naively, every run would invent a new one, and Bob would collect a new anonymous manager each time.</p>
+<p class="codefile">v:staffing</p><pre><code><span class="k">@prefix</span> v: &lt;urn:tiramemsu:v:&gt;.
+
+{ <span class="v">?x</span> a v:Employee } <span class="k">=&gt;</span> { <span class="v">?x</span> v:manager _:m }.</code></pre>
+<p>Materialization turns each blank node into a node found or created by <code>upsert_derived(n3:skolem, "&lt;R eid&gt;/&lt;rule&gt;/&lt;label&gt;", support)</code>. The key is built from the rule set’s statement, the rule index and eyeron’s deterministic witness name, so the same firing gives the same key. The key statement is itself derived from the firing’s support. As a result:</p>
+<ul>
+  <li>Run it twice for <code>v:bob</code> and both runs use the same node for <code>_:m</code>. The second asserts nothing.</li>
+  <li>Retract <code>(v:bob rdf:type v:Employee)</code> and the key goes with the conclusions about the node. The node itself, like everything, is never deleted. It is simply no longer used.</li>
+</ul>
+
+<h2>Snapshot, then commit</h2>
+<p>Reasoning can take a while. The writer is single, and holding it for a reasoning run would block every other write. So <code>materialize</code> reasons on a read view taken at <code>t₀</code>, outside the writer, and holds the writer only for the commit. The report carries <code>reasoned_at = t₀</code>.</p>
+<p>Between the two, another writer may retract a premise. At commit time, a conclusion whose support is no longer live is skipped, together with everything that depends on it, and listed in <code>stale_support</code>. The run does not fail, and the other conclusions are written. Run <code>materialize</code> again to catch up.</p>
+
+<h2>Previewing and bounding</h2>
+<ul>
+  <li><strong><code>dry_run</code></strong> reports what would be derived, existing and widened, and commits nothing.</li>
+  <li><strong><code>require_complete</code></strong> refuses to commit a run that stopped at a limit, failing with <code>Incomplete</code>. Without it, a partial run writes what it found, all of it sound.</li>
+  <li><strong><code>QueryBudget</code></strong> bounds the loading and the commit. eyeron’s own limits bound reasoning. Cancellation is checked between segments.</li>
+</ul>
+<pre><code><span class="k">let</span> preview = db.materialize(v(<span class="s">"mortality"</span>), &amp;MaterializeOptions {
+    dry_run: <span class="k">true</span>,
+    require_complete: <span class="k">true</span>,
+    ..MaterializeOptions::default()
+})?;</code></pre>
+<pre><code><span class="k">tm</span> materialize memory.db urn:tiramemsu:v:mortality --dry-run
+<span class="k">tm</span> materialize memory.db urn:tiramemsu:v:mortality --valid-during 1577836800000..1893456000000 --require-complete</code></pre>
+<h2>One proof per conclusion</h2>
+<p>eyeron returns one proof for each conclusion in each segment, even when the conclusion follows in several ways. A stored conclusion therefore rests on one of its possible supports. That is sound: everything it rests on is live. If that support goes while another remains, the conclusion is retracted, and the next <code>materialize</code> derives it again from the other support.</p>
+
+<h2>The report</h2>
+<table>
+  <thead><tr><th>Field</th><th>Meaning</th></tr></thead>
+  <tbody>
+    <tr><td><code>reasoned_at</code></td><td><code>t₀</code>, the snapshot the run reasoned on</td></tr>
+    <tr><td><code>tx</code></td><td>the commit’s <code>TxReport</code>: its transaction, what it asserted, retracted and superseded</td></tr>
+    <tr><td><code>derived</code></td><td>new conclusions written</td></tr>
+    <tr><td><code>existing</code></td><td>conclusions already stored with the same content and support</td></tr>
+    <tr><td><code>widened</code></td><td>conclusions superseded to a wider interval</td></tr>
+    <tr><td><code>stale_support</code></td><td>conclusions skipped because a support was retracted after <code>t₀</code></td></tr>
+    <tr><td><code>status</code></td><td><code>Complete</code> or <code>Incomplete { limits }</code></td></tr>
+  </tbody>
+</table>
+<nav class="chapter-nav" aria-label="Chapter navigation">
+  <a class="prev" href="rule-sets.html"><span>← Chapter 6</span>Rule sets as memory</a>
+  <a class="next" href="recipes.html"><span>Chapter 8 →</span>Recipes</a>
+</nav>
+</article>
+</div>
+
+<footer><div class="wrap">
+  <span>Tiramemsu · MIT OR Apache-2.0 · <a href="https://github.com/Volland/tiramemsu">github.com/Volland/tiramemsu</a></span>
+  <span><a href="../">Home</a> · <a href="./">N3 book</a> · <a href="../articles/">Articles</a></span>
+  <span><a href="../impressum.html">Impressum</a> · <a href="../datenschutz.html">Datenschutz</a> · <a href="../agb.html">AGB</a></span>
+</div></footer>
+</body>
+</html>

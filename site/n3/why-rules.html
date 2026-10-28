@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Why rules in agent memory: Reasoning with N3 in Tiramemsu</title>
+<meta name="description" content="What follows from memory, conclusions that stay grounded, and what never-forget means for a reasoner.">
+<link rel="icon" href="../assets/logo.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../style.css">
+<link rel="stylesheet" href="book.css">
+</head>
+<body>
+<header class="top"><div class="wrap">
+  <a class="brand" href="../"><img src="../assets/logo.svg" alt="">Tiramemsu</a>
+  <nav class="menu"><a href="../#features">Features</a><a href="../#matrix">Matrix</a><a href="../#start">Quick start</a><a href="./">N3 book</a><a href="../articles/">Articles</a><a href="../paper/">Papers</a><a href="https://github.com/Volland/tiramemsu">GitHub</a></nav>
+</div></header>
+
+<div class="book">
+<nav class="book-toc" aria-label="Chapters">
+  <a class="book-home" href="./">Reasoning with N3</a>
+  <ol>
+    <li><a href="why-rules.html" aria-current="page"><span class="n">01</span>Why rules in memory</a></li>
+    <li><a href="n3-in-15-minutes.html"><span class="n">02</span>N3 in fifteen minutes</a></li>
+    <li><a href="memory-as-n3.html"><span class="n">03</span>Your memory as N3</a></li>
+    <li><a href="transaction-time.html"><span class="n">04</span>Transaction time</a></li>
+    <li><a href="valid-time.html"><span class="n">05</span>Valid time</a></li>
+    <li><a href="rule-sets.html"><span class="n">06</span>Rule sets as memory</a></li>
+    <li><a href="materialization.html"><span class="n">07</span>Materialization</a></li>
+    <li><a href="recipes.html"><span class="n">08</span>Recipes</a></li>
+    <li><a href="reference.html"><span class="n">09</span>Reference</a></li>
+  </ol>
+</nav>
+<article class="post chapter">
+<p class="book-crumb"><a href="./">Reasoning with N3</a> · Chapter 1 of 9</p>
+<p class="kicker"><span>Chapter 1</span></p>
+<h1>Why rules in agent memory</h1>
+<p class="lede">A memory that only stores what it was told cannot say what follows from it. Rules can. In tiramemsu, what a rule concludes keeps its reasons, respects both clocks, and falls when its reasons go.</p>
+<h2>What follows from memory</h2>
+<p>An agent has written two facts: Alice works at Acme, and Acme is in Berlin. A user asks where Alice works. No statement says <em>Alice works in Berlin</em>. The answer follows from two that do.</p>
+<p>There are three usual ways out, and each has a cost:</p>
+<ul>
+  <li><strong>Infer it in the prompt, every time.</strong> The model does the join again on every question. It costs tokens, and two runs may disagree.</li>
+  <li><strong>Write the conclusion as a fact.</strong> It is fast to read. But when Alice changes jobs, the old conclusion stays, and nothing says it was only ever a conclusion.</li>
+  <li><strong>Query for it.</strong> A SPARQL join works for one question. It does not chain, and a hundred such questions become a hundred queries to maintain.</li>
+</ul>
+<p>A rule states the inference once, in a form a machine can run and a person can read:</p>
+<p class="codefile">where-people-work.n3</p><pre><code><span class="k">@prefix</span> v: &lt;urn:tiramemsu:v:&gt;.
+
+{ <span class="v">?p</span> v:worksAt <span class="v">?c</span>. <span class="v">?c</span> v:locatedIn <span class="v">?l</span> } <span class="k">=&gt;</span> { <span class="v">?p</span> v:worksIn <span class="v">?l</span> }.</code></pre>
+<p>Read it as: for any <code>?p</code>, <code>?c</code> and <code>?l</code>, if <code>?p</code> works at <code>?c</code> and <code>?c</code> is located in <code>?l</code>, then <code>?p</code> works in <code>?l</code>. This is Notation3, or N3, the rule language of the RDF world. <a href="n3-in-15-minutes.html">Chapter 2</a> teaches enough of it to read every example in this book.</p>
+
+<h2>What a plain reasoner gets wrong</h2>
+<p>Run that rule with any N3 reasoner over an export of the memory and you get an answer. In a memory with two clocks, it is often the wrong one.</p>
+<ul>
+  <li><strong>Time in the world.</strong> Alice worked at Acme from 2020 to 2022. Acme moved to Berlin in 2024. A plain reasoner joins the two facts and says Alice worked in Berlin. She never did. In tiramemsu, two facts that were never true at the same time never combine. <a href="valid-time.html">Chapter 5</a> shows how.</li>
+  <li><strong>Time in the database.</strong> An agent made a decision last Tuesday. Why? The answer depends on what it knew last Tuesday and on the rules it had then, not on today’s. In tiramemsu a reasoning run can happen on any past view, with the rules believed then. <a href="transaction-time.html">Chapter 4</a>.</li>
+  <li><strong>Reasons that go away.</strong> A user says Alice never worked at Acme. The fact is retracted. A conclusion drawn from it must go too, at once, without anyone remembering to clean up. <a href="materialization.html">Chapter 7</a>.</li>
+</ul>
+
+<h2>Grounded conclusions</h2>
+<p>Tiramemsu already keeps one promise about grounding: a layer never outlives the fact it is about. Retract a fact and its confidence, its source and the beliefs that cite it are retracted in the same transaction. The companion article <a href="../articles/grounded-memory.html">Memory that stays grounded</a> explains why that cascade takes exactly what it must.</p>
+<p>Reasoning extends the promise to conclusions. When tiramemsu writes what a rule concludes, it writes a <strong>derived belief</strong>: a statement with one support link to every premise it used and one to the stored rule set. A conclusion is grounded when all of its supports are live. The cascade follows support links, so:</p>
+<ul>
+  <li>retract or correct a premise, and the conclusion is retracted in that transaction;</li>
+  <li>edit or retract the rule set, and every conclusion it produced is retracted in that transaction;</li>
+  <li>retract a conclusion, and every conclusion drawn from it goes with it.</li>
+</ul>
+<p>No background job and no reconciliation pass are involved. It is the same cascade that retracts layers, with one more kind of edge to follow.</p>
+
+<h2>Never forget, still</h2>
+<p>Tiramemsu never deletes. A reasoner that writes must keep that rule too. It does:</p>
+<ul>
+  <li>Materialization only asserts and supersedes. It never edits a stored row.</li>
+  <li>A retracted conclusion stays in history with its support links, so an <code>as_of</code> view shows what was concluded then and from what.</li>
+  <li>Widening a conclusion’s valid interval is a supersede. Editing a rule set is a supersede. Both are visible in history.</li>
+</ul>
+
+<h2>Three verbs</h2>
+<p>The whole feature is three operations:</p>
+<table>
+  <thead><tr><th>Verb</th><th>Writes?</th><th>What it does</th></tr></thead>
+  <tbody>
+    <tr><td><code>View::reason(rules, &amp;ReasonOptions)</code></td><td>No</td><td>Runs N3 rules over a view and returns the conclusions, each with a proof made of statement ids. Accepts every builtin, including negation and the clock.</td></tr>
+    <tr><td><code>Tx::store_rules(rule_set, n3)</code></td><td>Yes</td><td>Keeps a rule set as one statement, so rules have history and can be corrected.</td></tr>
+    <tr><td><code>Db::materialize(rule_set, &amp;MaterializeOptions)</code></td><td>Yes</td><td>Reasons with a stored rule set and writes the conclusions as derived beliefs. Monotonic rules only.</td></tr>
+  </tbody>
+</table>
+<p>A first taste, in Rust. The rule finds who is mortal. Nothing is written.</p>
+<pre><code><span class="k">use</span> tiramemsu::{ReasonOptions, Rules};
+
+<span class="k">let</span> rules = <span class="s">r#"@prefix v: &lt;urn:tiramemsu:v:&gt;.
+{ ?x a v:Human } =&gt; { ?x a v:Mortal }."#</span>;
+
+<span class="k">let</span> result = db.now().reason(Rules::Text(rules.into()), &amp;ReasonOptions::default())?;
+<span class="k">for</span> c <span class="k">in</span> &amp;result.conclusions {
+    <span class="c">// (v:socrates rdf:type v:Mortal), proof { rule: 0, premises: [e1] }</span>
+    println!(<span class="s">"{} {} {}  rule {}  premises {:?}"</span>, c.s, c.p, c.o, c.proof.rule, c.proof.premises);
+}</code></pre>
+<p>The premises are statement ids, not copies of triples. Each one points at the exact statement the conclusion rests on, with its layers, its clocks and its history.</p>
+
+<h2>Before you start</h2>
+<div class="note"><strong>Design preview.</strong> This book describes the OpenSpec change <code>add-n3-reasoning</code>, which builds on <code>add-derived-beliefs</code>. Neither is in a release yet, and names may still change. Reasoning will be an opt-in Cargo feature, <code>n3</code>, off by default. The reasoner is <a href="https://github.com/eyereasoner/eyeron">eyeron</a> by Jos De Roo (MIT).</div>
+<p>You need to know tiramemsu’s two clocks and what a layer is. If either is new, read <a href="../articles/time-travel.html">Time travel and bitemporality, explained</a> and <a href="../articles/layered-graphs.html">Layered graphs, explained</a> first. You do not need to know N3. The next chapter teaches it.</p>
+<nav class="chapter-nav" aria-label="Chapter navigation">
+  <a class="prev" href="./"><span>← Cover</span>Contents</a>
+  <a class="next" href="n3-in-15-minutes.html"><span>Chapter 2 →</span>N3 in fifteen minutes</a>
+</nav>
+</article>
+</div>
+
+<footer><div class="wrap">
+  <span>Tiramemsu · MIT OR Apache-2.0 · <a href="https://github.com/Volland/tiramemsu">github.com/Volland/tiramemsu</a></span>
+  <span><a href="../">Home</a> · <a href="./">N3 book</a> · <a href="../articles/">Articles</a></span>
+  <span><a href="../impressum.html">Impressum</a> · <a href="../datenschutz.html">Datenschutz</a> · <a href="../agb.html">AGB</a></span>
+</div></footer>
+</body>
+</html>

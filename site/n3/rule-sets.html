@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Rule sets as memory: Reasoning with N3 in Tiramemsu</title>
+<meta name="description" content="Stored rules with history, corrections by supersede, and the monotonicity check.">
+<link rel="icon" href="../assets/logo.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../style.css">
+<link rel="stylesheet" href="book.css">
+</head>
+<body>
+<header class="top"><div class="wrap">
+  <a class="brand" href="../"><img src="../assets/logo.svg" alt="">Tiramemsu</a>
+  <nav class="menu"><a href="../#features">Features</a><a href="../#matrix">Matrix</a><a href="../#start">Quick start</a><a href="./">N3 book</a><a href="../articles/">Articles</a><a href="../paper/">Papers</a><a href="https://github.com/Volland/tiramemsu">GitHub</a></nav>
+</div></header>
+
+<div class="book">
+<nav class="book-toc" aria-label="Chapters">
+  <a class="book-home" href="./">Reasoning with N3</a>
+  <ol>
+    <li><a href="why-rules.html"><span class="n">01</span>Why rules in memory</a></li>
+    <li><a href="n3-in-15-minutes.html"><span class="n">02</span>N3 in fifteen minutes</a></li>
+    <li><a href="memory-as-n3.html"><span class="n">03</span>Your memory as N3</a></li>
+    <li><a href="transaction-time.html"><span class="n">04</span>Transaction time</a></li>
+    <li><a href="valid-time.html"><span class="n">05</span>Valid time</a></li>
+    <li><a href="rule-sets.html" aria-current="page"><span class="n">06</span>Rule sets as memory</a></li>
+    <li><a href="materialization.html"><span class="n">07</span>Materialization</a></li>
+    <li><a href="recipes.html"><span class="n">08</span>Recipes</a></li>
+    <li><a href="reference.html"><span class="n">09</span>Reference</a></li>
+  </ol>
+</nav>
+<article class="post chapter">
+<p class="book-crumb"><a href="./">Reasoning with N3</a> · Chapter 6 of 9</p>
+<p class="kicker"><span>Chapter 6</span></p>
+<h1>Rule sets as memory</h1>
+<p class="lede">Rules are knowledge too. A stored rule set is one statement, so it has history like a fact, it is corrected like a fact, and it can be the reason a conclusion exists.</p>
+<h2>Storing a rule set</h2>
+<p>A rule set is named by any IRI, say <code>v:mortality</code>. <code>Tx::store_rules(rule_set, n3)</code> parses the text and, if it parses, writes one statement:</p>
+<p class="center"><code>R = (v:mortality n3:source "…the N3 text…")</code></p>
+<p>where <code>n3:</code> is <code>urn:tiramemsu:n3:</code>. That is all a rule set is: a node with one live <code>n3:source</code> statement.</p>
+<pre><code><span class="k">use</span> tiramemsu::TxN3;   <span class="c">// brings store_rules into scope</span>
+
+const MORTALITY: &amp;str = <span class="s">r#"@prefix v: &lt;urn:tiramemsu:v:&gt;.
+{ ?x a v:Human } =&gt; { ?x a v:Mortal }."#</span>;
+
+db.transact(TxOptions::default(), |tx| {
+    <span class="k">let</span> r = tx.store_rules(v(<span class="s">"mortality"</span>), MORTALITY)?;   <span class="c">// the eid of R</span>
+    println!(<span class="s">"rule set statement {r}"</span>);
+    <span class="k">Ok</span>(())
+})?;</code></pre>
+<p><code>store_rules</code> returns the eid of <code>R</code>. Three cases:</p>
+<ul>
+  <li><strong>New rule set.</strong> <code>R</code> is asserted.</li>
+  <li><strong>Same text again.</strong> The existing statement is returned. Nothing is superseded, nothing is written.</li>
+  <li><strong>Different text.</strong> The live <code>n3:source</code> is superseded by the new text. The old version is retracted with kind <code>supersede</code> and stays in history.</li>
+</ul>
+<p>Text that does not parse fails with <code>N3Parse { line, message }</code> and leaves no trace. A broken rule set never reaches memory.</p>
+<p>From the command line:</p>
+<pre><code><span class="k">tm</span> rules put  memory.db urn:tiramemsu:v:mortality mortality.n3
+<span class="k">tm</span> rules show memory.db urn:tiramemsu:v:mortality</code></pre>
+<h2>Reasoning with a stored rule set</h2>
+<p><code>Rules::Stored(rule_set)</code> reads the live <code>n3:source</code> of the rule set <em>in the reasoning view</em> and runs it. The proofs then name the rule set. If the view has no live source for it, the run fails with <code>UnknownRuleSet</code>.</p>
+<pre><code><span class="k">let</span> r = db.now().reason(Rules::Stored(v(<span class="s">"mortality"</span>)), &amp;ReasonOptions::default())?;
+assert_eq!(r.conclusions[0].proof.rule_set, <span class="k">Some</span>(v(<span class="s">"mortality"</span>)));
+
+<span class="k">let</span> none = db.now().reason(Rules::Stored(v(<span class="s">"nothing"</span>)), &amp;ReasonOptions::default());
+assert!(matches!(none, <span class="k">Err</span>(Error::UnknownRuleSet { .. })));</code></pre>
+<p>Because the source is read from the view, an <code>as_of</code> view runs the version believed then. <a href="transaction-time.html">Chapter 4</a> showed the timeline.</p>
+
+<h2>Rule history is a query</h2>
+<p>Rule sets are ordinary statements, so SPARQL and Cypher read them like anything else. Every version of a rule set, with the transaction that stored it:</p>
+<pre><code><span class="k">PREFIX</span> n3: &lt;urn:tiramemsu:n3:&gt;
+<span class="k">SELECT</span> <span class="v">?text</span> <span class="v">?t</span> <span class="k">WHERE</span> {
+  v:mortality n3:source <span class="v">?text</span> ~ <span class="v">?r</span> .
+  <span class="v">?r</span> tm:txAdded <span class="v">?t</span>
+} <span class="k">ORDER BY</span> <span class="v">?t</span></code></pre>
+<p>Run it on <code>db.history()</code> to see retracted versions too. Each edit links the new version to the old one with <code>sys:supersedes</code>, so <code>?r sys:supersedes+ ?old</code> walks the edit chain. Put an author and a reason on the transaction that stores a rule set and the rules carry their own changelog.</p>
+
+<h2>Namespaces: <code>n3:</code> and <code>tm:</code></h2>
+<p>The two prefixes look alike and behave differently:</p>
+<ul>
+  <li><code>n3:</code> (<code>urn:tiramemsu:n3:</code>) holds ordinary stored data: <code>n3:source</code> on rule sets, and the labels <code>n3:derivedBy</code>, <code>n3:rule</code> and <code>n3:skolem</code> that materialization writes (<a href="materialization.html">chapter 7</a>).</li>
+  <li><code>tm:</code> (<code>urn:tiramemsu:tm:</code>) is reserved for virtual predicates such as <code>tm:content</code> and <code>tm:now</code>. They are computed for a run and cannot be written.</li>
+</ul>
+
+<h2 id="monotonicity">The monotonicity check</h2>
+<p>Parsing a rule set also classifies it, by looking at the builtins in its rule bodies:</p>
+<table>
+  <thead><tr><th>Class</th><th>When</th><th><code>reason</code></th><th><code>materialize</code></th></tr></thead>
+  <tbody>
+    <tr><td><code>Monotonic</code></td><td>none of the builtins below</td><td class="y">runs</td><td class="y">runs</td></tr>
+    <tr><td><code>NonMonotonic { rule, builtin }</code></td><td>a body uses <code>log:notIncludes</code>, <code>log:collectAllIn</code> or <code>log:forAllIn</code></td><td class="y">runs</td><td class="n">refused</td></tr>
+    <tr><td><code>ClockDependent { rule, builtin }</code></td><td>a body uses <code>time:localTime</code> or <code>tm:now</code></td><td class="y">runs</td><td class="n">refused</td></tr>
+  </tbody>
+</table>
+<p>The classification names the first offending rule by index and the builtin. For example, this rule set is <code>NonMonotonic</code>, naming rule 0 and <code>log:notIncludes</code>:</p>
+<p class="codefile">unmanaged.n3</p><pre><code><span class="k">@prefix</span> v: &lt;urn:tiramemsu:v:&gt;.
+<span class="k">@prefix</span> log: &lt;http://www.w3.org/2000/10/swap/log#&gt;.
+
+{ <span class="v">?x</span> a v:Employee. <span class="v">?SCOPE</span> log:notIncludes { <span class="v">?x</span> v:manager <span class="v">?m</span> } } <span class="k">=&gt;</span> { <span class="v">?x</span> a v:Unmanaged }.</code></pre>
+<p><code>View::rule_set_info(rule_set)</code> reports the class, the number of rules and the predicates the bodies use, which are also the predicates pruning will load:</p>
+<pre><code><span class="k">let</span> info = db.now().rule_set_info(&amp;v(<span class="s">"unmanaged"</span>))?;
+<span class="c">// info.monotonicity == NonMonotonic { rule: 0, builtin: "log:notIncludes" }</span>
+<span class="c">// info.rules        == 1</span>
+<span class="c">// info.predicates   == [rdf:type, v:manager]</span></code></pre>
+<h3>Why materialization refuses them</h3>
+<p>A stored conclusion stays true because of its supports. Each support is a live statement, and when any of them is retracted the conclusion is retracted too. That covers everything a monotonic rule depends on: things that are there.</p>
+<p>A non-monotonic rule also depends on things that are <em>not</em> there. “Bob is unmanaged” rests on the absence of a manager. When the manager is asserted tomorrow, nothing is retracted, so nothing would retract the stored conclusion. It would stay, wrong, and look grounded. A clock-dependent rule has the same problem with time: “overdue” was true when written and is false after the deadline moves, with no retraction in between.</p>
+<p>The design considered two ways around this, diffing runs and accepting stale results, and chose neither. Materialization is for rules whose conclusions the cascade can keep honest. For the rest, <code>reason</code> answers on demand, on any view, and nothing goes stale because nothing is stored.</p>
+
+<h2>Split rule sets by concern</h2>
+<p>Every conclusion a rule set produced rests on its statement <code>R</code>. Editing the rule set supersedes <code>R</code>, so every one of those conclusions is retracted in the same transaction, and the next <code>materialize</code> writes the new ones. That is what keeps them honest, and also what makes a big rule set expensive to touch. Keep rule sets small and focused: one for employment, one for trust, one for team structure. <a href="recipes.html#preview">Recipe 6</a> shows how to see the cost of an edit before you make it.</p>
+<nav class="chapter-nav" aria-label="Chapter navigation">
+  <a class="prev" href="valid-time.html"><span>← Chapter 5</span>Time, part 2: valid time</a>
+  <a class="next" href="materialization.html"><span>Chapter 7 →</span>Materialization</a>
+</nav>
+</article>
+</div>
+
+<footer><div class="wrap">
+  <span>Tiramemsu · MIT OR Apache-2.0 · <a href="https://github.com/Volland/tiramemsu">github.com/Volland/tiramemsu</a></span>
+  <span><a href="../">Home</a> · <a href="./">N3 book</a> · <a href="../articles/">Articles</a></span>
+  <span><a href="../impressum.html">Impressum</a> · <a href="../datenschutz.html">Datenschutz</a> · <a href="../agb.html">AGB</a></span>
+</div></footer>
+</body>
+</html>

@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Time, part 1: transaction time: Reasoning with N3 in Tiramemsu</title>
+<meta name="description" content="Reasoning as of any past transaction, with the rules believed then and a clock that reads then.">
+<link rel="icon" href="../assets/logo.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../style.css">
+<link rel="stylesheet" href="book.css">
+</head>
+<body>
+<header class="top"><div class="wrap">
+  <a class="brand" href="../"><img src="../assets/logo.svg" alt="">Tiramemsu</a>
+  <nav class="menu"><a href="../#features">Features</a><a href="../#matrix">Matrix</a><a href="../#start">Quick start</a><a href="./">N3 book</a><a href="../articles/">Articles</a><a href="../paper/">Papers</a><a href="https://github.com/Volland/tiramemsu">GitHub</a></nav>
+</div></header>
+
+<div class="book">
+<nav class="book-toc" aria-label="Chapters">
+  <a class="book-home" href="./">Reasoning with N3</a>
+  <ol>
+    <li><a href="why-rules.html"><span class="n">01</span>Why rules in memory</a></li>
+    <li><a href="n3-in-15-minutes.html"><span class="n">02</span>N3 in fifteen minutes</a></li>
+    <li><a href="memory-as-n3.html"><span class="n">03</span>Your memory as N3</a></li>
+    <li><a href="transaction-time.html" aria-current="page"><span class="n">04</span>Transaction time</a></li>
+    <li><a href="valid-time.html"><span class="n">05</span>Valid time</a></li>
+    <li><a href="rule-sets.html"><span class="n">06</span>Rule sets as memory</a></li>
+    <li><a href="materialization.html"><span class="n">07</span>Materialization</a></li>
+    <li><a href="recipes.html"><span class="n">08</span>Recipes</a></li>
+    <li><a href="reference.html"><span class="n">09</span>Reference</a></li>
+  </ol>
+</nav>
+<article class="post chapter">
+<p class="book-crumb"><a href="./">Reasoning with N3</a> · Chapter 4 of 9</p>
+<p class="kicker"><span>Chapter 4</span></p>
+<h1>Time, part 1: transaction time</h1>
+<p class="lede">Every reasoning run happens on a view. On an as-of view it reasons over memory as it was believed then, with the rules believed then, and with a clock that reads then. So an answer about the past never changes.</p>
+<h2>Every run has a view</h2>
+<p><code>reason</code> is a method of <code>View</code>, the same object that runs SPARQL and Cypher. Whatever the view can see is what the run can load. The now view sees what is believed now. <code>as_of(TimeRef::Tx(n))</code> sees what was believed after transaction <em>n</em>. <code>as_of(TimeRef::Instant(ms))</code> does the same for a wall-clock instant.</p>
+<pre><code><span class="c">// Transaction 2 asserted (v:socrates rdf:type v:Human).</span>
+<span class="k">let</span> rules = Rules::Text(<span class="s">r#"@prefix v: &lt;urn:tiramemsu:v:&gt;.
+{ ?x a v:Human } =&gt; { ?x a v:Mortal }."#</span>.into());
+
+<span class="k">let</span> then = db.as_of(TimeRef::Tx(1)).reason(rules.clone(), &amp;ReasonOptions::default())?;
+assert!(then.conclusions.is_empty());          <span class="c">// nothing was known yet</span>
+
+<span class="k">let</span> now = db.now().reason(rules, &amp;ReasonOptions::default())?;
+assert_eq!(now.conclusions.len(), 1);          <span class="c">// (v:socrates rdf:type v:Mortal)</span></code></pre>
+<p>The command line takes the same view flags as <code>tm query</code>:</p>
+<pre><code><span class="k">tm</span> reason memory.db --rules mortality.n3 --as-of 1    <span class="c"># no conclusion</span>
+<span class="k">tm</span> reason memory.db --rules mortality.n3              <span class="c"># (v:socrates rdf:type v:Mortal)</span></code></pre>
+<p>Tiramemsu guarantees that an <code>as_of(t)</code> view never changes once transaction <em>t</em> has committed. Reasoning inherits the guarantee: the same rules on the same as-of view give the same conclusions, today and in a year.</p>
+
+<h2>Rules as they were</h2>
+<p>A rule set stored with <code>store_rules</code> is a statement (<a href="rule-sets.html">chapter 6</a>). Editing it is a supersede, so the old version is still visible in views of the past. <code>Rules::Stored(rule_set)</code> reads the version that is live <em>in the reasoning view</em>:</p>
+<figure class="fig">
+<div class="fig-scroll">
+<svg viewBox="0 0 720 230" role="img" aria-labelledby="tt-title tt-desc">
+  <title id="tt-title">Reasoning as of transaction 3</title>
+  <desc id="tt-desc">Three lifetimes on the transaction-time axis. The fact that Socrates is human is believed from transaction 2 on. Rule set version A is believed from transaction 2 until transaction 5, when version B supersedes it. A line at transaction 3 crosses the fact and version A, so a run as of transaction 3 uses both. A line at now crosses the fact and version B.</desc>
+  <g class="lbl">
+    <text x="12" y="44">e1 · socrates a Human</text>
+    <text x="12" y="84">R · mortality, version A</text>
+    <text x="12" y="124">R′ · mortality, version B</text>
+  </g>
+  <rect class="bar-a" x="295" y="32" width="400" height="14" rx="3"/>
+  <rect class="bar-b" x="295" y="72" width="225" height="14" rx="3"/>
+  <rect class="bar-c" x="520" y="112" width="175" height="14" rx="3"/>
+  <path class="open" d="M699 33 l7 6 l-7 6 M699 113 l7 6 l-7 6"/>
+  <line class="cut-hl" x1="370" y1="20" x2="370" y2="160"/>
+  <text class="hl" x="376" y="160">as_of(Tx(3))</text>
+  <circle class="dot" cx="370" cy="39" r="5"/>
+  <circle class="dot" cx="370" cy="79" r="5"/>
+  <line class="cut" x1="670" y1="20" x2="670" y2="160"/>
+  <text class="mut" x="676" y="160">now</text>
+  <line class="ax" x1="220" y1="180" x2="700" y2="180"/>
+  <g class="mut tick">
+    <line class="ax" x1="220" y1="176" x2="220" y2="184"/><text x="220" y="200">1</text>
+    <line class="ax" x1="295" y1="176" x2="295" y2="184"/><text x="295" y="200">2</text>
+    <line class="ax" x1="370" y1="176" x2="370" y2="184"/><text x="370" y="200">3</text>
+    <line class="ax" x1="445" y1="176" x2="445" y2="184"/><text x="445" y="200">4</text>
+    <line class="ax" x1="520" y1="176" x2="520" y2="184"/><text x="520" y="200">5</text>
+    <line class="ax" x1="595" y1="176" x2="595" y2="184"/><text x="595" y="200">6</text>
+  </g>
+  <text class="mut" x="12" y="200">transaction time →</text>
+</svg>
+</div>
+<figcaption>Rules are statements, so they have lifetimes like facts. A run as of transaction 3 sees e1 and version A. A run on the now view sees e1 and version B.</figcaption>
+</figure>
+<pre><code><span class="c">// Version A stored in transaction 2, version B in transaction 5.</span>
+<span class="k">let</span> r = db.as_of(TimeRef::Tx(3)).reason(Rules::Stored(v(<span class="s">"mortality"</span>)), &amp;ReasonOptions::default())?;
+<span class="c">// r ran version A: the rules the agent had at transaction 3.</span></code></pre>
+<p>This answers a question audits ask and few systems can: <em>what would our rules have concluded then, from what we knew then?</em> Not today’s rules over yesterday’s data, and not yesterday’s rules over today’s data. Both clocks are wound back together.</p>
+
+<h2>The pinned clock</h2>
+<p>A rule may ask for the time. In plain N3 that is <code>time:localTime</code>, which reads the system clock. On an as-of view that would be wrong twice over: the run would reason about the present while looking at the past, and two runs would disagree.</p>
+<p>Tiramemsu pins the clock to the view:</p>
+<ul>
+  <li><code>now</code> is the view’s transaction-time instant: the as-of instant, or, on the now view, one instant taken when the run starts.</li>
+  <li>It is constant for the whole run, and the result reports it as <code>now</code>.</li>
+  <li><code>"" time:localTime ?t</code> and the virtual triple <code>tm:run tm:now ?t</code> both yield it, as <code>xsd:dateTime</code>.</li>
+</ul>
+<p class="codefile">clock.n3</p><pre><code><span class="k">@prefix</span> v: &lt;urn:tiramemsu:v:&gt;.
+<span class="k">@prefix</span> time: &lt;http://www.w3.org/2000/10/swap/time#&gt;.
+
+{ <span class="s">""</span> time:localTime <span class="v">?t</span> } <span class="k">=&gt;</span> { v:run v:at <span class="v">?t</span> }.</code></pre>
+<p>Run this twice on <code>as_of(TimeRef::Tx(3))</code> and both runs conclude the same <code>?t</code>: the instant of transaction 3.</p>
+<p>A more useful example: which tasks were overdue at the moment the agent made a decision?</p>
+<p class="codefile">overdue.n3</p><pre><code><span class="k">@prefix</span> v: &lt;urn:tiramemsu:v:&gt;.
+<span class="k">@prefix</span> tm: &lt;urn:tiramemsu:tm:&gt;.
+<span class="k">@prefix</span> math: &lt;http://www.w3.org/2000/10/swap/math#&gt;.
+
+{ <span class="v">?task</span> v:due <span class="v">?due</span>.
+  tm:run tm:now <span class="v">?now</span>.
+  <span class="v">?now</span> math:greaterThan <span class="v">?due</span>
+} <span class="k">=&gt;</span> { <span class="v">?task</span> a v:Overdue }.</code></pre>
+<pre><code><span class="k">let</span> decided_at = TimeRef::Instant(ms(<span class="s">"2026-10-20T09:00:00Z"</span>)); <span class="c">// ms(): your date-to-epoch-ms helper</span>
+<span class="k">let</span> r = db.as_of(decided_at).reason(Rules::Stored(v(<span class="s">"overdue"</span>)), &amp;ReasonOptions::default())?;
+<span class="c">// Overdue as of that morning, by what the agent knew that morning.</span></code></pre>
+<p>A rule set that reads the clock is <strong>clock-dependent</strong>. <code>reason</code> runs it. <code>materialize</code> refuses it, because a stored “overdue” would be true when written and false a week later, with no premise retracted to say so. <a href="rule-sets.html#monotonicity">Chapter 6</a> has the full classification.</p>
+
+<h2>Two clocks, never mixed</h2>
+<p><code>tm:now</code> is transaction time: when the database is looking from. The next chapter brings valid time, when facts held in the world, with its own virtual triples <code>tm:segmentFrom</code> and <code>tm:segmentTo</code>. They are different axes. A run as of last Tuesday can still reason about 2019. <code>tm:now</code> stays last Tuesday, and the segments are in 2019.</p>
+<nav class="chapter-nav" aria-label="Chapter navigation">
+  <a class="prev" href="memory-as-n3.html"><span>← Chapter 3</span>Your memory as N3</a>
+  <a class="next" href="valid-time.html"><span>Chapter 5 →</span>Time, part 2: valid time</a>
+</nav>
+</article>
+</div>
+
+<footer><div class="wrap">
+  <span>Tiramemsu · MIT OR Apache-2.0 · <a href="https://github.com/Volland/tiramemsu">github.com/Volland/tiramemsu</a></span>
+  <span><a href="../">Home</a> · <a href="./">N3 book</a> · <a href="../articles/">Articles</a></span>
+  <span><a href="../impressum.html">Impressum</a> · <a href="../datenschutz.html">Datenschutz</a> · <a href="../agb.html">AGB</a></span>
+</div></footer>
+</body>
+</html>

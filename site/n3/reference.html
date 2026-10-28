@@ -1,0 +1,198 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Reference: Reasoning with N3 in Tiramemsu</title>
+<meta name="description" content="Every surface, option, vocabulary term and error, and the limits of the design.">
+<link rel="icon" href="../assets/logo.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../style.css">
+<link rel="stylesheet" href="book.css">
+</head>
+<body>
+<header class="top"><div class="wrap">
+  <a class="brand" href="../"><img src="../assets/logo.svg" alt="">Tiramemsu</a>
+  <nav class="menu"><a href="../#features">Features</a><a href="../#matrix">Matrix</a><a href="../#start">Quick start</a><a href="./">N3 book</a><a href="../articles/">Articles</a><a href="../paper/">Papers</a><a href="https://github.com/Volland/tiramemsu">GitHub</a></nav>
+</div></header>
+
+<div class="book">
+<nav class="book-toc" aria-label="Chapters">
+  <a class="book-home" href="./">Reasoning with N3</a>
+  <ol>
+    <li><a href="why-rules.html"><span class="n">01</span>Why rules in memory</a></li>
+    <li><a href="n3-in-15-minutes.html"><span class="n">02</span>N3 in fifteen minutes</a></li>
+    <li><a href="memory-as-n3.html"><span class="n">03</span>Your memory as N3</a></li>
+    <li><a href="transaction-time.html"><span class="n">04</span>Transaction time</a></li>
+    <li><a href="valid-time.html"><span class="n">05</span>Valid time</a></li>
+    <li><a href="rule-sets.html"><span class="n">06</span>Rule sets as memory</a></li>
+    <li><a href="materialization.html"><span class="n">07</span>Materialization</a></li>
+    <li><a href="recipes.html"><span class="n">08</span>Recipes</a></li>
+    <li><a href="reference.html" aria-current="page"><span class="n">09</span>Reference</a></li>
+  </ol>
+</nav>
+<article class="post chapter">
+<p class="book-crumb"><a href="./">Reasoning with N3</a> · Chapter 9 of 9</p>
+<p class="kicker"><span>Chapter 9</span></p>
+<h1>Reference</h1>
+<p class="lede">Every surface, option, vocabulary term and error in one place, followed by what the design leaves out on purpose.</p>
+<div class="note"><strong>Design preview.</strong> Names and signatures follow the OpenSpec change <code>add-n3-reasoning</code>. Where the spec fixes a name, this page uses it exactly. The Rust names match the implementation in progress. <code>materialize</code> and the binding signatures are not written yet and are marked as sketches.</div>
+
+<h2>Enabling it</h2>
+<p>Reasoning lives in the crate <code>tm-n3</code>, behind the facade feature <code>n3</code>. The feature is off by default, does not turn on <code>exec</code>, and combines with every other feature. Without it, neither <code>tm-n3</code> nor <code>eyeron</code> is in the dependency tree. The core tier can reason: <code>--no-default-features --features n3</code> builds without the query front ends.</p>
+<p class="codefile">Cargo.toml</p><pre><code>[dependencies]
+tiramemsu = { git = "https://github.com/Volland/tiramemsu", features = ["n3"] }</code></pre>
+<p>Until eyeron is published on crates.io, the workspace pins it to a git commit. Cargo does not publish a crate with a git dependency, so a tiramemsu with the <code>n3</code> feature cannot come from crates.io until then. Build from the repository meanwhile.</p>
+
+<h2>Rust API</h2>
+<p class="codefile">tiramemsu, feature n3</p><pre><code><span class="k">use</span> tiramemsu::{ReasonOptions, ReasonScope, Rules, TimeMode, TxN3};
+
+<span class="c">// Read-only reasoning on any view.</span>
+<span class="k">impl</span> View&lt;'_&gt; {
+    <span class="k">pub</span> <span class="k">fn</span> reason(&amp;self, rules: Rules, opts: &amp;ReasonOptions) -&gt; Result&lt;ReasonResult&gt;;
+    <span class="k">pub</span> <span class="k">fn</span> rule_set_info(&amp;self, rule_set: &amp;Value) -&gt; Result&lt;RuleSetInfo&gt;;
+}
+
+<span class="c">// Storing rule sets, inside a transaction (trait TxN3). Returns the eid of R.</span>
+<span class="k">fn</span> store_rules(&amp;<span class="k">mut</span> self, rule_set: Value, n3: &amp;str) -&gt; Result&lt;Eid&gt;;
+
+<span class="c">// Writing conclusions as derived beliefs.</span>
+<span class="k">impl</span> Db {
+    <span class="k">pub</span> <span class="k">fn</span> materialize(&amp;self, rule_set: Value, opts: &amp;MaterializeOptions) -&gt; Result&lt;MaterializeReport&gt;;
+}
+
+<span class="k">pub</span> <span class="k">enum</span> Rules {
+    Text(String),     <span class="c">// N3 text, parsed for this run</span>
+    Stored(Value),    <span class="c">// the live n3:source of a rule set in the view</span>
+}</code></pre>
+<h3><code>ReasonOptions</code></h3>
+<table>
+  <thead><tr><th>Option</th><th>Default</th><th>Meaning</th></tr></thead>
+  <tbody>
+    <tr><td><code>scope</code></td><td><code>ReasonScope::All</code></td><td><code>All</code>, <code>Graphs(graphs)</code> for members of named graphs, or <code>Seeds { nodes, hops }</code> for statements within <code>hops</code> of the seeds</td></tr>
+    <tr><td><code>time</code></td><td><code>TimeMode::Pointwise</code></td><td><code>Pointwise</code> sweeps valid-time segments; <code>Atemporal</code> ignores valid time. A <code>valid_at</code> view always reasons over one snapshot.</td></tr>
+    <tr><td><code>window</code></td><td><code>Valid::ALWAYS</code></td><td>the valid-time window of the sweep; conclusions are reported only inside it</td></tr>
+    <tr><td><code>max_segments</code></td><td>1 024</td><td>stop the sweep after this many segments and report <code>Incomplete { limits: [Segments] }</code></td></tr>
+    <tr><td><code>proof_n3</code></td><td><code>false</code></td><td>also return eyeron’s N3 proof text</td></tr>
+    <tr><td><code>limits</code></td><td>eyeron’s defaults</td><td><code>ReasonLimits</code> for each eyeron run: <code>max_iterations</code>, <code>max_match_steps</code>, <code>max_backward_depth</code>, <code>max_term_bytes</code></td></tr>
+  </tbody>
+</table>
+<h3><code>ReasonResult</code></h3>
+<table>
+  <thead><tr><th>Field</th><th>Meaning</th></tr></thead>
+  <tbody>
+    <tr><td><code>conclusions</code></td><td>conclusions not among the loaded statements, each with <code>s</code>, <code>p</code>, <code>o</code>, its interval and a proof <code>{ rule_set, rule, premises }</code>; premises are loaded statements by eid or other conclusions by index</td></tr>
+    <tr><td><code>t</code></td><td>the view’s transaction</td></tr>
+    <tr><td><code>now</code></td><td>the pinned clock: the view’s instant</td></tr>
+    <tr><td><code>loaded</code>, <code>pruned</code></td><td>statements loaded, and whether predicate pruning applied</td></tr>
+    <tr><td><code>segments</code></td><td>number of valid-time segments reasoned over</td></tr>
+    <tr><td><code>status</code></td><td><code>Complete</code>, or <code>Incomplete { limits }</code> naming each limit reached: <code>Segments</code>, <code>Iterations</code>, <code>MatchSteps</code>, <code>BackwardDepth</code>, <code>BackwardSolutions</code>, <code>TermBytes</code>, <code>TermDepth</code>; builtin failures also make a run incomplete and are listed in <code>errors</code></td></tr>
+    <tr><td><code>contradiction</code></td><td>the first fired inference fuse: its rule, instance and valid time</td></tr>
+    <tr><td><code>rule_set</code>, <code>rule_set_statement</code></td><td>the stored rule set, if the rules came from one, and the eid of its live <code>n3:source</code> statement</td></tr>
+    <tr><td><code>proof_n3</code></td><td>eyeron’s proof text, with <code>proof_n3: true</code></td></tr>
+  </tbody>
+</table>
+<h3><code>MaterializeOptions</code></h3>
+<table>
+  <thead><tr><th>Option</th><th>Default</th><th>Meaning</th></tr></thead>
+  <tbody>
+    <tr><td><code>scope</code>, <code>time</code>, <code>window</code>, <code>max_segments</code>, <code>limits</code></td><td>as for <code>reason</code></td><td>the window defaults to unbounded</td></tr>
+    <tr><td><code>require_complete</code></td><td><code>false</code></td><td>fail with <code>Incomplete</code> instead of committing a partial run</td></tr>
+    <tr><td><code>dry_run</code></td><td><code>false</code></td><td>report what would be written, commit nothing</td></tr>
+    <tr><td><code>budget</code></td><td>none</td><td>a <code>QueryBudget</code> for loading and the commit</td></tr>
+  </tbody>
+</table>
+<p><code>MaterializeReport</code> carries <code>reasoned_at</code>, the commit’s <code>TxReport</code>, <code>derived</code>, <code>existing</code>, <code>widened</code>, <code>stale_support</code> and <code>status</code> (<a href="materialization.html">chapter 7</a>). <code>RuleSetInfo</code> carries <code>monotonicity</code> (<code>Monotonic</code>, <code>NonMonotonic { rule, builtin }</code> or <code>ClockDependent { rule, builtin }</code>), the rule count <code>rules</code>, the body <code>predicates</code>, and whether a body has a variable predicate.</p>
+
+<h2>Vocabulary</h2>
+<table>
+  <thead><tr><th>Term</th><th>Kind</th><th>Meaning</th></tr></thead>
+  <tbody>
+    <tr><td><code>n3:source</code></td><td>stored</td><td><code>(rule_set n3:source "…")</code>, the one live statement <code>R</code> of a rule set</td></tr>
+    <tr><td><code>n3:derivedBy</code></td><td>stored label</td><td><code>(D n3:derivedBy rule_set)</code> on a materialized conclusion</td></tr>
+    <tr><td><code>n3:rule</code></td><td>stored label</td><td><code>(D n3:rule i)</code>, the index of the rule that produced it</td></tr>
+    <tr><td><code>n3:skolem</code></td><td>stored, derived</td><td>the key of an invented node, <code>"&lt;R eid&gt;/&lt;rule&gt;/&lt;label&gt;"</code></td></tr>
+    <tr><td><code>sys:derivedFrom</code></td><td>stored, engine-owned</td><td>a support link from a derived statement to a premise or to <code>R</code></td></tr>
+    <tr><td><code>tm:content</code></td><td>virtual</td><td><code>e tm:content { s p o }</code>, what statement <code>e</code> says</td></tr>
+    <tr><td><code>tm:validFrom</code>, <code>tm:validTo</code></td><td>virtual</td><td>a statement’s bounded valid-time ends, as <code>xsd:dateTime</code></td></tr>
+    <tr><td><code>tm:run tm:now</code></td><td>virtual</td><td>the pinned clock; same value as <code>time:localTime</code></td></tr>
+    <tr><td><code>tm:run tm:segmentFrom</code>, <code>tm:segmentTo</code></td><td>virtual</td><td>the bounded ends of the current sweep segment</td></tr>
+  </tbody>
+</table>
+<p>Prefixes: <code>n3:</code> is <code>urn:tiramemsu:n3:</code>, <code>tm:</code> is <code>urn:tiramemsu:tm:</code>, <code>sys:</code> is <code>urn:tiramemsu:sys:</code>. Anonymous nodes, blank nodes and statements appear in N3 as <code>urn:tiramemsu:node:N</code>, <code>urn:tiramemsu:bnode:N</code> and <code>urn:tiramemsu:stmt:N</code>. Virtual triples are generated only when a rule body uses them and are never stored. <code>tm:</code> cannot be written.</p>
+
+<h2>Errors</h2>
+<table>
+  <thead><tr><th>Error</th><th>When</th></tr></thead>
+  <tbody>
+    <tr><td><code>N3Parse { line, message }</code></td><td>rule text does not parse, in <code>reason</code> or <code>store_rules</code>; <code>store_rules</code> leaves no trace</td></tr>
+    <tr><td><code>UnknownRuleSet</code></td><td><code>Rules::Stored</code> or <code>materialize</code> names a rule set with no live <code>n3:source</code> in the view</td></tr>
+    <tr><td><code>N3NotMaterializable { rule, builtin }</code></td><td><code>materialize</code> on a non-monotonic or clock-dependent rule set, before reasoning</td></tr>
+    <tr><td><code>N3Contradiction { rule }</code></td><td>an inference fuse fired during <code>materialize</code>; nothing is written</td></tr>
+    <tr><td><code>Incomplete</code></td><td><code>materialize</code> with <code>require_complete</code> reached a limit; nothing is written</td></tr>
+  </tbody>
+</table>
+<p><code>reason</code> never fails for a fired fuse or a reached limit. It reports them in <code>contradiction</code> and <code>status</code>.</p>
+
+<h2>Python, Node.js and the browser</h2>
+<p>All three go through the JSON bridge, with a read operation <code>reason</code>, a transaction operation <code>storeRules</code> and a database operation <code>materialize</code>. The bridge takes the same options and returns the same result as Rust:</p>
+<pre><code>{<span class="s">"op"</span>: <span class="s">"reason"</span>, <span class="s">"rules"</span>: <span class="s">"{ ?x a &lt;urn:tiramemsu:v:Human&gt; } =&gt; { ?x a &lt;urn:tiramemsu:v:Mortal&gt; }."</span>}</code></pre>
+<p>The binding signatures are not fixed yet. These sketches follow the bridge operations:</p>
+<p class="codefile">Python (sketch)</p><pre><code>MORTALITY = <span class="s">"urn:tiramemsu:v:mortality"</span>
+<span class="k">with</span> db.transact() <span class="k">as</span> tx:
+    tx.store_rules(MORTALITY, <span class="k">open</span>(<span class="s">"mortality.n3"</span>).read())
+
+result = db.as_of(tx=3).reason(rule_set=MORTALITY)
+preview = db.materialize(MORTALITY, dry_run=<span class="k">True</span>)</code></pre>
+<p class="codefile">Node.js (sketch)</p><pre><code><span class="k">const</span> MORTALITY = <span class="s">"urn:tiramemsu:v:mortality"</span>;
+db.transact((tx) =&gt; { tx.storeRules(MORTALITY, rulesText); });
+
+<span class="k">const</span> result = db.asOf({ tx: 3 }).reason({ ruleSet: MORTALITY });
+<span class="k">const</span> preview = db.materialize(MORTALITY, { dryRun: <span class="k">true</span> });</code></pre>
+<h2>MCP</h2>
+<table>
+  <thead><tr><th>Tool</th><th>Kind</th><th>Does</th></tr></thead>
+  <tbody>
+    <tr><td><code>reason</code></td><td>read</td><td>runs rule text or a stored rule set over a view; listed in read-only mode</td></tr>
+    <tr><td><code>store_rules</code></td><td>write</td><td>stores or supersedes a rule set; absent with <code>--read-only</code></td></tr>
+    <tr><td><code>materialize</code></td><td>write</td><td>writes conclusions as derived beliefs; absent with <code>--read-only</code></td></tr>
+  </tbody>
+</table>
+<p>An agent that may only read can still ask what follows from memory. Writing rules or conclusions needs a server started without <code>--read-only</code>.</p>
+
+<h2>Command line</h2>
+<pre><code><span class="k">tm</span> reason &lt;file&gt; (--rules &lt;path&gt; | --rule-set &lt;iri&gt;) [--as-of &lt;t&gt;]
+          [--valid-at &lt;instant&gt; | --valid-during &lt;from&gt;..&lt;to&gt;] [--graph &lt;iri&gt;]... [--proof]
+<span class="k">tm</span> rules put  &lt;file&gt; &lt;iri&gt; &lt;path&gt;
+<span class="k">tm</span> rules show &lt;file&gt; &lt;iri&gt;
+<span class="k">tm</span> materialize &lt;file&gt; &lt;iri&gt; [--valid-during &lt;from&gt;..&lt;to&gt;] [--graph &lt;iri&gt;]...
+               [--require-complete] [--dry-run]</code></pre>
+<p>As in <code>tm query</code>, <code>--as-of</code> takes a transaction number and instants are epoch milliseconds.</p>
+
+<h2 id="limits">Limits and non-goals</h2>
+<ul>
+  <li><strong>No non-monotonic materialization.</strong> Negation as failure, collecting and the clock work in <code>reason</code> only. <code>materialize</code> refuses them, because the cascade could not keep their conclusions honest.</li>
+  <li><strong>One proof per conclusion.</strong> eyeron returns one proof per conclusion per segment. A stored conclusion rests on one of its possible supports. It is sound, and a later run restores it if that support goes while another remains.</li>
+  <li><strong>No SPARQL or Cypher function.</strong> Neither language can call the reasoner. Materialized conclusions are ordinary statements, and <code>sys:derivedFrom</code> and <code>n3:derivedBy</code> are ordinary predicates, so every dialect reads them.</li>
+  <li><strong>Nothing runs on commit.</strong> Reasoning never runs automatically after a write, and never inside the writer. Call <code>materialize</code> when you want conclusions updated.</li>
+  <li><strong>Backward rules stay in the run.</strong> They see the loaded statements only. There is no backward chaining over the store and no OWL profile.</li>
+  <li><strong>No I/O from rules.</strong> Rules cannot reach the network or the file system.</li>
+  <li><strong>Sweeps cost segments.</strong> A run costs about one reasoner pass per segment, capped by <code>max_segments</code>.</li>
+  <li><strong>Opt-in.</strong> The <code>n3</code> feature is off by default, and eyeron is a git dependency until it is published on crates.io.</li>
+</ul>
+
+<h2>Credits</h2>
+<p>Reasoning is done by <a href="https://github.com/eyereasoner/eyeron">eyeron</a>, a native Rust N3 reasoner by Jos De Roo, released under the MIT license, from the family of the <a href="https://github.com/eyereasoner/eye">EYE</a> reasoner. Tiramemsu adds the mapping to statements, the two clocks and grounded materialization around it.</p>
+<nav class="chapter-nav" aria-label="Chapter navigation">
+  <a class="prev" href="recipes.html"><span>← Chapter 8</span>Recipes</a>
+  <a class="next" href="./"><span>Back to →</span>Contents</a>
+</nav>
+</article>
+</div>
+
+<footer><div class="wrap">
+  <span>Tiramemsu · MIT OR Apache-2.0 · <a href="https://github.com/Volland/tiramemsu">github.com/Volland/tiramemsu</a></span>
+  <span><a href="../">Home</a> · <a href="./">N3 book</a> · <a href="../articles/">Articles</a></span>
+  <span><a href="../impressum.html">Impressum</a> · <a href="../datenschutz.html">Datenschutz</a> · <a href="../agb.html">AGB</a></span>
+</div></footer>
+</body>
+</html>

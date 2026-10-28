@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Reasoning with N3 in Tiramemsu: a mini book</title>
+<meta name="description" content="A mini book on N3 rules over tiramemsu: reasoning that respects valid time and transaction time, rule sets stored as memory, and materialized conclusions that fall when their premises or rules go.">
+<link rel="icon" href="../assets/logo.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../style.css">
+<link rel="stylesheet" href="book.css">
+</head>
+<body>
+<header class="top"><div class="wrap">
+  <a class="brand" href="../"><img src="../assets/logo.svg" alt="">Tiramemsu</a>
+  <nav class="menu"><a href="../#features">Features</a><a href="../#matrix">Matrix</a><a href="../#start">Quick start</a><a href="./" aria-current="page">N3 book</a><a href="../articles/">Articles</a><a href="../paper/">Papers</a><a href="https://github.com/Volland/tiramemsu">GitHub</a></nav>
+</div></header>
+
+<main class="cover-page">
+<div class="cover">
+  <div class="cover-inner">
+    <p class="cover-kicker">A mini book · Tiramemsu</p>
+    <h1>Reasoning with N3 <span>in Tiramemsu</span></h1>
+    <p class="cover-sub">Rules over a memory that has two clocks and never forgets: conclusions that respect time, and that fall when their reasons go.</p>
+    <pre class="cover-rule" aria-label="An N3 rule: if p works at c and c is located in l, then p works in l."><code>{ <span class="v">?p</span> v:worksAt <span class="v">?c</span>.
+  <span class="v">?c</span> v:locatedIn <span class="v">?l</span> }
+    <span class="k">=&gt;</span> { <span class="v">?p</span> v:worksIn <span class="v">?l</span> }.</code></pre>
+    <div class="btns"><a class="btn primary" href="why-rules.html">Start reading</a><a class="btn" href="recipes.html">Recipes</a><a class="btn" href="reference.html">Reference</a></div>
+    <p class="cover-foot">Nine short chapters · design preview of <code>add-n3-reasoning</code> · reasoning by eyeron</p>
+  </div>
+  <div class="cover-layers" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span></div>
+</div>
+<div class="cover-body">
+<section class="contents" aria-labelledby="contents">
+  <h2 id="contents">Contents</h2>
+  <ol class="chapters">
+    <li><a href="why-rules.html"><span class="n">01</span><span class="t">Why rules in agent memory</span><span class="d">What follows from memory, conclusions that stay grounded, and what never-forget means for a reasoner.</span></a></li>
+    <li><a href="n3-in-15-minutes.html"><span class="n">02</span><span class="t">N3 in fifteen minutes</span><span class="d">Facts, formulas, rules, variables, builtins, backward rules and inference fuses: enough N3 to read every example.</span></a></li>
+    <li><a href="memory-as-n3.html"><span class="n">03</span><span class="t">Your memory as N3</span><span class="d">What the reasoner sees: statement IRIs, tm:content, layers, scopes and predicate pruning.</span></a></li>
+    <li><a href="transaction-time.html"><span class="n">04</span><span class="t">Time, part 1: transaction time</span><span class="d">Reasoning as of any past transaction, with the rules believed then and a clock that reads then.</span></a></li>
+    <li><a href="valid-time.html"><span class="n">05</span><span class="t">Time, part 2: valid time</span><span class="d">Facts that were never true at the same time never combine: pointwise semantics, the segment sweep and episodes.</span></a></li>
+    <li><a href="rule-sets.html"><span class="n">06</span><span class="t">Rule sets as memory</span><span class="d">Stored rules with history, corrections by supersede, and the monotonicity check.</span></a></li>
+    <li><a href="materialization.html"><span class="n">07</span><span class="t">Materialization</span><span class="d">Writing conclusions as derived beliefs that fall with their premises and their rules.</span></a></li>
+    <li><a href="recipes.html"><span class="n">08</span><span class="t">Recipes</span><span class="d">Tenure from validity, colleagues who overlapped, trusted facts, layered rule sets, contradiction fuses and previewing a rule edit.</span></a></li>
+    <li><a href="reference.html"><span class="n">09</span><span class="t">Reference</span><span class="d">Every surface, option, vocabulary term and error, and the limits of the design.</span></a></li>
+  </ol>
+</section>
+<section class="about" aria-labelledby="about">
+<h2 id="about">About this book</h2>
+<p>Tiramemsu stores facts with their own ids, two clocks and a history that is never deleted. This book is about the next step: asking what <em>follows</em> from that memory, with N3 rules, and keeping what follows as memory too.</p>
+<p>A plain rule engine joins facts that were never true at the same time, forgets which rules it used last month, and leaves its conclusions behind when their premises are retracted. The chapters show how tiramemsu avoids all three, one idea at a time, with examples you can paste.</p>
+<div class="grid three">
+  <div class="card"><span class="tag">Chapters 1–3</span><h3>The basics</h3><p>Why rules belong in memory, enough N3 to read every example, and what a rule sees of your statements.</p></div>
+  <div class="card"><span class="tag">Chapters 4–5</span><h3>Time</h3><p>Reasoning as of any transaction, with the rules believed then, and valid time that never combines facts from different moments.</p></div>
+  <div class="card"><span class="tag">Chapters 6–9</span><h3>Writing it down</h3><p>Rule sets with history, materialized conclusions that stay grounded, seven recipes and a reference.</p></div>
+</div>
+<div class="note"><strong>Design preview.</strong> The book follows the OpenSpec change <code>add-n3-reasoning</code> and its prerequisite <code>add-derived-beliefs</code>. Neither is released yet, and names may change. Reasoning will be the opt-in Cargo feature <code>n3</code>.</div>
+<p class="credit">Reasoning is done by <a href="https://github.com/eyereasoner/eyeron">eyeron</a>, a native Rust N3 reasoner by Jos De Roo (MIT). New to tiramemsu? Read <a href="../articles/time-travel.html">Time travel and bitemporality</a> and <a href="../articles/layered-graphs.html">Layered graphs</a> first.</p>
+</section>
+</div>
+</main>
+
+<footer><div class="wrap">
+  <span>Tiramemsu · MIT OR Apache-2.0 · <a href="https://github.com/Volland/tiramemsu">github.com/Volland/tiramemsu</a></span>
+  <span><a href="../">Home</a> · <a href="./">N3 book</a> · <a href="../articles/">Articles</a></span>
+  <span><a href="../impressum.html">Impressum</a> · <a href="../datenschutz.html">Datenschutz</a> · <a href="../agb.html">AGB</a></span>
+</div></footer>
+</body>
+</html>

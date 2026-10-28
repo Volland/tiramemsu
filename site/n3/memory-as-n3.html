@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Your memory as N3: Reasoning with N3 in Tiramemsu</title>
+<meta name="description" content="What the reasoner sees: statement IRIs, tm:content, layers, scopes and predicate pruning.">
+<link rel="icon" href="../assets/logo.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../style.css">
+<link rel="stylesheet" href="book.css">
+</head>
+<body>
+<header class="top"><div class="wrap">
+  <a class="brand" href="../"><img src="../assets/logo.svg" alt="">Tiramemsu</a>
+  <nav class="menu"><a href="../#features">Features</a><a href="../#matrix">Matrix</a><a href="../#start">Quick start</a><a href="./">N3 book</a><a href="../articles/">Articles</a><a href="../paper/">Papers</a><a href="https://github.com/Volland/tiramemsu">GitHub</a></nav>
+</div></header>
+
+<div class="book">
+<nav class="book-toc" aria-label="Chapters">
+  <a class="book-home" href="./">Reasoning with N3</a>
+  <ol>
+    <li><a href="why-rules.html"><span class="n">01</span>Why rules in memory</a></li>
+    <li><a href="n3-in-15-minutes.html"><span class="n">02</span>N3 in fifteen minutes</a></li>
+    <li><a href="memory-as-n3.html" aria-current="page"><span class="n">03</span>Your memory as N3</a></li>
+    <li><a href="transaction-time.html"><span class="n">04</span>Transaction time</a></li>
+    <li><a href="valid-time.html"><span class="n">05</span>Valid time</a></li>
+    <li><a href="rule-sets.html"><span class="n">06</span>Rule sets as memory</a></li>
+    <li><a href="materialization.html"><span class="n">07</span>Materialization</a></li>
+    <li><a href="recipes.html"><span class="n">08</span>Recipes</a></li>
+    <li><a href="reference.html"><span class="n">09</span>Reference</a></li>
+  </ol>
+</nav>
+<article class="post chapter">
+<p class="book-crumb"><a href="./">Reasoning with N3</a> · Chapter 3 of 9</p>
+<p class="kicker"><span>Chapter 3</span></p>
+<h1>Your memory as N3</h1>
+<p class="lede">A reasoning run loads part of a view into eyeron and reads the conclusions back. This chapter shows what a rule sees: values, statements and their layers, the virtual <code>tm:</code> predicates, and how a run decides what to load.</p>
+<h2>Values become N3 terms</h2>
+<p>Values map to N3 the way <a href="../articles/statement-store-export.html">bundle export</a> renders them as RDF, and back again:</p>
+<table>
+  <thead><tr><th>In memory</th><th>In N3</th></tr></thead>
+  <tbody>
+    <tr><td>An IRI</td><td>the IRI itself, e.g. <code>v:alice</code></td></tr>
+    <tr><td>A literal</td><td>the literal: <code>"Alice"</code>, <code>34</code>, <code>0.9</code>, <code>"2020-01-01T00:00:00Z"^^xsd:dateTime</code></td></tr>
+    <tr><td>An anonymous node <em>N</em></td><td><code>&lt;urn:tiramemsu:node:N&gt;</code></td></tr>
+    <tr><td>A blank node <em>N</em></td><td><code>&lt;urn:tiramemsu:bnode:N&gt;</code></td></tr>
+    <tr><td>A statement with eid <em>N</em></td><td><code>&lt;urn:tiramemsu:stmt:N&gt;</code></td></tr>
+  </tbody>
+</table>
+<p>The mapping is exact in both directions. A conclusion about <code>&lt;urn:tiramemsu:node:7&gt;</code> is about node 7, and a premise <code>&lt;urn:tiramemsu:stmt:1&gt;</code> is statement e1.</p>
+
+<h2>A statement is a triple and a name</h2>
+<p>Take a small memory. Statement e1 says Alice works at Acme, valid from 2020 to 2023. Statement e2 is a layer on e1: its confidence is 0.9.</p>
+<p>A rule sees e1 as an ordinary triple, so <code>{ ?p v:worksAt ?c }</code> matches it. It sees e2 as a triple whose subject is the IRI of e1:</p>
+<pre><code><span class="k">@prefix</span> v: &lt;urn:tiramemsu:v:&gt;.
+
+v:alice v:worksAt v:acme.
+&lt;urn:tiramemsu:stmt:1&gt; v:confidence <span class="s">0.9</span>.</code></pre>
+<p>That is enough for rules that only follow facts. A rule that reads a layer needs one more thing: from the name <code>&lt;urn:tiramemsu:stmt:1&gt;</code> it must get to what e1 says. That is the job of the virtual predicates.</p>
+
+<h2>The virtual predicates</h2>
+<p>For each loaded statement <code>e</code>, tiramemsu can offer three triples that are not stored anywhere:</p>
+<p class="codefile">what a rule sees for e1</p><pre><code><span class="k">@prefix</span> v: &lt;urn:tiramemsu:v:&gt;.
+<span class="k">@prefix</span> tm: &lt;urn:tiramemsu:tm:&gt;.
+<span class="k">@prefix</span> xsd: &lt;http://www.w3.org/2001/XMLSchema#&gt;.
+
+&lt;urn:tiramemsu:stmt:1&gt; tm:content { v:alice v:worksAt v:acme };
+    tm:validFrom <span class="s">"2020-01-01T00:00:00Z"^^xsd:dateTime</span>;
+    tm:validTo <span class="s">"2023-01-01T00:00:00Z"^^xsd:dateTime</span>.</code></pre>
+<ul>
+  <li><code>tm:content</code> links a statement to a formula of what it says.</li>
+  <li><code>tm:validFrom</code> and <code>tm:validTo</code> give its valid interval as <code>xsd:dateTime</code>, in UTC. An unbounded end has no triple: a statement valid for all time has neither.</li>
+</ul>
+<p>The names match the SPARQL virtual predicates <code>tm:validFrom</code> and <code>tm:validTo</code>, so a rule and a query read validity the same way. With them, a rule can combine a layer with the fact it is about:</p>
+<p class="codefile">trusted.n3</p><pre><code><span class="k">@prefix</span> v: &lt;urn:tiramemsu:v:&gt;.
+<span class="k">@prefix</span> tm: &lt;urn:tiramemsu:tm:&gt;.
+<span class="k">@prefix</span> math: &lt;http://www.w3.org/2000/10/swap/math#&gt;.
+
+{ <span class="v">?e</span> v:confidence <span class="v">?c</span>.
+  <span class="v">?c</span> math:greaterThan <span class="s">0.8</span>.
+  <span class="v">?e</span> tm:content { <span class="v">?s</span> v:worksAt <span class="v">?o</span> }
+} <span class="k">=&gt;</span> { <span class="v">?s</span> v:trustedWorksAt <span class="v">?o</span> }.</code></pre>
+<p>The conclusion <code>(v:alice v:trustedWorksAt v:acme)</code> has two premises, <code>[e2, e1]</code>: the layer it matched directly, and the statement whose content it matched. Both are statement ids. If either is retracted, a stored conclusion goes with it (<a href="materialization.html">chapter 7</a>).</p>
+<p>Three rules govern the virtual triples:</p>
+<ul>
+  <li><strong>On demand.</strong> They are generated only when some rule body uses that predicate, or has a variable in a predicate position. A rule set that never mentions <code>tm:validTo</code> never pays for it.</li>
+  <li><strong>Never stored.</strong> They exist for the length of the run. They are never written and never reported as conclusions.</li>
+  <li><strong>Reserved.</strong> The <code>tm:</code> namespace belongs to virtual predicates and cannot be written.</li>
+</ul>
+
+<h3>Why IRIs and not quoted triples</h3>
+<p>N3 could name a statement by its content alone, as the formula <code>{ v:alice v:worksAt v:acme }</code>. Tiramemsu does not, for two reasons. Two episodes of the same fact, Alice at Acme in 2020–22 and again from 2024, have the same content but are different statements with different valid times and layers. And a proof must point at the exact statement it used, so the conclusion can fall with it. Identity is the eid, so <code>&lt;urn:tiramemsu:stmt:N&gt;</code> it is.</p>
+
+<h2>Scopes: what a run may see</h2>
+<p>A run never loads the whole store by accident. It reads one <strong>scope</strong> of its view:</p>
+<table>
+  <thead><tr><th>Scope</th><th>Loads</th></tr></thead>
+  <tbody>
+    <tr><td><code>ReasonScope::All</code> (default)</td><td>every statement visible in the view</td></tr>
+    <tr><td><code>ReasonScope::Graphs(graphs)</code></td><td>the members of the given <a href="../articles/metagraphs.html">named graphs</a></td></tr>
+    <tr><td><code>ReasonScope::Seeds { nodes, hops }</code></td><td>statements whose subject or object lies within <code>hops</code> of the seed nodes</td></tr>
+  </tbody>
+</table>
+<pre><code><span class="k">use</span> tiramemsu::{ReasonOptions, ReasonScope, Rules};
+
+<span class="c">// Reason only over what one session wrote.</span>
+<span class="k">let</span> session = ReasonOptions {
+    scope: ReasonScope::Graphs(vec![v(<span class="s">"session-42"</span>)]),
+    ..ReasonOptions::default()
+};
+<span class="k">let</span> r = db.now().reason(Rules::Stored(v(<span class="s">"mortality"</span>)), &amp;session)?;
+
+<span class="c">// Reason only around Alice, two hops out.</span>
+<span class="k">let</span> around_alice = ReasonOptions {
+    scope: ReasonScope::Seeds { nodes: vec![v(<span class="s">"alice"</span>)], hops: 2 },
+    ..ReasonOptions::default()
+};</code></pre>
+<p>From the command line, <code>--graph</code> picks graphs and may be repeated:</p>
+<pre><code><span class="k">tm</span> reason memory.db --rule-set urn:tiramemsu:v:mortality --graph urn:tiramemsu:v:session-42</code></pre>
+<p>If <code>(v:a rdf:type v:Human)</code> is in graph <code>v:g1</code> and <code>(v:b rdf:type v:Human)</code> is not, a run scoped to <code>v:g1</code> concludes only that <code>v:a</code> is mortal.</p>
+
+<h2 id="pruning">Predicate pruning</h2>
+<p>Inside its scope, a run loads only statements whose predicate appears in a predicate position of some rule body. Forward rules, backward rules and formulas nested in bodies all count. The mortality rule mentions only <code>rdf:type</code>, so a memory with 100 <code>v:name</code> statements and 3 <code>rdf:type v:Human</code> statements loads 3.</p>
+<p>A variable in a predicate position turns pruning off for the whole run, because the rule could match any predicate:</p>
+<pre><code><span class="k">@prefix</span> v: &lt;urn:tiramemsu:v:&gt;.
+
+<span class="c"># Loads every statement of the scope: ?p could be anything.</span>
+{ <span class="v">?s</span> <span class="v">?p</span> <span class="v">?o</span>. <span class="v">?o</span> a v:Secret } <span class="k">=&gt;</span> { <span class="v">?s</span> v:touches v:secret }.</code></pre>
+<p>Every result reports <code>loaded</code>, the number of statements loaded, and <code>pruned</code>, whether pruning applied. Check them when a run is slower than expected.</p>
+<div class="note"><strong>Name your predicates.</strong> A variable predicate inside a nested formula counts too. <code>?e tm:content { ?s ?p ?o }</code> turns pruning off. <code>?e tm:content { ?s v:worksAt ?o }</code> keeps it, and loads only <code>v:worksAt</code> statements and the layers your rule names.</div>
+
+<h2>Reading the result</h2>
+<p><code>reason</code> returns the conclusions that are not already among the loaded statements, and facts about the run:</p>
+<pre><code><span class="k">let</span> r = db.now().reason(Rules::Stored(v(<span class="s">"trusted"</span>)), &amp;ReasonOptions::default())?;
+
+println!(<span class="s">"tx {}  now {}  loaded {}  pruned {}  segments {}"</span>,
+         r.t, r.now, r.loaded, r.pruned, r.segments);
+<span class="k">for</span> c <span class="k">in</span> &amp;r.conclusions {
+    <span class="c">// c.valid is the interval in which the conclusion holds (chapter 5)</span>
+    <span class="c">// c.proof.premises lists Premise::Statement(eid) or Premise::Conclusion(index)</span>
+    println!(<span class="s">"{} {} {}  {:?}  rule {}  from {:?}"</span>,
+             c.s, c.p, c.o, c.valid, c.proof.rule, c.proof.premises);
+}
+<span class="k">if</span> <span class="k">let</span> <span class="k">Some</span>(x) = &amp;r.contradiction { println!(<span class="s">"fuse fired: rule {}"</span>, x.rule); }</code></pre>
+<p>A premise is either a loaded statement (by eid) or another conclusion of the same run (by index), so a chain of rules is a tree you can walk. The two fields <code>t</code> and <code>now</code> say which view and which instant the run used. They matter in the next chapter.</p>
+<nav class="chapter-nav" aria-label="Chapter navigation">
+  <a class="prev" href="n3-in-15-minutes.html"><span>← Chapter 2</span>N3 in fifteen minutes</a>
+  <a class="next" href="transaction-time.html"><span>Chapter 4 →</span>Time, part 1: transaction time</a>
+</nav>
+</article>
+</div>
+
+<footer><div class="wrap">
+  <span>Tiramemsu · MIT OR Apache-2.0 · <a href="https://github.com/Volland/tiramemsu">github.com/Volland/tiramemsu</a></span>
+  <span><a href="../">Home</a> · <a href="./">N3 book</a> · <a href="../articles/">Articles</a></span>
+  <span><a href="../impressum.html">Impressum</a> · <a href="../datenschutz.html">Datenschutz</a> · <a href="../agb.html">AGB</a></span>
+</div></footer>
+</body>
+</html>

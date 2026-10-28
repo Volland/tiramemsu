@@ -11,7 +11,7 @@
 <body>
 <header class="top"><div class="wrap">
   <a class="brand" href="./"><img src="assets/logo.svg" alt="">Tiramemsu</a>
-  <nav class="menu"><a href="#why">Why</a><a href="#usecases">Use cases</a><a href="#features">Features</a><a href="#matrix">Matrix</a><a href="#start">Quick start</a><a href="benchmarks.html">Benchmarks</a><a href="articles/">Articles</a><a href="paper/">Papers</a><a href="https://github.com/Volland/tiramemsu">GitHub</a></nav>
+  <nav class="menu"><a href="#why">Why</a><a href="#usecases">Use cases</a><a href="#features">Features</a><a href="#matrix">Matrix</a><a href="#start">Quick start</a><a href="benchmarks.html">Benchmarks</a><a href="articles/">Articles</a><a href="n3/">N3 book</a><a href="paper/">Papers</a><a href="https://github.com/Volland/tiramemsu">GitHub</a></nav>
 </div></header>
 
 <main>
@@ -92,6 +92,13 @@ past = db.as_of(instant=<span class="s">"2026-10-06T09:00:00Z"</span>)
     <div class="card"><span class="tag">Recheck</span><h3>Answers that know they are stale</h3><p>Saved queries are marked <code>stale</code> or <code>recheck</code> by later writes, once each; answers on a past view stay fresh.</p></div>
     <div class="card"><span class="tag">Metagraphs</span><h3>Structure with two clocks</h3><p>Edges are nodes and can hold subgraphs. Nest, fold and unfold them, and ask how the structure looked last week.</p></div>
   </div>
+  <h3 class="group">Reason <span class="tag">preview</span></h3>
+  <div class="grid four">
+    <div class="card"><span class="tag">Reasoning</span><h3>N3 rules over memory</h3><p>Ask what follows from what the agent knows. Every conclusion comes with a proof made of statement ids. Opt-in feature <code>n3</code>, on <a href="https://github.com/eyereasoner/eyeron">eyeron</a>. <a href="n3/">The N3 book</a>.</p></div>
+    <div class="card"><span class="tag">Both clocks</span><h3>Rules that respect time</h3><p>Facts that were never true at the same time never combine. Reason as of any past transaction, with the rules believed then.</p></div>
+    <div class="card"><span class="tag">Grounded</span><h3>Conclusions that fall</h3><p>Materialized conclusions rest on their premises and their rule set, and are retracted in the same transaction when either goes.</p></div>
+    <div class="card"><span class="tag">Rules as memory</span><h3>Rule sets with history</h3><p>A rule set is a statement: edits are supersedes, and a monotonicity check keeps negation and the clock out of stored conclusions.</p></div>
+  </div>
   <h3 class="group">Recall</h3>
   <div class="grid four">
     <div class="card"><span class="tag">Meaning</span><h3>Vector recall</h3><p>Store the vectors your model computes and search them exactly (cosine, dot, L2; f32 or f16). Create, fill and drop indexes from Rust, SPARQL or Cypher. <a href="articles/vector-cookbook.html">Cookbook</a>.</p></div>
@@ -143,6 +150,9 @@ past = db.as_of(instant=<span class="s">"2026-10-06T09:00:00Z"</span>)
       <tr><td>Time-respecting journeys</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td><td class="p">via query</td><td class="y eng">✓</td><td class="y">✓</td></tr>
       <tr><td>Dependents (what breaks if retracted)</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td><td class="y eng">✓</td><td class="y">✓</td></tr>
       <tr><td>Saved answers and recheck</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td><td class="y eng">✓</td><td class="n">not yet</td></tr>
+      <tr class="grp"><td colspan="8">Reason (preview, opt-in feature <code>n3</code>)</td></tr>
+      <tr><td>N3 reasoning over any view, with proofs</td><td class="p">planned</td><td class="p">planned</td><td class="p">planned</td><td class="p">planned</td><td class="p">planned</td><td class="p eng">planned</td><td class="p">planned</td></tr>
+      <tr><td>Stored rule sets and grounded materialization</td><td class="p">planned</td><td class="p">planned</td><td class="p">planned</td><td class="p">planned</td><td class="p">planned</td><td class="p eng">planned</td><td class="p">planned</td></tr>
       <tr class="grp"><td colspan="8">Recall</td></tr>
       <tr><td>Text recall (BM25)</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td><td class="y eng">FTS5</td><td class="y">own index</td></tr>
       <tr><td>Vector search, exact and view-aware</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td><td class="y eng">✓</td><td class="y">✓</td></tr>
@@ -165,7 +175,7 @@ past = db.as_of(instant=<span class="s">"2026-10-06T09:00:00Z"</span>)
       <tr><td>Runs in the browser</td><td class="n">–</td><td class="n">–</td><td class="n">–</td><td class="y">✓</td><td class="n">–</td><td class="y eng">✓</td><td class="n">–</td></tr>
     </tbody>
   </table>
-  <p class="sub">✓ supported · – not offered on that surface. “via query” means the MCP <code>query</code> tool reaches it through SPARQL or Cypher; “checked” means schemas are enforced on MCP writes but defined elsewhere; “own tools” means dedicated MCP tools rather than query writes. The command line converts, compacts and benchmarks either engine. redb is experimental.</p>
+  <p class="sub">✓ supported · – not offered on that surface. “via query” means the MCP <code>query</code> tool reaches it through SPARQL or Cypher; “checked” means schemas are enforced on MCP writes but defined elsewhere; “own tools” means dedicated MCP tools rather than query writes. “planned” marks N3 reasoning, specified in full (<a href="n3/">the N3 book</a>) but not yet released. The command line converts, compacts and benchmarks either engine. redb is experimental.</p>
   <h3 class="group">Which engine?</h3>
   <div class="grid">
     <div class="card"><span class="tag">Default</span><h3>SQLite</h3><p>The smallest files, the browser build, FTS5, saved answers, and the most mature planner for star-shaped lookups. Pick it unless one of the reasons on the right applies.</p></div>
