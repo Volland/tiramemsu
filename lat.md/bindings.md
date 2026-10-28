@@ -54,6 +54,7 @@ Reads take a view and return rows; writes are one transaction each; anything tha
 - **Bulk import:** `importBegin`, `importChunk`, `importProgress`, `importFinish` and `importCancel`, see [[bindings#JSON Bridge#Bulk Import]].
 - **Saved answers:** `saveAnswer`, `savedAnswer`, `savedAnswers`, `checkSavedAnswers`, `refreshAnswer` and `deleteSavedAnswer`, see [[bindings#JSON Bridge#Saved Answers]].
 - **Conflict review:** the read `conflicts` and the dry-run `previewBundle`, see [[bindings#JSON Bridge#Conflict Review]].
+- **N3 reasoning** (feature `n3`): the reads `reason` and `ruleSetInfo`, the transaction op `storeRules` and `materialize`, see [[bindings#JSON Bridge#N3 Reasoning]].
 
 ### Budgets
 
@@ -116,6 +117,16 @@ The read `conflicts` ([[query#Conflict Inspection]]) and the dry run `previewBun
 `conflicts` takes `view`, `budget`, `s`, `p` (terms; one that is not stored matches nothing), `limit`, and the layer predicates `confidence` and `source`. Each entry is `{"s", "p", "declaredMany", "overlaps": [{"validFrom", "validTo"}], "values": [{"o", "statements": [{"eid", "validFrom", "validTo", "tAdd", "addedAt", "confidence", "confirmedBy", "authors", "sources", "sourceLayer"}]}]}` with `null` for an unbounded bound or an absent confidence ([[bindings/json/src/read.rs#conflicts]]).
 
 `previewBundle` takes `bundle` and `budget` and returns `{"wouldCommit", "failure", "root", "statements", "report", "burned": {"statements", "nodes", "blankNodes", "terms"}, "scope": {"basis", "t", "instant", "reserved": false}}` ([[bindings/json/src/tx.rs#preview_bundle]]); `failure` is the schema error object, and then `root`, `statements` and `report` are `null`. Applying is the `importBundle` op of `transact`. Node exposes `View.conflicts(opts)` and `Database.previewBundle(bundle, budget)`; Python `View.conflicts(s=, p=, limit=, confidence=, source=)` and `Database.preview_bundle(bundle, budget=)`, returning `Conflict` and `BundlePreview` dataclasses.
+
+### N3 Reasoning
+
+The N3 calls of [[reasoning]] behind the bridge feature `n3`, in [[bindings/json/src/n3.rs]]; without the feature they fail with `Unsupported`. Node, Python, wasm, the MCP server and the CLI build with it.
+
+`reason` is a read: `view`, `budget`, exactly one of `rules` (N3 text) and `ruleSet` (a term; a plain string is an IRI), `scope` (`"all"`, `{"graphs": [terms]}` or `{"seeds": {"nodes": [terms], "hops": n}}`), `window` (`{"from", "to"}`), `time` (`"pointwise"` or `"atemporal"`), `maxSegments`, `proofN3` and `limits` (`maxIterations`, `maxMatchSteps`, `maxBackwardDepth`, `maxTermBytes`). It returns `{"conclusions", "t", "now", "loaded", "pruned", "segments", "status": "complete" | "incomplete", "limits", "errors", "contradiction", "ruleSet", "ruleSetStatement", "proofN3"}`. A conclusion is `{"s", "p", "o", "validFrom", "validTo", "proof": {"ruleSet", "rule", "premises": [{"eid"} | {"conclusion": i}]}}`; its terms are bridge terms, or `{"blank"}`, `{"list"}` and `{"formula"}` for what the store has no value for.
+
+`ruleSetInfo` (`ruleSet`) returns `{"ruleSet", "statement", "text", "rules", "monotonicity": {"kind", "rule", "builtin"}, "predicates", "variablePredicate"}`. The transaction op `storeRules` (`ruleSet`, `n3`) returns `{"eid"}` and may be named with `as`. `materialize` (`ruleSet`, `scope`, `window`, `maxSegments`, `limits`, `requireComplete`, `dryRun`, `budget`) returns `{"ruleSet", "rulesStatement", "reasonedAt", "report", "derived", "existing", "widened": [{"old", "new"}], "skolems", "staleSupport", "unstorable", "status", "limits", "dryRun"}`. The error codes are `N3Parse`, `UnknownRuleSet`, `N3NotMaterializable`, `N3Contradiction` and `N3Incomplete`.
+
+Node exposes `View.reason(opts)`, `View.ruleSetInfo(ruleSet)`, `Database.reason`, `Database.ruleSetInfo`, `Database.materialize(ruleSet, opts)` and `Tx.storeRules(ruleSet, n3)`; Python `View.reason(rules, rule_set=, scope=, window=, time=, max_segments=, proof_n3=, limits=)`, `rule_set_info`, the same on `Database` plus `materialize(rule_set, …, require_complete=, dry_run=)`, and `TxBuilder.store_rules(rule_set, n3)`, returning the bridge's dicts with decoded terms.
 
 ### Views
 

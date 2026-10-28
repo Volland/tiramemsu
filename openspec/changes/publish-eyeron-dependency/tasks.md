@@ -1,7 +1,7 @@
 ## 1. Upstream
 
 - [x] 1.1 Prepare the eyeron patch (`cli` feature gating `ureq` and binaries; `ReasonerOptions::now`, with tests): `upstream/0001-now-option-and-cli-feature.patch` against eyeron `c4adb8c`.
-- [ ] 1.2 Propose it to the maintainer (only with the project owner's go-ahead).
+- [x] 1.2 Propose it to the maintainer: https://github.com/eyereasoner/eyeron/pull/25 (2026-10-28, rebased on eyeron `804488d`).
 - [ ] 1.3 eyeron published on crates.io.
 
 ## 2. Here

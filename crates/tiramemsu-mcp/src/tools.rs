@@ -97,6 +97,8 @@ enum Schema {
     Count(&'static str),
     Flag(&'static str),
     Vector(&'static str),
+    #[cfg(feature = "n3")]
+    Iri(&'static str),
 }
 
 const TERM: &str = "A term: a string (a plain string literal), a number, a boolean, or an object \
@@ -155,6 +157,8 @@ impl Schema {
                 "items": { "type": "number" },
                 "description": d,
             }),
+            #[cfg(feature = "n3")]
+            Schema::Iri(d) => json!({ "type": ["string", "object"], "description": d }),
         }
     }
 }
@@ -517,7 +521,102 @@ and mark, and records the error.",
         idempotent: false,
         args: &[("name", Schema::Text("The answer's name."), true)],
     },
+    #[cfg(feature = "n3")]
+    Tool {
+        name: "reason",
+        title: "Reason with N3 rules",
+        description: "Run Notation3 rules over memory on a view and return what follows, without writing \
+anything. Give the rules as N3 text (rules) or name a rule set stored with store_rules (ruleSet). A conclusion \
+holds at an instant only if it follows from the facts valid at that instant, so facts that were never true \
+together never combine; each conclusion carries its valid time and a proof (the rule's index and the \
+statements or earlier conclusions it used). Rule text may use the prefixes v: (urn:tiramemsu:v:), tm: and n3: \
+without declaring them; a statement is <urn:tiramemsu:stmt:N> with tm:content, tm:validFrom and tm:validTo. \
+An asOf view reasons over memory as believed then, with the rules believed then.",
+        writes: false,
+        idempotent: true,
+        args: &[
+            ("rules", Schema::Text("N3 rule text (or give ruleSet)."), false),
+            ("ruleSet", Schema::Iri(RULE_SET), false),
+            ("scope", Schema::Object(SCOPE), false),
+            ("window", Schema::Object(WINDOW), false),
+            (
+                "time",
+                Schema::Enum(
+                    "pointwise (default): conclusions respect valid time; atemporal: ignore valid time.",
+                    &["pointwise", "atemporal"],
+                ),
+                false,
+            ),
+            (
+                "maxSegments",
+                Schema::Count("The most valid-time segments a run reasons over (default 1024); past it the status is incomplete."),
+                false,
+            ),
+            ("proofN3", Schema::Flag("Add the reasoner's N3 proof text."), false),
+            ("limits", Schema::Object(LIMITS), false),
+            ("view", Schema::View, false),
+        ],
+    },
+    #[cfg(feature = "n3")]
+    Tool {
+        name: "store_rules",
+        title: "Store an N3 rule set",
+        description: "Store N3 rule text as the rule set ruleSet: one statement (ruleSet n3:source \"<text>\"). \
+Storing new text for an existing rule set supersedes the old version, which stays visible in asOf views; \
+storing the same text again changes nothing. Text that does not parse is refused (N3Parse) and nothing is \
+written. Returns the rule-set statement (eid), whether anything changed and the transaction (t).",
+        writes: true,
+        idempotent: true,
+        args: &[
+            ("ruleSet", Schema::Iri(RULE_SET), true),
+            ("n3", Schema::Text("The N3 rule text."), true),
+        ],
+    },
+    #[cfg(feature = "n3")]
+    Tool {
+        name: "materialize",
+        title: "Materialize a rule set",
+        description: "Reason with the stored rule set ruleSet on a snapshot and write its conclusions as derived \
+beliefs, in one transaction: each conclusion is supported by its premises and by the rule-set statement, so it \
+is retracted when a premise is retracted or corrected, or when the rule set is edited. Re-runs reuse existing \
+conclusions and widen their valid time. Rule sets with negation, aggregation or the clock are refused \
+(N3NotMaterializable), and a fired inference fuse aborts the run (N3Contradiction). dryRun reports what would \
+be written and writes nothing.",
+        writes: true,
+        idempotent: true,
+        args: &[
+            ("ruleSet", Schema::Iri(RULE_SET), true),
+            ("scope", Schema::Object(SCOPE), false),
+            ("window", Schema::Object(WINDOW), false),
+            (
+                "maxSegments",
+                Schema::Count("The most valid-time segments the run reasons over (default 1024)."),
+                false,
+            ),
+            ("limits", Schema::Object(LIMITS), false),
+            (
+                "requireComplete",
+                Schema::Flag("Refuse to write when the reasoning run is incomplete."),
+                false,
+            ),
+            ("dryRun", Schema::Flag("Report what would be written and write nothing."), false),
+        ],
+    },
 ];
+
+#[cfg(feature = "n3")]
+const RULE_SET: &str = "A rule set: an IRI as a plain string, or a term object.";
+#[cfg(feature = "n3")]
+const SCOPE: &str = "The statements reasoned over: \"all\" (default), {\"graphs\": [terms]} (members of these \
+named graphs) or {\"seeds\": {\"nodes\": [terms], \"hops\": n}} (statements within hops of the seed nodes).";
+#[cfg(feature = "n3")]
+const WINDOW: &str =
+    "The valid-time window of the run: {\"from\": time, \"to\": time}, either bound optional. \
+Default: unbounded.";
+#[cfg(feature = "n3")]
+const LIMITS: &str =
+    "The reasoner's limits per run: {\"maxIterations\", \"maxMatchSteps\", \"maxBackwardDepth\", \
+\"maxTermBytes\"}.";
 
 fn tool(name: &str) -> Option<&'static Tool> {
     TOOLS.iter().find(|t| t.name == name)
@@ -842,6 +941,61 @@ fn run(db: &Database, config: &Config, t: &Tool, args: &J) -> Result<J, ToolErro
             let a = db.call("refreshAnswer", &json!({ "name": name, "budget": budget }))?;
             Ok(json!({ "answer": a }))
         }
+        // @tg: implements:: [[openspec:n3-reasoning#Reasoning surfaces]] {since: "2026-10-28"}
+        #[cfg(feature = "n3")]
+        "reason" => {
+            let mut c = Map::new();
+            for k in [
+                "rules",
+                "ruleSet",
+                "scope",
+                "window",
+                "time",
+                "maxSegments",
+                "proofN3",
+                "limits",
+            ] {
+                if let Some(v) = get(k) {
+                    c.insert(k.into(), v);
+                }
+            }
+            let (mut r, v) = read("reason", c)?;
+            r["view"] = v;
+            Ok(r)
+        }
+        // @tg: implements:: [[openspec:n3-rule-sets#Rule-set surfaces]] {since: "2026-10-28"}
+        #[cfg(feature = "n3")]
+        "store_rules" => {
+            let op = json!({ "op": "storeRules", "ruleSet": get("ruleSet"), "n3": get("n3") });
+            let r = transact(json!([op]))?;
+            let changed = r["asserted"].as_array().is_some_and(|a| !a.is_empty());
+            Ok(json!({
+                "eid": r["results"][0]["eid"],
+                "changed": changed,
+                "superseded": r["superseded"],
+                "t": r["t"],
+            }))
+        }
+        // @tg: implements:: [[openspec:n3-materialization#Materialization surfaces]] {since: "2026-10-28"}
+        #[cfg(feature = "n3")]
+        "materialize" => {
+            let mut c = Map::new();
+            for k in [
+                "ruleSet",
+                "scope",
+                "window",
+                "maxSegments",
+                "limits",
+                "requireComplete",
+                "dryRun",
+            ] {
+                if let Some(v) = get(k) {
+                    c.insert(k.into(), v);
+                }
+            }
+            c.insert("budget".into(), budget.clone());
+            Ok(db.call("materialize", &J::Object(c))?)
+        }
         other => Err(ToolError::arg(format!("unknown tool {other:?}"))),
     }
 }
@@ -992,21 +1146,22 @@ mod tests {
             ..config
         });
         let names: Vec<_> = ro.iter().map(|d| d["name"].as_str().unwrap()).collect();
-        assert_eq!(
-            names,
-            [
-                "query",
-                "dependents",
-                "export_bundle",
-                "conflicts",
-                "preview_bundle",
-                "text_search",
-                "vector_search",
-                "recall",
-                "unembedded",
-                "saved_answers"
-            ]
-        );
+        let mut expected = vec![
+            "query",
+            "dependents",
+            "export_bundle",
+            "conflicts",
+            "preview_bundle",
+            "text_search",
+            "vector_search",
+            "recall",
+            "unembedded",
+            "saved_answers",
+        ];
+        if cfg!(feature = "n3") {
+            expected.push("reason");
+        }
+        assert_eq!(names, expected);
         assert!(ro
             .iter()
             .all(|d| d["annotations"]["readOnlyHint"] == json!(true)));

@@ -9,7 +9,9 @@ OpenSpec changes in `openspec/changes/archive/`.
 
 ## [Unreleased]
 
-Derived beliefs with support (`openspec/changes/add-derived-beliefs/`). No file format change: support links are ordinary statements.
+## [0.9.0] - 2026-10-28
+
+Derived beliefs with support (`openspec/changes/archive/2026-10-28-add-derived-beliefs/`). No file format change: support links are ordinary statements. N3 reasoning (`openspec/changes/archive/2026-10-28-add-n3-reasoning/`) builds on it.
 
 ### Added
 
@@ -19,11 +21,23 @@ Derived beliefs with support (`openspec/changes/add-derived-beliefs/`). No file 
 - **Supersede:** correcting a support retracts the beliefs derived from it without replaying them; correcting a belief (for example widening its valid interval) keeps its support links.
 - **Bundles** carry derivations and import re-derives them through `derive`.
 - **Surfaces:** the JSON bridge transaction op `derive`, Node `tx.derive`, Python `tx.derive` and the MCP write tool `derive` (hidden in read-only mode). Both the SQL engine and the trait engine (redb) implement it, checked by the oracle.
+- **N3 reasoning** (facade feature `n3`, off by default; new crate `tm-n3` on [eyeron](https://github.com/eyereasoner/eyeron)): `View::reason` runs N3 rules over a scope of any view, pruned to the predicates the rules use, with pointwise valid time (facts never valid together never combine), the clock pinned to the view's instant, structured proofs and a completion status.
+- **Stored rule sets:** `TxN3::store_rules` keeps a rule set as one supersedable `n3:source` statement, so as-of views reason with the rules believed then; `View::rule_set_info` classifies it (monotonic, non-monotonic, clock-dependent, untraced premises).
+- **Materialization:** `Db::materialize` writes conclusions as derived beliefs with the premises and the rule-set statement as support, so they fall when a premise or the rules change; re-runs are idempotent, widen intervals and reuse Skolem nodes.
+- **JSON bridge** (feature `n3`): the reads `reason` and `ruleSetInfo`, the transaction op `storeRules` and the operation `materialize`, with the error codes `N3Parse`, `UnknownRuleSet`, `N3NotMaterializable`, `N3Contradiction` and `N3Incomplete`.
+- **Node and Python:** `reason` and `ruleSetInfo` / `rule_set_info` on views and databases, `materialize` on databases, `storeRules` / `store_rules` on transactions. The wasm package builds the bridge with `n3`.
+- **MCP:** the read tool `reason` and the write tools `store_rules` and `materialize`, left out in read-only mode (feature `n3`, on by default).
+- **CLI:** `tm reason`, `tm rules put|show` and `tm materialize` (feature `n3`, on by default).
+- **Benchmark:** the `tm-bench` reasoning scenario (feature `n3`, `examples/reason.rs`): load, pruning and sweep cost against store size and validity bounds, on SQLite and redb.
 
 ### Changed
 
 - **`sys:derivedFrom` is engine-owned:** asserting or creating it directly fails with `ReservedNamespace` (it was already in the reserved `sys:` namespace).
 
+### Publishing
+
+- npm (`@tiramemsu/node`) and PyPI (`tiramemsu`) ship 0.9.0 with N3 reasoning.
+- On crates.io, 0.9.0 covers the crates below the facade (`tm-core`, `tm-store`, `tm-redb`, `tm-rusqlite`, `tm-ir`, `tm-exec`, `tm-native`, `tm-sparql`, `tm-cypher`, `tm-wasm`). `tiramemsu`, `tiramemsu-json`, `tiramemsu-mcp` and `tiramemsu-cli` depend, at least optionally, on `tm-n3`, whose reasoner eyeron is a git dependency, and Cargo refuses to publish them; they stay at 0.8.1 there until eyeron is on crates.io (proposed upstream in eyereasoner/eyeron#25).
 ## [0.8.1] - 2026-10-27
 
 Faster native runner on redb (`openspec/changes/archive/2026-10-27-tune-native-runner/`). No file format, API or answer changes.
@@ -248,7 +262,8 @@ First release.
 - Named graphs: `Tx::add_to_graph`, `remove_from_graph`, `clear_graph`, `View::graphs`, `View::graph_members`. SPARQL gains `GRAPH`, `FROM NAMED` and graph management updates.
 - JSON bridge (`tiramemsu-json`), Node.js bindings (`@tiramemsu/node`) and Python bindings (`tiramemsu`), with release workflows for PyPI wheels and npm.
 
-[Unreleased]: https://github.com/Volland/tiramemsu/compare/v0.8.1...HEAD
+[Unreleased]: https://github.com/Volland/tiramemsu/compare/v0.9.0...HEAD
+[0.9.0]: https://github.com/Volland/tiramemsu/compare/v0.8.1...v0.9.0
 [0.8.1]: https://github.com/Volland/tiramemsu/compare/v0.8.0...v0.8.1
 [0.8.0]: https://github.com/Volland/tiramemsu/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/Volland/tiramemsu/compare/v0.6.0...v0.7.0

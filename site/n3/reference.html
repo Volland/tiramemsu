@@ -35,7 +35,7 @@
 <p class="kicker"><span>Chapter 9</span></p>
 <h1>Reference</h1>
 <p class="lede">Every surface, option, vocabulary term and error in one place, followed by what the design leaves out on purpose.</p>
-<div class="note"><strong>Design preview.</strong> Names and signatures follow the OpenSpec change <code>add-n3-reasoning</code>. Where the spec fixes a name, this page uses it exactly. The Rust names match the implementation in progress. <code>materialize</code> and the binding signatures are not written yet and are marked as sketches.</div>
+<div class="note"><strong>Status.</strong> Reasoning ships behind the opt-in Cargo feature <code>n3</code>, off by default (OpenSpec change <code>add-n3-reasoning</code>, built on <code>add-derived-beliefs</code>). The reasoner is <a href="https://github.com/eyereasoner/eyeron">eyeron</a> by Jos De Roo (MIT). Until eyeron is on crates.io the feature is available only when building from the repository.</div>
 
 <h2>Enabling it</h2>
 <p>Reasoning lives in the crate <code>tm-n3</code>, behind the facade feature <code>n3</code>. The feature is off by default, does not turn on <code>exec</code>, and combines with every other feature. Without it, neither <code>tm-n3</code> nor <code>eyeron</code> is in the dependency tree. The core tier can reason: <code>--no-default-features --features n3</code> builds without the query front ends.</p>
@@ -136,17 +136,17 @@ tiramemsu = { git = "https://github.com/Volland/tiramemsu", features = ["n3"] }<
 <h2>Python, Node.js and the browser</h2>
 <p>All three go through the JSON bridge, with a read operation <code>reason</code>, a transaction operation <code>storeRules</code> and a database operation <code>materialize</code>. The bridge takes the same options and returns the same result as Rust:</p>
 <pre><code>{<span class="s">"op"</span>: <span class="s">"reason"</span>, <span class="s">"rules"</span>: <span class="s">"{ ?x a &lt;urn:tiramemsu:v:Human&gt; } =&gt; { ?x a &lt;urn:tiramemsu:v:Mortal&gt; }."</span>}</code></pre>
-<p>The binding signatures are not fixed yet. These sketches follow the bridge operations:</p>
-<p class="codefile">Python (sketch)</p><pre><code>MORTALITY = <span class="s">"urn:tiramemsu:v:mortality"</span>
+<p>The bindings wrap the bridge operations:</p>
+<p class="codefile">Python</p><pre><code>MORTALITY = <span class="s">"urn:tiramemsu:v:mortality"</span>
 <span class="k">with</span> db.transact() <span class="k">as</span> tx:
     tx.store_rules(MORTALITY, <span class="k">open</span>(<span class="s">"mortality.n3"</span>).read())
 
-result = db.as_of(tx=3).reason(rule_set=MORTALITY)
+result = db.now().reason(rule_set=MORTALITY)
 preview = db.materialize(MORTALITY, dry_run=<span class="k">True</span>)</code></pre>
-<p class="codefile">Node.js (sketch)</p><pre><code><span class="k">const</span> MORTALITY = <span class="s">"urn:tiramemsu:v:mortality"</span>;
+<p class="codefile">Node.js</p><pre><code><span class="k">const</span> MORTALITY = <span class="s">"urn:tiramemsu:v:mortality"</span>;
 db.transact((tx) =&gt; { tx.storeRules(MORTALITY, rulesText); });
 
-<span class="k">const</span> result = db.asOf({ tx: 3 }).reason({ ruleSet: MORTALITY });
+<span class="k">const</span> result = db.now().reason({ ruleSet: MORTALITY });
 <span class="k">const</span> preview = db.materialize(MORTALITY, { dryRun: <span class="k">true</span> });</code></pre>
 <h2>MCP</h2>
 <table>
@@ -160,13 +160,13 @@ db.transact((tx) =&gt; { tx.storeRules(MORTALITY, rulesText); });
 <p>An agent that may only read can still ask what follows from memory. Writing rules or conclusions needs a server started without <code>--read-only</code>.</p>
 
 <h2>Command line</h2>
-<pre><code><span class="k">tm</span> reason &lt;file&gt; (--rules &lt;path&gt; | --rule-set &lt;iri&gt;) [--as-of &lt;t&gt;]
-          [--valid-at &lt;instant&gt; | --valid-during &lt;from&gt;..&lt;to&gt;] [--graph &lt;iri&gt;]... [--proof]
+<pre><code><span class="k">tm</span> reason &lt;file&gt; (--rules &lt;path&gt; | --rule-set &lt;iri&gt;) [--as-of &lt;tx&gt; | --as-of-instant &lt;t&gt;]
+          [--valid-at &lt;instant&gt; | --valid-during &lt;from&gt;..&lt;to&gt;] [--graph &lt;iri&gt;]... [--atemporal] [--max-segments &lt;n&gt;] [--proof] [--json]
 <span class="k">tm</span> rules put  &lt;file&gt; &lt;iri&gt; &lt;path&gt;
 <span class="k">tm</span> rules show &lt;file&gt; &lt;iri&gt;
 <span class="k">tm</span> materialize &lt;file&gt; &lt;iri&gt; [--valid-during &lt;from&gt;..&lt;to&gt;] [--graph &lt;iri&gt;]...
                [--require-complete] [--dry-run]</code></pre>
-<p>As in <code>tm query</code>, <code>--as-of</code> takes a transaction number and instants are epoch milliseconds.</p>
+<p><code>--as-of</code> takes a transaction number. Instants are epoch milliseconds or RFC 3339 dates and date-times, and either side of a window may be empty. <code>--json</code> prints the bridge result.</p>
 
 <h2 id="limits">Limits and non-goals</h2>
 <ul>

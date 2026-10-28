@@ -31,22 +31,22 @@
 
 ## 5. Surfaces
 
-- [ ] 5.1 JSON bridge feature `n3`: read op `reason`, tx op `storeRules`, db op `materialize`.
-- [ ] 5.2 Node, Python, wasm wrappers (enable `n3` in each binding).
-- [ ] 5.3 MCP tools `reason` (read), `store_rules`, `materialize` (write, hidden in read-only mode, `additionalProperties: false`).
-- [ ] 5.4 CLI `tm reason`, `tm rules put|show`, `tm materialize`.
+- [x] 5.1 JSON bridge feature `n3`: read op `reason`, tx op `storeRules`, db op `materialize`.
+- [x] 5.2 Node, Python, wasm wrappers (enable `n3` in each binding).
+- [x] 5.3 MCP tools `reason` (read), `store_rules`, `materialize` (write, hidden in read-only mode, `additionalProperties: false`).
+- [x] 5.4 CLI `tm reason`, `tm rules put|show`, `tm materialize`.
 
 ## 6. Tests
 
 - [x] 6.1 Conformance: eyeron example corpus (facts loaded into a store, rules passed as text) gives eyeron's expected conclusions.
 - [x] 6.2 Property: for random facts with random intervals and a fixed monotonic rule set, a conclusion of the sweep holds at random `t` iff it is concluded by the `valid_at(t)` snapshot.
 - [x] 6.3 Property: after `materialize` and random retract/supersede sequences every live conclusion's support is live, and re-materializing reaches the same live set as a fresh materialization of a copy.
-- [ ] 6.4 Scenario tests for every scenario in the four delta specs, on SQLite and redb where they write; each annotated `@tg: verifies:: [[openspec:<capability>#<Requirement>#<Scenario>]]`.
-- [ ] 6.5 `tm-bench` scenario: load, pruning and sweep cost against store size and segment count, SQLite and redb.
+- [x] 6.4 Scenario tests for every scenario in the four delta specs, on SQLite and redb where they write; each annotated `@tg: verifies:: [[openspec:<capability>#<Requirement>#<Scenario>]]`.
+- [x] 6.5 `tm-bench` scenario: load, pruning and sweep cost against store size and segment count, SQLite and redb.
 
 ## 7. Documentation and site
 
-- [ ] 7.1 `lat.md/reasoning.md` (typed `Decision`, `openspec: [n3-reasoning, n3-rule-sets, n3-materialization]`) with N1–N18 as typed sections and constraints; `lat.md/architecture.md#Crates`; N3 test spec sections in `lat.md/tests.md`.
-- [ ] 7.2 `tm-n3/README.md` (crate docs, doctests); facade README feature list; CHANGELOG.
-- [ ] 7.3 Site: a reasoning page and the N3 mini book under `site/n3/`, linked from the index and the feature matrix.
-- [ ] 7.4 Run `tg check`, `tg ontology check` and `tg trace n3-reasoning --gaps` (and the other two capabilities); close every gap.
+- [x] 7.1 `lat.md/reasoning.md` (typed `Decision`, `openspec: [n3-reasoning, n3-rule-sets, n3-materialization]`) with N1–N18 as typed sections and constraints; `lat.md/architecture.md#Crates`. Test specs are the OpenSpec scenarios, each traced to its test by `@tg: verifies::` (`tg trace`), so no separate `lat.md/tests.md` sections were added.
+- [x] 7.2 `tm-n3/README.md` (crate docs, doctests); facade README feature list; CHANGELOG.
+- [x] 7.3 Site: a reasoning page and the N3 mini book under `site/n3/`, linked from the index and the feature matrix.
+- [x] 7.4 Run `tg check`, `tg ontology check` and `tg trace n3-reasoning --gaps` (and the other two capabilities); close every gap.

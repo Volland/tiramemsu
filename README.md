@@ -9,7 +9,7 @@ An embedded graph database on SQLite. Every fact has an id, so facts can carry l
 
 <p align="center"><a href="site/articles/layered-graphs.html">Layered graphs, explained</a> · <a href="site/articles/tiramemsu-vs-oxilite.html">Tiramemsu vs oxilite</a> · <a href="site/articles/metagraphs.html">Metagraphs</a> · <a href="lat.md/">Design (lat.md)</a> · <a href="openspec/specs/">Specs (OpenSpec)</a></p>
 
-> **Status: new.** Designed and implemented in September and October 2026 as one Rust library, released as 0.8.1 on crates.io (`tiramemsu`, plus the `tiramemsu-mcp` server and the `tm` command line), PyPI (`tiramemsu`) and npm (`@tiramemsu/node`). There is no network server; it runs on rusqlite natively, on SQLite compiled to WebAssembly in the browser, and (experimental in 0.8) on redb. What is measured and what is not is listed under [Status](#status).
+> **Status: new.** Designed and implemented in September and October 2026 as one Rust library, released as 0.9.0 on PyPI (`tiramemsu`) and npm (`@tiramemsu/node`), and on crates.io as `tiramemsu` with the `tiramemsu-mcp` server and the `tm` command line (0.8.1 there: their 0.9.0, with N3 reasoning, waits until its reasoner [eyeron](https://github.com/eyereasoner/eyeron) is on crates.io; the lower crates are at 0.9.0). There is no network server; it runs on rusqlite natively, on SQLite compiled to WebAssembly in the browser, and (experimental in 0.8) on redb. What is measured and what is not is listed under [Status](#status).
 
 ## Why
 
@@ -32,6 +32,8 @@ A knowledge graph stores facts. An agent also needs to say *how sure am I*, *whe
 - **Text recall.** Opt-in FTS5 recall over string values (inline short strings included): `View::text_search`, SPARQL `?e tm:textMatch "words"` and Cypher `CALL tiramemsu.text.search(...)` share one operation. Hits respect as-of, history, valid time and graphs, and carry a lexical score plus evidence (confidence, confirmations, authors, when added); absent evidence is reported as absent, and ties break on the statement id.
 - **Cyclic joins.** Opt-in native leapfrog triejoin for pure cyclic patterns (triangles and longer cycles) as the `tm_lftj` table function: `OpenOptions::planner.lftj`. It returns exactly the SQL rows (set or bag semantics, per-pattern views, graphs, provenance), routes only when enabled, installed, applicable and the size estimate agrees, and `explain_sparql` names the route or the reason it stayed in SQL.
 - **Bounded calls.** Opt-in query budgets: a deadline, cancellation from another thread, a reader-pool timeout and row or byte limits per operation. A stopped write commits nothing, and an over-budget result is an error, never a truncated answer.
+- **Derived beliefs.** `Tx::derive(s, p, o, valid, support)` writes a conclusion with engine-owned `sys:derivedFrom` links to the statements it rests on. Retracting or correcting any support retracts the conclusion in the same transaction, and `View::dependents` shows it first.
+- **N3 reasoning (opt-in feature `n3`).** Notation3 rules run by [eyeron](https://github.com/eyereasoner/eyeron) over any view, aware of both clocks: facts that were never valid at the same time never combine, as-of views reason with the facts and the rules believed then, and every conclusion carries a proof of statement ids. `Db::materialize` stores conclusions as derived beliefs with the rule set among their supports, so they fall when a premise or a rule changes. Also as `tm reason` / `tm materialize`, MCP tools and the bridge. Read [the N3 book](site/n3/index.html); eyeron is a git dependency until it is on crates.io.
 - **Saved answers.** Save a SPARQL or Cypher query with its parameters, view and result, and let later events mark it: `stale` when a cited statement is retracted or superseded, `recheck` when any other write (or the clock) could have changed it. Each mark is reported once, survives restarts, and only a successful re-run clears it; answers on past views stay fresh.
 - **Conflict review.** `View::conflicts` lists subject/predicate pairs whose distinct objects hold at the same valid time, with the evidence behind each value (statement ids, authors, sources, confirmations, confidence when stated), never a made-up score and never a write. `Db::preview_bundle` runs an import as a dry run and shows proposed and reused facts, cardinality retractions and schema failures before anything is committed.
 - **MCP server.** `tiramemsu-mcp` serves one memory file to Claude Code, Claude Desktop or any MCP client over stdio (`claude mcp add tiramemsu -- tiramemsu-mcp --db ./memory.db`): typed `assert`, `confirm`, `supersede`, `query`, `dependents`, bundle, `conflicts`, `preview_bundle`, `text_search` and saved-answer tools, a read-only mode, per-call budgets, and query results that name their view and say whether their provenance is complete.
@@ -100,6 +102,7 @@ flowchart TD
 | `tm-exec` | Planner, SQL codegen, path engine, result decoding. |
 | `tm-sparql` | SPARQL front end. |
 | `tm-cypher` | openCypher front end. |
+| `tm-n3` | N3 reasoning with eyeron over facts the facade loads: pruning, the valid-time sweep, proofs (feature `n3`). |
 | `tiramemsu` | The facade: `Db`, `View`, `Tx`. The only crate an application needs. |
 
 Each layer depends only on the one below it, and time is resolved in exactly one place. The full design is in [`lat.md/`](lat.md/), and every capability has a spec under [`openspec/specs/`](openspec/specs/).
@@ -274,7 +277,7 @@ scripts/wasm-interop.sh                # a file handed native -> WASM -> native
 
 ## How it differs from oxilite
 
-[oxilite](https://github.com/Volland/oxilite) is a shipped, Oxigraph-compatible RDF database on SQLite by the same author. It stores quads and uses reifiers for annotations, keeps history in a change log, and runs on D1, WebAssembly and more. Tiramemsu stores statements with ids, keeps lifetime in the row and is bitemporal, but it is new, runs on rusqlite and in the browser on SQLite compiled to WebAssembly (not on D1), and has none of oxilite's reasoning or validation. [The article](site/articles/tiramemsu-vs-oxilite.html) has the details and a benchmark.
+[oxilite](https://github.com/Volland/oxilite) is a shipped, Oxigraph-compatible RDF database on SQLite by the same author. It stores quads and uses reifiers for annotations, keeps history in a change log, and runs on D1, WebAssembly and more. Tiramemsu stores statements with ids, keeps lifetime in the row and is bitemporal, but it is new, runs on rusqlite and in the browser on SQLite compiled to WebAssembly (not on D1), and has none of oxilite's SHACL or ShEx validation; it reasons with N3 rules through eyeron (opt-in) rather than Datalog and OWL. [The article](site/articles/tiramemsu-vs-oxilite.html) has the details and a benchmark.
 
 ## Repository
 

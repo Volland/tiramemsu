@@ -16,6 +16,9 @@ tm export memory.redb --format nquads -o backup.nq
 tm convert memory.redb memory.db --backend sqlite
 tm compact memory.redb
 tm bench --scale 100000 --reps 5                # SQLite against redb on this machine
+tm reason memory.redb --rules socrates.n3      # what follows, written nowhere
+tm rules put memory.redb urn:tiramemsu:v:mortality socrates.n3
+tm materialize memory.redb urn:tiramemsu:v:mortality --dry-run
 ```
 
 | Command | What it does |
@@ -28,6 +31,11 @@ tm bench --scale 100000 --reps 5                # SQLite against redb on this ma
 | `convert <src> <dst> --backend <b>` | Lossless conversion, replaying the whole history (`tiramemsu::convert`). |
 | `compact <file>` | Reclaims free space in a redb file. SQLite files have nothing to compact. |
 | `bench [--scale N] [--reps R] [--out results.json]` | Runs the reduced backend benchmark (SQLite and redb) and prints the report. The comparison with Oxigraph is in `bench/backends`. |
+| `reason <file> --rules <path>\|--rule-set <iri>` | Runs N3 rules and prints one conclusion per line with its valid time; writes nothing. `--as-of <tx>`, `--as-of-instant <t>`, `--valid-at <t>` or `--valid-during <from>..<to>`, `--graph <iri>` (repeatable), `--atemporal`, `--max-segments`, `--proof`, `--json`. |
+| `rules put <file> <iri> <path>`, `rules show <file> <iri> [--json]` | Stores a rule set (a new version supersedes the old one) and prints it. |
+| `materialize <file> <iri>` | Writes the conclusions of a stored rule set as derived beliefs. `--valid-during`, `--graph`, `--require-complete`, `--dry-run` (lists what would be derived, writes nothing), `--json`. |
+
+Instants for the reasoning commands are epoch milliseconds or RFC 3339 dates and date-times; a window side may be left empty (`2020-01-01..`). The reasoning commands come with the cargo feature `n3`, on by default.
 
 Errors print their typed name and message on stderr (`Parse: …`, `BackendMismatch: …`) and exit with code 1. Usage errors exit with code 2.
 

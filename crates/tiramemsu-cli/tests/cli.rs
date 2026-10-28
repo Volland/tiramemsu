@@ -191,3 +191,133 @@ fn convert_from_sqlite_to_redb() {
     assert!(compacted.starts_with("compacted"), "{compacted}");
     assert_eq!(info(Path::new(&b))["statements"], ia["statements"]);
 }
+
+#[cfg(feature = "n3")]
+const SOCRATES_NT: &str = "<urn:tiramemsu:v:socrates> \
+<http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <urn:tiramemsu:v:Human> .\n";
+
+#[cfg(feature = "n3")]
+const SOCRATES_N3: &str = "{ ?x a v:Human } => { ?x a v:Mortal } .\n";
+
+/// A file holding `(v:socrates rdf:type v:Human)` on `backend`, and a rule file.
+#[cfg(feature = "n3")]
+fn socrates(dir: &Path, backend: &str) -> (String, String) {
+    let nt = p(dir, "s.nt");
+    std::fs::write(&nt, SOCRATES_NT).unwrap();
+    let f = p(dir, &format!("{backend}.db"));
+    ok(&["create", &f, "--backend", backend]);
+    ok(&["import", &f, &nt]);
+    let rules = p(dir, "socrates.n3");
+    std::fs::write(&rules, SOCRATES_N3).unwrap();
+    (f, rules)
+}
+
+// n3-reasoning "CLI reasoning", on both backends.
+// @tg: verifies:: [[openspec:n3-reasoning#Reasoning surfaces#CLI reasoning]] {since: "2026-10-28", level: e2e}
+#[cfg(feature = "n3")]
+#[test]
+fn cli_reasoning() {
+    let d = tempfile::tempdir().unwrap();
+    for backend in ["sqlite", "redb"] {
+        let (f, rules) = socrates(d.path(), backend);
+        let before = info(Path::new(&f));
+        let out = ok(&["reason", &f, "--rules", &rules]);
+        assert_eq!(
+            out.lines().collect::<Vec<_>>(),
+            ["(v:socrates rdf:type v:Mortal)  always"],
+            "{backend}"
+        );
+        // writes nothing
+        assert_eq!(info(Path::new(&f)), before);
+        let proof = ok(&["reason", &f, "--rules", &rules, "--proof"]);
+        assert!(proof.contains("by rule 0 from stmt 1"), "{proof}");
+        let j: serde_json::Value =
+            serde_json::from_str(&ok(&["reason", &f, "--rules", &rules, "--json"])).unwrap();
+        assert_eq!(
+            j["conclusions"][0]["o"],
+            serde_json::json!({ "iri": "urn:tiramemsu:v:Mortal" })
+        );
+        // as of before the import there is nothing to conclude
+        let empty = ok(&["reason", &f, "--rules", &rules, "--as-of", "0"]);
+        assert_eq!(empty, "", "{backend}");
+        let snap = ok(&["reason", &f, "--rules", &rules, "--valid-at", "2024-06-01"]);
+        assert!(
+            snap.contains("[2024-06-01T00:00:00Z, 2024-06-01T00:00:00.001Z)"),
+            "{snap}"
+        );
+    }
+}
+
+// `tm rules put` stores (and re-storing changes nothing), `tm rules show`
+// prints it, and `tm reason --rule-set` runs it.
+// @tg: verifies:: [[openspec:n3-rule-sets#Rule-set surfaces]] {since: "2026-10-28", level: e2e}
+#[cfg(feature = "n3")]
+#[test]
+fn cli_rules_put_show_and_reason() {
+    let d = tempfile::tempdir().unwrap();
+    let (f, rules) = socrates(d.path(), "sqlite");
+    let iri = "urn:tiramemsu:v:mortality";
+    let put = ok(&["rules", "put", &f, iri, &rules]);
+    assert!(put.contains("stored as statement"), "{put}");
+    assert!(put.contains("1 rules, monotonic"), "{put}");
+    let again = ok(&["rules", "put", &f, iri, &rules]);
+    assert!(again.contains("unchanged"), "{again}");
+    let show = ok(&["rules", "show", &f, iri]);
+    assert!(show.ends_with(&format!("{SOCRATES_N3}\n")), "{show}");
+    let j: serde_json::Value =
+        serde_json::from_str(&ok(&["rules", "show", &f, iri, "--json"])).unwrap();
+    assert_eq!(j["text"], SOCRATES_N3);
+    let out = ok(&["reason", &f, "--rule-set", iri]);
+    assert!(out.contains("(v:socrates rdf:type v:Mortal)"), "{out}");
+    let missing = tm(&["reason", &f, "--rule-set", "urn:tiramemsu:v:none"]);
+    assert_eq!(missing.status.code(), Some(1));
+    assert!(String::from_utf8_lossy(&missing.stderr).starts_with("UnknownRuleSet:"));
+    let bad = p(d.path(), "bad.n3");
+    std::fs::write(&bad, "{ ?x a").unwrap();
+    let parse = tm(&["rules", "put", &f, iri, &bad]);
+    assert!(String::from_utf8_lossy(&parse.stderr).starts_with("N3Parse:"));
+    // exactly one of --rules and --rule-set
+    assert_eq!(tm(&["reason", &f]).status.code(), Some(2));
+    let window = ok(&[
+        "reason",
+        &f,
+        "--rules",
+        &rules,
+        "--valid-during",
+        "2020-01-01..",
+        "--graph",
+        "urn:tiramemsu:v:none",
+    ]);
+    assert_eq!(window, "");
+}
+
+// n3-materialization "CLI dry run"
+// @tg: verifies:: [[openspec:n3-materialization#Materialization surfaces#CLI dry run]] {since: "2026-10-28", level: e2e}
+#[cfg(feature = "n3")]
+#[test]
+fn cli_dry_run() {
+    let d = tempfile::tempdir().unwrap();
+    for backend in ["sqlite", "redb"] {
+        let dir = d.path().join(backend);
+        std::fs::create_dir(&dir).unwrap();
+        let (f, rules) = socrates(&dir, backend);
+        let iri = "urn:tiramemsu:v:mortality";
+        ok(&["rules", "put", &f, iri, &rules]);
+        // A discarded write may grow a redb file (pages are reserved), so the
+        // dry run is checked on the logical counts, not the file size.
+        let logical = |f: &str| {
+            let mut v = info(Path::new(f));
+            v.as_object_mut().unwrap().remove("fileSize");
+            v
+        };
+        let before = logical(&f);
+        let out = ok(&["materialize", &f, iri, "--dry-run"]);
+        assert!(out.contains("(v:socrates rdf:type v:Mortal)"), "{out}");
+        assert!(out.contains("would derive 1"), "{out}");
+        assert_eq!(logical(&f), before, "{backend}");
+        let done = ok(&["materialize", &f, iri, "--require-complete"]);
+        assert!(done.contains("derived 1"), "{done}");
+        let again = ok(&["materialize", &f, iri]);
+        assert!(again.contains("derived 0, existing 1"), "{again}");
+    }
+}

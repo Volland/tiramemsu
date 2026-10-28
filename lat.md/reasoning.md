@@ -142,10 +142,12 @@ N17: Rust, the JSON bridge, Node, Python, wasm, MCP and the CLI expose `reason`,
 
 - motivated_by:: [[reasoning#Optional Crate]] {weight: primary, since: "2026-10-28"}
 
-A reasoner's input is a whole scope, not a row, so it does not fit as a function inside a query.
+A reasoner's input is a whole scope, not a row, so it does not fit as a function inside a query. The bridge calls are in [[bindings#JSON Bridge#N3 Reasoning]]; the MCP tools and `tm` commands in [[api#MCP Tools]] and [[api#CLI]].
 
 ## Tests Prove Semantics
 
 N18: conformance against eyeron's examples, a property test that sweeps agree with snapshots, a grounding and convergence property test, scenario tests and a benchmark on both backends.
 
 - motivated_by:: [[reasoning#Pointwise Valid Time]] {weight: primary, since: "2026-10-28"}
+
+The benchmark (`tm-bench`, `examples/reason.rs`, feature `n3`) measured on 2026-10-28 at 10 000 statements: a pruned two-hop join loading 499 statements took about 8 ms with one segment and 18 ms with 17, the same rule atemporal 8.5 ms, and an unpruned load of the whole store 73 ms; SQLite and redb were within a few percent.

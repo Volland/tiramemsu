@@ -26,6 +26,14 @@ oxttl = { version = "0.2", features = ["rdf-12"] }
 oxrdf = { version = "0.3", features = ["rdf-12"] }
 serde_json = "1"
 
+[features]
+default = ["n3"]
+# `tm reason`, `tm rules put|show` and `tm materialize` (OpenSpec change
+# `add-n3-reasoning`). Cargo refuses to publish a crate whose dependencies,
+# optional ones included, are not on crates.io, so this crate (like the facade)
+# cannot be published until `tm-n3` and eyeron are (`publish-eyeron-dependency`).
+n3 = ["tiramemsu/n3", "tiramemsu-json/n3"]
+
 [dev-dependencies]
 tempfile = "3"
 

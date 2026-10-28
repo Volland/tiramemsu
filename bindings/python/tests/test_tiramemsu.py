@@ -1137,3 +1137,59 @@ class TestVectorRecall:
             with db.transact() as tx:
                 tx.set_embedding(r.hits[0].eid, self.MODEL, [0.0, 1.0])
         assert e.value.code == "EmbeddingConflict"
+
+
+# ---------------------------------------------------------------------- N3 reasoning
+
+RDF_TYPE = Iri("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")
+SOCRATES = "{ ?x a v:Human } => { ?x a v:Mortal } ."
+
+
+class TestN3Reasoning:
+    # @tg: verifies:: [[openspec:n3-reasoning#Reasoning surfaces]] {since: "2026-10-28", level: integration}
+    def test_reason_with_text_and_a_stored_rule_set(self, db: Database) -> None:
+        with db.transact() as tx:
+            tx.assert_(iri("socrates"), RDF_TYPE, iri("Human"))
+        r = db.reason(SOCRATES)
+        assert [(c["s"], c["o"]) for c in r["conclusions"]] == [
+            (iri("socrates"), iri("Mortal"))
+        ]
+        assert r["conclusions"][0]["proof"] == {
+            "ruleSet": None,
+            "rule": 0,
+            "premises": [{"eid": 1}],
+        }
+        assert r["status"] == "complete" and r["pruned"] is True
+        # reasoning writes nothing
+        assert len(db.now().triples()) == 1
+
+        with db.transact() as tx:
+            tx.store_rules("urn:tiramemsu:v:mortality", SOCRATES)
+        stored = db.now().reason(rule_set=iri("mortality"), time="atemporal")
+        assert stored["ruleSet"] == iri("mortality")
+        assert stored["conclusions"][0]["proof"]["ruleSet"] == iri("mortality")
+        info = db.rule_set_info("urn:tiramemsu:v:mortality")
+        assert info["text"] == SOCRATES and info["rules"] == 1
+        assert info["monotonicity"] == {"kind": "monotonic"}
+
+        with pytest.raises(TiramemsuError) as e:
+            db.reason("{ ?x a")
+        assert e.value.code == "N3Parse"
+        with pytest.raises(TiramemsuError) as e:
+            db.reason(rule_set="urn:tiramemsu:v:none")
+        assert e.value.code == "UnknownRuleSet"
+        nothing = db.now().reason(
+            SOCRATES, scope={"graphs": [iri("g")]}, window=("2020-01-01", None)
+        )
+        assert nothing["conclusions"] == []
+
+    def test_materialize_and_dry_run(self, db: Database) -> None:
+        with db.transact() as tx:
+            tx.assert_(iri("socrates"), RDF_TYPE, iri("Human"))
+            tx.store_rules("urn:tiramemsu:v:mortality", SOCRATES)
+        before = len(db.now().triples())
+        dry = db.materialize("urn:tiramemsu:v:mortality", dry_run=True)
+        assert dry["dryRun"] is True and len(dry["derived"]) == 1
+        assert len(db.now().triples()) == before
+        r = db.materialize("urn:tiramemsu:v:mortality", require_complete=True)
+        assert len(r["derived"]) == 1 and r["status"] == "complete"

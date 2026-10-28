@@ -5,6 +5,8 @@
 //! backend (SQL on SQLite, the native runner on redb). Errors print their typed
 //! name (`Parse: …`) on stderr and exit 1; usage errors exit 2.
 
+#[cfg(feature = "n3")]
+mod n3;
 mod output;
 mod rdfio;
 
@@ -110,6 +112,18 @@ enum Cmd {
     },
     /// Compact a redb file (nothing to do on SQLite).
     Compact { file: PathBuf },
+    /// Run N3 rules over memory and print what follows (writes nothing).
+    #[cfg(feature = "n3")]
+    Reason(n3::ReasonArgs),
+    /// Store and print N3 rule sets.
+    #[cfg(feature = "n3")]
+    Rules {
+        #[command(subcommand)]
+        cmd: n3::RulesCmd,
+    },
+    /// Write the conclusions of a stored rule set as derived beliefs.
+    #[cfg(feature = "n3")]
+    Materialize(n3::MaterializeArgs),
     /// Benchmark SQLite against redb on this machine (a reduced suite; the full
     /// comparison with Oxigraph is `bench/backends`).
     Bench {
@@ -375,6 +389,12 @@ fn run(cmd: Cmd) -> Result<()> {
             println!("{}", tm_bench::report::markdown(&r));
             Ok(())
         }
+        #[cfg(feature = "n3")]
+        Cmd::Reason(a) => n3::reason(a),
+        #[cfg(feature = "n3")]
+        Cmd::Rules { cmd } => n3::rules(cmd),
+        #[cfg(feature = "n3")]
+        Cmd::Materialize(a) => n3::materialize(a),
         Cmd::Compact { file } => {
             let db = open(&file)?;
             let before = db.summary()?.file_size;

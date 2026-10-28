@@ -276,6 +276,14 @@ fn apply(tx: &mut Tx<'_>, ops: &[J]) -> Res<(Vec<J>, HashMap<String, Eid>)> {
                 named = Some(a.eid());
                 json!({ "eid": a.eid().n(), "new": matches!(a, Asserted::New(_)) })
             }
+            #[cfg(feature = "n3")]
+            "storeRules" => {
+                let e = crate::n3::store_rules(tx, op)?;
+                named = Some(e);
+                json!({ "eid": e.n() })
+            }
+            #[cfg(not(feature = "n3"))]
+            "storeRules" => return Err(crate::no_n3()),
             "retract" => json!(tx.retract(eid(op, "eid", &refs)?)?),
             "retractMatching" => {
                 let (s, p, o) = (

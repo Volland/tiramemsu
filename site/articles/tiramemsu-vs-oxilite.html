@@ -26,9 +26,9 @@
 <tr><td>Status</td><td>Shipped, published, documented, with bindings and a studio</td><td>New. Designed and implemented in September and October 2026, one library on crates.io, a Python package on PyPI, Node.js and browser packages built but not yet on npm</td></tr>
 <tr><td>Conformance</td><td>Oxigraph's own W3C and store tests run on it; 96 % of the openCypher TCK</td><td>634 of 781 in-scope W3C tests; 67 % of the TCK (deviations listed, not hidden)</td></tr>
 <tr><td>Where it runs</td><td>rusqlite, dlopen, Turso, Cloudflare D1, WebAssembly, Durable Objects</td><td>rusqlite, and SQLite compiled to WebAssembly in a browser worker (memory or OPFS)</td></tr>
-<tr><td>Also has</td><td>Datalog, OWL reasoning, SHACL and ShEx, JSON-LD and credentials, full-text, vectors, Python and Node bindings, MCP</td><td>Full-text recall with evidence ranking, Python and Node bindings, an MCP server. No reasoning, validation or vectors yet</td></tr>
+<tr><td>Also has</td><td>Datalog, OWL reasoning, SHACL and ShEx, JSON-LD and credentials, full-text, vectors, Python and Node bindings, MCP</td><td>N3 reasoning with eyeron (opt-in), full-text recall with evidence ranking, Python and Node bindings, an MCP server. No reasoning, validation or vectors yet</td></tr>
 </table>
-<p>If you need SPARQL on D1, reasoning, or a drop-in for Oxigraph today, use oxilite. What follows is where the designs differ, not a claim that tiramemsu does more.</p>
+<p>If you need SPARQL on D1, Datalog or OWL reasoning, or a drop-in for Oxigraph today, use oxilite. What follows is where the designs differ, not a claim that tiramemsu does more.</p>
 
 <h2>1. What is a statement?</h2>
 <p>This is the root difference. In oxilite a statement is a <strong>quad</strong> <code>(s, p, o, g)</code>: a key in a clustered table, so the same triple in the same graph is one row, as RDF says. To say something about a triple, oxilite uses RDF 1.2 <em>reifiers</em>: a separate node that points at a “triple term”. It adds a reifier only when needed, for relationship properties or parallel edges.</p>
@@ -86,7 +86,7 @@
 <h2>Which should you use?</h2>
 <table>
 <tr><th>You want</th><th>Use</th></tr>
-<tr><td>Standard RDF and SPARQL, Oxigraph compatibility, D1, reasoning or SHACL</td><td>oxilite</td></tr>
+<tr><td>Standard RDF and SPARQL, Oxigraph compatibility, D1, Datalog or OWL reasoning, or SHACL</td><td>oxilite</td></tr>
 <tr><td>Facts that carry provenance, confidence and beliefs, with corrections and exact history of both belief and truth</td><td>tiramemsu</td></tr>
 <tr><td>A mature dependency today</td><td>oxilite</td></tr>
 </table>

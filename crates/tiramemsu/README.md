@@ -28,6 +28,7 @@ The default build is the full facade. The query engine and each query front end 
 | `exec` | The shared query engine: `View::execute_ir` / `explain_ir`, paths (`View::path`, `path_with`, `path_report`, `PathArgs`), the opt-in LFTJ operator, the `ir` module and the `planner`, `query_engine`, `path_max_hops` and `path_max_states` open options | `tm-ir`, `tm-exec` |
 | `sparql` | `View::sparql`, `sparql_with`, `explain_sparql`, `SparqlResult`, `Solutions` and `sparql_frontend`; implies `exec` | `tm-sparql` (`spargebra`, `peg`) |
 | `cypher` | `View::cypher`, `Db::cypher_write`, `TxCypher`, `CypherParams` and `cypher_frontend`; implies `exec` | `tm-cypher` (`open-cypher`) |
+| `n3` | N3 reasoning with [eyeron](https://github.com/eyereasoner/eyeron): `View::reason`, `View::rule_set_info`, `TxN3::store_rules` and `Db::materialize`, aware of valid and transaction time; off by default and independent of `exec`. eyeron is a git dependency until it is on crates.io, so this feature is only available when building from the repository | `tm-n3`, `eyeron` |
 | `default` | `sparql` and `cypher`; saved answers (`Db::save_answer` and the rest) need both front ends | all of the above |
 
 ```toml
