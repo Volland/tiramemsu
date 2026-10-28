@@ -33,7 +33,7 @@ The releases after 0.4.0 are proposed in `docs/feature-roadmap.md` (see [[projec
 
 Eleven OpenSpec proposals (2026-10-10) cover the releases after 0.4.0 in `docs/feature-roadmap.md`. Vector and hybrid recall are implemented and archived (`openspec/changes/archive/2026-10-11-*`); libSQL is deferred (2026-10-11); the rest are open.
 
-Six more (2026-10-27) add the redb backend and its native runner ([[backends]]).
+Six more (2026-10-27) add the redb backend and its native runner ([[backends]]). Four more (2026-10-28) add Datalog ([[datalog]]).
 
 | Release | Change | Delivers |
 |---|---|---|
@@ -54,6 +54,10 @@ Six more (2026-10-27) add the redb backend and its native runner ([[backends]]).
 | 0.8 | `add-tm-cli` | The `tm` command-line tool ([[backends#Backend Detection and CLI]]) |
 | 0.8 | `add-backend-benchmarks` | redb vs SQLite vs Oxigraph, with an honest strengths-and-weaknesses report and two articles |
 | 0.9 | `move-sqlite-onto-store` | SQLite on the storage trait behind a 5 % regression gate ([[backends#One Engine In Two Phases]]) |
+| — | `add-datalog-engine` | `tm-datalog`: semi-naive engine with DatalogMTL over valid time, magic-set goals, `warn` checks, every surface ([[datalog]]) |
+| — | `add-datalog-constraints` | `error` constraints enforced at commit, seeded by the transaction's changes ([[datalog#Warn And Error Constraints]]) |
+| — | `add-datalog-materialization` | Programs materialized through `derive`, reconciliation, incremental runs ([[datalog#Shared Materialization With Reconciliation]]) |
+| — | `add-datalog-query-calls` | Datalog goals from SPARQL `SERVICE` and Cypher `CALL` ([[datalog#Goal Calls In SPARQL And Cypher]]) |
 
 ```plantuml
 @startuml milestones

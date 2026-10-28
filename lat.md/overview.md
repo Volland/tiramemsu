@@ -38,7 +38,7 @@ These are explicitly out of scope, so the design can stay small and exact.
 - Physical deletion or excision of facts. See [[time-model#Never Forget]]. Legal erasure is served by crypto-shredding instead, which deletes no row. See [[time-model#Erasure]].
 - Persistent git-style branches. Only short speculative transactions exist. See [[time-model#Speculative Transactions]].
 - Multi-writer replication in v1. The event log is kept ready for it. See [[time-model#Event Log]].
-- Datalog as a query language in v1.
+- Datalog as a query language in v1. Reversed by DL1 ([[datalog#One Language Three Uses]]), proposed on 2026-10-28.
 
 ## Decision Record
 
@@ -46,7 +46,7 @@ Every row is a decision taken in the design interview of 2026-09-29, with the se
 
 Rows D19–D25 were added the same day, after a comparison with oxilite ([[prior-art#oxilite]]) and after measuring SQLite 3.53 plans on the schema ([[query#Physical Planning#Join Ordering]], [[storage#Measured Footprint]]). D26 follows a SQLite versus DuckDB benchmark on the same workload ([[prior-art#DuckDB]]).
 
-D35 was added on 2026-10-01: it reserves origin bits so that agent files can later merge without rewriting ids. D36 was added the same day: a statement can name a graph, so an edge can hold a subgraph. D37–D44 come from the storage-backend interview of 2026-10-27 ([[backends]]). D45–D52 come from the change `add-derived-beliefs` of 2026-10-28 ([[derived-beliefs]]).
+D35 was added on 2026-10-01: it reserves origin bits so that agent files can later merge without rewriting ids. D36 was added the same day: a statement can name a graph, so an edge can hold a subgraph. D37–D44 come from the storage-backend interview of 2026-10-27 ([[backends]]). D45–D52 come from the change `add-derived-beliefs` of 2026-10-28 ([[derived-beliefs]]). DL1–DL24 come from the Datalog interview of the same day ([[datalog]]).
 
 | ID | Decision | Specified in |
 |---|---|---|
