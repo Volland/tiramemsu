@@ -35,6 +35,8 @@
 //!
 // @lat: [[api#Bindings]]
 
+#[cfg(feature = "datalog")]
+pub mod datalog;
 #[cfg(feature = "n3")]
 pub mod n3;
 mod read;
@@ -450,12 +452,19 @@ impl Database {
     /// `maxSegments`, `proofN3`, `limits`) and `ruleSetInfo` (`ruleSet`), the
     /// transaction op `storeRules` and `materialize` (`ruleSet`, `scope`,
     /// `window`, `maxSegments`, `limits`, `requireComplete`, `dryRun`, `budget`)
-    /// reason with N3 rules; without it they fail with `Unsupported`.
+    /// reason with N3 rules; without it they fail with `Unsupported`. With the
+    /// feature `datalog`, the reads `datalog` (`program` or `stored`, `goal`,
+    /// `scope`, `window`, `time`, `limits`, `demand`, `proof`, `access`,
+    /// `parallelThreshold`, `requireComplete`), `datalogReason`
+    /// (`includeRelations`), `programInfo`, `explainDatalog` and `check` (`only`)
+    /// and the transaction op `storeProgram` (`program`, `text`) run Datalog;
+    /// without it they fail with `Unsupported`.
     pub fn call(&self, op: &str, args: &J) -> Res<J> {
         match op {
             "sparql" | "cypher" | "triples" | "path" | "events" | "graphs" | "graphMembers"
             | "values" | "dependents" | "bundle" | "textSearch" | "vectorSearch" | "recall"
-            | "unembedded" | "explainSparql" | "conflicts" | "reason" | "ruleSetInfo" => {
+            | "unembedded" | "explainSparql" | "conflicts" | "reason" | "ruleSetInfo" | "datalog"
+            | "datalogReason" | "programInfo" | "explainDatalog" | "check" => {
                 let view = read::view_from_json(&self.db, args.get("view").unwrap_or(&J::Null))?;
                 let (budget, _entry) = self.budget(args.get("budget"))?;
                 match &budget {
@@ -560,6 +569,14 @@ fn materialize(db: &Db, args: &J) -> Res<J> {
         let _ = (db, args);
         Err(no_n3())
     }
+}
+
+/// The error of a Datalog operation in a build without the feature `datalog`.
+#[cfg(not(feature = "datalog"))]
+pub(crate) fn no_datalog() -> BindError {
+    BindError::Db(Error::unsupported(
+        "Datalog (the JSON bridge was built without the feature `datalog`)",
+    ))
 }
 
 /// The error of an N3 operation in a build without the feature `n3`.

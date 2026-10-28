@@ -956,6 +956,19 @@ fn n3_node_refused() {
     });
 }
 
+#[cfg(feature = "n3")]
+#[test]
+fn datalog_node_refuses_n3() {
+    each(|db| {
+        tx(db, |t| t.store_program(v("r"), REPORTS));
+        let r = db.transact(TxOptions::default(), |t| {
+            t.store_rules(v("r"), "{ ?x a v:A } => { ?x a v:B } .")?;
+            Ok(())
+        });
+        assert!(matches!(r, Err(Error::RuleLanguageConflict { .. })), "{r:?}");
+    });
+}
+
 // ---------------------------------------------------------------- constraints
 
 const POLICIES: &str = "constraint one_ceo error :- v:role(X, v:CEO), v:role(Y, v:CEO), X != Y.\n\

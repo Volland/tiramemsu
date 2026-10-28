@@ -232,6 +232,20 @@ pub fn run(view: &View<'_>, op: &str, args: &J) -> Res<J> {
         "ruleSetInfo" => crate::n3::rule_set_info(view, args),
         #[cfg(not(feature = "n3"))]
         "reason" | "ruleSetInfo" => Err(crate::no_n3()),
+        #[cfg(feature = "datalog")]
+        "datalog" => crate::datalog::query(view, args),
+        #[cfg(feature = "datalog")]
+        "datalogReason" => crate::datalog::reason(view, args),
+        #[cfg(feature = "datalog")]
+        "programInfo" => crate::datalog::program_info(view, args),
+        #[cfg(feature = "datalog")]
+        "explainDatalog" => crate::datalog::explain(view, args),
+        #[cfg(feature = "datalog")]
+        "check" => crate::datalog::check(view, args),
+        #[cfg(not(feature = "datalog"))]
+        "datalog" | "datalogReason" | "programInfo" | "explainDatalog" | "check" => {
+            Err(crate::no_datalog())
+        }
         other => Err(arg(format!("unknown read operation {other:?}"))),
     }
 }
