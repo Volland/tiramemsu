@@ -9,6 +9,8 @@ OpenSpec changes in `openspec/changes/archive/`.
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-10-28
+
 Datalog (`openspec/changes/add-datalog-engine/`, decisions DL1–DL26 in `lat.md/datalog.md`). No file format change: programs are ordinary statements.
 
 ### Added
