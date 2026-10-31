@@ -79,8 +79,11 @@ The tag starts `npm-publish.yml`:
 1. **`addon`** runs on each of the five platforms, builds the addon, and runs the whole test suite on it,
    which is the smoke test. It uploads `tiramemsu.<platform>-<arch>.node`.
 2. **`publish`** downloads the five files into `bindings/node`, builds the TypeScript, checks that all five
-   are present, runs `npm pack --dry-run`, and runs `npm publish --provenance --access public`. If you
+   are present, runs `npm pack --dry-run`, and runs `npm stage publish --provenance --access public`. If you
    added a required reviewer, approve the deployment in the Actions tab.
+3. **Approve the staged version.** The token may only stage, so the version is uploaded but not public yet.
+   Approve it with two-factor authentication on npmjs.com (the package's staged versions), or from a
+   terminal: `npm stage list @tiramemsu/node` shows its id, and `npm stage approve <id>` publishes it.
 
 Check <https://www.npmjs.com/package/@tiramemsu/node>, then run `npm install @tiramemsu/node` in a clean
 project.
@@ -104,6 +107,7 @@ checked, or `gh workflow run npm-publish.yml --ref main -f publish=true`.
 | `Cannot find module './tiramemsu.<platform>-<arch>.node'` | No addon for this platform is in the package. Build it with `npm run build:native` |
 | `npm error 403 … You cannot publish over the previously published versions` | That version is already on npm. Bump the version |
 | `npm error 404 … '@tiramemsu/node' is not in this registry` on publish | The token cannot publish to the `@tiramemsu` scope, or the organization does not exist. Check step 2 |
+| `E_STAGE_REQUIRED`, `403 … This token can only publish to a staging area` | The token may only stage. The workflow stages (`npm stage publish`); approve the version with 2FA on npmjs.com or with `npm stage approve <id>` (`npm stage list @tiramemsu/node` shows the id) |
 | `npm error need auth` or `EOTP` | The token is missing from the environment, or it requires a one-time password. Use an automation-capable token |
 | The `publish` job waits, then fails with `Branch "…" is not allowed to deploy to npm` | The run is not on a `v*` tag or `main` |
 | A runner label is not found | GitHub retired it. Replace the label in `.github/workflows/npm-publish.yml` |

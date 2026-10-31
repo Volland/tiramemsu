@@ -2,8 +2,9 @@
 # package that carries all of them, and publishes it to npm with provenance.
 # See docs/node-publishing.md.
 #
-# - A `v*` tag (the release tag) builds and publishes.
-# - A manual run builds; it publishes only when `publish` is checked.
+# - A `v*` tag (the release tag) builds and stages the version on npm.
+# - A manual run builds; it stages only when `publish` is checked.
+# A staged version goes public once a maintainer approves it with 2FA.
 name: npm publish
 
 on:
@@ -87,8 +88,14 @@ jobs:
           ls tiramemsu.*.node
           test "$(ls tiramemsu.*-*.node | wc -l)" -eq 5
           npm pack --dry-run
-      - name: Publish
+      # The npm token may only stage: `npm stage publish` uploads the version
+      # in a state that is not public, and a maintainer approves it with 2FA
+      # (npmjs.com, or `npm stage approve <id>`). See docs/node-publishing.md.
+      - name: Stage for publishing
         working-directory: bindings/node
-        run: npm publish --provenance --access public
+        run: |
+          npm install -g npm@11
+          npm stage publish --provenance --access public
+          npm stage list @tiramemsu/node
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
