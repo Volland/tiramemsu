@@ -37,6 +37,7 @@ page = f'''<!doctype html>
 <article class="post">
 <h1>{TITLE}</h1>
 <p class="meta">Guide · feature <code>elpi</code> · crates <code>tm-elpi</code>, <code>tm-elpi-store</code></p>
+<p class="meta"><strong>Preview:</strong> ELPI support is built and tested but not yet released; it needs lean-elpi 0.4 on crates.io and will ship in a later release (feature <code>elpi</code>, off by default).</p>
 
 {body}
 <p><a href="../articles/elpi-reasoning.html">The long read: λProlog in a bitemporal memory →</a></p>

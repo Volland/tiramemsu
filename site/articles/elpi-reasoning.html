@@ -17,6 +17,7 @@
 <article class="post">
 <h1>λProlog in a bitemporal memory</h1>
 <p class="meta">Tiramemsu articles · 31 October 2026</p>
+<p class="meta"><strong>Preview:</strong> ELPI support is built and tested but not yet released; it needs lean-elpi 0.4 on crates.io and will ship in a later release (feature <code>elpi</code>, off by default).</p>
 
 <p><em>How Tiramemsu gained a third reasoning language: ELPI, run by an implementation written in Lean 4, reading the store through callbacks, stating its own support, and checking writes at commit.</em></p>
 <p>Tiramemsu already had two ways to reason over memory. N3 rules run through eyeron, and a Datalog engine of its own handles recursion, constraints and valid time in one pass. Both are good at rules over triples, and both are flat. Neither lets a rule quantify over other rules, assume a fact for the length of one proof, or say “for any fresh x”. Those are exactly the questions an agent’s validator asks. Would this plan still hold if Bob left the team? Is every role assignment justified by some policy, whatever the policy is? Does a schema accept this record under every reading of its optional fields?</p>

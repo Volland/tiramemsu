@@ -42,6 +42,7 @@ page = f'''<!doctype html>
 <article class="post">
 <h1>{TITLE}</h1>
 <p class="meta">Tiramemsu articles · {DATE}</p>
+<p class="meta"><strong>Preview:</strong> ELPI support is built and tested but not yet released; it needs lean-elpi 0.4 on crates.io and will ship in a later release (feature <code>elpi</code>, off by default).</p>
 
 {body}
 <p><a href="../elpi/">The ELPI guide →</a> · <a href="building-the-datalog-engine.html">Related: building the Datalog engine →</a></p>

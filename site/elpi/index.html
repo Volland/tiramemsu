@@ -17,6 +17,7 @@
 <article class="post">
 <h1>ELPI in Tiramemsu: a guide</h1>
 <p class="meta">Guide · feature <code>elpi</code> · crates <code>tm-elpi</code>, <code>tm-elpi-store</code></p>
+<p class="meta"><strong>Preview:</strong> ELPI support is built and tested but not yet released; it needs lean-elpi 0.4 on crates.io and will ship in a later release (feature <code>elpi</code>, off by default).</p>
 
 <p>ELPI is Tiramemsu’s third reasoning language, after N3 and Datalog. It is a dialect of λProlog with higher-order clauses, hypothetical reasoning (<code>=&gt;</code>, <code>pi</code>) and constraint handling rules, run by <a href="https://github.com/Volland/lean-elpi">lean-elpi</a>, an implementation in Lean 4. Use it for validators that need search, rules about rules, or questions of the form “what would follow if…”. This guide covers the calls, the terms, time, constraints, stored programs and materialization. The <a href="../articles/elpi-reasoning.html">long read</a> explains the design, and the decisions are in <code>lat.md/elpi.md</code> (E1 to E13).</p>
 <p>ELPI is the opt-in facade feature <code>elpi</code> (crates <code>tm-elpi</code> and <code>tm-elpi-store</code>). It links the native library <code>libleanelpi</code>, which carries the Lean runtime and exists for macOS and Linux on arm64 and x86-64. Point <code>LEANELPI_DIST</code> at the directory that holds it. No build turns ELPI on by default, and the Node, Python and wasm packages leave it out. The CLI and the MCP server have the feature as well.</p>

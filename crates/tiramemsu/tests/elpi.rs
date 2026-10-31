@@ -738,3 +738,116 @@ reports X Y :- tm.triple X (iri "urn:tiramemsu:v:manager") _ _, reach X [X] Y.
         got.len()
     });
 }
+
+// The examples of the validators article (article/elpi-validators/), run here
+// so the article stays true.
+
+fn team(db: &Db) {
+    tx(db, |t| {
+        t.assert(v("alice"), v("manager"), v("bob"), Valid::ALWAYS)?;
+        t.assert(v("bob"), v("manager"), v("dana"), Valid::ALWAYS)?;
+        t.assert(v("alice"), v("manager"), v("carol"), Valid::ALWAYS)?;
+        t.assert(v("carol"), v("manager"), v("dana"), Valid::ALWAYS)?;
+        t.assert(v("dana"), v("manager"), v("erin"), Valid::ALWAYS)?;
+        Ok(())
+    });
+}
+
+const WHAT_IF: &str = r#"
+pred gone o:term.
+pred reaches o:term, o:term.
+reaches X Y :- tm.triple X (iri "urn:tiramemsu:v:manager") Y _, not (gone Y).
+reaches X Z :- tm.triple X (iri "urn:tiramemsu:v:manager") Y _, not (gone Y), reaches Y Z.
+"#;
+
+/// `=>` adds a clause for one goal only: "who would alice still reach if bob
+/// and carol were gone?" changes nothing stored.
+#[test]
+fn article_hypothetical_reach() {
+    each(|db| {
+        team(db);
+        let now = db.now();
+        let all = values(
+            &now.elpi(&text(WHAT_IF), r#"reaches (iri "urn:tiramemsu:v:alice") Y"#, &ElpiOptions::default())
+                .unwrap(),
+            "Y",
+        );
+        let without_bob = values(
+            &now.elpi(
+                &text(WHAT_IF),
+                r#"gone (iri "urn:tiramemsu:v:bob") => reaches (iri "urn:tiramemsu:v:alice") Y"#,
+                &ElpiOptions::default(),
+            )
+            .unwrap(),
+            "Y",
+        );
+        let without_both = now
+            .elpi(
+                &text(WHAT_IF),
+                r#"(gone (iri "urn:tiramemsu:v:bob"), gone (iri "urn:tiramemsu:v:carol")) => reaches (iri "urn:tiramemsu:v:alice") Y"#,
+                &ElpiOptions::default(),
+            )
+            .unwrap();
+        // dana and erin are found twice: once through bob, once through carol
+        assert_eq!(all.len(), 6);
+        let mut distinct = all.clone();
+        distinct.dedup();
+        assert_eq!(distinct, vec![v("bob"), v("carol"), v("dana"), v("erin")]);
+        let mut wb = without_bob.clone();
+        wb.dedup();
+        assert_eq!(wb, vec![v("carol"), v("dana"), v("erin")]);
+        assert_eq!(without_both.rows.len(), 0);
+        // nothing was stored: the full answer is unchanged afterwards
+        let again = now
+            .elpi(&text(WHAT_IF), r#"reaches (iri "urn:tiramemsu:v:alice") Y"#, &ElpiOptions::default())
+            .unwrap();
+        assert_eq!(again.rows.len(), all.len());
+        (all.len(), wb.len())
+    });
+}
+
+const POLICIES: &str = r#"
+pred policy o:string, o:(term -> prop).
+policy "has an owner" (P\ tm.triple P (iri "urn:tiramemsu:v:owner") _ _).
+policy "has a due date" (P\ tm.triple P (iri "urn:tiramemsu:v:due") _ _).
+tm.violation warn Name "a project breaks a policy" [E] :-
+  tm.triple P (iri "urn:tiramemsu:v:type") (iri "urn:tiramemsu:v:Project") E,
+  policy Name Check, not (Check P).
+"#;
+
+/// Policies are data: each is a predicate passed as an argument.
+#[test]
+fn article_policies_as_predicates() {
+    each(|db| {
+        tx(db, |t| {
+            t.assert(v("p1"), v("type"), v("Project"), Valid::ALWAYS)?;
+            t.assert(v("p1"), v("owner"), v("ann"), Valid::ALWAYS)?;
+            t.assert(v("p2"), v("type"), v("Project"), Valid::ALWAYS)?;
+            t.assert(v("p2"), v("due"), Value::str("2026-12-01"), Valid::ALWAYS)?;
+            Ok(())
+        });
+        let r = db.now().elpi_check(&text(POLICIES), &ElpiOptions::default()).unwrap();
+        let mut names: Vec<String> = r.violations.iter().map(|x| x.name.clone()).collect();
+        names.sort();
+        assert_eq!(names, ["has a due date", "has an owner"]);
+        names
+    });
+}
+
+/// `pi` with `=>`: a rule that holds for any fresh node is checked by
+/// assuming the node exists and asking the rule about it.
+#[test]
+fn article_pi_any_member() {
+    each(|db| {
+        let p = r#"
+pred member o:term, o:term.
+pred staffed o:term.
+staffed T :- member _ T.
+pred rule_ok.
+rule_ok :- pi x\ member x (iri "urn:tiramemsu:v:fresh") => staffed (iri "urn:tiramemsu:v:fresh").
+"#;
+        let n = db.now().elpi(&text(p), "rule_ok", &ElpiOptions::default()).unwrap().rows.len();
+        assert_eq!(n, 1);
+        n
+    });
+}

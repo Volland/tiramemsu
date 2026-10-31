@@ -106,7 +106,8 @@ past = db.as_of(instant=<span class="s">"2026-10-06T09:00:00Z"</span>)
     <div class="card"><span class="tag">Grounded</span><h3>Conclusions that fall</h3><p>A stored program can materialize its conclusions as derived beliefs that fall with their premises or with an edit of the program. Negation and aggregates are reconciled on each run.</p></div>
     <div class="card"><span class="tag">In queries</span><h3>A goal inside SPARQL or Cypher</h3><p>Join a recursive question, such as who is above Alice, with an ordinary pattern: <code>SERVICE &lt;urn:tiramemsu:dl:query&gt;</code> or <code>CALL tiramemsu.datalog.query</code>. <a href="articles/datalog-temporal-reasoning.html">Read the article</a>.</p></div>
   </div>
-  <h3 class="group">ELPI <span class="tag">new</span></h3>
+  <h3 class="group">ELPI <span class="tag">preview</span></h3>
+  <p>Built and tested, not yet released: it needs lean-elpi 0.4 on crates.io and ships in a later release. <a href="articles/elpi-validators.html">See what it does</a>.</p>
   <div class="grid four">
     <div class="card"><span class="tag">λProlog</span><h3>Higher-order rules</h3><p>ELPI programs, run by lean-elpi, read memory through <code>tm.triple</code> on any view: hypothetical clauses (<code>=&gt;</code>), fresh names (<code>pi</code>) and rules over rules. Opt-in feature <code>elpi</code>. <a href="elpi/">The guide</a>.</p></div>
     <div class="card"><span class="tag">Constraints</span><h3>Validators at commit</h3><p>A program's <code>tm.violation-delta</code> runs on every write, seeded by what the transaction added or retracted, under a budget that fails closed. A random-history test checks it refuses exactly the writes that introduce a violation.</p></div>
@@ -172,7 +173,7 @@ past = db.as_of(instant=<span class="s">"2026-10-06T09:00:00Z"</span>)
       <tr><td>Datalog goals and rules over valid time (DatalogMTL, Allen relations)</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td><td class="p">builds, untested</td><td class="y">✓</td><td class="y eng">✓</td><td class="y">✓</td></tr>
       <tr><td>Constraints enforced at commit</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td><td class="p">builds, untested</td><td class="y">✓</td><td class="y eng">✓</td><td class="y">✓</td></tr>
       <tr><td>Programs materialized as grounded beliefs</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td><td class="p">builds, untested</td><td class="y">✓</td><td class="y eng">✓</td><td class="y">✓</td></tr>
-      <tr class="grp"><td colspan="8">ELPI (opt-in feature <code>elpi</code>, links lean-elpi; macOS and Linux)</td></tr>
+      <tr class="grp"><td colspan="8">ELPI, preview: not yet released (opt-in feature <code>elpi</code>, links lean-elpi; macOS and Linux)</td></tr>
       <tr><td>ELPI goals, checks and conclusions over any view</td><td class="y">✓</td><td class="n">–</td><td class="n">–</td><td class="n">–</td><td class="y">✓</td><td class="y eng">✓</td><td class="y">✓</td></tr>
       <tr><td>ELPI validators enforced at commit</td><td class="y">✓</td><td class="n">–</td><td class="n">–</td><td class="n">–</td><td class="y">✓</td><td class="y eng">✓</td><td class="y">✓</td></tr>
       <tr><td>ELPI programs materialized as grounded beliefs</td><td class="y">✓</td><td class="n">–</td><td class="n">–</td><td class="n">–</td><td class="y">✓</td><td class="y eng">✓</td><td class="y">✓</td></tr>
