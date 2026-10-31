@@ -387,6 +387,7 @@ impl<'e> Planner<'e> {
                     }
                 };
                 Node::Datalog(PDatalog {
+                    language: t.language,
                     program,
                     goal: t.goal.clone(),
                     view_text: view_text(&view),

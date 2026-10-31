@@ -25,6 +25,10 @@ n3 = ["tiramemsu/n3"]
 # `storeProgram`; OpenSpec change `add-datalog-engine`). Off by default; the
 # Node, Python and wasm bindings, the MCP server and the CLI turn it on.
 datalog = ["tiramemsu/datalog"]
+# ELPI (`elpi`, `elpiCheck`, `elpiConclude`, `elpiProgramInfo`, `storeElpiProgram`,
+# `enforceElpi`, `materializeElpi`; `lat.md/elpi#Own Calls`). Off by default: it
+# links the native libleanelpi. Without it these ops fail with `Unsupported`.
+elpi = ["tiramemsu/elpi"]
 
 [dev-dependencies]
 tempfile = "3"

@@ -64,7 +64,7 @@ pub struct Exec<'a> {
     /// Input rows above which a join step runs in parallel morsels (`0`: never).
     pub parallel_threshold: usize,
     /// The Datalog provider of the engine, for goal calls.
-    pub datalog: Option<std::sync::Arc<dyn tm_exec::datalog::DatalogProvider>>,
+    pub datalog: tm_exec::datalog::GoalProviders,
     /// The relations of the goal calls run so far, by spec: a call runs once.
     datalog_calls: RefCell<HashMap<String, std::rc::Rc<Rel>>>,
 }
@@ -84,7 +84,7 @@ pub fn execute(
     engine.run_hook();
     let mut ex = Exec::new(store, p.query().semantics, synthetic);
     ex.parallel_threshold = engine.parallel_threshold();
-    ex.datalog = engine.datalog_provider().cloned();
+    ex.datalog = engine.goal_providers();
     if let Some(pe) = engine.path_engine() {
         ex.path_max_hops = pe.options().max_hops;
         ex.path_max_states = pe.options().max_states;
@@ -123,7 +123,7 @@ pub fn explain(engine: &QueryEngine, store: &dyn ReadStore, p: &Prepared) -> Res
     let (node, synthetic) = plan(store, p)?;
     let mut ex = Exec::new(store, p.query().semantics, synthetic);
     ex.parallel_threshold = engine.parallel_threshold();
-    ex.datalog = engine.datalog_provider().cloned();
+    ex.datalog = engine.goal_providers();
     if let Some(pe) = engine.path_engine() {
         ex.path_max_hops = pe.options().max_hops;
         ex.path_max_states = pe.options().max_states;
@@ -191,7 +191,7 @@ impl<'a> Exec<'a> {
             path_max_hops: 15,
             path_max_states: 1_000_000,
             parallel_threshold: 0,
-            datalog: None,
+            datalog: Default::default(),
             datalog_calls: RefCell::new(HashMap::new()),
         }
     }
@@ -1746,10 +1746,7 @@ impl<'a> Exec<'a> {
         if let Some(r) = self.datalog_calls.borrow().get(&key) {
             return Ok((**r).clone());
         }
-        let provider = self
-            .datalog
-            .as_ref()
-            .ok_or_else(tm_exec::datalog::no_provider)?;
+        let provider = self.datalog.get(t.language)?;
         let spec = Self::spec_of(&t.view_text)?;
         let program = match &t.program {
             PDlProgram::Stored(i) => DlProgram::Stored(i.clone()),
@@ -1764,7 +1761,11 @@ impl<'a> Exec<'a> {
             &t.goal,
             &names,
         )?;
-        self.note(format!("datalog call {:?} ({} rows)", t.goal, rows.len()));
+        let lang = match t.language {
+            tm_ir::GoalLanguage::Datalog => "datalog",
+            tm_ir::GoalLanguage::Elpi => "elpi",
+        };
+        self.note(format!("{lang} call {:?} ({} rows)", t.goal, rows.len()));
         let mut rel = Rel::default();
         for (_, v) in &t.outputs {
             rel.vars.push(v.clone());

@@ -444,8 +444,36 @@ pub enum Error {
     RuleLanguageConflict {
         /// The node, rendered.
         node: String,
-        /// The language it already holds (`"N3"` or `"Datalog"`).
+        /// The language it already holds (`"N3"`, `"Datalog"` or `"ELPI"`).
         existing: String,
+    },
+    /// ELPI program text that does not parse, typecheck or load (facade
+    /// feature `elpi`).
+    #[error("ELPI program: {message}")]
+    ElpiProgram {
+        /// The engine's message.
+        message: String,
+    },
+    /// An ELPI run that failed: a runtime error, a host builtin error, or
+    /// support that the run did not read.
+    #[error("ELPI run: {message}")]
+    ElpiRun {
+        /// The engine's message.
+        message: String,
+    },
+    /// An ELPI run that used up its fuel or its row budget.
+    #[error("ELPI run exceeded its budget: {message}")]
+    ElpiOutOfFuel {
+        /// Which budget ran out.
+        message: String,
+    },
+    /// Stored ELPI programs that include each other in a cycle.
+    #[error("ELPI program {program} includes itself: {}", chain.join(" -> "))]
+    ProgramCycle {
+        /// The program, rendered.
+        program: String,
+        /// The include chain, ending where it started.
+        chain: Vec<String>,
     },
     /// A file that is neither a SQLite nor a redb database.
     #[error("{path} is not a database file this build can open (neither SQLite nor redb)")]

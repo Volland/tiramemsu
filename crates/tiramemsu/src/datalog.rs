@@ -215,12 +215,17 @@ fn live_source(tx: &mut Tx<'_>, node: &Value, p: &str) -> Result<Option<(Eid, Va
 }
 
 /// Fails with `RuleLanguageConflict` when `node` holds live rules of the other
-/// language (`other` is `n3:source` or `dl:source`).
+/// language (`other` is `n3:source`, `dl:source` or `elpi:source`).
 pub(crate) fn check_language(tx: &mut Tx<'_>, node: &Value, other: &str) -> Result<()> {
     if live_source(tx, node, other)?.is_some() {
         return Err(Error::RuleLanguageConflict {
             node: node.to_string(),
-            existing: if other == N3_SOURCE { "N3" } else { "Datalog" }.into(),
+            existing: match other {
+                N3_SOURCE => "N3",
+                tm_core::vocab::ELPI_SOURCE => "ELPI",
+                _ => "Datalog",
+            }
+            .into(),
         });
     }
     Ok(())
@@ -233,6 +238,7 @@ impl TxDatalog for Tx<'_> {
     fn store_program(&mut self, program: Value, text: &str) -> Result<Eid> {
         tm_datalog::validate(text)?;
         check_language(self, &program, N3_SOURCE)?;
+        check_language(self, &program, tm_core::vocab::ELPI_SOURCE)?;
         let value = Value::str(text);
         if let Some((eid, current)) = live_source(self, &program, DL_SOURCE)? {
             if current == value {

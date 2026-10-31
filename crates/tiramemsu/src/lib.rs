@@ -31,8 +31,14 @@ mod datalog_enforce;
 #[cfg(feature = "datalog")]
 mod datalog_materialize;
 mod db;
+#[cfg(feature = "elpi")]
+mod elpi;
+#[cfg(all(feature = "elpi", feature = "exec"))]
+mod elpi_call;
+#[cfg(feature = "elpi")]
+mod elpi_materialize;
 mod import;
-#[cfg(any(feature = "n3", feature = "datalog"))]
+#[cfg(any(feature = "n3", feature = "datalog", feature = "elpi"))]
 mod materialize;
 #[cfg(feature = "n3")]
 // @tg: implements:: [[openspec:optional-query-frontends#Optional N3 reasoning feature]] {since: "2026-10-28"}
@@ -60,6 +66,10 @@ pub use datalog_call::{watch_datalog_calls, watched_datalog_calls};
 #[cfg(feature = "datalog")]
 pub use datalog_materialize::{MaterializeProgramOptions, MaterializeProgramReport};
 pub use db::{Db, OpenOptions, Summary};
+#[cfg(feature = "elpi")]
+pub use elpi::{ElpiProgram, TxElpi};
+#[cfg(feature = "elpi")]
+pub use elpi_materialize::{MaterializeElpiOptions, MaterializeElpiReport};
 pub use import::{BulkImport, ImportProgress, ImportSummary};
 #[cfg(feature = "n3")]
 pub use n3::TxN3;
@@ -119,6 +129,20 @@ pub use tm_datalog::{
     ReasonResult as DatalogReasonResult, Row as DatalogRow, Scope as DatalogScope, Severity,
     Status as DatalogStatus, Term as DatalogTerm, TimeMode as DatalogTime, Violation,
 };
+/// The ELPI engine crate (`tm-elpi`).
+#[cfg(feature = "elpi")]
+pub use tm_elpi as elpi_engine;
+#[cfg(feature = "elpi")]
+pub use tm_elpi::{
+    CheckResult as ElpiCheckResult, ConcludeResult as ElpiConcludeResult,
+    Conclusion as ElpiConclusion, ElpiOptions, ElpiTerm, QueryResult as ElpiQueryResult,
+    Row as ElpiRow, Severity as ElpiSeverity, Violation as ElpiViolation,
+};
+/// The ELPI persistence crate (`tm-elpi-store`).
+#[cfg(feature = "elpi")]
+pub use tm_elpi_store as elpi_store;
+#[cfg(feature = "elpi")]
+pub use tm_elpi_store::ProgramInfo as ElpiProgramInfo;
 #[cfg(feature = "exec")]
 pub use tm_exec::path::row::{Dir as PathDir, HopKind};
 #[cfg(feature = "exec")]

@@ -1,0 +1,26 @@
+[package]
+name = "tm-elpi-store"
+description = "Tiramemsu ELPI persistence: stored λProlog programs with includes, commit-time enforcement and materialization plans"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+readme = "README.md"
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
+rust-version.workspace = true
+
+[features]
+default = []
+# Runs programs through lean-elpi (`tm-elpi/native`).
+native = ["tm-elpi/native"]
+
+[dependencies]
+tm-core = { workspace = true }
+tm-store = { workspace = true }
+tm-elpi = { workspace = true }
+
+[lints]
+workspace = true

@@ -118,6 +118,9 @@ fn read_only_refuses_writes_before_a_transaction() {
     if cfg!(feature = "datalog") {
         expected.extend(["datalog_query", "check_constraints"]);
     }
+    if cfg!(feature = "elpi") {
+        expected.extend(["elpi_query", "elpi_check"]);
+    }
     assert_eq!(names, expected);
     for name in ["save_answer", "check_answers", "refresh_answer"] {
         assert_eq!(tool_error(&rpc_call(&mut ro, name, json!({}))), "ReadOnly");
@@ -523,9 +526,10 @@ fn protocol_handshake_and_errors() {
     .unwrap();
     let n3_tools = if cfg!(feature = "n3") { 3 } else { 0 };
     let datalog_tools = if cfg!(feature = "datalog") { 5 } else { 0 };
+    let elpi_tools = if cfg!(feature = "elpi") { 5 } else { 0 };
     assert_eq!(
         r["result"]["tools"].as_array().unwrap().len(),
-        20 + n3_tools + datalog_tools
+        20 + n3_tools + datalog_tools + elpi_tools
     );
     // protocol errors
     let code = |r: Option<J>| r.unwrap()["error"]["code"].as_i64().unwrap();
@@ -1353,4 +1357,56 @@ fn read_only_mcp_hides_enforce_program() {
     );
     assert_eq!(tool_error(&r), "ReadOnly");
     assert_eq!(counters(&ro), before);
+}
+
+// The ELPI tools end to end: store, query, check, enforce and materialize.
+// @tg: verifies:: [[openspec:elpi-query-calls#ELPI bridge operations#MCP tools]] {level: integration}
+#[test]
+#[cfg(feature = "elpi")]
+fn elpi_tools() {
+    let dir = tempfile::tempdir().unwrap();
+    let server = Server::open(Config::new(dir.path().join("m.db"))).unwrap();
+    let iri = |s: &str| json!({ "iri": format!("urn:tiramemsu:v:{s}") });
+    server
+        .call_tool(
+            "assert",
+            &json!({ "s": iri("a"), "p": iri("parent"), "o": iri("b") }),
+        )
+        .unwrap();
+    server
+        .call_tool(
+            "assert",
+            &json!({ "s": iri("b"), "p": iri("parent"), "o": iri("c") }),
+        )
+        .unwrap();
+    let text = "tm.conclude (triple X (iri \"urn:tiramemsu:v:grandparent\") Z) [E1, E2] :-\n  tm.triple X (iri \"urn:tiramemsu:v:parent\") Y E1,\n  tm.triple Y (iri \"urn:tiramemsu:v:parent\") Z E2.\n";
+    let s = server
+        .call_tool(
+            "store_elpi_program",
+            &json!({ "program": "urn:tiramemsu:v:g", "text": text }),
+        )
+        .unwrap();
+    assert_eq!(s["changed"], json!(true));
+    let q = server
+        .call_tool(
+            "elpi_query",
+            &json!({ "stored": "urn:tiramemsu:v:g", "goal": "tm.triple (iri \"urn:tiramemsu:v:a\") _ Y _" }),
+        )
+        .unwrap();
+    assert_eq!(q["rows"].as_array().unwrap().len(), 1);
+    let m = server
+        .call_tool(
+            "materialize_elpi",
+            &json!({ "program": "urn:tiramemsu:v:g" }),
+        )
+        .unwrap();
+    assert_eq!(m["derived"].as_array().unwrap().len(), 1);
+    let c = server
+        .call_tool("elpi_check", &json!({ "stored": "urn:tiramemsu:v:g" }))
+        .unwrap();
+    assert_eq!(c["violations"], json!([]));
+    let e = server
+        .call_tool("enforce_elpi", &json!({ "program": "urn:tiramemsu:v:g" }))
+        .unwrap();
+    assert!(e["eid"].as_u64().is_some(), "{e}");
 }

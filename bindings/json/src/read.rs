@@ -246,6 +246,16 @@ pub fn run(view: &View<'_>, op: &str, args: &J) -> Res<J> {
         "datalog" | "datalogReason" | "programInfo" | "explainDatalog" | "check" => {
             Err(crate::no_datalog())
         }
+        #[cfg(feature = "elpi")]
+        "elpi" => crate::elpi::query(view, args),
+        #[cfg(feature = "elpi")]
+        "elpiCheck" => crate::elpi::check(view, args),
+        #[cfg(feature = "elpi")]
+        "elpiConclude" => crate::elpi::conclude(view, args),
+        #[cfg(feature = "elpi")]
+        "elpiProgramInfo" => crate::elpi::program_info(view, args),
+        #[cfg(not(feature = "elpi"))]
+        "elpi" | "elpiCheck" | "elpiConclude" | "elpiProgramInfo" => Err(crate::no_elpi()),
         other => Err(arg(format!("unknown read operation {other:?}"))),
     }
 }

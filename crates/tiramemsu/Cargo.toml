@@ -24,6 +24,8 @@ tm-sparql = { workspace = true, optional = true }
 tm-cypher = { workspace = true, optional = true }
 tm-n3 = { workspace = true, optional = true }
 tm-datalog = { workspace = true, optional = true }
+tm-elpi = { workspace = true, optional = true }
+tm-elpi-store = { workspace = true, optional = true }
 lru = "0.18"
 serde_json = "1"
 
@@ -111,6 +113,11 @@ n3 = ["dep:tm-n3"]
 # `TxDatalog::store_program`; OpenSpec change `add-datalog-engine`). Off by default
 # and independent of `exec`: the core tier can run Datalog. No git dependency.
 datalog = ["dep:tm-datalog"]
+# ELPI (λProlog) through lean-elpi (`View::elpi`, `View::elpi_check`,
+# `View::elpi_program_info`, `TxElpi`, `Db::materialize_elpi`; OpenSpec changes
+# `add-elpi-engine`, `add-elpi-programs`, `add-elpi-materialization`). Off by
+# default: it links the native libleanelpi, found through `LEANELPI_DIST`.
+elpi = ["dep:tm-elpi", "dep:tm-elpi-store", "tm-elpi/native", "tm-elpi-store/native"]
 
 [lints]
 workspace = true

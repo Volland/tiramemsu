@@ -110,7 +110,7 @@ enum Schema {
     Count(&'static str),
     Flag(&'static str),
     Vector(&'static str),
-    #[cfg(any(feature = "n3", feature = "datalog"))]
+    #[cfg(any(feature = "n3", feature = "datalog", feature = "elpi"))]
     Iri(&'static str),
     #[cfg(feature = "datalog")]
     Names(&'static str),
@@ -172,7 +172,7 @@ impl Schema {
                 "items": { "type": "number" },
                 "description": d,
             }),
-            #[cfg(any(feature = "n3", feature = "datalog"))]
+            #[cfg(any(feature = "n3", feature = "datalog", feature = "elpi"))]
             Schema::Iri(d) => json!({ "type": ["string", "object"], "description": d }),
             #[cfg(feature = "datalog")]
             Schema::Names(d) => {
@@ -770,7 +770,98 @@ reports what would be written and writes nothing. An unknown program is refused 
             ("dryRun", Schema::Flag("Report what would be written and write nothing."), false),
         ],
     },
+    #[cfg(feature = "elpi")]
+    Tool {
+        name: "elpi_query",
+        title: "Query memory with ELPI",
+        description: "Solve an ELPI (λProlog) goal over memory on a view and return one row per solution, \
+without writing anything. Give the program as ELPI text (program) or name a program stored with \
+store_elpi_program (stored); goal is an ELPI query such as reports (iri \"urn:tiramemsu:v:alice\") Y. Programs \
+read statements with tm.triple S P O E, valid at one instant (validAt, default now); terms are (iri \"…\"), \
+(str \"…\"), (num N), (dbl F), (bool \"true\"), (lang Lex Tag), (lit Lex Datatype) and statements (eid N). A \
+program may include stored programs with accumulate <iri>. fuel bounds the resolution steps.",
+        writes: false,
+        idempotent: true,
+        args: &[
+            ("program", Schema::Text("ELPI program text (or give stored)."), false),
+            ("stored", Schema::Iri(ELPI_PROGRAM), false),
+            ("goal", Schema::Text("The ELPI goal, such as reports (iri \"urn:tiramemsu:v:alice\") Y."), true),
+            ("validAt", Schema::Text("The valid instant the program reads (epoch ms or a date-time)."), false),
+            ("fuel", Schema::Count("Resolution steps (default: the engine's budget)."), false),
+            ("limit", Schema::Count("At most this many solutions (default: all)."), false),
+            ("view", Schema::View, false),
+        ],
+    },
+    #[cfg(feature = "elpi")]
+    Tool {
+        name: "elpi_check",
+        title: "Check ELPI constraints",
+        description: "Run an ELPI program's tm.violation Severity Name Message Eids over memory on a view and \
+return every violation (severity error or warn, name, message, the statements it cites and the valid time \
+over which they hold together), without writing anything. Give the program as text (program) or name a \
+stored program (stored).",
+        writes: false,
+        idempotent: true,
+        args: &[
+            ("program", Schema::Text("ELPI program text (or give stored)."), false),
+            ("stored", Schema::Iri(ELPI_PROGRAM), false),
+            ("fuel", Schema::Count("Resolution steps (default: the engine's budget)."), false),
+            ("view", Schema::View, false),
+        ],
+    },
+    #[cfg(feature = "elpi")]
+    Tool {
+        name: "store_elpi_program",
+        title: "Store an ELPI program",
+        description: "Store ELPI text as the program program: one statement (program elpi:source \"<text>\"). \
+New text supersedes the old version, which stays visible in asOf views; the same text changes nothing. Text \
+that does not load is refused (ElpiProgram), an include cycle is refused (ProgramCycle), and a node holding \
+N3 rules or a Datalog program is refused (RuleLanguageConflict). Returns the program statement (eid), \
+whether anything changed and the transaction (t).",
+        writes: true,
+        idempotent: true,
+        args: &[
+            ("program", Schema::Iri(ELPI_PROGRAM), true),
+            ("text", Schema::Text("The ELPI program text."), true),
+        ],
+    },
+    #[cfg(feature = "elpi")]
+    Tool {
+        name: "enforce_elpi",
+        title: "Enforce an ELPI program's constraints",
+        description: "Enforce a stored ELPI program (on, the default) at every write, or stop (on: false): one \
+statement (program elpi:enforced true). Turning it on runs the program's full tm.violation check and is \
+refused with ConstraintViolated when memory already violates an error constraint. From then on every write \
+runs tm.violation-delta, seeded by the write's added and retracted statements, and a violation refuses the \
+write. Returns the enforcement statement (eid, null when turned off) and the transaction (t).",
+        writes: true,
+        idempotent: true,
+        args: &[
+            ("program", Schema::Iri(ELPI_PROGRAM), true),
+            ("on", Schema::Flag("true (default) enforces the program; false stops enforcing it."), false),
+        ],
+    },
+    #[cfg(feature = "elpi")]
+    Tool {
+        name: "materialize_elpi",
+        title: "Materialize an ELPI program",
+        description: "Run the stored ELPI program's tm.conclude Fact Support on a snapshot and write each \
+conclusion as a derived belief supported by the statements it lists, the program statement and the programs \
+it includes, in one transaction; earlier conclusions the run no longer derives are retracted. dryRun reports \
+what would be written and writes nothing.",
+        writes: true,
+        idempotent: true,
+        args: &[
+            ("program", Schema::Iri(ELPI_PROGRAM), true),
+            ("fuel", Schema::Count("Resolution steps (default: the engine's budget)."), false),
+            ("dryRun", Schema::Flag("Report what would be written and write nothing."), false),
+        ],
+    },
 ];
+
+#[cfg(feature = "elpi")]
+const ELPI_PROGRAM: &str =
+    "An ELPI program stored with store_elpi_program: an IRI as a plain string, or a term object.";
 
 #[cfg(feature = "n3")]
 const RULE_SET: &str = "A rule set: an IRI as a plain string, or a term object.";
@@ -1261,6 +1352,57 @@ fn run(db: &Database, config: &Config, t: &Tool, args: &J) -> Result<J, ToolErro
             c.insert("budget".into(), budget.clone());
             Ok(db.call("materializeProgram", &J::Object(c))?)
         }
+        // @tg: implements:: [[elpi#Own Calls]] {since: "2026-10-31"}
+        // @tg: implements:: [[openspec:elpi-query-calls#ELPI bridge operations]] {since: "2026-10-31"}
+        #[cfg(feature = "elpi")]
+        "elpi_query" | "elpi_check" => {
+            let mut c = Map::new();
+            for k in ["program", "stored", "goal", "validAt", "fuel", "limit"] {
+                if let Some(v) = get(k) {
+                    c.insert(k.into(), v);
+                }
+            }
+            let op = if t.name == "elpi_query" {
+                "elpi"
+            } else {
+                "elpiCheck"
+            };
+            let (mut r, v) = read(op, c)?;
+            r["view"] = v;
+            Ok(r)
+        }
+        #[cfg(feature = "elpi")]
+        "store_elpi_program" => {
+            let op =
+                json!({ "op": "storeElpiProgram", "program": get("program"), "text": get("text") });
+            let r = transact(json!([op]))?;
+            let changed = r["asserted"].as_array().is_some_and(|a| !a.is_empty());
+            Ok(json!({
+                "eid": r["results"][0]["eid"],
+                "changed": changed,
+                "superseded": r["superseded"],
+                "t": r["t"],
+            }))
+        }
+        #[cfg(feature = "elpi")]
+        "enforce_elpi" => {
+            let on = get("on").unwrap_or(J::Bool(true));
+            let op = json!({ "op": "enforceElpi", "program": get("program"), "on": on });
+            let r = transact(json!([op]))?;
+            Ok(json!({ "eid": r["results"][0]["eid"], "on": on, "t": r["t"] }))
+        }
+        #[cfg(feature = "elpi")]
+        "materialize_elpi" => {
+            let mut c = Map::new();
+            c.insert("stored".into(), get("program").unwrap_or(J::Null));
+            for k in ["fuel", "dryRun"] {
+                if let Some(v) = get(k) {
+                    c.insert(k.into(), v);
+                }
+            }
+            c.insert("budget".into(), budget.clone());
+            Ok(db.call("materializeElpi", &J::Object(c))?)
+        }
         other => Err(ToolError::arg(format!("unknown tool {other:?}"))),
     }
 }
@@ -1428,6 +1570,9 @@ mod tests {
         }
         if cfg!(feature = "datalog") {
             expected.extend(["datalog_query", "check_constraints"]);
+        }
+        if cfg!(feature = "elpi") {
+            expected.extend(["elpi_query", "elpi_check"]);
         }
         assert_eq!(names, expected);
         assert!(ro

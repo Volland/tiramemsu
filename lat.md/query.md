@@ -892,6 +892,8 @@ CALL tiramemsu.datalog.query('v:reporting', 'reports(v:alice, X)') YIELD X, vali
 - **Provenance:** with provenance on, a query containing the call records `ProvenanceGap::DatalogCall` (name `datalogCall`); statements matched by the ordinary patterns are still cited.
 - **Feature gating:** without a registered provider (the facade without `datalog`) the call parses and fails at execution with `Unsupported`.
 
+- **ELPI goals:** the same leaf with `language: GoalLanguage::Elpi` ([[elpi#Own Calls]]): `SERVICE <urn:tiramemsu:elpi:query> { [] elpi:program <p> | elpi:text "…" ; elpi:goal "…" }` and `CALL tiramemsu.elpi.query(program, goal)`. The table function's spec carries `"language": "elpi"`, and [[crates/tm-exec/src/datalog.rs#GoalProviders]] picks the provider the facade registered with `QueryEngine::with_elpi_provider` ([[crates/tiramemsu/src/elpi_call.rs#Provider]]). An ELPI goal reads one valid instant, so `elpi:validFrom` and `elpi:validTo` stay unbound.
+
 ## Vector Recall
 
 Recall by meaning: the statements of a view whose embedding is nearest to a query vector, each with its similarity and the evidence the store holds. The search is exact and runs on every host, with no SQLite extension.

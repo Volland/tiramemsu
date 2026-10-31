@@ -30,6 +30,7 @@ The default build is the full facade. The query engine and each query front end 
 | `cypher` | `View::cypher`, `Db::cypher_write`, `TxCypher`, `CypherParams` and `cypher_frontend`; implies `exec` | `tm-cypher` (`open-cypher`) |
 | `n3` | N3 reasoning with [eyeron](https://github.com/eyereasoner/eyeron): `View::reason`, `View::rule_set_info`, `TxN3::store_rules` and `Db::materialize`, aware of valid and transaction time; off by default and independent of `exec`. eyeron comes from crates.io | `tm-n3`, `eyeron` |
 | `datalog` | Datalog with DatalogMTL over valid time: `View::datalog` (goal rows with intervals, magic-set goals), `View::datalog_reason`, `View::check` (constraint violations), `View::program_info`, `View::explain_datalog` and `TxDatalog::store_program`; off by default and independent of `exec`, no git dependency | `tm-datalog` |
+| `elpi` | ELPI (λProlog) through lean-elpi: `View::elpi`, `View::elpi_check`, `View::elpi_conclude`, `View::elpi_program_info`, `TxElpi::store_elpi_program`, `TxElpi::enforce_elpi`, `Db::materialize_elpi`, and goal calls from SPARQL and Cypher; off by default, links the native libleanelpi found through `LEANELPI_DIST` | `tm-elpi`, `tm-elpi-store` |
 | `default` | `sparql` and `cypher`; saved answers (`Db::save_answer` and the rest) need both front ends | all of the above |
 
 ```toml

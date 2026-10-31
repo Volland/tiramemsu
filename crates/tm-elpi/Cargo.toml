@@ -1,0 +1,28 @@
+[package]
+name = "tm-elpi"
+description = "Tiramemsu ELPI: λProlog programs run by lean-elpi over a view, with host builtins, stated support and pointwise valid time"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+readme = "README.md"
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
+rust-version.workspace = true
+
+[features]
+# Links the native `libleanelpi` (found through `LEANELPI_DIST`). Without it the
+# crate builds its pure parts (terms, scans, intervals) and every run fails
+# with `Unsupported`, so `cargo test --workspace` needs no native library.
+default = []
+native = ["dep:leanelpi"]
+
+[dependencies]
+tm-core = { workspace = true }
+tm-store = { workspace = true }
+leanelpi = { workspace = true, optional = true }
+
+[lints]
+workspace = true

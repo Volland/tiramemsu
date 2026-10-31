@@ -20,13 +20,14 @@ pub enum Parsed {
 /// `tm`, `dl`, `v` (the database `@vocab`) and every row of the database prefix table.
 pub fn parser(env: &Env) -> Result<SparqlParser> {
     let mut p = SparqlParser::new();
-    let fixed: [(&str, &str); 6] = [
+    let fixed: [(&str, &str); 7] = [
         ("rdf", tm_core::vocab::RDF),
         ("rdfs", "http://www.w3.org/2000/01/rdf-schema#"),
         ("xsd", tm_core::vocab::XSD),
         ("sys", tm_core::vocab::SYS),
         ("tm", tm_core::vocab::TM),
         ("dl", tm_core::vocab::DL),
+        ("elpi", tm_core::vocab::ELPI),
     ];
     let bad =
         |name: &str, e: String| parse_error(None, format!("invalid IRI for prefix `{name}`: {e}"));
@@ -131,7 +132,7 @@ pub fn display_span(text: &str) -> Option<Span> {
 /// predeclared: `(byte offset, prefix)`. `peg` loses spargebra's "Prefix not
 /// found" message behind a later, further failure, so it is recovered here.
 pub fn undeclared_prefix(text: &str, env: &Env) -> Option<(usize, String)> {
-    let mut known: Vec<String> = ["rdf", "rdfs", "xsd", "sys", "tm", "dl", "v"]
+    let mut known: Vec<String> = ["rdf", "rdfs", "xsd", "sys", "tm", "dl", "elpi", "v"]
         .iter()
         .map(|s| s.to_string())
         .chain(env.prefixes.iter().map(|(n, _)| n.clone()))

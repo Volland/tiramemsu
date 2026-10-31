@@ -1076,6 +1076,13 @@ impl Db {
             &notes,
             opts.constraint_budget.unwrap_or(self.constraint_budget),
         );
+        #[cfg(feature = "elpi")]
+        let elpi_notes: std::cell::RefCell<Option<tm_elpi_store::Notes>> = Default::default();
+        #[cfg(feature = "elpi")]
+        let (elpi_ref, elpi_limit) = (
+            &elpi_notes,
+            opts.constraint_budget.unwrap_or(self.constraint_budget),
+        );
         let report = armed(&mut guard, |store| {
             store.transact(opts, move |tx| {
                 #[cfg(feature = "exec")]
@@ -1088,6 +1095,12 @@ impl Db {
                 {
                     let n = crate::datalog_enforce::commit_check(tx, opts.dry_run, limit)?;
                     *notes_ref.borrow_mut() = Some(n);
+                }
+                // ELPI constraints of enforced programs (add-elpi-programs)
+                #[cfg(feature = "elpi")]
+                {
+                    let n = tm_elpi_store::commit_check(tx, opts.dry_run, elpi_limit)?;
+                    *elpi_ref.borrow_mut() = Some(n);
                 }
                 if budget::active() {
                     // the last point a budget stops the write; past it the
@@ -1109,6 +1122,15 @@ impl Db {
                 r.constraint_checks = n.checks;
                 r.seed_rows = n.seed_rows;
                 r.constraint_violations = n.violations;
+            }
+            r
+        });
+        #[cfg(feature = "elpi")]
+        let report = report.map(|mut r| {
+            if let Some(n) = elpi_notes.take() {
+                r.constraint_checks += n.checks;
+                r.seed_rows += n.seed_rows;
+                r.constraint_violations.extend(n.violations);
             }
             r
         });
@@ -1196,6 +1218,8 @@ impl Db {
                     ops(&mut tx)?;
                     #[cfg(feature = "datalog")]
                     crate::datalog_enforce::commit_check(&mut tx, false, self.constraint_budget)?;
+                    #[cfg(feature = "elpi")]
+                    tm_elpi_store::commit_check(&mut tx, false, self.constraint_budget)?;
                     Ok(())
                 },
                 |exec| {
@@ -1210,6 +1234,8 @@ impl Db {
                     ops(&mut tx)?;
                     #[cfg(feature = "datalog")]
                     crate::datalog_enforce::commit_check(&mut tx, false, self.constraint_budget)?;
+                    #[cfg(feature = "elpi")]
+                    tm_elpi_store::commit_check(&mut tx, false, self.constraint_budget)?;
                     Ok(())
                 },
                 |store| {
@@ -1326,6 +1352,11 @@ fn build_engine(opts: &OpenOptions) -> Option<Arc<Engine>> {
     // goal calls from SPARQL and Cypher (`add-datalog-query-calls`)
     #[cfg(feature = "datalog")]
     let engine = engine.with_datalog_provider(Arc::new(crate::datalog_call::Provider {
+        clock: opts.clock.clone(),
+    }));
+    // ELPI goal calls (`add-elpi-query-calls`)
+    #[cfg(feature = "elpi")]
+    let engine = engine.with_elpi_provider(Arc::new(crate::elpi_call::Provider {
         clock: opts.clock.clone(),
     }));
     Some(Arc::new(engine))

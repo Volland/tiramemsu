@@ -541,3 +541,47 @@ fn datalog_call_without_the_feature_is_unsupported() {
         .unwrap_err();
     assert!(matches!(e, Error::Unsupported { .. }), "{e:?}");
 }
+
+// elpi-engine "Core tier unchanged": `elpi` is off by default, no other feature
+// pulls it in, and it is the only way `tm-elpi` (and with it lean-elpi) enters
+// the facade; the engine crate links lean-elpi only through its `native` feature
+// @tg: verifies:: [[openspec:elpi-engine#Optional ELPI feature#Core tier unchanged]] {since: "2026-10-31", level: unit}
+#[test]
+fn default_build_has_no_elpi() {
+    let manifest: toml::Value = toml::from_str(include_str!("../Cargo.toml")).unwrap();
+    let features = &manifest["features"];
+    let names = |f: &str| -> Vec<String> {
+        features[f]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|x| x.as_str().unwrap().to_string())
+            .collect()
+    };
+    assert!(!names("default").iter().any(|f| f == "elpi"));
+    for (name, list) in features.as_table().unwrap() {
+        if name != "elpi" {
+            assert!(
+                !list
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .filter_map(|f| f.as_str())
+                    .any(|f| f == "elpi" || f.contains("tm-elpi")),
+                "feature {name} pulls in ELPI"
+            );
+        }
+    }
+    let engine: toml::Value = toml::from_str(include_str!("../../tm-elpi/Cargo.toml")).unwrap();
+    assert_eq!(
+        engine["dependencies"]["leanelpi"]["optional"].as_bool(),
+        Some(true)
+    );
+    assert!(engine["features"]["default"].as_array().unwrap().is_empty());
+    let cli: toml::Value = toml::from_str(include_str!("../../tiramemsu-cli/Cargo.toml")).unwrap();
+    assert!(!cli["features"]["default"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|f| f.as_str() == Some("elpi")));
+}

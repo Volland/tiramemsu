@@ -19,9 +19,9 @@ pub mod vocab;
 pub use agg::{Agg, AggFunc, Key};
 pub use expr::{ArithOp, CmpOp, Expr, Func, Lookup, LookupMode};
 pub use op::{
-    goal_variables, Aggregate, DatalogPattern, DlProgramRef, Extend, Filter, GraphSel, IrQuery,
-    Join, LeftJoin, Op, OrderLimit, PathPattern, Project, RecallPattern, RowNumber, TextPattern,
-    TriplePattern, Union, Unnest, Values, VectorPattern,
+    goal_variables, Aggregate, DatalogPattern, DlProgramRef, Extend, Filter, GoalLanguage,
+    GraphSel, IrQuery, Join, LeftJoin, Op, OrderLimit, PathPattern, Project, RecallPattern,
+    RowNumber, TextPattern, TriplePattern, Union, Unnest, Values, VectorPattern,
 };
 pub use params::{params, Params};
 pub use path::{PathCompleteness, PathExpr, PathMode, TemporalPath};

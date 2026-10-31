@@ -4,9 +4,11 @@
 //! of `View::datalog`. Its arguments are constants or parameters, and a call runs
 //! once per query execution: the relation is cached per program, goal and view,
 //! so a later row, `CALL { }` subquery or `OPTIONAL MATCH` never runs it again.
+//! `CALL tiramemsu.elpi.query(program, goal)` is the same call of an ELPI goal
+//! (`lat.md/elpi#Own Calls`).
 
 use tm_core::Value;
-use tm_ir::{DatalogPattern, DlProgramRef, Op, TermOrVar, Var};
+use tm_ir::{DatalogPattern, DlProgramRef, GoalLanguage, Op, TermOrVar, Var};
 
 use super::{core, Exec, Row};
 use crate::ast::{Expr, ExprKind, Name};
@@ -15,6 +17,9 @@ use crate::value::Val;
 
 /// The procedure name (compared lower-case).
 pub const NAME: &str = "tiramemsu.datalog.query";
+
+/// The ELPI procedure name (compared lower-case).
+pub const ELPI_NAME: &str = "tiramemsu.elpi.query";
 
 fn shape(msg: impl std::fmt::Display) -> CypherError {
     core(tm_core::Error::DatalogCallShape {
@@ -37,16 +42,22 @@ impl Exec<'_> {
     /// string or `{text: "…"}`) and the goal body.
     // @tg: implements:: [[openspec:datalog-query-calls#Cypher goal procedure]] {since: "2026-10-28"}
     // @tg: implements:: [[openspec:datalog-query-calls#Evaluated once per query]] {since: "2026-10-28"}
+    // @tg: implements:: [[openspec:elpi-query-calls#ELPI goal calls]] {since: "2026-10-31"}
     pub(crate) fn exec_datalog_query(
         &mut self,
         rows: Vec<Row>,
         args: &[Expr],
         yields: &[(Name, Option<Name>)],
         standalone: bool,
+        language: GoalLanguage,
     ) -> CResult<(Vec<Row>, Vec<String>)> {
+        let name = match language {
+            GoalLanguage::Datalog => NAME,
+            GoalLanguage::Elpi => ELPI_NAME,
+        };
         if args.len() != 2 {
             return Err(shape(format!(
-                "{NAME} takes (program, goal), got {} arguments",
+                "{name} takes (program, goal), got {} arguments",
                 args.len()
             )));
         }
@@ -96,7 +107,7 @@ impl Exec<'_> {
             for (n, a) in yields {
                 let Some(i) = columns.iter().position(|c| *c == n.text) else {
                     return Err(CypherError::eval(format!(
-                        "{NAME}: no yield column `{}` (columns: {})",
+                        "{name}: no yield column `{}` (columns: {})",
                         n.text,
                         columns.join(", ")
                     )));
@@ -106,11 +117,12 @@ impl Exec<'_> {
             v
         };
         let view = self.view();
-        let key = format!("{program:?}\u{1}{goal}\u{1}{view:?}");
+        let key = format!("{language:?}\u{1}{program:?}\u{1}{goal}\u{1}{view:?}");
         let table = match self.datalog.get(&key) {
             Some(t) => t.clone(),
             None => {
                 let mut call = DatalogPattern::new(program, goal, view);
+                call.language = language;
                 for g in &vars {
                     call.outputs.push((g.clone(), Var::new(format!("dl_{g}"))));
                 }
