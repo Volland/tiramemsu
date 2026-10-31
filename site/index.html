@@ -11,7 +11,7 @@
 <body>
 <header class="top"><div class="wrap">
   <a class="brand" href="./"><img src="assets/logo.svg" alt="">Tiramemsu</a>
-  <nav class="menu"><a href="#why">Why</a><a href="#usecases">Use cases</a><a href="#features">Features</a><a href="#matrix">Matrix</a><a href="#start">Quick start</a><a href="benchmarks.html">Benchmarks</a><a href="articles/">Articles</a><a href="n3/">N3 book</a><a href="datalog/">Datalog</a><a href="paper/">Papers</a><a href="https://github.com/Volland/tiramemsu">GitHub</a></nav>
+  <nav class="menu"><a href="#why">Why</a><a href="#usecases">Use cases</a><a href="#features">Features</a><a href="#matrix">Matrix</a><a href="#start">Quick start</a><a href="benchmarks.html">Benchmarks</a><a href="articles/">Articles</a><a href="n3/">N3 book</a><a href="datalog/">Datalog</a><a href="elpi/">ELPI</a><a href="paper/">Papers</a><a href="https://github.com/Volland/tiramemsu">GitHub</a></nav>
 </div></header>
 
 <main>
@@ -106,6 +106,14 @@ past = db.as_of(instant=<span class="s">"2026-10-06T09:00:00Z"</span>)
     <div class="card"><span class="tag">Grounded</span><h3>Conclusions that fall</h3><p>A stored program can materialize its conclusions as derived beliefs that fall with their premises or with an edit of the program. Negation and aggregates are reconciled on each run.</p></div>
     <div class="card"><span class="tag">In queries</span><h3>A goal inside SPARQL or Cypher</h3><p>Join a recursive question, such as who is above Alice, with an ordinary pattern: <code>SERVICE &lt;urn:tiramemsu:dl:query&gt;</code> or <code>CALL tiramemsu.datalog.query</code>. <a href="articles/datalog-temporal-reasoning.html">Read the article</a>.</p></div>
   </div>
+  <h3 class="group">ELPI <span class="tag">preview</span></h3>
+  <p>Built and tested, not yet released: it needs lean-elpi 0.4 on crates.io and ships in a later release. <a href="articles/elpi-validators.html">See what it does</a>.</p>
+  <div class="grid four">
+    <div class="card"><span class="tag">λProlog</span><h3>Higher-order rules</h3><p>ELPI programs, run by lean-elpi, read memory through <code>tm.triple</code> on any view: hypothetical clauses (<code>=&gt;</code>), fresh names (<code>pi</code>) and rules over rules. Opt-in feature <code>elpi</code>. <a href="elpi/">The guide</a>.</p></div>
+    <div class="card"><span class="tag">Constraints</span><h3>Validators at commit</h3><p>A program's <code>tm.violation-delta</code> runs on every write, seeded by what the transaction added or retracted, under a budget that fails closed. A random-history test checks it refuses exactly the writes that introduce a violation.</p></div>
+    <div class="card"><span class="tag">Grounded</span><h3>Support the program states</h3><p><code>tm.conclude</code> lists the statements a conclusion rests on; the run refuses support it never read. Stored conclusions fall with a premise, the program or a library it includes.</p></div>
+    <div class="card"><span class="tag">In queries</span><h3>A goal inside SPARQL or Cypher</h3><p><code>SERVICE &lt;urn:tiramemsu:elpi:query&gt;</code> and <code>CALL tiramemsu.elpi.query</code> join an ELPI goal with ordinary patterns, once per query. <a href="articles/elpi-reasoning.html">Read the article</a>.</p></div>
+  </div>
   <h3 class="group">Recall</h3>
   <div class="grid four">
     <div class="card"><span class="tag">Meaning</span><h3>Vector recall</h3><p>Store the vectors your model computes and search them exactly (cosine, dot, L2; f32 or f16). Create, fill and drop indexes from Rust, SPARQL or Cypher. <a href="articles/vector-cookbook.html">Cookbook</a>.</p></div>
@@ -165,6 +173,10 @@ past = db.as_of(instant=<span class="s">"2026-10-06T09:00:00Z"</span>)
       <tr><td>Datalog goals and rules over valid time (DatalogMTL, Allen relations)</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td><td class="p">builds, untested</td><td class="y">✓</td><td class="y eng">✓</td><td class="y">✓</td></tr>
       <tr><td>Constraints enforced at commit</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td><td class="p">builds, untested</td><td class="y">✓</td><td class="y eng">✓</td><td class="y">✓</td></tr>
       <tr><td>Programs materialized as grounded beliefs</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td><td class="p">builds, untested</td><td class="y">✓</td><td class="y eng">✓</td><td class="y">✓</td></tr>
+      <tr class="grp"><td colspan="8">ELPI, preview: not yet released (opt-in feature <code>elpi</code>, links lean-elpi; macOS and Linux)</td></tr>
+      <tr><td>ELPI goals, checks and conclusions over any view</td><td class="y">✓</td><td class="n">–</td><td class="n">–</td><td class="n">–</td><td class="y">✓</td><td class="y eng">✓</td><td class="y">✓</td></tr>
+      <tr><td>ELPI validators enforced at commit</td><td class="y">✓</td><td class="n">–</td><td class="n">–</td><td class="n">–</td><td class="y">✓</td><td class="y eng">✓</td><td class="y">✓</td></tr>
+      <tr><td>ELPI programs materialized as grounded beliefs</td><td class="y">✓</td><td class="n">–</td><td class="n">–</td><td class="n">–</td><td class="y">✓</td><td class="y eng">✓</td><td class="y">✓</td></tr>
       <tr class="grp"><td colspan="8">Recall</td></tr>
       <tr><td>Text recall (BM25)</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td><td class="y eng">FTS5</td><td class="y">own index</td></tr>
       <tr><td>Vector search, exact and view-aware</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td><td class="y">✓</td><td class="y eng">✓</td><td class="y">✓</td></tr>

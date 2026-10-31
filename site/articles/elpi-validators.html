@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Validators that ask “what if”: tiramemsu</title>
+<meta name="description" content="A hands-on tour of ELPI in Tiramemsu: questions over memory, hypothetical answers with =>, policies as predicates, pi for any member, validators that refuse a bad write, and grounded conclusions. Preview: not yet released.">
+<link rel="icon" href="../assets/logo.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+<header class="top"><div class="wrap">
+  <a class="brand" href="../"><img src="../assets/logo.svg" alt="">Tiramemsu</a>
+  <nav class="menu"><a href="../#features">Features</a><a href="../#start">Quick start</a><a href="./" aria-current="page">Articles</a><a href="../datalog/">Datalog</a><a href="../elpi/">ELPI</a><a href="../paper/">Papers</a><a href="https://github.com/Volland/tiramemsu">GitHub</a></nav>
+</div></header>
+
+<article class="post">
+<h1>Validators that ask “what if”</h1>
+<p class="meta">Tiramemsu articles · 31 October 2026</p>
+<p class="meta"><strong>Preview:</strong> ELPI support is built and tested but not yet released; it needs lean-elpi 0.4 on crates.io and will ship in a later release (feature <code>elpi</code>, off by default).</p>
+
+<p><em>A hands-on tour of ELPI in Tiramemsu: questions over memory, hypothetical answers that change nothing, policies passed around as data, guards that refuse a bad write, and conclusions that stay grounded. Every example below is a test in the repository.</em></p>
+<blockquote>
+<p><strong>Preview.</strong> ELPI support is built and tested but not released. It needs lean-elpi 0.4, whose host callbacks are not on crates.io yet, and it will ship in a later Tiramemsu release. The feature is called <code>elpi</code>, and it is off by default.</p>
+</blockquote>
+<p>An agent’s memory is full of rules nobody wrote down: one CEO at a time, every project has an owner, a report needs a reviewer who is not its author. Tiramemsu can check rules like these in Datalog. Some questions, though, are not about what is true but about what would be true if something changed. Would the team still reach Erin if Bob left? Does this policy hold for any new member, whoever that is? Which of these ten policies does this project break, when the policies themselves are data?</p>
+<p>These are λProlog’s home ground, and ELPI is the dialect of λProlog that Tiramemsu runs, through lean-elpi. This article walks through six small programs, from a plain question to a guard that runs on every write.</p>
+<h2>Setup</h2>
+<p>Build with the feature <code>elpi</code> and point <code>LEANELPI_DIST</code> at the directory that holds <code>libleanelpi</code>. The examples use this team:</p>
+<pre class="text"><code>alice → bob → dana → erin
+alice → carol → dana</code></pre>
+<p>Each arrow is a <code>v:manager</code> statement: alice manages bob and carol, both of them manage dana, and dana manages erin.</p>
+<h2>1. Ask a question</h2>
+<p>A program reads memory with <code>tm.triple S P O E</code>. <code>E</code> is the statement as <code>(eid N)</code>, and values are wrapped by type: IRIs in <code>(iri "…")</code>, strings in <code>(str "…")</code>, integers in <code>(num N)</code>.</p>
+<pre><code>pred reaches o:term, o:term.
+reaches X Y :- tm.triple X (iri &quot;urn:tiramemsu:v:manager&quot;) Y _.
+reaches X Z :- tm.triple X (iri &quot;urn:tiramemsu:v:manager&quot;) Y _, reaches Y Z.</code></pre>
+<pre class="rust"><code>let r = db.now().elpi(&amp;program, r#&quot;reaches (iri &quot;urn:tiramemsu:v:alice&quot;) Y&quot;#, &amp;ElpiOptions::default())?;</code></pre>
+<p>The goal returns bob, carol, dana and erin. Dana and erin appear twice, once through bob and once through carol, because the search finds each path. The program never sees a copy of memory: each <code>tm.triple</code> call is an index lookup on the view, and an as-of view runs it over memory as it was then.</p>
+<h2>2. Ask what would happen</h2>
+<p>Add one predicate that no clause defines, and let the rules respect it:</p>
+<pre><code>pred gone o:term.
+reaches X Y :- tm.triple X (iri &quot;urn:tiramemsu:v:manager&quot;) Y _, not (gone Y).
+reaches X Z :- tm.triple X (iri &quot;urn:tiramemsu:v:manager&quot;) Y _, not (gone Y), reaches Y Z.</code></pre>
+<p>Now ask the question under an assumption:</p>
+<pre><code>gone (iri &quot;urn:tiramemsu:v:bob&quot;) =&gt; reaches (iri &quot;urn:tiramemsu:v:alice&quot;) Y</code></pre>
+<p><code>=&gt;</code> adds the clause <code>gone bob</code> for this one goal. Alice still reaches carol, dana and erin, so losing bob breaks nothing. Assume both are gone:</p>
+<pre><code>(gone (iri &quot;urn:tiramemsu:v:bob&quot;), gone (iri &quot;urn:tiramemsu:v:carol&quot;)) =&gt; reaches (iri &quot;urn:tiramemsu:v:alice&quot;) Y</code></pre>
+<p>There is no answer: without bob and carol, alice reaches nobody. Nothing was written or retracted. The next plain query returns the full chain again, and the store’s history shows no write. In SPARQL or Datalog the usual way is a speculative transaction that is rolled back. Here the hypothesis is part of the question.</p>
+<h2>3. Policies are data</h2>
+<p>In λProlog a predicate can be an argument. So a policy can be a named check that the validator applies, and a new policy is one more clause, not a new rule:</p>
+<pre><code>pred policy o:string, o:(term -&gt; prop).
+policy &quot;has an owner&quot;   (P\ tm.triple P (iri &quot;urn:tiramemsu:v:owner&quot;) _ _).
+policy &quot;has a due date&quot; (P\ tm.triple P (iri &quot;urn:tiramemsu:v:due&quot;) _ _).
+
+tm.violation warn Name &quot;a project breaks a policy&quot; [E] :-
+  tm.triple P (iri &quot;urn:tiramemsu:v:type&quot;) (iri &quot;urn:tiramemsu:v:Project&quot;) E,
+  policy Name Check, not (Check P).</code></pre>
+<p><code>P\ …</code> is a lambda, and <code>Check P</code> applies it. Take two projects: p1 has an owner but no due date, and p2 has a due date but no owner. Then <code>View::elpi_check</code> reports two <code>warn</code> violations, “has a due date” and “has an owner”. Each one cites the project’s type statement and carries the time over which that statement holds. Storing the policies as an ELPI program makes them versioned like any other statement: edit one, and the next check uses the new text.</p>
+<h2>4. For any member at all</h2>
+<p><code>pi x\</code> introduces a name that exists nowhere else. Together with <code>=&gt;</code> it checks that a rule holds for any member, not just the ones in memory:</p>
+<pre><code>pred member o:term, o:term.
+pred staffed o:term.
+staffed T :- member _ T.
+
+pred rule_ok.
+rule_ok :- pi x\ member x (iri &quot;urn:tiramemsu:v:fresh&quot;) =&gt; staffed (iri &quot;urn:tiramemsu:v:fresh&quot;).</code></pre>
+<p><code>rule_ok</code> succeeds: whoever the new member is, a team with that member counts as staffed. This is the shape of a schema or contract check. You test the rule against an arbitrary member rather than a sample.</p>
+<h2>5. Refuse a bad write</h2>
+<p>A validator can guard every commit. It states its violation twice: a full form for the first check, and a delta form that starts from what the transaction added.</p>
+<pre><code>tm.violation error &quot;one_ceo&quot; &quot;two CEOs&quot; [E1, E2] :-
+  tm.triple X (iri &quot;urn:tiramemsu:v:role&quot;) (iri &quot;urn:tiramemsu:v:CEO&quot;) E1,
+  tm.triple Y (iri &quot;urn:tiramemsu:v:role&quot;) (iri &quot;urn:tiramemsu:v:CEO&quot;) E2,
+  not (X = Y), E1 = eid N1, E2 = eid N2, N1 &lt; N2.
+
+tm.violation-delta &quot;one_ceo&quot; &quot;two CEOs&quot; [E1, E2] :-
+  tm.added X (iri &quot;urn:tiramemsu:v:role&quot;) (iri &quot;urn:tiramemsu:v:CEO&quot;) E1,
+  tm.triple Y (iri &quot;urn:tiramemsu:v:role&quot;) (iri &quot;urn:tiramemsu:v:CEO&quot;) E2,
+  not (X = Y).</code></pre>
+<pre class="rust"><code>db.transact(TxOptions::default(), |tx| {
+    tx.store_elpi_program(v(&quot;policy&quot;), POLICY)?;
+    tx.enforce_elpi(v(&quot;policy&quot;), true)?;
+    Ok(())
+})?;</code></pre>
+<p>From then on, a transaction that asserts a second CEO fails with <code>ConstraintViolated</code> and writes nothing, while one that only renames someone commits. A delta form can also start from <code>tm.retracted</code>, which catches a project losing its only owner.</p>
+<p>Each check runs under the commit’s budget, and a validator that loops fails the write instead of holding the writer. A property test offers random histories to an enforced database and to an unenforced copy. It checks that a write is refused exactly when the full check on the copy finds a violation the write introduced.</p>
+<h2>6. Remember what follows</h2>
+<p><code>tm.conclude</code> states a conclusion and the statements it rests on:</p>
+<pre><code>tm.conclude (triple X (iri &quot;urn:tiramemsu:v:grandmanager&quot;) Z) [E1, E2] :-
+  tm.triple X (iri &quot;urn:tiramemsu:v:manager&quot;) Y E1,
+  tm.triple Y (iri &quot;urn:tiramemsu:v:manager&quot;) Z E2.</code></pre>
+<p><code>Db::materialize_elpi</code> writes each conclusion as a derived belief, supported by the listed statements, by the program and by any library it includes. Retract <code>bob manager dana</code> and alice stops being dana’s grandmanager through bob. Edit the program, and all its conclusions go. A program cannot claim support it never read, because the run refuses any statement id its builtins did not return. Running it again with nothing changed writes nothing.</p>
+<h2>Inside a query</h2>
+<p>A goal can be one part of a SPARQL or Cypher query, so ELPI answers join ordinary patterns:</p>
+<pre class="sparql"><code>SELECT ?Y ?mail WHERE {
+  SERVICE &lt;urn:tiramemsu:elpi:query&gt; {
+    [] elpi:program v:reporting ; elpi:goal &quot;reports (iri \&quot;urn:tiramemsu:v:alice\&quot;) Y&quot; }
+  ?Y v:email ?mail }</code></pre>
+<h2>Which language when</h2>
+<ul>
+<li><strong>Datalog:</strong> use it for recursion and aggregates at scale, and for rules over valid time with its temporal operators. It is the fast path and it enforces constraints by itself.</li>
+<li><strong>N3:</strong> use it when the rules come as N3, or when you want proofs in N3’s own vocabulary.</li>
+<li><strong>ELPI:</strong> use it when the rule needs search, an assumption (<code>=&gt;</code>), a fresh name (<code>pi</code>) or a rule as an argument. This is the case for validators and contracts.</li>
+</ul>
+<p>All three store their programs the same way, read the same views and write conclusions that fall with their premises. A node holds programs of one language only.</p>
+<h2>Limits</h2>
+<p>ELPI is in preview. lean-elpi is about 2.4 times slower than ELPI 1.18, and Tiramemsu has no ELPI benchmark yet. The native library exists for macOS and Linux only, so the Node, Python and browser packages leave ELPI out. The command line, the MCP server and Rust have it.</p>
+<p>The guide has every call, term and error. The engineering story, from callbacks to the bugs the tests found, is the companion article <em>λProlog in a bitemporal memory</em>.</p>
+
+<p><a href="../elpi/">The ELPI guide →</a> · <a href="elpi-reasoning.html">Related: λProlog in a bitemporal memory →</a></p>
+</article>
+
+<footer><div class="wrap">
+  <span>Tiramemsu · MIT OR Apache-2.0 · <a href="https://github.com/Volland/tiramemsu">github.com/Volland/tiramemsu</a></span>
+  <span><a href="../">Home</a> · <a href="./">All articles</a></span>
+  <span><a href="../impressum.html">Impressum</a> · <a href="../datenschutz.html">Datenschutz</a> · <a href="../agb.html">AGB</a></span>
+</div></footer>
+</body>
+</html>

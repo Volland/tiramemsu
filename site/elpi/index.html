@@ -1,0 +1,246 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ELPI in Tiramemsu: a guide</title>
+<meta name="description" content="A practical guide to ELPI (λProlog) in Tiramemsu: host builtins over a view, terms, valid time, constraints enforced at commit, stored programs with includes, materialization, and goal calls from SPARQL and Cypher.">
+<link rel="icon" href="../assets/logo.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+<header class="top"><div class="wrap">
+  <a class="brand" href="../"><img src="../assets/logo.svg" alt="">Tiramemsu</a>
+  <nav class="menu"><a href="../#features">Features</a><a href="../#start">Quick start</a><a href="../datalog/">Datalog guide</a><a href="./" aria-current="page">ELPI guide</a><a href="../n3/">N3 book</a><a href="../articles/">Articles</a></nav>
+</div></header>
+
+<article class="post">
+<h1>ELPI in Tiramemsu: a guide</h1>
+<p class="meta">Guide · feature <code>elpi</code> · crates <code>tm-elpi</code>, <code>tm-elpi-store</code></p>
+<p class="meta"><strong>Preview:</strong> ELPI support is built and tested but not yet released; it needs lean-elpi 0.4 on crates.io and will ship in a later release (feature <code>elpi</code>, off by default).</p>
+
+<p>ELPI is Tiramemsu’s third reasoning language, after N3 and Datalog. It is a dialect of λProlog with higher-order clauses, hypothetical reasoning (<code>=&gt;</code>, <code>pi</code>) and constraint handling rules, run by <a href="https://github.com/Volland/lean-elpi">lean-elpi</a>, an implementation in Lean 4. Use it for validators that need search, rules about rules, or questions of the form “what would follow if…”. This guide covers the calls, the terms, time, constraints, stored programs and materialization. The <a href="../articles/elpi-reasoning.html">long read</a> explains the design, and the decisions are in <code>lat.md/elpi.md</code> (E1 to E13).</p>
+<p>ELPI is the opt-in facade feature <code>elpi</code> (crates <code>tm-elpi</code> and <code>tm-elpi-store</code>). It links the native library <code>libleanelpi</code>, which carries the Lean runtime and exists for macOS and Linux on arm64 and x86-64. Point <code>LEANELPI_DIST</code> at the directory that holds it. No build turns ELPI on by default, and the Node, Python and wasm packages leave it out. The CLI and the MCP server have the feature as well.</p>
+<p><strong>Status.</strong> Built and tested. It needs lean-elpi 0.4, which adds host callbacks and structured answers to its C interface and is not on crates.io yet, so for now the workspace builds against a lean-elpi checkout next to the repository.</p>
+<h2 id="five-minutes">Five minutes</h2>
+<p>Store two statements, then ask a question in ELPI:</p>
+<pre class="rust"><code>let v = |s: &amp;str| Value::iri(format!(&quot;urn:tiramemsu:v:{s}&quot;));
+db.transact(TxOptions::default(), |tx| {
+    tx.assert(v(&quot;alice&quot;), v(&quot;manager&quot;), v(&quot;bob&quot;), Valid::ALWAYS)?;
+    tx.assert(v(&quot;bob&quot;), v(&quot;manager&quot;), v(&quot;carol&quot;), Valid::ALWAYS)?;
+    Ok(())
+})?;
+let program = ElpiProgram::Text(r#&quot;
+pred reports o:term, o:term.
+reports X Y :- tm.triple X (iri &quot;urn:tiramemsu:v:manager&quot;) Y _.
+reports X Z :- tm.triple X (iri &quot;urn:tiramemsu:v:manager&quot;) Y _, reports Y Z.
+&quot;#.into());
+let r = db.now().elpi(&amp;program, r#&quot;reports (iri &quot;urn:tiramemsu:v:alice&quot;) Y&quot;#, &amp;ElpiOptions::default())?;
+// two rows: Y = bob and Y = carol</code></pre>
+<p>From the command line, with the program in a file <code>reporting.elpi</code>, run <code>tm elpi query mem.db reporting.elpi 'reports (iri "urn:tiramemsu:v:alice") Y'</code>. The bridge op is <code>elpi</code> and the MCP tool is <code>elpi_query</code>.</p>
+<h2 id="reading-the-store">Reading the store</h2>
+<p>A program never sees a copy of memory. It calls four host predicates, and tiramemsu answers each call from the view:</p>
+<table>
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
+<thead>
+<tr>
+<th>Predicate</th>
+<th>Reads</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>tm.triple S P O E</code></td>
+<td>statements of the view; <code>E</code> is the statement as <code>(eid N)</code></td>
+</tr>
+<tr>
+<td><code>tm.valid E From To</code></td>
+<td>the valid interval of statement <code>E</code>, bounds <code>(at Ms)</code> or <code>inf</code></td>
+</tr>
+<tr>
+<td><code>tm.added S P O E</code></td>
+<td>statements the current transaction added (commit-time checks only)</td>
+</tr>
+<tr>
+<td><code>tm.retracted S P O E</code></td>
+<td>statements the current transaction retracted (commit-time checks only)</td>
+</tr>
+</tbody>
+</table>
+<p>A bound argument becomes an index lookup: <code>tm.triple (iri "urn:tiramemsu:v:alice") P O E</code> reads only alice’s statements. A bound value that is not in the dictionary matches nothing and reads nothing. A run counts the rows these predicates return against a budget (<code>ElpiOptions::max_rows</code>, 10⁷ by default) and counts its resolution steps against <code>fuel</code>.</p>
+<h2 id="terms">Terms</h2>
+<p>ELPI is typed, so every tiramemsu value is a <code>term</code> built by one constructor of the prelude, which every program is loaded after:</p>
+<table>
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
+<thead>
+<tr>
+<th>Value</th>
+<th>Term</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>IRI</td>
+<td><code>(iri "urn:ex:a")</code></td>
+</tr>
+<tr>
+<td>string</td>
+<td><code>(str "Ann")</code></td>
+</tr>
+<tr>
+<td>integer</td>
+<td><code>(num 41)</code>, so <code>N</code> in <code>(num N)</code> is an ELPI <code>int</code></td>
+</tr>
+<tr>
+<td>double</td>
+<td><code>(dbl 1.5)</code></td>
+</tr>
+<tr>
+<td>boolean</td>
+<td><code>(bool "true")</code></td>
+</tr>
+<tr>
+<td>language-tagged string</td>
+<td><code>(lang "Hallo" "de")</code></td>
+</tr>
+<tr>
+<td>any other literal</td>
+<td><code>(lit "2024-01-02" "http://www.w3.org/2001/XMLSchema#date")</code></td>
+</tr>
+<tr>
+<td>node, blank node, transaction</td>
+<td><code>(node 3)</code>, <code>(bnode 4)</code>, <code>(tx 9)</code></td>
+</tr>
+<tr>
+<td>statement as a value</td>
+<td><code>(stmtv (eid 12))</code></td>
+</tr>
+</tbody>
+</table>
+<p>Arithmetic works on the unwrapped value: <code>tm.triple _ (iri "urn:tiramemsu:v:age") (num N) _, M is N + 1</code> binds <code>M</code> to <code>42</code> for a stored age of 41. A solution’s variables come back as values. A term that no value holds, such as a list or a lambda, comes back printed (<code>ElpiTerm::Other</code>).</p>
+<h2 id="time">Time</h2>
+<p>Transaction time is the view’s: on <code>db.as_of(TimeRef::Tx(t))</code> a program reads memory as it was believed then, and it runs the program text believed then too.</p>
+<p>Valid time is pointwise. A goal query reads the statements valid at one instant: the view’s <code>valid_at</code>, else <code>ElpiOptions::valid_at</code>, else now. A statement valid over <code>[2020, 2024)</code> is not read at 2025.</p>
+<p>Conclusions and constraint checks read every statement and work out when their result holds. A conclusion holds over the intersection of its support’s intervals. Premises valid over <code>[2020, 2025)</code> and <code>[2022, ∞)</code> give <code>[2022, 2025)</code>, and premises that were never valid together give nothing. A program that uses negation, cut, <code>findall</code> or <code>tm.retracted</code> is evaluated once per valid-time segment instead, because there the absence of a fact matters too.</p>
+<h2 id="constraints">Constraints</h2>
+<p>A program states violations as clauses of <code>tm.violation</code>:</p>
+<pre><code>tm.violation error &quot;one_ceo&quot; &quot;two CEOs&quot; [E1, E2] :-
+  tm.triple X (iri &quot;urn:tiramemsu:v:role&quot;) (iri &quot;urn:tiramemsu:v:CEO&quot;) E1,
+  tm.triple Y (iri &quot;urn:tiramemsu:v:role&quot;) (iri &quot;urn:tiramemsu:v:CEO&quot;) E2,
+  not (X = Y), E1 = eid N1, E2 = eid N2, N1 &lt; N2.</code></pre>
+<p>The arguments are the severity (<code>error</code> or <code>warn</code>), a name, a message and the statements the violation cites. <code>View::elpi_check</code> runs every <code>tm.violation</code> and reports each violation with the interval over which its statements hold together. Two CEOs whose terms never overlap are not a violation. The bridge op is <code>elpiCheck</code>, the MCP tool <code>elpi_check</code>, and the CLI command <code>tm elpi check</code>.</p>
+<h3 id="enforced-at-commit">Enforced at commit</h3>
+<p><code>tx.enforce_elpi(program, true)</code> writes <code>(program elpi:enforced true)</code>. At that commit the full <code>tm.violation</code> runs, and an <code>error</code> violation fails the transaction with <code>ConstraintViolated</code>. On every later commit tiramemsu runs <code>tm.violation-delta Name Msg Eids</code> instead. In it, <code>tm.added</code> and <code>tm.retracted</code> read only what the transaction changed, so the check costs what the write costs:</p>
+<pre><code>tm.violation-delta &quot;one_ceo&quot; &quot;two CEOs&quot; [E1, E2] :-
+  tm.added X (iri &quot;urn:tiramemsu:v:role&quot;) (iri &quot;urn:tiramemsu:v:CEO&quot;) E1,
+  tm.triple Y (iri &quot;urn:tiramemsu:v:role&quot;) (iri &quot;urn:tiramemsu:v:CEO&quot;) E2,
+  not (X = Y).</code></pre>
+<p>You write the delta form, because ELPI programs cannot be unfolded automatically the way Datalog constraints can. A delta form that starts from <code>tm.retracted</code> catches violations caused by a removal, such as a project losing its only owner.</p>
+<ul>
+<li>A violation that the view as of the previous transaction already held does not fail the commit.</li>
+<li>A program without delta clauses is only checked when its text or its enforcement changes.</li>
+<li>Changing the text of an enforced program, or of a program it includes, runs the full check again.</li>
+</ul>
+<p>The checks of one commit run under the constraint budget (<code>OpenOptions::constraint_budget</code>). The row cap is <code>max_seed_rows</code>, and the deadline becomes fuel at 4000 resolution steps per millisecond. A check that loops fails the transaction with <code>ConstraintBudgetExceeded</code> and writes nothing. A property test checks that an enforced program refuses a random transaction exactly when the full check finds a violation the transaction introduced.</p>
+<h2 id="stored-programs">Stored programs</h2>
+<p><code>tx.store_elpi_program(program, text)</code> loads the text to check it, then makes <code>(program elpi:source "&lt;text&gt;")</code> the node’s one live source. New text supersedes the old version, and the same text writes nothing. A node holds rules of one language: storing ELPI on a node with N3 rules or a Datalog program, or the reverse, fails with <code>RuleLanguageConflict</code>.</p>
+<p>A line <code>accumulate &lt;iri&gt;.</code> includes another stored program, read from the same view:</p>
+<pre><code>accumulate &lt;urn:tiramemsu:v:lib&gt;.
+pred boss o:term.
+boss Y :- reports (iri &quot;urn:tiramemsu:v:alice&quot;) Y.</code></pre>
+<p>Includes nest. A cycle fails with <code>ProgramCycle</code> and a missing program with <code>UnknownProgram</code>. <code>View::elpi_program_info</code> lists the text, the source statement, every program included with its own source statement, whether the program may be non-monotonic, and whether it is enforced.</p>
+<h2 id="materialization">Materialization</h2>
+<p>A program states conclusions as clauses of <code>tm.conclude</code>, listing the statements each one rests on:</p>
+<pre><code>tm.conclude (triple X (iri &quot;urn:tiramemsu:v:grandparent&quot;) Z) [E1, E2] :-
+  tm.triple X (iri &quot;urn:tiramemsu:v:parent&quot;) Y E1,
+  tm.triple Y (iri &quot;urn:tiramemsu:v:parent&quot;) Z E2.</code></pre>
+<p><code>View::elpi_conclude</code> returns the conclusions without writing. <code>Db::materialize_elpi(program, opts)</code> runs the stored program on a snapshot and writes each conclusion as a derived belief, in one short transaction.</p>
+<ul>
+<li><strong>Support.</strong> A conclusion is supported by the statements it lists, the program’s source statement and the source of every program it includes. It falls when a premise is retracted or when any of those programs is edited.</li>
+<li><strong>No forged support.</strong> Every listed statement must be one the run’s builtins returned, so a program cannot claim support it never read. An empty list is refused.</li>
+<li><strong>Re-runs.</strong> Materializing again with no writes in between derives nothing. Each run retracts the program’s earlier conclusions that it no longer derives, so a conclusion drawn from negation goes away once a new fact contradicts it.</li>
+<li><strong>Reruns after writes.</strong> A program that may be non-monotonic is listed in <code>needs_rerun_after_writes</code>.</li>
+</ul>
+<p>From the command line: <code>tm elpi program put mem.db urn:tiramemsu:v:g grand.elpi</code>, then <code>tm elpi materialize mem.db urn:tiramemsu:v:g</code>.</p>
+<h2 id="goals-inside-sparql-and-cypher">Goals inside SPARQL and Cypher</h2>
+<p>An ELPI goal can be one part of a query, joined with ordinary patterns. It runs once per query, through the same path as Datalog goal calls:</p>
+<pre class="sparql"><code>SELECT ?Y ?mail WHERE {
+  SERVICE &lt;urn:tiramemsu:elpi:query&gt; {
+    [] elpi:program v:reporting ; elpi:goal &quot;reports (iri \&quot;urn:tiramemsu:v:alice\&quot;) Y&quot; }
+  ?Y v:email ?mail }</code></pre>
+<pre class="cypher"><code>CALL tiramemsu.elpi.query(&#39;v:reporting&#39;, &#39;reports (iri &quot;urn:tiramemsu:v:alice&quot;) Y&#39;) YIELD Y
+MATCH (m) WHERE m = Y RETURN m.email</code></pre>
+<p>Each goal variable binds the query variable of the same name. <code>elpi:text "…"</code> (or <code>{text: "…"}</code> in Cypher) runs program text instead of a stored program. Two limits:</p>
+<ul>
+<li>A goal reads one valid instant, so <code>elpi:validFrom</code> and <code>elpi:validTo</code> stay unbound.</li>
+<li>A query row holds only stored terms, so a value the program computed and never stored fails the query with <code>Unsupported</code>. Use <code>View::elpi</code> for those.</li>
+</ul>
+<h2 id="every-surface">Every surface</h2>
+<table>
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
+<thead>
+<tr>
+<th>Surface</th>
+<th>Calls</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Rust</td>
+<td><code>View::elpi</code>, <code>elpi_check</code>, <code>elpi_conclude</code>, <code>elpi_program_info</code>; <code>TxElpi::store_elpi_program</code>, <code>enforce_elpi</code>; <code>Db::materialize_elpi</code></td>
+</tr>
+<tr>
+<td>CLI (<code>tm</code>, feature <code>elpi</code>)</td>
+<td><code>tm elpi query</code>, <code>check</code>, <code>conclude</code>, <code>materialize</code>, <code>program put\|show\|enforce\|unenforce</code></td>
+</tr>
+<tr>
+<td>JSON bridge (feature <code>elpi</code>)</td>
+<td><code>elpi</code>, <code>elpiCheck</code>, <code>elpiConclude</code>, <code>elpiProgramInfo</code>, <code>storeElpiProgram</code>, <code>enforceElpi</code>, <code>materializeElpi</code></td>
+</tr>
+<tr>
+<td>MCP (feature <code>elpi</code>)</td>
+<td><code>elpi_query</code>, <code>elpi_check</code>; write tools <code>store_elpi_program</code>, <code>enforce_elpi</code>, <code>materialize_elpi</code></td>
+</tr>
+<tr>
+<td>SPARQL, Cypher</td>
+<td><code>SERVICE &lt;urn:tiramemsu:elpi:query&gt;</code>, <code>CALL tiramemsu.elpi.query</code></td>
+</tr>
+</tbody>
+</table>
+<h2 id="errors">Errors</h2>
+<ul>
+<li><code>ElpiProgram</code>: the text does not parse, typecheck or load.</li>
+<li><code>ElpiRun</code>: a runtime error, or support the run never read.</li>
+<li><code>ElpiOutOfFuel</code>: the fuel or the row budget ran out.</li>
+<li><code>ProgramCycle</code>: stored programs include each other.</li>
+<li><code>UnknownProgram</code> and <code>RuleLanguageConflict</code>: as for Datalog.</li>
+<li><code>ConstraintViolated</code> and <code>ConstraintBudgetExceeded</code>: at commit.</li>
+</ul>
+<p>Without the feature every ELPI call fails with <code>Unsupported</code>.</p>
+<h2 id="limits">Limits</h2>
+<ul>
+<li>lean-elpi is about 2.4 times slower than ELPI 1.18 (by geometric mean on ELPI’s own benchmarks). No speed gate is set and no tiramemsu benchmark of ELPI exists yet.</li>
+<li>A host predicate returns all rows of one call at once, not lazily, so the row budget is what bounds memory.</li>
+<li>Programs choose no intervals: tiramemsu computes when a conclusion holds.</li>
+<li>There are no packages for Node, Python or the browser. lean-elpi has no Windows or wasm build.</li>
+</ul>
+
+<p><a href="../articles/elpi-reasoning.html">The long read: λProlog in a bitemporal memory →</a></p>
+</article>
+
+<footer><div class="wrap">
+  <span>Tiramemsu · MIT OR Apache-2.0 · <a href="https://github.com/Volland/tiramemsu">github.com/Volland/tiramemsu</a></span>
+  <span><a href="../">Home</a> · <a href="../articles/">Articles</a></span>
+  <span><a href="../impressum.html">Impressum</a> · <a href="../datenschutz.html">Datenschutz</a> · <a href="../agb.html">AGB</a></span>
+</div></footer>
+</body>
+</html>
