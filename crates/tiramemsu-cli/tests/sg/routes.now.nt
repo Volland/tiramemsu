@@ -1,0 +1,6 @@
+<http://example.org/FRA> <http://example.org/route> <http://example.org/LHR> .
+<urn:tiramemsu:stmt:1> <http://example.org/distance> "655"^^<http://www.w3.org/2001/XMLSchema#integer> .
+<urn:tiramemsu:stmt:1> <http://www.w3.org/1999/02/22-rdf-syntax-ns#reifies> <<( <http://example.org/FRA> <http://example.org/route> <http://example.org/LHR> )>> .
+<urn:tiramemsu:stmt:1> <urn:tiramemsu:tm:txAdded> "1"^^<http://www.w3.org/2001/XMLSchema#integer> .
+<urn:tiramemsu:stmt:2> <http://www.w3.org/1999/02/22-rdf-syntax-ns#reifies> <<( <urn:tiramemsu:stmt:1> <http://example.org/distance> "655"^^<http://www.w3.org/2001/XMLSchema#integer> )>> .
+<urn:tiramemsu:stmt:2> <urn:tiramemsu:tm:txAdded> "2"^^<http://www.w3.org/2001/XMLSchema#integer> .

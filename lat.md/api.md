@@ -184,8 +184,29 @@ Bindings wrap the facade crate one to one. Python, Node, WASM and the MCP server
 - **N3 reasoning** (feature `n3`, on by default; [[reasoning]], [[crates/tiramemsu-cli/src/n3.rs]]): `tm reason <file> (--rules <path> | --rule-set <iri>) [--as-of <t> | --as-of-instant <instant>] [--valid-at <instant> | --valid-during <from>..<to>] [--graph <iri>]… [--atemporal] [--max-segments n] [--proof] [--json]` prints one conclusion per line, `(v:socrates rdf:type v:Mortal)  always`, and a summary on stderr; `tm rules put <file> <iri> <path>` stores a rule set and `tm rules show <file> <iri> [--json]` prints it; `tm materialize <file> <iri> [--valid-during <from>..<to>] [--graph <iri>]… [--require-complete] [--dry-run] [--json]` writes conclusions, and with `--dry-run` lists what would be derived and writes nothing. Instants are epoch milliseconds or RFC 3339 dates and date-times; a window side may be empty. `--json` prints the bridge's result ([[bindings#JSON Bridge#N3 Reasoning]]).
 - **Datalog** (feature `datalog`, on by default; [[datalog]], [[crates/tiramemsu-cli/src/datalog.rs]]): `tm datalog <file> <program> [goal]` runs a goal of a program file or stored program IRI and prints one row per line, `X=v:bob  always`, with the view and run flags of `tm reason` plus `--no-demand`, `--proof`, `--explain` and `--json`; `tm check <file> <program> [--only <name>]…` prints each violated constraint and its violations; `tm program put <file> <iri> <path>` stores a program, `tm program show <file> <iri> [--json]` prints it and whether it is enforced, `tm materialize-program <file> <iri> [--valid-during <from>..<to>] [--graph <iri>]… [--require-complete] [--dry-run] [--json]` writes a stored program's conclusions, and `tm program enforce|unenforce <file> <iri>` turns commit-time checking of its `error` constraints on or off; a refused write prints its violations ([[bindings#JSON Bridge#Datalog]]).
 - **Formats:** `table`, SPARQL 1.1 `json`/`csv`/`tsv`, `ntriples` for `CONSTRUCT`; Cypher prints the bridge's JSON. Terms in tables are N-Triples ([[crates/tm-core/src/rdf.rs#write_term]]).
-- **Import and export** ([[crates/tiramemsu-cli/src/rdfio.rs]]): N-Triples, N-Quads, Turtle and TriG through `oxttl`, in bulk-import chunks ([[query#Bulk Import]]); blank-node labels are scoped to their file. Export writes the live statements, without the engine's `urn:tiramemsu:sys:` predicates, and each named-graph membership as a quad.
+- **Import and export** ([[crates/tiramemsu-cli/src/rdfio.rs]]): N-Triples, N-Quads, Turtle and TriG through `oxttl`, in bulk-import chunks ([[query#Bulk Import]]); blank-node labels are scoped to their file. Export writes the live statements, without the engine's `urn:tiramemsu:sys:` predicates, and each named-graph membership as a quad. `--format sg-nt12` writes every statement with its clocks instead ([[api#Statement Graph Export]]).
 - **Errors:** the typed error name and message on stderr and exit code 1 (`Parse: …`, `AlreadyExists: …`); usage errors exit with code 2. `--explain` covers SPARQL; Cypher has no explain entry point yet.
+
+## Statement Graph Export
+
+`tm export <file> --format sg-nt12 [--as-of T | --history] [--valid-at MS]` writes memory whole as RDF 1.2: every statement with its id and both clocks, in LeanRDF's proven format.
+
+The writer is [[crates/tiramemsu-cli/src/sg.rs#export_sg]]. For each statement `e` it writes:
+- `stmt:e rdf:reifies <<( s p o )>>`;
+- `tm:txAdded`, and `tm:txRetracted` when retracted;
+- `tm:validFromMs` and `tm:validToMs`, as `xsd:integer`;
+- the base triple, when `e` is live in the selected view.
+
+Statement references inside the triple term are `urn:tiramemsu:stmt:n`, as everywhere else ([[crates/tm-core/src/rdf.rs#render]]).
+
+- **The format is LeanRDF's.** `leanrdf-statements` (LeanRDF v0.3.1, `statements/`) defines it, and proves its decoder exact both ways (`decode_toRDF`, `toRDF_decode`). The output is canonical RDF 1.2 N-Triples, in LeanRDF's triple order (its derived `Ord` on terms) and with its string escapes, so `leanrdf-sg decode` accepts each file in its view, and `leanrdf-sg export` of the result reproduces it byte for byte. The recorded outputs in `crates/tiramemsu-cli/tests/sg/` are checked that way in LeanRDF's own test suite.
+- **Valid time has its own names.** In queries, `tm:validFrom` and `tm:validTo` are virtual `xsd:dateTime` predicates ([[query#Views and Scans#Virtual Predicates]]). The export writes epoch milliseconds, the form LeanRDF's decoder is proven on, under `tm:validFromMs` and `tm:validToMs`, so no IRI has two datatypes.
+- **Left out:**
+  - `sys:` bookkeeping, for example the `sys:supersedes` statement a supersede writes;
+  - statements added and retracted in one transaction, which no view ever shows.
+- **Refused:** a plain IRI under `urn:tiramemsu:stmt:` in content, and `rdf:reifies` as a predicate. Both would read back as something else.
+- **Export-only:** `tm import` refuses triple terms, and the exported clocks are not mapped back to intervals.
+- **Two senses of "statement graph".** This export is about the paper's sense: Gelling, Fletcher and Schmidt's Statement Graph, and the closed, acyclic criterion of [[paper#Statement as One Record Paper]]. It is not the named graph named by a statement ([[data-model#Named Graphs#Statement Graphs]]).
 
 ## MCP Tools
 

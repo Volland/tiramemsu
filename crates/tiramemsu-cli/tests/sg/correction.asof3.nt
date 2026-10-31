@@ -1,0 +1,16 @@
+<http://example.org/FRA> <http://example.org/route> <http://example.org/LHR> .
+<http://example.org/LHR> <http://example.org/route> <http://example.org/JFK> .
+<urn:tiramemsu:stmt:1> <http://example.org/distance> "665"^^<http://www.w3.org/2001/XMLSchema#integer> .
+<urn:tiramemsu:stmt:1> <http://www.w3.org/1999/02/22-rdf-syntax-ns#reifies> <<( <http://example.org/FRA> <http://example.org/route> <http://example.org/LHR> )>> .
+<urn:tiramemsu:stmt:1> <urn:tiramemsu:tm:txAdded> "1"^^<http://www.w3.org/2001/XMLSchema#integer> .
+<urn:tiramemsu:stmt:2> <http://www.w3.org/1999/02/22-rdf-syntax-ns#reifies> <<( <urn:tiramemsu:stmt:1> <http://example.org/distance> "665"^^<http://www.w3.org/2001/XMLSchema#integer> )>> .
+<urn:tiramemsu:stmt:2> <urn:tiramemsu:tm:txAdded> "2"^^<http://www.w3.org/2001/XMLSchema#integer> .
+<urn:tiramemsu:stmt:2> <urn:tiramemsu:tm:txRetracted> "4"^^<http://www.w3.org/2001/XMLSchema#integer> .
+<urn:tiramemsu:stmt:3> <http://www.w3.org/1999/02/22-rdf-syntax-ns#reifies> <<( <http://example.org/LHR> <http://example.org/route> <http://example.org/JFK> )>> .
+<urn:tiramemsu:stmt:3> <urn:tiramemsu:tm:txAdded> "3"^^<http://www.w3.org/2001/XMLSchema#integer> .
+<urn:tiramemsu:stmt:3> <urn:tiramemsu:tm:validFromMs> "1774828800000"^^<http://www.w3.org/2001/XMLSchema#integer> .
+<urn:tiramemsu:stmt:3> <urn:tiramemsu:tm:validToMs> "1792800000000"^^<http://www.w3.org/2001/XMLSchema#integer> .
+<urn:tiramemsu:stmt:4> <http://www.w3.org/1999/02/22-rdf-syntax-ns#reifies> <<( <urn:tiramemsu:stmt:1> <http://example.org/distance> "655"^^<http://www.w3.org/2001/XMLSchema#integer> )>> .
+<urn:tiramemsu:stmt:4> <urn:tiramemsu:tm:txAdded> "4"^^<http://www.w3.org/2001/XMLSchema#integer> .
+<urn:tiramemsu:stmt:6> <http://www.w3.org/1999/02/22-rdf-syntax-ns#reifies> <<( <urn:tiramemsu:stmt:4> <http://example.org/source> <http://example.org/airlineDB> )>> .
+<urn:tiramemsu:stmt:6> <urn:tiramemsu:tm:txAdded> "4"^^<http://www.w3.org/2001/XMLSchema#integer> .

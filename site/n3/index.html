@@ -25,7 +25,7 @@
   <span class="v">?c</span> v:locatedIn <span class="v">?l</span> }
     <span class="k">=&gt;</span> { <span class="v">?p</span> v:worksIn <span class="v">?l</span> }.</code></pre>
     <div class="btns"><a class="btn primary" href="why-rules.html">Start reading</a><a class="btn" href="recipes.html">Recipes</a><a class="btn" href="reference.html">Reference</a></div>
-    <p class="cover-foot">Nine short chapters · feature <code>n3</code> · reasoning by eyeron</p>
+    <p class="cover-foot">Ten short chapters · feature <code>n3</code> · reasoning by eyeron</p>
   </div>
   <div class="cover-layers" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span></div>
 </div>
@@ -42,6 +42,7 @@
     <li><a href="materialization.html"><span class="n">07</span><span class="t">Materialization</span><span class="d">Writing conclusions as derived beliefs that fall with their premises and their rules.</span></a></li>
     <li><a href="recipes.html"><span class="n">08</span><span class="t">Recipes</span><span class="d">Tenure from validity, colleagues who overlapped, trusted facts, layered rule sets, contradiction fuses and previewing a rule edit.</span></a></li>
     <li><a href="reference.html"><span class="n">09</span><span class="t">Reference</span><span class="d">Every surface, option, vocabulary term and error, and the limits of the design.</span></a></li>
+    <li><a href="export-rdf12.html"><span class="n">10</span><span class="t">Time leaves the store</span><span class="d">Both clocks exported as RDF 1.2: every statement reified with its lifetime, the triple asserted in the view you choose, checked by LeanRDF.</span></a></li>
   </ol>
 </section>
 <section class="about" aria-labelledby="about">
@@ -51,7 +52,7 @@
 <div class="grid three">
   <div class="card"><span class="tag">Chapters 1–3</span><h3>The basics</h3><p>Why rules belong in memory, enough N3 to read every example, and what a rule sees of your statements.</p></div>
   <div class="card"><span class="tag">Chapters 4–5</span><h3>Time</h3><p>Reasoning as of any transaction, with the rules believed then, and valid time that never combines facts from different moments.</p></div>
-  <div class="card"><span class="tag">Chapters 6–9</span><h3>Writing it down</h3><p>Rule sets with history, materialized conclusions that stay grounded, seven recipes and a reference.</p></div>
+  <div class="card"><span class="tag">Chapters 6–10</span><h3>Writing it down</h3><p>Rule sets with history, materialized conclusions that stay grounded, seven recipes, a reference, and both clocks exported as RDF 1.2.</p></div>
 </div>
 <div class="note"><strong>Status.</strong> Reasoning ships behind the opt-in Cargo feature <code>n3</code>, off by default (OpenSpec change <code>add-n3-reasoning</code>, built on <code>add-derived-beliefs</code>). The reasoner is <a href="https://github.com/eyereasoner/eyeron">eyeron</a> by Jos De Roo (MIT). Until eyeron is on crates.io the feature is available only when building from the repository.</div>
 <p class="credit">Reasoning is done by <a href="https://github.com/eyereasoner/eyeron">eyeron</a>, a native Rust N3 reasoner by Jos De Roo (MIT). New to tiramemsu? Read <a href="../articles/time-travel.html">Time travel and bitemporality</a> and <a href="../articles/layered-graphs.html">Layered graphs</a> first.</p>

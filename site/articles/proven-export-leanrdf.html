@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>An export with a proof: tiramemsu and LeanRDF</title>
+<meta name="description" content="LeanRDF proves the statement-graph format exact in Lean, makes the paper's criterion and kernel executable, and checks tiramemsu's Rust exporter byte for byte.">
+<link rel="icon" href="../assets/logo.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+<header class="top"><div class="wrap">
+  <a class="brand" href="../"><img src="../assets/logo.svg" alt="">Tiramemsu</a>
+  <nav class="menu"><a href="../#features">Features</a><a href="../#start">Quick start</a><a href="./" aria-current="page">Articles</a><a href="../datalog/">Datalog</a><a href="../paper/">Papers</a><a href="https://github.com/Volland/tiramemsu">GitHub</a></nav>
+</div></header>
+
+<article class="post">
+<h1>An export with a proof</h1>
+<p class="meta">Tiramemsu articles · 31 October 2026 · companion to <a href="statement-graph-export-rdf12.html">Taking memory out whole</a></p>
+
+<p>An export format is a promise: what goes out can come back. Usually the promise is backed by a few round-trip tests. For <code>tm export --format sg-nt12</code> it is backed by theorems. The format is defined in <a href="https://github.com/Volland/rdf-lean">LeanRDF</a>, a Lean 4 library that writes the W3C semantics of RDF as Lean definitions, and the tiramemsu exporter is checked against that definition on every build.</p>
+
+<h2>What is proven</h2>
+<p>LeanRDF's <code>leanrdf-statements</code> package models a tiramemsu statement as a record: an id, a subject and an object (each a term or another record's id), a predicate, a transaction interval and a valid interval. <code>toRDF v</code> is the export in a view <code>v</code>, and <code>decode v</code> reads a graph back. Two theorems connect them:</p>
+<pre><code>theorem decode_toRDF (hw : sg.WellFormed) : decode v (sg.toRDF v) = .ok sg
+theorem toRDF_decode (h : decode v g = .ok sg) :
+    sg.WellFormed ∧ ∀ t, t ∈ sg.toRDF v ↔ t ∈ g</code></pre>
+<p>The first says that nothing is lost: export, then decode, and you get back the same statements. The second matters more for checking. Anything the decoder accepts is <em>exactly</em> the export of a well-formed set of statements. A stray triple, a missing clock or a missing assertion is rejected with an error that names it, and nothing is dropped silently. So a file that decodes is correct by that theorem, whoever wrote it.</p>
+<p>Lean checks these proofs with its kernel. The library has no <code>sorry</code> and uses only the three standard axioms.</p>
+
+<h2>The paper, executable</h2>
+<p>The paper <a href="../paper/export-boundaries.html"><em>When Is a Temporal Statement Store a Statement Graph?</em></a> came with an abstract Lean development. LeanRDF vendors it, with its DOI and source commit, and applies it to real RDF terms:</p>
+<ul>
+  <li><code>criterion</code>: a set of records has an identity-preserving export to a Gelling–Fletcher–Schmidt Statement Graph exactly when it is closed and acyclic, and that export is unique.</li>
+  <li><code>kernel</code>: an executable peel, proven equal to the paper's export kernel, the greatest closed acyclic subset (<code>kernel_greatest</code>). <code>isClosed</code> and <code>isAcyclic</code> are deciders proven equal to the paper's relations.</li>
+  <li>History closure: under tiramemsu's write rules the full history is closed and its cycles stay inside one transaction (<code>history_closed</code>, <code>history_cycle</code>, <code>history_kernel</code>).</li>
+  <li>Quoting: nesting each reference as a triple term gives generalized RDF 1.2, and a basic graph pattern has the same answers over the live statements as over their quoted image (<code>bgp_view'</code>).</li>
+</ul>
+<pre><code>$ leanrdf-sg kernel snapshot.jsonl
+kernel: [6]
+removed eid 4: dangling reference to eid 1
+removed eid 5: depends on removed eid 4
+removed eid 7: on a reference cycle
+removed eid 8: on a reference cycle</code></pre>
+<p>Proofs are about the definitions. To catch a definition that says the wrong thing, an exhaustive check runs every statement graph of at most four records over a small alphabet: 406,901 of them. On each one it compares the kernel with a brute-force search, quoting with the kernel, and decoding with exporting in three views.</p>
+
+<h2>Why the clocks are integers</h2>
+<p>Valid time was meant to be an <code>xsd:dateTime</code>. Then the decoder theorems would need a proven round trip between epoch milliseconds and calendar dates. The arithmetic behind that conversion turned out to be hard to prove in Lean, and the attempt was slow and incomplete. So the export writes milliseconds as <code>xsd:integer</code>. Their round trip is already proven in LeanRDF's core. Because tiramemsu's own <code>tm:validFrom</code> is a <code>dateTime</code>, the export uses <code>tm:validFromMs</code> instead (LeanRDF v0.3.1).</p>
+
+<h2>Closing the loop between Rust and Lean</h2>
+<p>A proof about LeanRDF's definition says nothing about tiramemsu's Rust code. Three choices connect them:</p>
+<ul>
+  <li><strong>One canonical form.</strong> The Rust writer sorts triples the way LeanRDF's derived <code>Ord</code> on terms does: IRIs before blank nodes, before literals, before triple terms, then field by field. It also escapes strings exactly as LeanRDF's serializer does. So there is one right byte string for each export.</li>
+  <li><strong>Recorded outputs.</strong> tiramemsu's tests build stores through the Rust API: a route, a superseded distance in four views, a statement that never became visible, and awkward literals. They export each store and compare it with a recorded file.</li>
+  <li><strong>A test in Lean.</strong> LeanRDF keeps a copy of those files. Its test suite decodes each one in its view and requires the re-export to equal it byte for byte. tiramemsu's route export is also byte-identical to the golden file LeanRDF's authors wrote by hand before tiramemsu had the format.</li>
+</ul>
+<p>Together these give a narrower claim than "the exporter is correct", but a precise one: for every recorded case, what tiramemsu wrote is exactly the export of a well-formed statement graph, by <code>toRDF_decode</code>. When either side changes, one of the two test suites fails.</p>
+
+<h2>What is trusted</h2>
+<ul>
+  <li>The transcription of the paper's definitions into Lean, which is vendored unchanged except for imports.</li>
+  <li>The N-Triples parser and the JSON-lines reader, which are tested, not proven.</li>
+  <li>The Lean compiler, for <code>leanrdf-sg</code> and the exhaustive check.</li>
+  <li>tiramemsu itself beyond the recorded cases.</li>
+</ul>
+<p>The linear-time bound of the paper's kernel algorithm is not mechanized: <code>kernel</code> is proven correct, not fast.</p>
+<p>LeanRDF's site has <a href="https://volland.github.io/rdf-lean/book/statements/">a chapter on statement graphs</a> and <a href="https://volland.github.io/rdf-lean/docs/statements/">the package reference</a>. The source is at <a href="https://github.com/Volland/rdf-lean">github.com/Volland/rdf-lean</a>.</p>
+</article>
+
+<footer><div class="wrap">
+  <span>Tiramemsu · MIT OR Apache-2.0 · <a href="https://github.com/Volland/tiramemsu">github.com/Volland/tiramemsu</a></span>
+  <span><a href="../">Home</a> · <a href="./">All articles</a></span>
+  <span><a href="../impressum.html">Impressum</a> · <a href="../datenschutz.html">Datenschutz</a> · <a href="../agb.html">AGB</a></span>
+</div></footer>
+</body>
+</html>

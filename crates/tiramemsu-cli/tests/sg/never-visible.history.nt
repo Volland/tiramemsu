@@ -1,0 +1,3 @@
+<http://example.org/a> <http://example.org/p> <http://example.org/c> .
+<urn:tiramemsu:stmt:2> <http://www.w3.org/1999/02/22-rdf-syntax-ns#reifies> <<( <http://example.org/a> <http://example.org/p> <http://example.org/c> )>> .
+<urn:tiramemsu:stmt:2> <urn:tiramemsu:tm:txAdded> "1"^^<http://www.w3.org/2001/XMLSchema#integer> .

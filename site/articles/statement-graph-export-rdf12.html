@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Taking memory out whole: tiramemsu</title>
+<meta name="description" content="tm export --format sg-nt12 writes every statement with its id and both clocks as RDF 1.2 reification, asserting what is live in the view you choose, in a format LeanRDF proves exact.">
+<link rel="icon" href="../assets/logo.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+<header class="top"><div class="wrap">
+  <a class="brand" href="../"><img src="../assets/logo.svg" alt="">Tiramemsu</a>
+  <nav class="menu"><a href="../#features">Features</a><a href="../#start">Quick start</a><a href="./" aria-current="page">Articles</a><a href="../datalog/">Datalog</a><a href="../paper/">Papers</a><a href="https://github.com/Volland/tiramemsu">GitHub</a></nav>
+</div></header>
+
+<article class="post">
+<h1>Taking memory out whole</h1>
+<p class="meta">Tiramemsu articles · 31 October 2026 · follows <a href="statement-store-export.html">What leaves the store intact</a></p>
+
+<p><code>tm export</code> has always written the live statements as N-Triples or N-Quads. Those formats lose what makes tiramemsu what it is. They drop the statement ids, so an annotation on a fact can no longer point at that fact. They drop retracted statements, so the history is gone. And they drop both clocks. The new format keeps all of it:</p>
+<pre><code>tm export memory.db --format sg-nt12                          <span class="c"># assert what is live now</span>
+tm export memory.db --format sg-nt12 --as-of 3                <span class="c"># ... what was live after transaction 3</span>
+tm export memory.db --format sg-nt12 --history                <span class="c"># ... every statement</span>
+tm export memory.db --format sg-nt12 --valid-at 1800000000000 <span class="c"># ... only what is valid at that instant</span></code></pre>
+<p>"sg" stands for statement graph, in the paper's sense: Gelling, Fletcher and Schmidt's model, where each statement is a vertex with subject, predicate and object edges. This is not tiramemsu's <a href="metagraphs.html">named graph named by a statement</a>, which shares the name. "nt12" stands for RDF 1.2 N-Triples, the format of the output.</p>
+
+<h2>One statement, four kinds of line</h2>
+<p>Take a route and a distance about it. The distance is entered wrong, as 665, and corrected to 655 by a <code>supersede</code> in transaction 4, together with a note on where the right number came from. A summer route has a valid interval:</p>
+<pre><code>tx 1   e1 = (:FRA, :route, :LHR)
+tx 2   e2 = (e1, :distance, 665)
+tx 3   e3 = (:LHR, :route, :JFK)       valid [2026-03-30, 2026-10-24)
+tx 4   e4 = (e1, :distance, 655)       supersedes e2, which is retracted
+       e6 = (e4, :source, :airlineDB)</code></pre>
+<p>Every statement becomes a <em>reifier</em>: an IRI that stands for that occurrence and names, through <code>rdf:reifies</code>, the triple it is about. Its clocks come with it. Here is <code>e2</code>, the wrong distance, in the export (prefixes shortened):</p>
+<pre><code>stmt:2 rdf:reifies &lt;&lt;( stmt:1 :distance 665 )&gt;&gt; .
+stmt:2 tm:txAdded 2 .
+stmt:2 tm:txRetracted 4 .</code></pre>
+<p>A reference to another statement is written as that statement's IRI, here <code>stmt:1</code>. It is the IRI SPARQL already returns for a statement id. Every clock is an <code>xsd:integer</code>: transaction numbers, and valid time in epoch milliseconds.</p>
+<pre><code>stmt:3 rdf:reifies &lt;&lt;( :LHR :route :JFK )&gt;&gt; .
+stmt:3 tm:txAdded 3 .
+stmt:3 tm:validFromMs 1774828800000 .
+stmt:3 tm:validToMs 1792800000000 .</code></pre>
+
+<h2>The view decides what is asserted</h2>
+<p>Reifiers say that a statement existed. Whether its triple is <em>asserted</em> depends on the view, exactly as for a query. Every reifier appears in all four exports. Only the asserted lines differ:</p>
+<table>
+  <thead><tr><th>View</th><th>Asserted triples</th></tr></thead>
+  <tbody>
+    <tr><td><code>now</code></td><td><pre><code>:FRA :route :LHR .
+:LHR :route :JFK .
+stmt:1 :distance 655 .
+stmt:4 :source :airlineDB .</code></pre></td></tr>
+    <tr><td><code>--as-of 3</code></td><td><pre><code>:FRA :route :LHR .
+:LHR :route :JFK .
+stmt:1 :distance 665 .</code></pre></td></tr>
+    <tr><td><code>--valid-at 1800000000000</code></td><td><pre><code>:FRA :route :LHR .
+stmt:1 :distance 655 .
+stmt:4 :source :airlineDB .</code></pre></td></tr>
+    <tr><td><code>--history</code></td><td><pre><code>:FRA :route :LHR .
+:LHR :route :JFK .
+stmt:1 :distance 655 .
+stmt:1 :distance 665 .
+stmt:4 :source :airlineDB .</code></pre></td></tr>
+  </tbody>
+</table>
+<p>As of transaction 3, the wrong distance was what we believed, so it is asserted, and the correction and its source do not exist yet. On 15 January 2027 the summer route is not valid, so it is not asserted. The history asserts both distances, and their reifiers show which one was retracted and when.</p>
+
+<h2>What is left out</h2>
+<ul>
+  <li><strong>Bookkeeping.</strong> <code>sys:</code> statements belong to the engine, as in the plain export. The supersede wrote one, <code>(e4, sys:supersedes, e2)</code>, as eid 5, which is why the example jumps from <code>stmt:4</code> to <code>stmt:6</code>.</li>
+  <li><strong>Statements that were never visible.</strong> A statement added and retracted in the same transaction has no view in which it was ever true, and it is not exported.</li>
+</ul>
+<p>Two things are refused rather than written. One is a plain IRI that starts with <code>urn:tiramemsu:stmt:</code>, which would read back as a statement id. The other is <code>rdf:reifies</code> used as an ordinary predicate.</p>
+
+<h2>Why <code>tm:validFromMs</code></h2>
+<p>In SPARQL and Cypher, <code>tm:validFrom</code> and <code>tm:validTo</code> are virtual predicates whose values are <code>xsd:dateTime</code>. The export writes milliseconds, so it uses names of its own: <code>tm:validFromMs</code> and <code>tm:validToMs</code>. No IRI means two things. Why milliseconds at all is the subject of <a href="proven-export-leanrdf.html">the companion article</a>: they are the form the decoder is proven on.</p>
+
+<h2>Checking a file</h2>
+<p>The format is defined by <a href="https://github.com/Volland/rdf-lean">LeanRDF</a>, a Lean 4 library of RDF semantics. Its decoder is proven exact. A file decodes only if it is exactly the export of a well-formed set of statements, and decoding an export gives back the statements:</p>
+<pre><code>tm export memory.db --format sg-nt12 --history &gt; memory.nt
+cd rdf-lean/statements
+lake exe leanrdf-sg decode ../memory.nt --history   <span class="c"># exit 0 and the records as JSON lines, or exit 2 and what is wrong</span></code></pre>
+<p>tiramemsu writes LeanRDF's canonical form, with its triple order and string escapes. Decoding a file with LeanRDF and exporting the result again gives back the same bytes. LeanRDF's test suite checks that on every build, for every file tiramemsu's export tests record.</p>
+
+<h2>Not supported</h2>
+<ul>
+  <li><strong>Reading it back.</strong> The format is export-only: <code>tm import</code> refuses triple terms, and the clock triples would not become intervals again.</li>
+  <li><strong>Named graphs.</strong> Graph memberships are not part of the format. Use N-Quads for those.</li>
+</ul>
+<p>The practical guide is <a href="https://github.com/Volland/tiramemsu/blob/main/docs/statement-graph-export.md"><code>docs/statement-graph-export.md</code></a>. The paper behind the format is <a href="../paper/export-boundaries.html"><em>When Is a Temporal Statement Store a Statement Graph?</em></a></p>
+</article>
+
+<footer><div class="wrap">
+  <span>Tiramemsu · MIT OR Apache-2.0 · <a href="https://github.com/Volland/tiramemsu">github.com/Volland/tiramemsu</a></span>
+  <span><a href="../">Home</a> · <a href="./">All articles</a></span>
+  <span><a href="../impressum.html">Impressum</a> · <a href="../datenschutz.html">Datenschutz</a> · <a href="../agb.html">AGB</a></span>
+</div></footer>
+</body>
+</html>

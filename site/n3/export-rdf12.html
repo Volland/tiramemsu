@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Time leaves the store: Reasoning with N3 in Tiramemsu</title>
+<meta name="description" content="Exporting a memory with both clocks as RDF 1.2: every statement reified with its lifetime, the base triple asserted in the view you choose, checked by LeanRDF.">
+<link rel="icon" href="../assets/logo.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../style.css">
+<link rel="stylesheet" href="book.css">
+</head>
+<body>
+<header class="top"><div class="wrap">
+  <a class="brand" href="../"><img src="../assets/logo.svg" alt="">Tiramemsu</a>
+  <nav class="menu"><a href="../#features">Features</a><a href="../#matrix">Matrix</a><a href="../#start">Quick start</a><a href="./">N3 book</a><a href="../articles/">Articles</a><a href="../datalog/">Datalog</a><a href="../paper/">Papers</a><a href="https://github.com/Volland/tiramemsu">GitHub</a></nav>
+</div></header>
+
+<div class="book">
+<nav class="book-toc" aria-label="Chapters">
+  <a class="book-home" href="./">Reasoning with N3</a>
+  <ol>
+    <li><a href="why-rules.html"><span class="n">01</span>Why rules in memory</a></li>
+    <li><a href="n3-in-15-minutes.html"><span class="n">02</span>N3 in fifteen minutes</a></li>
+    <li><a href="memory-as-n3.html"><span class="n">03</span>Your memory as N3</a></li>
+    <li><a href="transaction-time.html"><span class="n">04</span>Transaction time</a></li>
+    <li><a href="valid-time.html"><span class="n">05</span>Valid time</a></li>
+    <li><a href="rule-sets.html"><span class="n">06</span>Rule sets as memory</a></li>
+    <li><a href="materialization.html"><span class="n">07</span>Materialization</a></li>
+    <li><a href="recipes.html"><span class="n">08</span>Recipes</a></li>
+    <li><a href="reference.html"><span class="n">09</span>Reference</a></li>
+    <li><a href="export-rdf12.html" aria-current="page"><span class="n">10</span>Time leaves the store</a></li>
+  </ol>
+</nav>
+<article class="post chapter">
+<p class="book-crumb"><a href="./">Reasoning with N3</a> · Chapter 10 of 10</p>
+<p class="kicker"><span>Chapter 10</span></p>
+<h1>Time leaves the store</h1>
+<p class="lede">Chapters 4 and 5 asked what follows as of a transaction and at an instant. This short chapter takes the same two clocks out of tiramemsu, as RDF 1.2 that any RDF 1.2 tool can read, with the views you already know.</p>
+
+<h2>Why not plain N-Triples</h2>
+<p>A rule sees a view: the statements live as of some transaction, valid at some instant. Plain <code>tm export</code> writes one such view, the live statements now, and nothing else. The ids are gone, so a layer about a statement has nothing to point at. Retracted statements are gone, so chapter 4's "what did we believe then" cannot be asked again elsewhere. The intervals are gone, so chapter 5's pointwise semantics has nothing to work on.</p>
+
+<h2>Every statement, with its clocks</h2>
+<p><code>tm export --format sg-nt12</code> writes every statement as an RDF 1.2 reifier, with its lifetime and its valid interval:</p>
+<p class="codefile">tm export memory.db --format sg-nt12</p><pre><code>stmt:3 rdf:reifies &lt;&lt;( v:alice v:worksAt v:acme )&gt;&gt; .
+stmt:3 tm:txAdded 3 .
+stmt:3 tm:validFromMs 1577836800000 .      <span class="c"># 2020-01-01</span>
+stmt:3 tm:validToMs 1640995200000 .        <span class="c"># 2022-01-01</span></code></pre>
+<p>This is shortened: in the file, IRIs are written in full and numbers are typed <code>xsd:integer</code>. Then comes the triple itself, <code>v:alice v:worksAt v:acme</code>. It is written only if the statement is live in the view of the export, which you choose with the same flags as <code>tm query</code>:</p>
+<table>
+  <thead><tr><th>Flag</th><th>Asserts</th><th>Chapter</th></tr></thead>
+  <tbody>
+    <tr><td>none</td><td>what is live now</td><td>4</td></tr>
+    <tr><td><code>--as-of T</code></td><td>what was live after transaction <code>T</code></td><td>4</td></tr>
+    <tr><td><code>--history</code></td><td>every statement</td><td>4</td></tr>
+    <tr><td><code>--valid-at MS</code></td><td>only what is valid at that instant, with any of the above</td><td>5</td></tr>
+  </tbody>
+</table>
+<p>The reifiers are the same in every view. A reader can always see that Alice's job ended in 2022 and was recorded in transaction 3, even in a view where the job is not asserted.</p>
+
+<h2>Conclusions travel too, their reasons do not</h2>
+<p>A materialized conclusion from chapter 7 is a statement like any other, so it is exported with its clocks. Its <code>sys:derivedFrom</code> links are engine bookkeeping and stay behind, like every <code>sys:</code> statement. Outside the store, a conclusion is a fact with a lifetime. To know why it holds, ask tiramemsu: <code>View::dependents</code>, or <code>tm reason --proof</code>.</p>
+
+<h2>Two names for valid time</h2>
+<p>In rules and queries, <code>tm:validFrom</code> and <code>tm:validTo</code> are <code>xsd:dateTime</code> values (<a href="reference.html">chapter 9</a>). The export writes epoch milliseconds under names of its own, <code>tm:validFromMs</code> and <code>tm:validToMs</code>, so the two never mix. A rule run over an exported file has to compare milliseconds.</p>
+
+<h2>A format with a proof</h2>
+<p>The format is defined by <a href="https://github.com/Volland/rdf-lean">LeanRDF</a>, which proves in Lean that its decoder is exact:</p>
+<ul>
+  <li>a file that decodes is exactly the export of a well-formed set of statements;</li>
+  <li>decoding an export gives back the statements.</li>
+</ul>
+<p>tiramemsu writes LeanRDF's canonical form, and LeanRDF's tests decode tiramemsu's recorded exports and reproduce them byte for byte. The articles <a href="../articles/statement-graph-export-rdf12.html">Taking memory out whole</a> and <a href="../articles/proven-export-leanrdf.html">An export with a proof</a> tell both halves.</p>
+<div class="note"><strong>Export-only.</strong> <code>tm import</code> does not read this format back: it refuses triple terms, and the clock triples would not become intervals.</div>
+<nav class="chapter-nav" aria-label="Chapter navigation">
+  <a class="prev" href="reference.html"><span>← Chapter 9</span>Reference</a>
+  <a class="next" href="./"><span>Back to →</span>Contents</a>
+</nav>
+</article>
+</div>
+
+<footer><div class="wrap">
+  <span>Tiramemsu · MIT OR Apache-2.0 · <a href="https://github.com/Volland/tiramemsu">github.com/Volland/tiramemsu</a></span>
+  <span><a href="../">Home</a> · <a href="./">N3 book</a> · <a href="../articles/">Articles</a></span>
+  <span><a href="../impressum.html">Impressum</a> · <a href="../datenschutz.html">Datenschutz</a> · <a href="../agb.html">AGB</a></span>
+</div></footer>
+</body>
+</html>
