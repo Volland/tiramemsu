@@ -776,6 +776,90 @@ fn parallel_and_sequential_agree() {
     });
 }
 
+// @tg: verifies:: [[openspec:datalog-evaluation#Deterministic results#Mixed values sort in value order]] {level: integration}
+#[test]
+fn mixed_values_sort_in_value_order() {
+    use tiramemsu::datalog_engine::terms::total_cmp;
+    let value = |t: &DatalogTerm| match t {
+        DatalogTerm::Value(v) => v.clone(),
+        DatalogTerm::Invented(n) => Value::iri(format!("urn:tiramemsu:dl:invented:{n}")),
+    };
+    each(|db| {
+        // written in an order unrelated to the value order, so ids are too
+        let objects = [
+            Value::str("pear"),
+            v("zeta"),
+            Value::Int(42),
+            Value::Bool(true),
+            Value::Double(-1.5),
+            Value::Date(19_000),
+            Value::LangStr {
+                lex: "apple".into(),
+                lang: "en".into(),
+            },
+            v("alpha"),
+            Value::Int(-7),
+            Value::DateTime {
+                ms: 5 * D,
+                tz: None,
+            },
+            Value::Bool(false),
+            Value::str("Apple"),
+            Value::Double(42.0),
+        ];
+        for (i, o) in objects.iter().enumerate() {
+            let s = if i % 3 == 0 { "b" } else { "a" };
+            assert_fact(db, s, "has", o.clone(), Valid::ALWAYS);
+        }
+        let r = goal(
+            db,
+            "out(X, V) :- v:has(X, V).\n\
+             exists M: out(X, M) :- v:has(X, _).",
+            "out(X, V)",
+        );
+        assert_eq!(r.rows.len(), objects.len() + 2);
+        for w in r.rows.windows(2) {
+            let (a, b) = (&w[0].values, &w[1].values);
+            let ord = a
+                .iter()
+                .zip(b)
+                .map(|(x, y)| total_cmp(&value(x), &value(y)))
+                .find(|o| o.is_ne())
+                .unwrap_or(std::cmp::Ordering::Equal);
+            assert_ne!(ord, std::cmp::Ordering::Greater, "{a:?} before {b:?}");
+        }
+        rows(&r)
+    });
+}
+
+// @tg: verifies:: [[openspec:datalog-evaluation#Deterministic results#Timeless and timed runs agree]] {level: integration}
+#[test]
+fn timeless_and_timed_runs_agree() {
+    each(|db| {
+        // every edge is valid always
+        random_graph(db, 5, 60, 150);
+        let mut seen = Vec::new();
+        for time in [DatalogTime::Atemporal, DatalogTime::Pointwise] {
+            for proof in [false, true] {
+                let mut o = opts();
+                o.demand = false;
+                o.time = time;
+                o.proof = proof;
+                let r = db
+                    .now()
+                    .datalog(&text(REPORTS), Some("reports(X, Y)"), &o)
+                    .unwrap();
+                assert!(r.rows.iter().all(|row| row.valid == [Valid::ALWAYS]));
+                assert_eq!(r.rows.iter().all(|row| row.proof.is_some()), proof);
+                seen.push(rows(&r));
+            }
+        }
+        assert!(!seen[0].is_empty());
+        assert!(seen.iter().all(|s| s == &seen[0]));
+        seen.swap_remove(0)
+    });
+}
+
 // @tg: verifies:: [[openspec:datalog-evaluation#Explain a program run#Explain shows access choice]] {level: integration}
 #[test]
 fn explain_shows_access_choice() {
@@ -789,6 +873,28 @@ fn explain_shows_access_choice() {
         assert!(plan.contains("access <urn:tiramemsu:v:manager>"), "{plan}");
         assert!(plan.contains("iteration"), "{plan}");
         assert_eq!(e.result.rows.len(), 2);
+    });
+}
+
+// @tg: verifies:: [[openspec:datalog-evaluation#Explain a program run#Explain shows phase times]] {level: integration}
+#[test]
+fn explain_shows_phase_times() {
+    each(|db| {
+        chain(db);
+        let e = db
+            .now()
+            .explain_datalog(&text(REPORTS), Some("reports(v:alice, X)"), &opts())
+            .unwrap();
+        let n = e.plan.len();
+        let ms = |line: &str, prefix: &str| -> f64 {
+            let rest = line
+                .strip_prefix(prefix)
+                .unwrap_or_else(|| panic!("{line}"));
+            rest.strip_suffix(" ms").unwrap().parse().unwrap()
+        };
+        assert!(ms(&e.plan[n - 2], "time: evaluation ") >= 0.0);
+        assert!(ms(&e.plan[n - 1], "time: results ") >= 0.0);
+        e.result.rows.len()
     });
 }
 

@@ -29,9 +29,7 @@ serde_json = "1"
 [features]
 default = ["n3", "datalog"]
 # The N3 tools `reason`, `store_rules` and `materialize` (OpenSpec change
-# `add-n3-reasoning`). Cargo refuses to publish a crate whose dependencies,
-# optional ones included, are not on crates.io, so this crate (like the facade)
-# cannot be published until `tm-n3` and eyeron are (`publish-eyeron-dependency`).
+# `add-n3-reasoning`).
 n3 = ["tiramemsu/n3", "tiramemsu-json/n3"]
 # The Datalog tools `datalog_query`, `check_constraints`, `store_program` and
 # `enforce_program` (OpenSpec changes `add-datalog-engine`, `add-datalog-constraints`).

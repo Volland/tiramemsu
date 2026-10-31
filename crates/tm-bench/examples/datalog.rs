@@ -131,6 +131,33 @@ fn souffle(dir: &Path, edges: &[(u64, u64)], program: &str) -> Option<(u64, f64)
     Some((csv.lines().count() as u64, ms))
 }
 
+/// The evaluation and result milliseconds an explain reports, best of `reps`.
+fn split(
+    db: &Db,
+    p: &DatalogProgram,
+    goal: &str,
+    opts: &DatalogOptions,
+    reps: usize,
+) -> (f64, f64) {
+    let ms = |plan: &[String], prefix: &str| -> f64 {
+        plan.iter()
+            .find_map(|l| l.strip_prefix(prefix))
+            .and_then(|r| r.strip_suffix(" ms"))
+            .and_then(|r| r.parse().ok())
+            .expect("phase time")
+    };
+    let mut best = (f64::MAX, f64::MAX);
+    for _ in 0..reps.max(1) {
+        let e = db
+            .now()
+            .explain_datalog(p, Some(goal), opts)
+            .expect("explain");
+        best.0 = best.0.min(ms(&e.plan, "time: evaluation "));
+        best.1 = best.1.min(ms(&e.plan, "time: results "));
+    }
+    best
+}
+
 fn main() {
     let noise: u64 = arg("--noise")
         .and_then(|x| x.parse().ok())
@@ -159,6 +186,15 @@ fn main() {
                 r.rows.len()
             );
             counts.push(r.rows.len() as u64);
+            let (ev, rs) = split(&db, &p, "r(X, Y)", &full, reps);
+            println!(
+                "| tc {name} | datalog {} evaluation only | {ev:.1} | |",
+                backend.name()
+            );
+            println!(
+                "| tc {name} | datalog {} results only | {rs:.1} | |",
+                backend.name()
+            );
             let g = DatalogProgram::Text(TC.into());
             let (r, ms) = time(reps, || {
                 db.now()

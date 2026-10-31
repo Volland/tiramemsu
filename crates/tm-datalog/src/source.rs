@@ -53,7 +53,14 @@ fn mask(p: &Pat4) -> u8 {
 }
 
 type Key = SmallVec<[Id; 4]>;
-type Index = FxHashMap<Key, Vec<u32>>;
+/// Rows of a loaded predicate by the values of a bound-position mask.
+pub type Index = FxHashMap<Key, Vec<u32>>;
+
+/// The bound-position mask of a pattern over a loaded predicate (the predicate
+/// itself is fixed by the load).
+pub fn loaded_mask(p: &Pat4) -> u8 {
+    mask(p) & !0b0010
+}
 
 fn row_key(r: &Row, m: u8) -> Key {
     (0..4)
@@ -84,6 +91,50 @@ impl Loaded {
             .unwrap_or_else(|p| p.into_inner())
             .insert(m, ix.clone());
         ix
+    }
+
+    /// The index for mask `m`, when it has been built.
+    pub fn built(&self, m: u8) -> Option<Arc<Index>> {
+        self.idx
+            .read()
+            .unwrap_or_else(|p| p.into_inner())
+            .get(&m)
+            .cloned()
+    }
+
+    /// Calls `f` with each row matching `pat` (its predicate is this load's),
+    /// through `ix` when it is the index for the pattern's mask.
+    pub fn visit(
+        &self,
+        pat: &Pat4,
+        ix: Option<&Index>,
+        f: &mut dyn FnMut(Row, &IvSet) -> Result<()>,
+    ) -> Result<()> {
+        let m = loaded_mask(pat);
+        if m == 0 {
+            for (r, iv) in self.rows.iter().zip(self.ivs.iter()) {
+                f(*r, iv)?;
+            }
+            return Ok(());
+        }
+        let owned;
+        let ix = match ix {
+            Some(ix) => ix,
+            None => {
+                owned = self.index(m);
+                &*owned
+            }
+        };
+        let k: Key = (0..4)
+            .filter(|i| m & (1 << i) != 0)
+            .map(|i| pat[i].unwrap_or_default())
+            .collect();
+        if let Some(rows) = ix.get(&k) {
+            for &i in rows {
+                f(self.rows[i as usize], &self.ivs[i as usize])?;
+            }
+        }
+        Ok(())
     }
 }
 
@@ -290,6 +341,16 @@ impl<'s> Stored<'s> {
         })
     }
 
+    /// The loaded statements of predicate `p`, when it has been loaded (no probe
+    /// is counted and nothing is loaded).
+    pub fn peek(&self, p: Option<Id>) -> Option<Arc<Loaded>> {
+        self.loaded
+            .read()
+            .unwrap_or_else(|x| x.into_inner())
+            .get(&p)
+            .cloned()
+    }
+
     /// The statements matching `pat`, with their interval sets, in eid order.
     pub fn matches(&self, store: &dyn ReadStore, pat: &Pat4) -> Result<Vec<(Row, IvSet)>> {
         let mut out = Vec::new();
@@ -355,26 +416,7 @@ impl<'s> Stored<'s> {
             }
         };
         match loaded {
-            Some(l) => {
-                let m = mask(pat) & !0b0010;
-                if m == 0 {
-                    for (r, iv) in l.rows.iter().zip(l.ivs.iter()) {
-                        f(*r, iv)?;
-                    }
-                    return Ok(());
-                }
-                let ix = l.index(m);
-                let k: Key = (0..4)
-                    .filter(|i| m & (1 << i) != 0)
-                    .map(|i| pat[i].unwrap_or_default())
-                    .collect();
-                if let Some(rows) = ix.get(&k) {
-                    for &i in rows {
-                        f(l.rows[i as usize], &l.ivs[i as usize])?;
-                    }
-                }
-                Ok(())
-            }
+            Some(l) => l.visit(pat, None, f),
             None => {
                 for (r, iv) in self.scan(
                     store,

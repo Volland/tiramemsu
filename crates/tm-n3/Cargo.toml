@@ -11,9 +11,6 @@ homepage.workspace = true
 keywords.workspace = true
 categories.workspace = true
 rust-version.workspace = true
-# eyeron is a git dependency until it is on crates.io (OpenSpec change
-# `publish-eyeron-dependency`), and Cargo refuses to publish a crate with one.
-publish = false
 
 [dependencies]
 tm-core = { workspace = true }

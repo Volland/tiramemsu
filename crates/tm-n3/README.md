@@ -55,5 +55,5 @@ assert_eq!(c.proof.premises, [Premise::Statement(Eid::new(1)), Premise::Statemen
 # Ok::<(), tm_core::Error>(())
 ```
 
-eyeron is MIT-licensed (Jos De Roo). It is pinned to a git commit until it is
-published on crates.io, so this crate is `publish = false` meanwhile.
+eyeron is MIT-licensed (Jos De Roo). It is used from crates.io with
+`default-features = false`, which leaves out its HTTP client.

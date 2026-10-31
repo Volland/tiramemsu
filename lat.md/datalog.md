@@ -47,7 +47,7 @@ DL5: a conclusion holds at an instant exactly when it follows from the facts val
 
 - motivated_by:: [[reasoning#Pointwise Valid Time]] {weight: primary, since: "2026-10-28"}
 
-This is N5's meaning computed differently: N3 sweeps segments because eyeron keeps one proof per conclusion, while this engine sees every derivation of a stratum. Results equal N3's on the same Horn rules ([[datalog#Gates And Oracles]]). `time: atemporal` stays available. Negation and aggregates are [[datalog#Stratified Negation In The Interval Engine]].
+A set that covers every instant (an atemporal run, or statements valid always) short-cuts union, difference and coverage, and a row holding always takes nothing new, so time-free programs pay almost nothing for the interval column. This is N5's meaning computed differently: N3 sweeps segments because eyeron keeps one proof per conclusion, while this engine sees every derivation of a stratum. Results equal N3's on the same Horn rules ([[datalog#Gates And Oracles]]). `time: atemporal` stays available. Negation and aggregates are [[datalog#Stratified Negation In The Interval Engine]].
 
 ## DatalogMTL Horn Fragment
 
@@ -105,7 +105,9 @@ DL12: relations are flat `i64` columns sorted once per needed index, with interv
 
 - motivated_by:: [[backends#Hybrid Join Engine]] {weight: primary, since: "2026-10-28"}
 
-As built, relations are tuples in one flat buffer with hash indexes per bound-position mask, built on first use and kept current on insert, joined by index nested loops ([[crates/tm-datalog/src/rel.rs]], [[crates/tm-datalog/src/eval.rs]]); the worst-case-optimal join for cyclic bodies is not built yet and is recorded as debt on the code. Indexes are chosen per binding pattern, as Soufflé does. Delta and full relations merge by sort-merge with coalescing; each rule variant is ordered from actual sizes and re-planned when a delta changes size tenfold; the delta is cut into parallel morsels. Only ObjectIds are joined and terms are decoded at the output. Rejected: hash tables only (cyclic blow-up, no ordered sweeps) and B-tree relations.
+As built, relations are tuples in one flat buffer, found through a table of row numbers that hashes into the buffer (no key copy), with hash indexes per bound-position mask, built on first use and kept current on insert, joined by index nested loops ([[crates/tm-datalog/src/rel.rs]], [[crates/tm-datalog/src/eval.rs]]); the worst-case-optimal join for cyclic bodies is not built yet and is recorded as debt on the code. Indexes are chosen per binding pattern, as Soufflé does. New tuples merge into the full relation one by one through that table, and a derivation whose head tuple already holds over its whole set is dropped when emitted. Each rule variant is ordered from actual sizes, cached for its stratum and re-planned when a relation its body reads grows tenfold or stops being empty; before it runs, its atoms' indexes and loaded predicates are resolved once, so probes take no lock. The delta is cut into parallel morsels. Only ObjectIds are joined and terms are decoded at the output ([[datalog#Rank-Ordered Results]]). Rejected: hash tables only (cyclic blow-up, no ordered sweeps) and B-tree relations.
+
+- changed_by:: [[changes#Tune Datalog Performance]] {date: 2026-10-29}
 
 ## Shared Materialization With Reconciliation
 
@@ -172,7 +174,19 @@ DL20: a `tm-bench` Datalog suite on both backends gates the release, and three o
 
 - motivated_by:: [[reasoning#Tests Prove Semantics]] {weight: primary, since: "2026-10-28"}
 
-Workloads at 10⁵ and 10⁶ statements: transitive closure (chain, hub, small world), same-generation, an RDFS and OWL 2 RL subset on WatDiv, DatalogMTL on a temporal LUBM-style set, and constraint-check cost against transaction size; references are Soufflé's interpreter, Nemo, MeTeoR and eyeron. Proposed gates: ten times `tm-n3` on the same Horn programs, within twice Soufflé's interpreter on closure and same-generation, and at most 20 % added to a 100-statement transaction at 10⁶ by enforced constraints. The brute-force evaluator checks DatalogMTL property tests instant by instant. Measured on 2026-10-28 (`bench/datalog/README.md`): 6.6× `tm-n3` on a hub closure (N3 did not finish the small-world closure in 491 s) and 3.1–4.3× slower than Soufflé's interpreter on closures, so neither gate is met yet; demand goals run in milliseconds. Tuning is open.
+Workloads at 10⁵ and 10⁶ statements: transitive closure (chain, hub, small world), same-generation, an RDFS and OWL 2 RL subset on WatDiv, DatalogMTL on a temporal LUBM-style set, and constraint-check cost against transaction size; references are Soufflé's interpreter, Nemo, MeTeoR and eyeron. Proposed gates: ten times `tm-n3` on the same Horn programs, within twice Soufflé's interpreter on closure and same-generation, and at most 20 % added to a 100-statement transaction at 10⁶ by enforced constraints. The brute-force evaluator checks DatalogMTL property tests instant by instant. Measured on 2026-10-28 (`bench/datalog/README.md`): 6.6× `tm-n3` on a hub closure and 3.1–4.3× slower than Soufflé's interpreter, so neither gate was met. After [[changes#Tune Datalog Performance]] (2026-10-29): 84× `tm-n3` on the hub closure (N3 still does not finish the small world), and 1.0–1.4× Soufflé's interpreter on the closures, so both gates are met; demand goals run in milliseconds. Explain reports evaluation and result time apart, and the benchmark prints both.
+
+- changed_by:: [[changes#Tune Datalog Performance]] {date: 2026-10-29}
+
+## Rank-Ordered Results
+
+R1 of `tune-datalog-performance`: a result's distinct ids are decoded once and ranked in the store's value order, and rows sort by those integer ranks, then by interval start.
+
+- motivated_by:: [[constraints#Read Performance First]] {weight: primary, since: "2026-10-29"}
+- motivated_by:: [[datalog#Gates And Oracles]] {weight: secondary, since: "2026-10-29"}
+- changed_by:: [[changes#Tune Datalog Performance]] {date: 2026-10-29}
+
+Equal values share a rank and the sort is stable, so the order is exactly that of comparing decoded values (the `datalog-evaluation` requirement "Deterministic results"), and `datalog_reason` orders conclusions the same way with predicates ranked once. Before, `goal_rows` decoded every cell twice and compared `Value`s per pair, about 70 % of a closure query ([[crates/tm-datalog/src/run.rs]]). Rejected: sorting by raw id (not the value order), caching `Debug` strings in the comparison, and parallel sorting (not on wasm, keeps the decode cost).
 
 ## Guarded Value Invention
 

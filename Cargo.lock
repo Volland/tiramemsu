@@ -377,8 +377,9 @@ dependencies = [
 
 [[package]]
 name = "eyeron"
-version = "0.8.23"
-source = "git+https://github.com/Volland/eyeron?rev=e7625810f3ee779f04eef6d365605bc2111ea2e1#e7625810f3ee779f04eef6d365605bc2111ea2e1"
+version = "0.8.25"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d446a9583f4caad806c454527cf325787b1960d13628693adef33e207ce5d443"
 dependencies = [
  "num-bigint",
  "num-traits",
@@ -1816,6 +1817,7 @@ dependencies = [
 name = "tm-datalog"
 version = "0.10.0"
 dependencies = [
+ "hashbrown 0.16.1",
  "proptest",
  "rustc-hash",
  "smallvec",

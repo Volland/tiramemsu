@@ -19,7 +19,7 @@ serde_json = "1"
 
 [features]
 # The N3 reasoning scenario (`reason` module, `examples/reason.rs`). Off by
-# default: eyeron is not on crates.io yet.
+# default.
 n3 = ["tiramemsu/n3"]
 # The Datalog benchmark (`examples/datalog.rs`; OpenSpec change `add-datalog-engine`).
 datalog = ["tiramemsu/datalog"]

@@ -21,4 +21,5 @@ This directory defines the high-level concepts, business logic, and architecture
 - [[reasoning]] — Decisions N1–N18: N3 reasoning with eyeron over views, pointwise valid time, stored rule sets and materialized, grounded conclusions
 - [[datalog]] — Decisions DL1–DL24 (proposed): a fast Datalog crate with DatalogMTL over valid time, magic-set goals, constraints and reconciled materialization
 - [[constraints]] — Project-level constraints that bind several decisions, with their sources
+- [[changes]] — Changes that moved intent and code together, cited by `changed_by` edges
 - [[derived-beliefs]] — Decisions D45–D52: derived beliefs with `sys:derivedFrom` support links, the support cascade, supersede, bundles and derived upsert

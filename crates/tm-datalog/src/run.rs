@@ -4,6 +4,7 @@
 use std::collections::BTreeSet;
 
 use rustc_hash::{FxHashMap, FxHashSet};
+use smallvec::SmallVec;
 use tm_core::store::{Pattern, ReadStore};
 use tm_core::vocab::{DL_SOURCE, SYS_IN_GRAPH};
 use tm_core::{
@@ -685,18 +686,46 @@ fn rel_name(p: &Pred) -> String {
     }
 }
 
-fn sort_key(store: &dyn ReadStore, terms: &Terms, tuple: &[Id]) -> Result<Vec<Value>> {
-    tuple.iter().map(|&x| terms.value(store, x)).collect()
+/// The distinct ids of a result, each decoded once and ranked in the store's
+/// value order; equal values share a rank, so sorting rows by ranks gives the
+/// order of sorting them by decoded values (`lat.md/datalog#Rank-Ordered Results`).
+struct Ranks {
+    of: FxHashMap<Id, (u32, Term)>,
 }
 
-fn cmp_values(a: &[Value], b: &[Value]) -> std::cmp::Ordering {
-    for (x, y) in a.iter().zip(b) {
-        let o = terms::total_cmp(x, y);
-        if o.is_ne() {
-            return o;
+impl Ranks {
+    // @tg: implements:: [[openspec:datalog-evaluation#Deterministic results]] {since: "2026-10-29"}
+    fn new(
+        store: &dyn ReadStore,
+        terms: &Terms,
+        ids: impl IntoIterator<Item = Id>,
+    ) -> Result<Ranks> {
+        let distinct: FxHashSet<Id> = ids.into_iter().collect();
+        let mut vals = Vec::with_capacity(distinct.len());
+        for id in distinct {
+            vals.push((id, terms.value(store, id)?));
         }
+        vals.sort_by(|a, b| terms::total_cmp(&a.1, &b.1));
+        let mut of = FxHashMap::default();
+        of.reserve(vals.len());
+        let mut rank = 0u32;
+        for i in 0..vals.len() {
+            if i > 0 && terms::total_cmp(&vals[i - 1].1, &vals[i].1).is_ne() {
+                rank += 1;
+            }
+            let id = vals[i].0;
+            of.insert(id, (rank, terms.term(store, id)?));
+        }
+        Ok(Ranks { of })
     }
-    a.len().cmp(&b.len())
+
+    fn key(&self, tuple: &[Id]) -> SmallVec<[u32; 4]> {
+        tuple.iter().map(|x| self.of[x].0).collect()
+    }
+
+    fn term(&self, id: Id) -> Term {
+        self.of[&id].1.clone()
+    }
 }
 
 fn finish(store: &dyn ReadStore, eng: &Engine<'_, '_>, opts: &DatalogOptions) -> Result<Status> {
@@ -712,6 +741,29 @@ fn finish(store: &dyn ReadStore, eng: &Engine<'_, '_>, opts: &DatalogOptions) ->
     Ok(st)
 }
 
+/// Wall-clock time of a phase; always 0 on wasm32, whose `std` has no
+/// monotonic clock.
+struct Stopwatch {
+    #[cfg(not(target_arch = "wasm32"))]
+    start: std::time::Instant,
+}
+
+impl Stopwatch {
+    fn start() -> Stopwatch {
+        Stopwatch {
+            #[cfg(not(target_arch = "wasm32"))]
+            start: std::time::Instant::now(),
+        }
+    }
+
+    fn ms(&self) -> f64 {
+        #[cfg(not(target_arch = "wasm32"))]
+        return self.start.elapsed().as_secs_f64() * 1e3;
+        #[cfg(target_arch = "wasm32")]
+        return 0.0;
+    }
+}
+
 /// The rows of goal `gi` of a run.
 fn goal_rows(
     eng: &Engine<'_, '_>,
@@ -722,36 +774,42 @@ fn goal_rows(
 ) -> Result<Vec<Row>> {
     let store = eng.store();
     let r = &eng.sh.rels[rel as usize];
-    let mut rows: Vec<(Vec<Value>, i64, Row)> = Vec::new();
-    for row in 0..r.len() as u32 {
-        let iv = clip(prep, &r.ivs[row as usize]);
-        if iv.is_empty() {
-            continue;
-        }
+    let kept: Vec<(u32, IvSet)> = (0..r.len() as u32)
+        .filter_map(|row| {
+            let iv = clip(prep, &r.ivs[row as usize]);
+            (!iv.is_empty()).then_some((row, iv))
+        })
+        .collect();
+    let ranks = Ranks::new(
+        store,
+        eng.sh.terms,
+        kept.iter()
+            .flat_map(|(row, _)| r.tuple(*row).iter().copied()),
+    )?;
+    let mut rows: Vec<(SmallVec<[u32; 4]>, i64, Row)> = Vec::with_capacity(kept.len());
+    // proofs resolve in row order, so `facts` is numbered as before the sort
+    for (row, iv) in kept {
         let tuple = r.tuple(row);
-        let values = tuple
-            .iter()
-            .map(|&x| eng.sh.terms.term(store, x))
-            .collect::<Result<Vec<_>>>()?;
         let pf = if proof {
             Some(res.fragments(rel, row, &iv)?)
         } else {
             None
         };
         rows.push((
-            sort_key(store, eng.sh.terms, tuple)?,
+            ranks.key(tuple),
             iv.intervals()[0].0,
             Row {
-                values,
+                values: tuple.iter().map(|&x| ranks.term(x)).collect(),
                 valid: iv.valids(),
                 proof: pf,
             },
         ));
     }
-    rows.sort_by(|a, b| cmp_values(&a.0, &b.0).then(a.1.cmp(&b.1)));
+    rows.sort_by(|a, b| a.0.cmp(&b.0).then(a.1.cmp(&b.1)));
     Ok(rows.into_iter().map(|(_, _, r)| r).collect())
 }
 
+// @tg: implements:: [[openspec:datalog-evaluation#Explain a program run]] {since: "2026-10-29", note: "phase times"}
 fn run_goal(
     store: &dyn ReadStore,
     spec: &ViewSpec,
@@ -790,14 +848,18 @@ fn run_goal(
         opts.proof,
         FxHashSet::default(),
     )?;
+    let watch = Stopwatch::start();
     eng.run()?;
+    let eval_ms = watch.ms();
     let status = finish(store, &eng, opts)?;
     let mut res = Resolver {
         eng: &eng,
         facts: Vec::new(),
         memo: FxHashMap::default(),
     };
+    let watch = Stopwatch::start();
     let rows = goal_rows(&eng, &prep, goal_rel, opts.proof, &mut res)?;
+    let rows_ms = watch.ms();
     let facts = std::mem::take(&mut res.facts);
     let mut plan = Vec::new();
     if explain {
@@ -820,6 +882,8 @@ fn run_goal(
             ));
         }
         plan.push(format!("iterations: {}", eng.iterations));
+        plan.push(format!("time: evaluation {eval_ms:.3} ms"));
+        plan.push(format!("time: results {rows_ms:.3} ms"));
     }
     Ok((
         DatalogResult {
@@ -905,10 +969,43 @@ pub fn reason_excluding(
         facts: Vec::new(),
         memo: FxHashMap::default(),
     };
-    let mut conclusions: Vec<(Vec<Value>, i64, Conclusion)> = Vec::new();
-    let mut relations: Vec<(Vec<Value>, Fact)> = Vec::new();
+    let shown = |rel: &program::Relation| {
+        !rel.hidden && (matches!(rel.name, Pred::Iri(_)) || opts.include_relations)
+    };
+    let ranks = Ranks::new(
+        store,
+        &terms,
+        prep.prog
+            .rels
+            .iter()
+            .enumerate()
+            .filter(|(_, rel)| shown(rel))
+            .flat_map(|(ri, _)| {
+                let r = &eng.sh.rels[ri];
+                (0..r.len() as u32).flat_map(move |row| r.tuple(row).iter().copied())
+            }),
+    )?;
+    // relations in the order of their predicate IRI as displayed, or of their name
+    let mut by_name: Vec<(String, usize)> = prep
+        .prog
+        .rels
+        .iter()
+        .enumerate()
+        .map(|(ri, rel)| match &rel.name {
+            Pred::Iri(p) => (format!("{}", Value::iri(p.as_str())), ri),
+            Pred::Name(n) => (n.clone(), ri),
+        })
+        .collect();
+    by_name.sort();
+    let mut name_rank = vec![0usize; prep.prog.rels.len()];
+    for (i, (_, ri)) in by_name.iter().enumerate() {
+        name_rank[*ri] = i;
+    }
+    type Key = (usize, SmallVec<[u32; 4]>);
+    let mut conclusions: Vec<(Key, i64, Conclusion)> = Vec::new();
+    let mut relations: Vec<(Key, Fact)> = Vec::new();
     for (ri, rel) in prep.prog.rels.iter().enumerate() {
-        if rel.hidden {
+        if !shown(rel) {
             continue;
         }
         let r = &eng.sh.rels[ri];
@@ -930,51 +1027,39 @@ pub fn reason_excluding(
                         } else {
                             None
                         };
-                        let key = sort_key(store, &terms, tuple)?;
                         conclusions.push((
-                            key,
+                            (name_rank[ri], ranks.key(tuple)),
                             a,
                             Conclusion {
-                                s: terms.term(store, tuple[0])?,
+                                s: ranks.term(tuple[0]),
                                 p: Value::iri(p.as_str()),
-                                o: terms.term(store, tuple[1])?,
+                                o: ranks.term(tuple[1]),
                                 valid: frag.valids()[0],
                                 proof,
                             },
                         ));
                     }
                 }
-                Pred::Name(n) if opts.include_relations => {
+                Pred::Name(n) => {
                     let iv = clip(&prep, &r.ivs[row as usize]);
                     if iv.is_empty() {
                         continue;
                     }
-                    let args = tuple
-                        .iter()
-                        .map(|&x| terms.term(store, x))
-                        .collect::<Result<Vec<_>>>()?;
-                    let mut key = vec![Value::str(n.as_str())];
-                    key.extend(sort_key(store, &terms, tuple)?);
                     relations.push((
-                        key,
+                        (name_rank[ri], ranks.key(tuple)),
                         Fact {
                             relation: n.clone(),
-                            args,
+                            args: tuple.iter().map(|&x| ranks.term(x)).collect(),
                             valid: iv.valids(),
                             proof: None,
                         },
                     ));
                 }
-                Pred::Name(_) => {}
             }
         }
     }
-    conclusions.sort_by(|a, b| {
-        let pa = format!("{}", a.2.p);
-        let pb = format!("{}", b.2.p);
-        pa.cmp(&pb).then(cmp_values(&a.0, &b.0)).then(a.1.cmp(&b.1))
-    });
-    relations.sort_by(|a, b| cmp_values(&a.0, &b.0));
+    conclusions.sort_by(|a, b| a.0.cmp(&b.0).then(a.1.cmp(&b.1)));
+    relations.sort_by(|a, b| a.0.cmp(&b.0));
     let facts = std::mem::take(&mut res.facts);
     Ok(ReasonResult {
         conclusions: conclusions.into_iter().map(|c| c.2).collect(),

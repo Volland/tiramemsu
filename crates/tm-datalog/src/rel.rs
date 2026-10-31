@@ -1,12 +1,15 @@
-//! Derived relations: tuples of ids in one flat buffer, each with its coalesced
+//! Derived relations: tuples of ids in one flat buffer, found through a table of
+//! row numbers that hashes into that buffer, each with its coalesced
 //! interval set, hash indexes per bound-position mask built on first use and
 //! kept current on insert, the delta of the running iteration, and the
 //! derivations that first produced each portion of a tuple's interval set
 //! (`lat.md/datalog#Sorted Columnar Relations`, `#Provenance On Demand`).
 
+use std::hash::BuildHasher;
 use std::sync::{Arc, RwLock};
 
-use rustc_hash::FxHashMap;
+use hashbrown::HashTable;
+use rustc_hash::{FxBuildHasher, FxHashMap};
 use smallvec::SmallVec;
 
 use crate::interval::IvSet;
@@ -15,7 +18,8 @@ use crate::terms::Id;
 /// A tuple key.
 pub type Key = SmallVec<[Id; 4]>;
 
-type Index = FxHashMap<Key, Vec<u32>>;
+/// Rows by the values of a bound-position mask.
+pub type Index = FxHashMap<Key, Vec<u32>>;
 
 /// One derived relation.
 // @tg: -contradicts:: [[datalog#Sorted Columnar Relations]] {reason: "hash indexes and index nested loops; the worst-case-optimal join for cyclic bodies is not built yet", until: "a cyclic workload in the Datalog benchmark"}
@@ -27,7 +31,8 @@ pub struct Rel {
     pub ivs: Vec<IvSet>,
     /// The part of each row's set that came from stored statements (seed rules).
     pub stored: Vec<IvSet>,
-    map: FxHashMap<Key, u32>,
+    /// Row numbers, hashed by their tuple in `data` (no copy of the key).
+    rows: HashTable<u32>,
     idx: RwLock<FxHashMap<u32, Arc<Index>>>,
     /// Per row: the portions of its set and the derivation of each (provenance on).
     pub prov: Vec<SmallVec<[(IvSet, u32); 1]>>,
@@ -45,7 +50,7 @@ impl Rel {
             data: Vec::new(),
             ivs: Vec::new(),
             stored: Vec::new(),
-            map: FxHashMap::default(),
+            rows: HashTable::new(),
             idx: RwLock::new(FxHashMap::default()),
             prov: Vec::new(),
             delta: Vec::new(),
@@ -71,7 +76,17 @@ impl Rel {
 
     /// The row of a tuple.
     pub fn find(&self, tuple: &[Id]) -> Option<u32> {
-        self.map.get(tuple).copied()
+        self.find_hashed(tuple, FxBuildHasher.hash_one(tuple))
+    }
+
+    fn find_hashed(&self, tuple: &[Id], hash: u64) -> Option<u32> {
+        let a = self.arity;
+        let data = &self.data;
+        self.rows
+            .find(hash, |&row| {
+                &data[row as usize * a..(row as usize + 1) * a] == tuple
+            })
+            .copied()
     }
 
     fn index(&self, mask: u32) -> Arc<Index> {
@@ -138,14 +153,43 @@ impl Rel {
         Ok(())
     }
 
+    /// The index for `mask`, when it has been built.
+    pub fn built(&self, mask: u32) -> Option<Arc<Index>> {
+        self.idx
+            .read()
+            .unwrap_or_else(|p| p.into_inner())
+            .get(&mask)
+            .cloned()
+    }
+
+    /// [`Rel::for_rows`] through `ix`, the index of a mask that is neither empty
+    /// nor full.
+    pub fn for_rows_in(
+        ix: &Index,
+        key: &[Id],
+        mut f: impl FnMut(u32) -> tm_core::Result<()>,
+    ) -> tm_core::Result<()> {
+        if let Some(rows) = ix.get(key) {
+            for &row in rows {
+                f(row)?;
+            }
+        }
+        Ok(())
+    }
+
     /// Adds `iv` to `tuple`'s set; returns the row and the part that is new.
     pub fn insert(&mut self, tuple: &[Id], iv: &IvSet, prov: bool) -> Option<(u32, IvSet)> {
         if iv.is_empty() {
             return None;
         }
-        match self.map.get(tuple).copied() {
+        let hash = FxBuildHasher.hash_one(tuple);
+        match self.find_hashed(tuple, hash) {
             Some(row) => {
                 let r = row as usize;
+                // a row that holds at every instant takes nothing new
+                if self.ivs[r].is_all() {
+                    return None;
+                }
                 let new = iv.subtract(&self.ivs[r]);
                 if new.is_empty() {
                     return None;
@@ -164,7 +208,10 @@ impl Rel {
                     self.prov.push(SmallVec::new());
                 }
                 self.fragments += iv.intervals().len() as u64;
-                self.map.insert(tuple.iter().copied().collect(), row);
+                let (a, data) = (self.arity, &self.data);
+                self.rows.insert_unique(hash, row, |&r| {
+                    FxBuildHasher.hash_one(&data[r as usize * a..(r as usize + 1) * a])
+                });
                 let idx = self.idx.get_mut().unwrap_or_else(|p| p.into_inner());
                 for (&mask, ix) in idx.iter_mut() {
                     Arc::make_mut(ix)

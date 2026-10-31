@@ -124,9 +124,23 @@ impl IvSet {
         self.0.iter().any(|&(a, b)| a <= t && t < b)
     }
 
-    /// True when every instant of `other` is in `self`.
+    /// True when every instant of `other` is in `self`. Both are coalesced, so
+    /// each interval of `other` must lie inside one interval of `self`.
     pub fn covers(&self, other: &IvSet) -> bool {
-        other.subtract(self).is_empty()
+        if other.is_empty() || self.is_all() {
+            return true;
+        }
+        let mut j = 0;
+        for &(a, b) in &other.0 {
+            while j < self.0.len() && self.0[j].1 <= a {
+                j += 1;
+            }
+            match self.0.get(j) {
+                Some(&(c, d)) if c <= a && b <= d => {}
+                _ => return false,
+            }
+        }
+        true
     }
 
     /// `self ∩ other`.
@@ -163,6 +177,9 @@ impl IvSet {
 
     /// `self ∪ other`.
     pub fn union(&self, other: &IvSet) -> IvSet {
+        if self.is_all() || other.is_all() {
+            return IvSet::all();
+        }
         if self.is_empty() {
             return other.clone();
         }
@@ -185,6 +202,9 @@ impl IvSet {
     pub fn subtract(&self, other: &IvSet) -> IvSet {
         if other.is_empty() || self.is_empty() {
             return self.clone();
+        }
+        if other.is_all() {
+            return IvSet::empty();
         }
         let mut out = SmallVec::new();
         let mut j = 0;
@@ -367,6 +387,56 @@ mod tests {
             IvSet::all().subtract(&IvSet::one(3, POS_INF)),
             IvSet::one(NEG_INF, 3)
         );
+    }
+
+    #[test]
+    fn every_instant_shortcuts_match_pointwise() {
+        let sets = [
+            IvSet::empty(),
+            IvSet::all(),
+            IvSet::one(NEG_INF, 3),
+            IvSet::one(3, POS_INF),
+            IvSet::one(2, 6),
+            IvSet::from_intervals(vec![(NEG_INF, 1), (4, 8), (10, POS_INF)]),
+            IvSet::from_intervals(vec![(0, 2), (5, 6)]),
+        ];
+        let points = [
+            NEG_INF,
+            NEG_INF + 1,
+            -3,
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            8,
+            9,
+            10,
+            20,
+            POS_INF - 1,
+        ];
+        for a in &sets {
+            for b in &sets {
+                let (u, d) = (a.union(b), a.subtract(b));
+                for &t in &points {
+                    assert_eq!(
+                        u.contains(t),
+                        a.contains(t) || b.contains(t),
+                        "{a:?} ∪ {b:?} at {t}"
+                    );
+                    assert_eq!(
+                        d.contains(t),
+                        a.contains(t) && !b.contains(t),
+                        "{a:?} ∖ {b:?} at {t}"
+                    );
+                }
+                let covers = points.iter().all(|&t| !b.contains(t) || a.contains(t));
+                assert_eq!(a.covers(b), covers, "{a:?} covers {b:?}");
+                assert_eq!(a.covers(b), b.subtract(a).is_empty(), "{a:?} covers {b:?}");
+            }
+        }
     }
 
     #[test]

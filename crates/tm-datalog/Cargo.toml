@@ -21,6 +21,7 @@ parallel = []
 [dependencies]
 tm-core = { workspace = true }
 tm-store = { workspace = true }
+hashbrown = { version = "0.16", default-features = false }
 rustc-hash = "2"
 smallvec = "1"
 

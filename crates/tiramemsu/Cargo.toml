@@ -104,8 +104,7 @@ cypher = ["exec", "dep:tm-cypher"]
 redb = ["dep:tm-redb"]
 # N3 reasoning with eyeron (`View::reason`, `View::rule_set_info`,
 # `TxN3::store_rules`; OpenSpec change `add-n3-reasoning`). Off by default and
-# independent of `exec`: the core tier can reason. eyeron is a git dependency
-# until it is on crates.io, so a build with this feature cannot be published.
+# independent of `exec`: the core tier can reason.
 n3 = ["dep:tm-n3"]
 # Datalog with DatalogMTL over valid time (`View::datalog`, `View::datalog_reason`,
 # `View::check`, `View::program_info`, `View::explain_datalog`,

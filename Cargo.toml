@@ -36,13 +36,9 @@ tiramemsu-mcp = { path = "crates/tiramemsu-mcp", version = "0.10.0" }
 tm-wasm = { path = "crates/tm-wasm", version = "0.10.0" }
 tm-n3 = { path = "crates/tm-n3", version = "0.10.0" }
 tm-datalog = { path = "crates/tm-datalog", version = "0.10.0" }
-# The N3 reasoner, pinned to a git commit until it is on crates.io (OpenSpec
-# change `publish-eyeron-dependency`); `tm-n3` is `publish = false` meanwhile.
-# Pinned to the branch of eyereasoner/eyeron#25 on the project fork: with
-# `default-features = false` it leaves out eyeron's HTTP client (`ureq`, and
-# with it `ring`, which broke the linux-aarch64 wheel), and it has
-# `ReasonerOptions::now`. Back to upstream once the PR is merged.
-eyeron = { git = "https://github.com/Volland/eyeron", rev = "e7625810f3ee779f04eef6d365605bc2111ea2e1", default-features = false }
+# The N3 reasoner, from crates.io. `default-features = false` leaves out its
+# HTTP client (`ureq`, and with it `ring`, which broke the linux-aarch64 wheel).
+eyeron = { version = "0.8.25", default-features = false }
 
 # The storage engine is optimised even in dev builds: redb is pure Rust, and an
 # unoptimised B-tree makes the redb test suites ten times slower (SQLite is

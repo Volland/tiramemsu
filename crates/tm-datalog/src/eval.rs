@@ -10,6 +10,7 @@
 //! interval sets as they go.
 
 use std::collections::BTreeSet;
+use std::sync::Arc;
 
 use rustc_hash::{FxHashMap, FxHashSet};
 use smallvec::SmallVec;
@@ -20,8 +21,8 @@ use crate::interval::{IvSet, NEG_INF, POS_INF};
 use crate::program::{
     ready, Agg, BKind, CAtom, CExpr, Elem, Program, Rule, RuleKind, Slot, Source, Var,
 };
-use crate::rel::Rel;
-use crate::source::{Pat4, Stored};
+use crate::rel::{self, Rel};
+use crate::source::{self, Loaded, Pat4, Stored};
 use crate::syntax::{AggFn, CmpOp, TempOp, Window};
 use crate::terms::{self, Id, Terms};
 
@@ -129,6 +130,31 @@ struct Out {
     deriv: Option<Deriv>,
 }
 
+/// An atom's access resolved once per rule variant: the loaded predicate (and
+/// its index for the atom's bound mask, when built) or a derived relation's
+/// index, so the join loop takes no lock per probe
+/// (`lat.md/datalog#Sorted Columnar Relations`).
+enum Pre {
+    /// Read as written.
+    None,
+    /// A loaded stored predicate.
+    Loaded {
+        p: Id,
+        m: u8,
+        l: Arc<Loaded>,
+        ix: Option<Arc<source::Index>>,
+    },
+    /// A derived relation's index for `mask`.
+    Derived { mask: u32, ix: Arc<rel::Index> },
+}
+
+/// A cached plan: the body order and the sizes of the derived relations the
+/// body reads when it was made.
+struct Plan {
+    order: Vec<usize>,
+    sizes: Vec<usize>,
+}
+
 /// The part of a run that worker threads share.
 pub struct Shared<'p, 's> {
     /// The program.
@@ -167,6 +193,8 @@ pub struct Engine<'p, 's> {
     facts: u64,
     new_values: u64,
     estimates: FxHashMap<(Option<Id>, u8), f64>,
+    /// Plans of the running stratum, by rule and delta position.
+    plans: FxHashMap<(usize, Option<usize>), Plan>,
 }
 
 /// Interval set of a derived row under an atom's operators (innermost first).
@@ -209,6 +237,7 @@ impl<'p, 's> Engine<'p, 's> {
             facts: 0,
             new_values: 0,
             estimates: FxHashMap::default(),
+            plans: FxHashMap::default(),
         })
     }
 
@@ -263,6 +292,7 @@ impl<'p, 's> Engine<'p, 's> {
             .iter()
             .map(|&r| self.sh.prog.rels[r as usize].name.to_string())
             .collect();
+        self.plans.clear();
         // iteration 0: every rule over full relations
         let mut outs = Vec::new();
         for &ri in &st.rules {
@@ -550,24 +580,113 @@ impl<'p, 's> Engine<'p, 's> {
         Ok(order)
     }
 
-    fn eval_rule(&mut self, ri: usize, delta: Option<usize>, si: usize) -> Result<Vec<Out>> {
-        let rule = &self.sh.prog.rules[ri];
-        let order = self.plan_rule(rule, delta, &BTreeSet::new())?;
-        if self.iterations == 0 || delta.is_none() {
-            let desc: Vec<String> = order
-                .iter()
-                .map(|&k| describe(&rule.body[k], delta == Some(k)))
-                .collect();
-            let line = format!(
-                "  rule {} -> {}: {}",
-                ri,
-                self.sh.prog.rels[rule.head as usize].name,
-                desc.join(", ")
-            );
-            if !self.plan.contains(&line) {
-                self.plan.push(line);
+    /// The lengths of the derived relations `rule`'s body reads.
+    fn body_sizes(&self, rule: &Rule) -> Vec<usize> {
+        let mut out = Vec::new();
+        for e in &rule.body {
+            let atoms: &[&CAtom] = match e {
+                Elem::Pos(a) | Elem::Neg(a) => &[a],
+                Elem::Binary { lhs, rhs, .. } => &[lhs, rhs],
+                _ => &[],
+            };
+            for a in atoms {
+                if let Some(r) = a.rel() {
+                    out.push(self.sh.rels[r as usize].len());
+                }
             }
         }
+        out
+    }
+
+    /// The order of a rule variant: the cached one, unless a relation the body
+    /// reads has become non-empty or grown tenfold since it was planned.
+    fn order(&mut self, ri: usize, delta: Option<usize>) -> Result<Vec<usize>> {
+        let rule = &self.sh.prog.rules[ri];
+        let sizes = self.body_sizes(rule);
+        if let Some(p) = self.plans.get(&(ri, delta)) {
+            let stale = p
+                .sizes
+                .iter()
+                .zip(&sizes)
+                .any(|(&was, &now)| (was == 0 && now > 0) || now >= was.saturating_mul(10));
+            if !stale {
+                return Ok(p.order.clone());
+            }
+        }
+        let order = self.plan_rule(rule, delta, &BTreeSet::new())?;
+        let desc: Vec<String> = order
+            .iter()
+            .map(|&k| describe(&rule.body[k], delta == Some(k)))
+            .collect();
+        let line = format!(
+            "  rule {} -> {}: {}",
+            ri,
+            self.sh.prog.rels[rule.head as usize].name,
+            desc.join(", ")
+        );
+        if !self.plan.contains(&line) {
+            self.plan.push(line);
+        }
+        self.plans.insert(
+            (ri, delta),
+            Plan {
+                order: order.clone(),
+                sizes,
+            },
+        );
+        Ok(order)
+    }
+
+    /// The accesses of a variant's atoms, by body element, from the bound
+    /// positions the order gives each.
+    fn resolve(&self, rule: &Rule, order: &[usize], delta: Option<usize>) -> Vec<Pre> {
+        let mut pre: Vec<Pre> = (0..rule.body.len()).map(|_| Pre::None).collect();
+        let mut bound = BTreeSet::new();
+        for &k in order {
+            let e = &rule.body[k];
+            if let Elem::Pos(a) = e {
+                if a.ops.is_empty() && delta != Some(k) {
+                    let is_bound = |s: &Slot| Self::slot_bound(s, &bound);
+                    match &a.src {
+                        Source::Stored(sp) if !sp.e.as_ref().is_some_and(is_bound) => {
+                            if let Slot::Const(c) = sp.p {
+                                let p = self.sh.consts[c as usize];
+                                if let Some(l) = self.sh.stored.peek(Some(p)) {
+                                    let m =
+                                        u8::from(is_bound(&sp.s)) | u8::from(is_bound(&sp.o)) << 2;
+                                    let ix = if m == 0 { None } else { l.built(m) };
+                                    pre[k] = Pre::Loaded { p, m, l, ix };
+                                }
+                            }
+                        }
+                        Source::Derived { rel, args } => {
+                            let mask = args
+                                .iter()
+                                .enumerate()
+                                .filter(|(_, s)| is_bound(s))
+                                .fold(0u32, |m, (i, _)| m | 1 << i);
+                            let full = (1u32 << args.len()) - 1;
+                            if mask != 0 && mask != full {
+                                if let Some(ix) = self.sh.rels[*rel as usize].built(mask) {
+                                    pre[k] = Pre::Derived { mask, ix };
+                                }
+                            }
+                        }
+                        Source::Stored(_) => {}
+                    }
+                }
+            }
+            if let Some(b) = ready(e, &bound, rule) {
+                bound.extend(b);
+            }
+        }
+        pre
+    }
+
+    fn eval_rule(&mut self, ri: usize, delta: Option<usize>, si: usize) -> Result<Vec<Out>> {
+        let order = self.order(ri, delta)?;
+        let rule = &self.sh.prog.rules[ri];
+        let pre = self.resolve(rule, &order, delta);
         let _ = si;
         let none = Vec::new();
         let deltas: &[(u32, IvSet)] = match delta.map(|k| &rule.body[k]) {
@@ -581,6 +700,7 @@ impl<'p, 's> Engine<'p, 's> {
             ri: ri as u32,
             order: &order,
             delta,
+            pre: &pre,
         };
         #[cfg(all(feature = "parallel", not(target_arch = "wasm32")))]
         if let (Some(sync), Some(_)) = (self.sync, delta) {
@@ -637,6 +757,7 @@ struct Cx<'e, 'p, 's> {
     ri: u32,
     order: &'e [usize],
     delta: Option<usize>,
+    pre: &'e [Pre],
 }
 
 impl Cx<'_, '_, '_> {
@@ -654,7 +775,9 @@ impl Cx<'_, '_, '_> {
         let results: Vec<Mutex<Option<Result<Vec<Out>>>>> =
             (0..n).map(|_| Mutex::new(None)).collect();
         let interrupt = budget::interrupt();
-        let (sh, rule, ri, order, delta) = (self.sh, self.rule, self.ri, self.order, self.delta);
+        let (sh, rule, ri, order, delta, pre) = (
+            self.sh, self.rule, self.ri, self.order, self.delta, self.pre,
+        );
         std::thread::scope(|sc| {
             for _ in 0..threads {
                 sc.spawn(|| {
@@ -665,6 +788,7 @@ impl Cx<'_, '_, '_> {
                         ri,
                         order,
                         delta,
+                        pre,
                     };
                     let drain = || loop {
                         if failed.load(Ordering::Relaxed) {
@@ -1012,10 +1136,16 @@ impl Cx<'_, '_, '_> {
                                 key.push(x);
                             }
                         }
-                        r.for_rows(mask, &key, |row| {
+                        let each = |row| {
                             let p = (!magic).then_some(Prem::Row(*rel, row));
                             visit(r.tuple(row), &r.ivs[row as usize], p, b, prem, out)
-                        })?;
+                        };
+                        match &self.pre[ek] {
+                            Pre::Derived { mask: m, ix } if *m == mask => {
+                                Rel::for_rows_in(ix, &key, each)?
+                            }
+                            _ => r.for_rows(mask, &key, each)?,
+                        }
                     }
                     Source::Stored(sp) => {
                         let g = |s: &Slot| {
@@ -1024,14 +1154,22 @@ impl Cx<'_, '_, '_> {
                         };
                         let pat: Pat4 = [g(&sp.s), g(&sp.p), g(&sp.o), sp.e.as_ref().and_then(g)];
                         let all = IvSet::all();
-                        self.sh
-                            .stored
-                            .for_matches(self.store, &pat, &mut |r, siv| {
-                                let vals = [r.s, r.p, r.o, r.e];
-                                let n = if sp.e.is_some() { 4 } else { 3 };
-                                let siv = if sp.record { &all } else { siv };
-                                visit(&vals[..n], siv, Some(Prem::Stmt(r.e)), b, prem, out)
-                            })?;
+                        let each = &mut |r: source::Row, siv: &IvSet| {
+                            let vals = [r.s, r.p, r.o, r.e];
+                            let n = if sp.e.is_some() { 4 } else { 3 };
+                            let siv = if sp.record { &all } else { siv };
+                            visit(&vals[..n], siv, Some(Prem::Stmt(r.e)), b, prem, out)
+                        };
+                        match &self.pre[ek] {
+                            Pre::Loaded { p, m, l, ix }
+                                if pat[1] == Some(*p)
+                                    && pat[3].is_none()
+                                    && source::loaded_mask(&pat) == *m =>
+                            {
+                                l.visit(&pat, ix.as_deref(), each)?
+                            }
+                            _ => self.sh.stored.for_matches(self.store, &pat, each)?,
+                        }
                     }
                 }
             }
@@ -1355,6 +1493,7 @@ impl Cx<'_, '_, '_> {
             .filter(|v| b[*v as usize] != UNBOUND)
             .collect();
         let order = plan_static(&inner_rule, &bound);
+        let pre: Vec<Pre> = inner_rule.body.iter().map(|_| Pre::None).collect();
         let sub = Cx {
             sh: self.sh,
             store: self.store,
@@ -1362,6 +1501,7 @@ impl Cx<'_, '_, '_> {
             ri: u32::MAX,
             order: &order,
             delta: None,
+            pre: &pre,
         };
         let mut items: FxHashMap<Vec<Id>, (Option<Value>, IvSet)> = FxHashMap::default();
         let mut keys: Vec<Vec<Id>> = Vec::new();
@@ -1533,6 +1673,14 @@ impl Cx<'_, '_, '_> {
         }
         if hiv.is_empty() {
             return Ok(());
+        }
+        // a tuple that already holds over the whole set gains nothing in `merge`
+        // (clipping and magic sets only shrink or fill what it would add)
+        let head = &self.sh.rels[rule.head as usize];
+        if let Some(row) = head.find(&tuple) {
+            if head.ivs[row as usize].covers(&hiv) {
+                return Ok(());
+            }
         }
         out.push(Out {
             rel: rule.head,
