@@ -181,7 +181,10 @@ impl Lowerer<'_> {
             } => self.values(variables, bindings),
             GraphPattern::Service { name, inner, .. } => match name {
                 NamedNodePattern::NamedNode(n) if n.as_str() == tm_core::vocab::DL_QUERY => {
-                    self.datalog_service(inner, view)
+                    self.datalog_service(inner, view, tm_ir::GoalLanguage::Datalog)
+                }
+                NamedNodePattern::NamedNode(n) if n.as_str() == tm_core::vocab::ELPI_QUERY => {
+                    self.datalog_service(inner, view, tm_ir::GoalLanguage::Elpi)
                 }
                 NamedNodePattern::NamedNode(n)
                     if crate::dataset::parse_time_respecting_iri(n.as_str())?.is_some() =>

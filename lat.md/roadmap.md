@@ -33,7 +33,7 @@ The releases after 0.4.0 are proposed in `docs/feature-roadmap.md` (see [[projec
 
 Eleven OpenSpec proposals (2026-10-10) cover the releases after 0.4.0 in `docs/feature-roadmap.md`. Vector and hybrid recall are implemented and archived (`openspec/changes/archive/2026-10-11-*`); libSQL is deferred (2026-10-11); the rest are open.
 
-Six more (2026-10-27) add the redb backend and its native runner ([[backends]]). Four more (2026-10-28) add Datalog ([[datalog]]).
+Six more (2026-10-27) add the redb backend and its native runner ([[backends]]). Four more (2026-10-28) add Datalog ([[datalog]]). Four more (2026-10-31) add ELPI on lean-elpi 0.4 ([[elpi#Prerequisite And Four Changes]]): all four are built and archived.
 
 | Release | Change | Delivers |
 |---|---|---|
@@ -58,6 +58,10 @@ Six more (2026-10-27) add the redb backend and its native runner ([[backends]]).
 | — | `add-datalog-constraints` | `error` constraints enforced at commit, seeded by the transaction's changes ([[datalog#Warn And Error Constraints]]) |
 | — | `add-datalog-materialization` | Programs materialized through `derive`, reconciliation, incremental runs ([[datalog#Shared Materialization With Reconciliation]]) |
 | — | `add-datalog-query-calls` | Datalog goals from SPARQL `SERVICE` and Cypher `CALL` ([[datalog#Goal Calls In SPARQL And Cypher]]) |
+| — | `add-elpi-engine` (archived) | `tm-elpi`: λProlog over lean-elpi with host callback builtins, queries and `warn` checks ([[elpi]]) |
+| — | `add-elpi-programs` (archived) | `tm-elpi-store`: program nodes with includes, delta-seeded enforcement at commit ([[elpi#Two Constraint Entry Points]]) |
+| — | `add-elpi-materialization` (archived) | Program-stated support through the shared materialize path, reconciliation ([[elpi#Reconciled Materialization]]) |
+| — | `add-elpi-query-calls` (archived) | ELPI goals from SPARQL `SERVICE` and Cypher `CALL` ([[elpi#Own Calls]]) |
 
 ```plantuml
 @startuml milestones

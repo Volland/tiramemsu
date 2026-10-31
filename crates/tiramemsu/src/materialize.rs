@@ -24,6 +24,7 @@ pub(crate) enum MTerm {
     /// A value.
     Value(Value),
     /// A node the rules invented, with a label stable across runs.
+    #[cfg_attr(not(any(feature = "n3", feature = "datalog")), allow(dead_code))]
     Invent(String),
     /// Something a statement cannot hold (a list, a formula).
     Unstorable,
@@ -35,6 +36,7 @@ pub(crate) enum MSupport {
     /// A stored statement.
     Statement(Eid),
     /// An earlier item.
+    #[cfg_attr(not(any(feature = "n3", feature = "datalog")), allow(dead_code))]
     Item(usize),
 }
 

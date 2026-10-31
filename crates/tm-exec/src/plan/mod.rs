@@ -198,6 +198,8 @@ pub enum PDlProgram {
 /// optional interval columns. Evaluated once per execution.
 #[derive(Clone, Debug, PartialEq)]
 pub struct PDatalog {
+    /// The language of the program.
+    pub language: tm_ir::GoalLanguage,
     /// The program.
     pub program: PDlProgram,
     /// The goal body.

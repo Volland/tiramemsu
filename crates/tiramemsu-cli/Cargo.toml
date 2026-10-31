@@ -34,6 +34,10 @@ n3 = ["tiramemsu/n3", "tiramemsu-json/n3"]
 # `tm datalog`, `tm check` and `tm program put|show`
 # (OpenSpec change `add-datalog-engine`).
 datalog = ["tiramemsu/datalog", "tiramemsu-json/datalog"]
+# `tm elpi query|check|conclude|materialize|program` (OpenSpec changes
+# `add-elpi-engine`, `add-elpi-programs`, `add-elpi-materialization`). Not a
+# default: it links the native libleanelpi (found through `LEANELPI_DIST`).
+elpi = ["tiramemsu/elpi"]
 
 [dev-dependencies]
 tempfile = "3"

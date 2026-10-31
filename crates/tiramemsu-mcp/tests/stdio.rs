@@ -85,6 +85,15 @@ fn stdio_session_end_to_end() {
             "materialize_program",
         ]);
     }
+    if cfg!(feature = "elpi") {
+        expected.extend([
+            "elpi_query",
+            "elpi_check",
+            "store_elpi_program",
+            "enforce_elpi",
+            "materialize_elpi",
+        ]);
+    }
     assert_eq!(names, expected);
     let call = |id: u64, name: &str, args: J| {
         json!({ "jsonrpc": "2.0", "id": id, "method": "tools/call",

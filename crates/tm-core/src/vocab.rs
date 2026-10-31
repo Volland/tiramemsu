@@ -74,6 +74,37 @@ pub const SYS_DB: &str = "urn:tiramemsu:sys:db";
 /// `sys:vocab`.
 pub const SYS_VOCAB: &str = "urn:tiramemsu:sys:vocab";
 
+/// `elpi:` namespace: stored ELPI programs, their labels and goal calls.
+pub const ELPI: &str = "urn:tiramemsu:elpi:";
+/// The SPARQL `SERVICE` IRI of an ELPI goal call (`lat.md/elpi#Own Calls`).
+pub const ELPI_QUERY: &str = "urn:tiramemsu:elpi:query";
+/// `elpi:goal`: in a goal call, the goal (a string literal).
+pub const ELPI_GOAL: &str = "urn:tiramemsu:elpi:goal";
+/// `elpi:program`: in a goal call, the stored program (an IRI).
+pub const ELPI_PROGRAM: &str = "urn:tiramemsu:elpi:program";
+/// `elpi:text`: in a goal call, program text (a string literal).
+pub const ELPI_TEXT: &str = "urn:tiramemsu:elpi:text";
+/// `elpi:validFrom`: in a goal call, binds the start of a row's interval.
+pub const ELPI_VALID_FROM: &str = "urn:tiramemsu:elpi:validFrom";
+/// `elpi:validTo`: in a goal call, binds the end of a row's interval.
+pub const ELPI_VALID_TO: &str = "urn:tiramemsu:elpi:validTo";
+/// ELPI program text: `(program elpi:source "<text>")` (facade feature `elpi`).
+pub const ELPI_SOURCE: &str = "urn:tiramemsu:elpi:source";
+/// `(program elpi:enforced true)` turns an ELPI program's constraints on at commit.
+pub const ELPI_ENFORCED: &str = "urn:tiramemsu:elpi:enforced";
+/// `(d elpi:derivedBy program)`: an ELPI program derived `d`.
+pub const ELPI_DERIVED_BY: &str = "urn:tiramemsu:elpi:derivedBy";
+/// The rule label of an ELPI derivation.
+pub const ELPI_RULE: &str = "urn:tiramemsu:elpi:rule";
+/// The skolem label of a node an ELPI run invented.
+pub const ELPI_SKOLEM: &str = "urn:tiramemsu:elpi:skolem";
+/// `(tx elpi:materialized program)`: the transaction materialized the program.
+pub const ELPI_MATERIALIZED: &str = "urn:tiramemsu:elpi:materialized";
+/// `(tx elpi:reconciled program)`: the transaction retracted conclusions no longer derived.
+pub const ELPI_RECONCILED: &str = "urn:tiramemsu:elpi:reconciled";
+/// The number of conclusions a materialization retracted.
+pub const ELPI_RECONCILED_COUNT: &str = "urn:tiramemsu:elpi:reconciledCount";
+
 /// `sys:inGraph`: the membership predicate `(eid sys:inGraph graph)` (engine-owned).
 pub const SYS_IN_GRAPH: &str = "urn:tiramemsu:sys:inGraph";
 /// `sys:derivedFrom`: the support link `(D sys:derivedFrom e)` of a derived belief

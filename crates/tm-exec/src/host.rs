@@ -40,7 +40,7 @@ pub fn check_capabilities(c: Capabilities) -> Result<()> {
 pub fn install(
     exec: &mut dyn Executor,
     ops: &OperatorRegistry,
-    datalog: Option<std::sync::Arc<dyn crate::datalog::DatalogProvider>>,
+    goals: crate::datalog::GoalProviders,
 ) -> Result<()> {
     check_capabilities(exec.capabilities())?;
     let reg = exec
@@ -55,6 +55,6 @@ pub fn install(
     reg.register_conn_table(crate::text::table_function())?;
     reg.register_conn_table(crate::vector::table_function())?;
     reg.register_conn_table(crate::recall::table_function())?;
-    reg.register_conn_table(crate::datalog::table_function(datalog))?;
+    reg.register_conn_table(crate::datalog::table_function(goals))?;
     ops.register_all(reg)
 }

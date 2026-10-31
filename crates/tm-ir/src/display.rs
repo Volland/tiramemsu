@@ -236,12 +236,16 @@ fn write_op(out: &mut String, op: &Op, depth: usize, pretty: bool) {
             out.push(')');
         }
         Op::Datalog(t) => {
+            let head = match t.language {
+                crate::op::GoalLanguage::Datalog => "datalog",
+                crate::op::GoalLanguage::Elpi => "elpi",
+            };
             match &t.program {
                 crate::op::DlProgramRef::Iri(i) => {
-                    let _ = write!(out, "(datalog :program {}", term(i));
+                    let _ = write!(out, "({head} :program {}", term(i));
                 }
                 crate::op::DlProgramRef::Text(x) => {
-                    let _ = write!(out, "(datalog :text {x:?}");
+                    let _ = write!(out, "({head} :text {x:?}");
                 }
             }
             let _ = write!(out, " :goal {:?} :view {}", t.goal, view_text(&t.view));

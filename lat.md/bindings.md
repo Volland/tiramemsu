@@ -140,6 +140,12 @@ The database op `materializeProgram` (`stored`, `scope`, `window`, `limits`, `re
 
 Node exposes `View.datalog(opts)`, `datalogReason`, `programInfo`, `explainDatalog`, `check`, the same on `Database`, and `Tx.storeProgram(program, text)`; Python `View.datalog(goal, program, stored=, scope=, window=, time=, limits=, demand=, proof=, access=, parallel_threshold=, require_complete=)`, `datalog_reason`, `program_info`, `explain_datalog`, `check(only=)`, the same on `Database`, and `TxBuilder.store_program(program, text)`.
 
+### ELPI
+
+The ELPI calls of [[elpi]] behind the bridge feature `elpi`, in [[bindings/json/src/elpi.rs]]; without the feature they fail with `Unsupported`. Only the CLI and the MCP server build with it so far ([[elpi#Native Library Distribution]]).
+
+A call names its program with exactly one of `program` (ELPI text) and `stored` (a program node). The read `elpi` takes `goal` and the options `validAt`, `fuel`, `limit` and `maxRows`, and returns `{"rows": [{var: term}], "exhausted", "fuelUsed", "rowsRead"}`; a term no value holds is `{"elpi": "<printed>"}`. `elpiCheck` returns `{"violations": [{"severity", "name", "message", "eids", "valid"}]}`, `elpiConclude` `{"conclusions": [{"s", "p", "o", "support", "validFrom", "validTo"}], "nonMonotonic"}`, and `elpiProgramInfo` (`program`) `{"program", "statement", "text", "includes": [{"program", "statement"}], "nonMonotonic", "enforced"}`. The transaction ops `storeElpiProgram` (`program`, `text`) and `enforceElpi` (`program`, `on`) return `{"eid"}`. The database op `materializeElpi` (`stored`, `fuel`, `dryRun`, `budget`) returns `{"program", "programStatement", "reasonedAt", "commit", "derived", "existing", "widened", "reconciled", "staleSupport", "needsRerunAfterWrites", "dryRun"}`. The error codes are `ElpiProgram`, `ElpiRun`, `ElpiOutOfFuel` and `ProgramCycle`.
+
 ### Views
 
 A view selects both clocks and is the same object for every read: `{"kind": "now" | "asOf" | "history", "tx", "instant", "validAt"}`.

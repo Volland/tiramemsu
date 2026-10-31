@@ -709,6 +709,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "leanelpi"
+version = "0.4.0"
+dependencies = [
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "libc"
 version = "0.2.189"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1693,6 +1701,8 @@ dependencies = [
  "tm-core",
  "tm-cypher",
  "tm-datalog",
+ "tm-elpi",
+ "tm-elpi-store",
  "tm-exec",
  "tm-ir",
  "tm-n3",
@@ -1822,6 +1832,24 @@ dependencies = [
  "rustc-hash",
  "smallvec",
  "tm-core",
+ "tm-store",
+]
+
+[[package]]
+name = "tm-elpi"
+version = "0.11.0"
+dependencies = [
+ "leanelpi",
+ "tm-core",
+ "tm-store",
+]
+
+[[package]]
+name = "tm-elpi-store"
+version = "0.11.0"
+dependencies = [
+ "tm-core",
+ "tm-elpi",
  "tm-store",
 ]
 

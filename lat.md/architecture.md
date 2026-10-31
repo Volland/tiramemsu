@@ -130,6 +130,8 @@ The Rust workspace is split by layer so each front end compiles against the IR o
 | `tm-cypher` | openCypher subset + extensions → IR, results as Cypher values | a Cypher parser, `tm-ir` |
 | `tm-n3` | N3 reasoning with eyeron over facts handed to it: term mapping, rule analysis and pruning sets, the pointwise valid-time sweep, proofs and support keys; never touches a store ([[reasoning]]) | `tm-core`, `eyeron` (crates.io, `default-features = false`) |
 | `tm-datalog` | Datalog over a store's views: parser, analysis, interval sets with DatalogMTL and Allen relations, magic-set goals, probe-or-load stored access, semi-naive evaluation, proofs and constraint checks; reads through `ReadStore` and never writes ([[datalog]]) | `tm-core`, `tm-store` (publishable) |
+| `tm-elpi` | ELPI (λProlog) over a store's views through lean-elpi: the prelude, term mapping, host builtins `tm.triple`/`tm.added`/`tm.retracted`/`tm.valid`, queries, checks and conclusions with stated support; reads through `ReadStore` and never writes ([[elpi#Engine And Persistence Crates]]) | `tm-core`, `tm-store`, `leanelpi` (feature `native`, links libleanelpi) |
+| `tm-elpi-store` | ELPI persistence: `elpi:source` program nodes with includes, enforcement and the commit hook, materialization plans; writes through the transaction handle only ([[elpi#Engine And Persistence Crates]]) | `tm-elpi`, `tm-core`, `tm-store` |
 | `tiramemsu` | Facade: `Db`, `View`, `Tx`, results, reader pool, budgets, bulk import, saved answers, conflict review and previews; the only crate bindings use | `tm-core`, `tm-rusqlite`; the others behind cargo features ([[architecture#Crates#Cargo Features]]) |
 | `tiramemsu-json` (`bindings/json`) | The JSON bridge: one `Database` with `call(op, args)`, shared by every binding ([[bindings#JSON Bridge]]) | `tiramemsu` with `sparql` and `cypher` |
 | `tiramemsu-mcp` | Local stdio MCP server with typed memory tools ([[api#MCP Tools]]) | `tiramemsu-json`, `tiramemsu` |
@@ -209,6 +211,7 @@ The facade's query engine and front ends are optional dependencies (`add-optiona
 | `redb` | `Backend::Redb`: create, open and convert redb files; queries on them need `exec` | `tm-redb`, `redb` |
 | `n3` | `View::reason`, `View::rule_set_info`, `TxN3::store_rules`, `Db::materialize`; off by default, independent of `exec` ([[reasoning#Optional Crate]]) | `tm-n3`, `eyeron` |
 | `datalog` | `View::datalog`, `View::datalog_reason`, `View::check`, `View::program_info`, `View::explain_datalog`, `TxDatalog::store_program`; off by default, independent of `exec`, no git dependency ([[datalog#Own Kernel Over ReadStore]]) | `tm-datalog` |
+| `elpi` | `View::elpi`, `View::elpi_check`, `View::elpi_conclude`, `View::elpi_program_info`, `TxElpi`, `Db::materialize_elpi`; off by default, links the native libleanelpi found through `LEANELPI_DIST` ([[elpi#Native Library Distribution]]) | `tm-elpi`, `tm-elpi-store`, `leanelpi` |
 | `default` | `sparql` + `cypher`, and saved answers, which store queries of both languages | all |
 
 - **Serialisation is not parsing.** The RDF terms and the N-Triples writer moved from `tm-sparql` to [[crates/tm-core/src/rdf.rs#render]] and [[crates/tm-core/src/rdf.rs#write_ntriples]], which `tm-sparql` re-exports, so bundle N-Triples and JSON need no front end.

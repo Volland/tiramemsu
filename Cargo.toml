@@ -36,9 +36,14 @@ tiramemsu-mcp = { path = "crates/tiramemsu-mcp", version = "0.11.0" }
 tm-wasm = { path = "crates/tm-wasm", version = "0.11.0" }
 tm-n3 = { path = "crates/tm-n3", version = "0.11.0" }
 tm-datalog = { path = "crates/tm-datalog", version = "0.11.0" }
+tm-elpi = { path = "crates/tm-elpi", version = "0.11.0" }
+tm-elpi-store = { path = "crates/tm-elpi-store", version = "0.11.0" }
 # The N3 reasoner, from crates.io. `default-features = false` leaves out its
 # HTTP client (`ureq`, and with it `ring`, which broke the linux-aarch64 wheel).
 eyeron = { version = "0.8.25", default-features = false }
+# The ELPI engine (lean-elpi's Rust binding, which links the native libleanelpi
+# found through `LEANELPI_DIST`). Optional everywhere: see `tm-elpi`'s `native`.
+leanelpi = { version = "0.4" }
 
 # The storage engine is optimised even in dev builds: redb is pure Rust, and an
 # unoptimised B-tree makes the redb test suites ten times slower (SQLite is
@@ -53,3 +58,9 @@ opt-level = 3
 # in the test suite.
 [profile.dev.package.eyeron]
 opt-level = 3
+
+# lean-elpi 0.4 (host callback builtins, structured results) is not on crates.io
+# yet: until it is, build against a checkout next to this repository. Remove
+# this section once `leanelpi` 0.4 is published (lat.md/elpi#Native Library Distribution).
+[patch.crates-io]
+leanelpi = { path = "../lean-elpi/bindings/rust" }

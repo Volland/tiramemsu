@@ -569,18 +569,22 @@ impl TxN3 for Tx<'_> {
     // @tg: implements:: [[openspec:n3-rule-sets#Store a rule set]] {since: "2026-10-28"}
     // @tg: implements:: [[openspec:n3-rule-sets#Rule sets have transaction time]] {since: "2026-10-28"}
     // @tg: implements:: [[openspec:datalog-programs#Rule language conflict]] {since: "2026-10-28"}
+    // @tg: implements:: [[openspec:elpi-programs#Rule language conflict]] {since: "2026-10-31"}
     fn store_rules(&mut self, rule_set: Value, n3: &str) -> Result<Eid> {
         RuleSet::parse(n3)?;
-        // a node holds rules of one language (a live Datalog program refuses N3)
-        if let (Some(s), Some(p)) = (
-            self.lookup(&rule_set)?,
-            self.lookup(&Value::iri(tm_core::vocab::DL_SOURCE))?,
-        ) {
-            if !self.live_rows(Some(s), Some(p), None)?.is_empty() {
-                return Err(Error::RuleLanguageConflict {
-                    node: rule_set.to_string(),
-                    existing: "Datalog".into(),
-                });
+        // a node holds rules of one language (a live Datalog or ELPI program refuses N3)
+        for (other, name) in [
+            (tm_core::vocab::DL_SOURCE, "Datalog"),
+            (tm_core::vocab::ELPI_SOURCE, "ELPI"),
+        ] {
+            if let (Some(s), Some(p)) = (self.lookup(&rule_set)?, self.lookup(&Value::iri(other))?)
+            {
+                if !self.live_rows(Some(s), Some(p), None)?.is_empty() {
+                    return Err(Error::RuleLanguageConflict {
+                        node: rule_set.to_string(),
+                        existing: name.into(),
+                    });
+                }
             }
         }
         let source = Value::iri(N3_SOURCE);

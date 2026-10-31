@@ -7,11 +7,13 @@
 
 #[cfg(feature = "datalog")]
 mod datalog;
+#[cfg(feature = "elpi")]
+mod elpi;
 #[cfg(feature = "n3")]
 mod n3;
 mod output;
 mod rdfio;
-#[cfg(any(feature = "n3", feature = "datalog"))]
+#[cfg(any(feature = "n3", feature = "datalog", feature = "elpi"))]
 mod reasoning;
 mod sg;
 
@@ -153,6 +155,12 @@ enum Cmd {
     Program {
         #[command(subcommand)]
         cmd: datalog::ProgramCmd,
+    },
+    /// Run ELPI (λProlog) programs: queries, checks, conclusions, stored programs.
+    #[cfg(feature = "elpi")]
+    Elpi {
+        #[command(subcommand)]
+        cmd: elpi::ElpiCmd,
     },
     /// Benchmark SQLite against redb on this machine (a reduced suite; the full
     /// comparison with Oxigraph is `bench/backends`).
@@ -455,6 +463,8 @@ fn run(cmd: Cmd) -> Result<()> {
         Cmd::MaterializeProgram(a) => datalog::materialize_program(a),
         #[cfg(feature = "datalog")]
         Cmd::Program { cmd } => datalog::programs(cmd),
+        #[cfg(feature = "elpi")]
+        Cmd::Elpi { cmd } => elpi::elpi(cmd),
         Cmd::Compact { file } => {
             let db = open(&file)?;
             let before = db.summary()?.file_size;

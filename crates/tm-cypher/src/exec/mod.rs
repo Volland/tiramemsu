@@ -361,7 +361,22 @@ impl Exec<'_> {
             return self.exec_text_search(rows, args, yields, standalone);
         }
         if lname == datalog::NAME {
-            return self.exec_datalog_query(rows, args, yields, standalone);
+            return self.exec_datalog_query(
+                rows,
+                args,
+                yields,
+                standalone,
+                tm_ir::GoalLanguage::Datalog,
+            );
+        }
+        if lname == datalog::ELPI_NAME {
+            return self.exec_datalog_query(
+                rows,
+                args,
+                yields,
+                standalone,
+                tm_ir::GoalLanguage::Elpi,
+            );
         }
         if lname == vector::NAME {
             return self.exec_vector_search(rows, args, yields, standalone);

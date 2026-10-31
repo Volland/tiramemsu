@@ -73,6 +73,7 @@ pub struct QueryEngine {
     hook: Mutex<Option<Hook>>,
     parallel_threshold: usize,
     datalog: Option<Arc<dyn datalog::DatalogProvider>>,
+    elpi: Option<Arc<dyn datalog::DatalogProvider>>,
 }
 
 impl std::fmt::Debug for QueryEngine {
@@ -98,6 +99,7 @@ impl QueryEngine {
             hook: Mutex::new(None),
             parallel_threshold: DEFAULT_PARALLEL_THRESHOLD,
             datalog: None,
+            elpi: None,
         }
     }
 
@@ -113,6 +115,23 @@ impl QueryEngine {
     /// The registered Datalog provider, if any.
     pub fn datalog_provider(&self) -> Option<&Arc<dyn datalog::DatalogProvider>> {
         self.datalog.as_ref()
+    }
+
+    /// This engine with an ELPI provider: goal calls whose language is ELPI
+    /// (`SERVICE <urn:tiramemsu:elpi:query>`, `CALL tiramemsu.elpi.query`) run
+    /// through it. Without one such a call fails with `Unsupported`.
+    #[must_use]
+    pub fn with_elpi_provider(mut self, p: Arc<dyn datalog::DatalogProvider>) -> QueryEngine {
+        self.elpi = Some(p);
+        self
+    }
+
+    /// The goal-call providers of both languages.
+    pub fn goal_providers(&self) -> datalog::GoalProviders {
+        datalog::GoalProviders {
+            datalog: self.datalog.clone(),
+            elpi: self.elpi.clone(),
+        }
     }
 
     /// This engine with another parallel threshold: the input rows above which
@@ -138,7 +157,7 @@ impl QueryEngine {
     ///
     /// `MissingCapability` if the host lacks `functions` or `vtab`.
     pub fn install(&self, exec: &mut dyn Executor) -> Result<()> {
-        host::install(exec, &self.registry, self.datalog.clone())
+        host::install(exec, &self.registry, self.goal_providers())
     }
 
     /// Validates `q`, binds `params` and checks routing, without any I/O.

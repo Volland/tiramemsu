@@ -300,6 +300,20 @@ fn apply(tx: &mut Tx<'_>, ops: &[J]) -> Res<(Vec<J>, HashMap<String, Eid>)> {
             }
             #[cfg(not(feature = "datalog"))]
             "enforce" => return Err(crate::no_datalog()),
+            #[cfg(feature = "elpi")]
+            "storeElpiProgram" => {
+                let e = crate::elpi::store_program(tx, op)?;
+                named = Some(e);
+                json!({ "eid": e.n() })
+            }
+            #[cfg(feature = "elpi")]
+            "enforceElpi" => {
+                let e = crate::elpi::enforce(tx, op)?;
+                named = e;
+                json!({ "eid": e.map(|e| e.n()) })
+            }
+            #[cfg(not(feature = "elpi"))]
+            "storeElpiProgram" | "enforceElpi" => return Err(crate::no_elpi()),
             "retract" => json!(tx.retract(eid(op, "eid", &refs)?)?),
             "retractMatching" => {
                 let (s, p, o) = (

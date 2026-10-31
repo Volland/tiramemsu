@@ -1,14 +1,19 @@
 //! `SERVICE <urn:tiramemsu:dl:query> { [] dl:goal "…" ; dl:program <iri> | dl:text "…" ;
-//! dl:validFrom ?f ; dl:validTo ?t }` → [`Op::Datalog`] (`lat.md/query#Datalog Calls`).
+//! dl:validFrom ?f ; dl:validTo ?t }` → [`Op::Datalog`] (`lat.md/query#Datalog Calls`),
+//! and the same call of an ELPI goal under `SERVICE <urn:tiramemsu:elpi:query>` with
+//! the `elpi:` properties (`lat.md/elpi#Own Calls`).
 //!
 //! The front end has no Datalog parser: the goal's variables are read textually
 //! ([`tm_ir::goal_variables`]) and each binds the SPARQL variable of the same name.
 
 use spargebra::algebra::GraphPattern;
 use spargebra::term::{NamedNodePattern, TermPattern};
-use tm_core::vocab::{DL_GOAL, DL_PROGRAM, DL_TEXT, DL_VALID_FROM, DL_VALID_TO};
+use tm_core::vocab::{
+    DL_GOAL, DL_PROGRAM, DL_TEXT, DL_VALID_FROM, DL_VALID_TO, ELPI_GOAL, ELPI_PROGRAM, ELPI_TEXT,
+    ELPI_VALID_FROM, ELPI_VALID_TO,
+};
 use tm_core::{Error, Result, Value};
-use tm_ir::{DatalogPattern, DlProgramRef, Op, TermOrVar, View};
+use tm_ir::{DatalogPattern, DlProgramRef, GoalLanguage, Op, TermOrVar, View};
 
 use super::Lowerer;
 use crate::terms;
@@ -20,9 +25,34 @@ fn shape(msg: impl std::fmt::Display) -> Error {
 }
 
 impl Lowerer<'_> {
-    /// Lowers the group of a `SERVICE <urn:tiramemsu:dl:query>`.
+    /// Lowers the group of a `SERVICE <urn:tiramemsu:dl:query>` (or, for
+    /// `GoalLanguage::Elpi`, of a `SERVICE <urn:tiramemsu:elpi:query>`).
     // @tg: implements:: [[openspec:datalog-query-calls#SPARQL goal service]] {since: "2026-10-28"}
-    pub(super) fn datalog_service(&mut self, inner: &GraphPattern, view: View) -> Result<Op> {
+    // @tg: implements:: [[openspec:elpi-query-calls#ELPI goal calls]] {since: "2026-10-31"}
+    pub(super) fn datalog_service(
+        &mut self,
+        inner: &GraphPattern,
+        view: View,
+        language: GoalLanguage,
+    ) -> Result<Op> {
+        let (p_goal, p_program, p_text, p_from, p_to, ns) = match language {
+            GoalLanguage::Datalog => (
+                DL_GOAL,
+                DL_PROGRAM,
+                DL_TEXT,
+                DL_VALID_FROM,
+                DL_VALID_TO,
+                "dl",
+            ),
+            GoalLanguage::Elpi => (
+                ELPI_GOAL,
+                ELPI_PROGRAM,
+                ELPI_TEXT,
+                ELPI_VALID_FROM,
+                ELPI_VALID_TO,
+                "elpi",
+            ),
+        };
         let GraphPattern::Bgp { patterns } = inner else {
             return Err(shape(
                 "the service group holds only the call's property list on one subject",
@@ -44,58 +74,54 @@ impl Lowerer<'_> {
                 return Err(shape("the subject of a call is `[]` or a variable"));
             }
             let NamedNodePattern::NamedNode(p) = &t.predicate else {
-                return Err(shape(
-                    "a call's property is dl:goal, dl:program, dl:text, dl:validFrom or dl:validTo",
-                ));
+                return Err(shape(format!(
+                    "a call's property is {ns}:goal, {ns}:program, {ns}:text, {ns}:validFrom or {ns}:validTo"
+                )));
             };
             let dup = |name: &str| shape(format!("{name} given twice"));
-            match p.as_str() {
-                DL_GOAL => {
-                    if goal.is_some() {
-                        return Err(dup("dl:goal"));
-                    }
-                    goal = Some(string_const(&t.object, "dl:goal")?);
+            let p = p.as_str();
+            if p == p_goal {
+                if goal.is_some() {
+                    return Err(dup(&format!("{ns}:goal")));
                 }
-                DL_TEXT => {
-                    if text.is_some() {
-                        return Err(dup("dl:text"));
-                    }
-                    text = Some(string_const(&t.object, "dl:text")?);
+                goal = Some(string_const(&t.object, &format!("{ns}:goal"))?);
+            } else if p == p_text {
+                if text.is_some() {
+                    return Err(dup(&format!("{ns}:text")));
                 }
-                DL_PROGRAM => {
-                    if program.is_some() {
-                        return Err(dup("dl:program"));
-                    }
-                    program = Some(match &t.object {
-                        TermPattern::NamedNode(n) => TermOrVar::Const(terms::named_node(n)),
-                        _ => return Err(shape("dl:program needs a program IRI constant")),
-                    });
+                text = Some(string_const(&t.object, &format!("{ns}:text"))?);
+            } else if p == p_program {
+                if program.is_some() {
+                    return Err(dup(&format!("{ns}:program")));
                 }
-                DL_VALID_FROM | DL_VALID_TO => {
-                    let TermPattern::Variable(v) = &t.object else {
-                        return Err(shape(format!("<{}> binds a variable", p.as_str())));
-                    };
-                    let slot = if p.as_str() == DL_VALID_FROM {
-                        &mut from
-                    } else {
-                        &mut to
-                    };
-                    if slot.is_some() {
-                        return Err(dup(p.as_str()));
-                    }
-                    *slot = Some(self.var(v.as_str()));
+                program = Some(match &t.object {
+                    TermPattern::NamedNode(n) => TermOrVar::Const(terms::named_node(n)),
+                    _ => return Err(shape(format!("{ns}:program needs a program IRI constant"))),
+                });
+            } else if p == p_from || p == p_to {
+                let TermPattern::Variable(v) = &t.object else {
+                    return Err(shape(format!("<{p}> binds a variable")));
+                };
+                let slot = if p == p_from { &mut from } else { &mut to };
+                if slot.is_some() {
+                    return Err(dup(p));
                 }
-                other => return Err(shape(format!("unknown property <{other}>"))),
+                *slot = Some(self.var(v.as_str()));
+            } else {
+                return Err(shape(format!("unknown property <{p}>")));
             }
         }
-        let goal = goal.ok_or_else(|| shape("dl:goal is missing"))?;
+        let goal = goal.ok_or_else(|| shape(format!("{ns}:goal is missing")))?;
         let program = match (program, text) {
             (Some(i), None) => DlProgramRef::Iri(i),
             (None, Some(t)) => DlProgramRef::Text(t),
-            (Some(_), Some(_)) => return Err(shape("give dl:program or dl:text, not both")),
-            (None, None) => return Err(shape("dl:program or dl:text is missing")),
+            (Some(_), Some(_)) => {
+                return Err(shape(format!("give {ns}:program or {ns}:text, not both")))
+            }
+            (None, None) => return Err(shape(format!("{ns}:program or {ns}:text is missing"))),
         };
         let mut call = DatalogPattern::new(program, goal.clone(), view);
+        call.language = language;
         for name in tm_ir::goal_variables(&goal) {
             let v = self.var(&name);
             call.outputs.push((name, v));

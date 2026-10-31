@@ -22,6 +22,7 @@ use tm_core::{SqlError, SqlValue};
 
 use crate::path::view::parse_view_arg;
 use crate::plan::{PDatalog, PDlProgram};
+use tm_ir::GoalLanguage;
 
 /// The SQL name.
 pub const NAME: &str = "tm_datalog";
@@ -81,6 +82,34 @@ pub trait DatalogProvider: Send + Sync {
         program: &DlProgram,
         goal: &str,
     ) -> Result<DlRows>;
+}
+
+/// The providers of goal calls, one per language.
+#[derive(Clone, Default)]
+pub struct GoalProviders {
+    /// Runs Datalog goals (facade features `exec` and `datalog`).
+    pub datalog: Option<Arc<dyn DatalogProvider>>,
+    /// Runs ELPI goals (facade features `exec` and `elpi`).
+    pub elpi: Option<Arc<dyn DatalogProvider>>,
+}
+
+impl GoalProviders {
+    /// The provider of `language`.
+    ///
+    /// # Errors
+    ///
+    /// `Unsupported` when this build registered none.
+    // @tg: implements:: [[openspec:elpi-query-calls#ELPI call feature gating]] {since: "2026-10-31"}
+    pub fn get(&self, language: GoalLanguage) -> Result<&Arc<dyn DatalogProvider>> {
+        match language {
+            GoalLanguage::Datalog => self.datalog.as_ref().ok_or_else(no_provider),
+            GoalLanguage::Elpi => self.elpi.as_ref().ok_or_else(|| Error::Unsupported {
+                feature: "ELPI goal call (this build has no ELPI provider: enable the `elpi` \
+                          feature of tiramemsu)"
+                    .to_string(),
+            }),
+        }
+    }
 }
 
 /// The error of a call without a registered provider.
@@ -229,13 +258,16 @@ pub fn spec_text(p: &PDatalog) -> String {
         PDlProgram::Text(t) => serde_json::json!({ "text": t }),
     };
     let outputs: Vec<&str> = p.outputs.iter().map(|(g, _)| g.as_str()).collect();
-    serde_json::json!({
+    let mut spec = serde_json::json!({
         "program": program,
         "goal": p.goal,
         "view": p.view_text,
         "outputs": outputs,
-    })
-    .to_string()
+    });
+    if p.language == GoalLanguage::Elpi {
+        spec["language"] = serde_json::json!("elpi");
+    }
+    spec.to_string()
 }
 
 fn arg_err(msg: impl std::fmt::Display) -> Error {
@@ -248,7 +280,7 @@ fn arg_err(msg: impl std::fmt::Display) -> Error {
 /// Evaluates one call of `tm_datalog(spec)` on the calling connection.
 // @lat: [[query#Datalog Calls]]
 pub fn call(
-    provider: Option<&Arc<dyn DatalogProvider>>,
+    providers: &GoalProviders,
     exec: &mut dyn Executor,
     args: &[SqlValue],
 ) -> Result<Vec<Vec<SqlValue>>> {
@@ -272,7 +304,12 @@ pub fn call(
                 .collect()
         })
         .unwrap_or_default();
-    let provider = provider.ok_or_else(no_provider)?;
+    let language = match v["language"].as_str() {
+        None | Some("datalog") => GoalLanguage::Datalog,
+        Some("elpi") => GoalLanguage::Elpi,
+        Some(other) => return Err(arg_err(format!("unknown language {other:?}"))),
+    };
+    let provider = providers.get(language)?;
     let store = SqlStore::new(exec);
     let rows = run_call(provider.as_ref(), &store, &spec, &program, goal, &outputs)?;
     let cell = |id: Option<ObjectId>| id.map_or(SqlValue::Null, |i| SqlValue::Integer(i.raw()));
@@ -292,7 +329,7 @@ pub fn call(
 
 /// The table function registered on every connection by [`crate::host::install`]:
 /// without a provider a call fails with `Unsupported`.
-pub fn table_function(provider: Option<Arc<dyn DatalogProvider>>) -> ConnTableFunction {
+pub fn table_function(providers: GoalProviders) -> ConnTableFunction {
     let mut columns: Vec<String> = (0..MAX_OUTPUTS).map(|i| format!("c{i}")).collect();
     columns.extend(["validFrom".to_string(), "validTo".to_string()]);
     ConnTableFunction {
@@ -300,6 +337,6 @@ pub fn table_function(provider: Option<Arc<dyn DatalogProvider>>) -> ConnTableFu
         args: vec!["spec".to_string()],
         columns,
         pushdown: Vec::new(),
-        func: Arc::new(move |exec, args| call(provider.as_ref(), exec, args)),
+        func: Arc::new(move |exec, args| call(&providers, exec, args)),
     }
 }

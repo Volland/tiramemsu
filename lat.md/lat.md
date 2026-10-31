@@ -20,6 +20,7 @@ This directory defines the high-level concepts, business logic, and architecture
 - [[backends]] — Decisions D37–D44: the typed storage trait, the redb backend, the native runner, durability modes and backend detection
 - [[reasoning]] — Decisions N1–N18: N3 reasoning with eyeron over views, pointwise valid time, stored rule sets and materialized, grounded conclusions
 - [[datalog]] — Decisions DL1–DL24 (proposed): a fast Datalog crate with DatalogMTL over valid time, magic-set goals, constraints and reconciled materialization
+- [[elpi]] — Decisions E1–E13 (E1–E10 built in three changes): λProlog through lean-elpi over FFI, host callback builtins, program-stated support, an engine crate and a persistence crate
 - [[constraints]] — Project-level constraints that bind several decisions, with their sources
 - [[changes]] — Changes that moved intent and code together, cited by `changed_by` edges
 - [[derived-beliefs]] — Decisions D45–D52: derived beliefs with `sys:derivedFrom` support links, the support cascade, supersede, bundles and derived upsert

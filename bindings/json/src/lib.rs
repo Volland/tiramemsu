@@ -37,6 +37,8 @@
 
 #[cfg(feature = "datalog")]
 pub mod datalog;
+#[cfg(feature = "elpi")]
+pub mod elpi;
 #[cfg(feature = "n3")]
 pub mod n3;
 mod read;
@@ -158,6 +160,10 @@ impl BindError {
                 Error::DatalogIncomplete { .. } => "DatalogIncomplete",
                 Error::UnknownProgram { .. } => "UnknownProgram",
                 Error::RuleLanguageConflict { .. } => "RuleLanguageConflict",
+                Error::ElpiProgram { .. } => "ElpiProgram",
+                Error::ElpiRun { .. } => "ElpiRun",
+                Error::ElpiOutOfFuel { .. } => "ElpiOutOfFuel",
+                Error::ProgramCycle { .. } => "ProgramCycle",
                 Error::ConstraintViolated { .. } => "ConstraintViolated",
                 Error::ConstraintNotEnforceable { .. } => "ConstraintNotEnforceable",
                 Error::ConstraintBudgetExceeded { .. } => "ConstraintBudgetExceeded",
@@ -480,7 +486,8 @@ impl Database {
             "sparql" | "cypher" | "triples" | "path" | "events" | "graphs" | "graphMembers"
             | "values" | "dependents" | "bundle" | "textSearch" | "vectorSearch" | "recall"
             | "unembedded" | "explainSparql" | "conflicts" | "reason" | "ruleSetInfo"
-            | "datalog" | "datalogReason" | "programInfo" | "explainDatalog" | "check" => {
+            | "datalog" | "datalogReason" | "programInfo" | "explainDatalog" | "check" | "elpi"
+            | "elpiCheck" | "elpiConclude" | "elpiProgramInfo" => {
                 let view = read::view_from_json(&self.db, args.get("view").unwrap_or(&J::Null))?;
                 let (budget, _entry) = self.budget(args.get("budget"))?;
                 match &budget {
@@ -532,6 +539,21 @@ impl Database {
                         .run(|| materialize(&self.db, args).map_err(value::into_core))
                         .map_err(BindError::from),
                     None => materialize(&self.db, args),
+                }
+            }
+            "materializeElpi" => {
+                let (budget, _entry) = self.budget(args.get("budget"))?;
+                let call = || -> Res<J> {
+                    #[cfg(feature = "elpi")]
+                    return elpi::materialize(&self.db, args);
+                    #[cfg(not(feature = "elpi"))]
+                    return Err(no_elpi());
+                };
+                match &budget {
+                    Some(b) => b
+                        .run(|| call().map_err(value::into_core))
+                        .map_err(BindError::from),
+                    None => call(),
                 }
             }
             "materializeProgram" => {
@@ -607,6 +629,14 @@ fn materialize(db: &Db, args: &J) -> Res<J> {
 pub(crate) fn no_datalog() -> BindError {
     BindError::Db(Error::unsupported(
         "Datalog (the JSON bridge was built without the feature `datalog`)",
+    ))
+}
+
+/// The error of an ELPI operation in a build without the feature `elpi`.
+#[cfg(not(feature = "elpi"))]
+pub(crate) fn no_elpi() -> BindError {
+    BindError::Db(Error::unsupported(
+        "ELPI (the JSON bridge was built without the feature `elpi`)",
     ))
 }
 

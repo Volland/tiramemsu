@@ -188,6 +188,16 @@ impl TextPattern {
     }
 }
 
+/// The language of a goal call's program (`lat.md/query#Datalog Calls`).
+#[derive(Copy, Clone, Debug, Default, PartialEq, Eq, Hash)]
+pub enum GoalLanguage {
+    /// A Datalog program (`dl:source`), run by `tm-datalog`.
+    #[default]
+    Datalog,
+    /// An ELPI program (`elpi:source`), run by `tm-elpi` (`lat.md/elpi#Own Calls`).
+    Elpi,
+}
+
 /// Which Datalog program a goal call runs: a stored program's IRI or program text.
 #[derive(Clone, Debug, PartialEq)]
 pub enum DlProgramRef {
@@ -206,6 +216,8 @@ pub enum DlProgramRef {
 /// planner never pushes a variable into it.
 #[derive(Clone, Debug, PartialEq)]
 pub struct DatalogPattern {
+    /// The language of the program.
+    pub language: GoalLanguage,
     /// The program to run.
     pub program: DlProgramRef,
     /// The goal body, such as `reports(ex:alice, X)`.
@@ -223,6 +235,7 @@ impl DatalogPattern {
     /// A call of `program` for `goal` under `view` binding nothing yet.
     pub fn new(program: DlProgramRef, goal: impl Into<String>, view: View) -> DatalogPattern {
         DatalogPattern {
+            language: GoalLanguage::Datalog,
             program,
             goal: goal.into(),
             outputs: Vec::new(),
