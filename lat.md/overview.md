@@ -105,6 +105,7 @@ D35 was added on 2026-10-01: it reserves origin bits so that agent files can lat
 | D50 | Derivation behaves identically in the SQL and the trait engine, checked by the oracle | [[derived-beliefs#Both Engines One Oracle]] |
 | D51 | `upsert_derived` reuses a node only through a key derived from exactly the same support | [[derived-beliefs#Derived Upsert For Invented Nodes]] |
 | D52 | A derived interval widens by supersede, keeping its support | [[derived-beliefs#Widening Is A Supersede]] |
+| D53 | `tm export --format sg-nt12` writes LeanRDF's proven statement-graph format byte for byte; valid time as `tm:validFromMs`/`tm:validToMs`, apart from the `xsd:dateTime` virtual predicates | [[api#Statement Graph Export]] |
 
 ## Open Inputs
 

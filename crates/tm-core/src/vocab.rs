@@ -133,6 +133,14 @@ pub const N3_SOURCE: &str = "urn:tiramemsu:n3:source";
 pub const TM_INTERVAL: &str = "urn:tiramemsu:tm:Interval";
 /// `rdf:type`.
 pub const RDF_TYPE: &str = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
+/// `rdf:reifies` (RDF 1.2): a reifier and the triple term it reifies.
+pub const RDF_REIFIES: &str = "http://www.w3.org/1999/02/22-rdf-syntax-ns#reifies";
+/// `tm:validFromMs`: the start of a statement's valid interval as `xsd:integer` epoch
+/// ms, in the statement-graph export (`tm export --format sg-nt12`). Not a virtual
+/// predicate: `tm:validFrom` is the `xsd:dateTime` one queries use.
+pub const TM_VALID_FROM_MS: &str = "urn:tiramemsu:tm:validFromMs";
+/// `tm:validToMs`: the end of the valid interval, epoch ms, in the statement-graph export.
+pub const TM_VALID_TO_MS: &str = "urn:tiramemsu:tm:validToMs";
 
 /// The schema-flag predicates.
 pub const SCHEMA_FLAGS: [&str; 5] = [

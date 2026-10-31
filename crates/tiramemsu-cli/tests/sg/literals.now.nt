@@ -1,0 +1,12 @@
+<http://example.org/a> <http://example.org/label> "Grüße"@de .
+<http://example.org/a> <http://example.org/note> "tab\there \"q\" \b\f\u0001\u007F" .
+<http://example.org/a> <http://example.org/on> "true"^^<http://www.w3.org/2001/XMLSchema#boolean> .
+<urn:tiramemsu:stmt:1> <http://example.org/confidence> "0.9"^^<http://www.w3.org/2001/XMLSchema#decimal> .
+<urn:tiramemsu:stmt:1> <http://www.w3.org/1999/02/22-rdf-syntax-ns#reifies> <<( <http://example.org/a> <http://example.org/note> "tab\there \"q\" \b\f\u0001\u007F" )>> .
+<urn:tiramemsu:stmt:1> <urn:tiramemsu:tm:txAdded> "1"^^<http://www.w3.org/2001/XMLSchema#integer> .
+<urn:tiramemsu:stmt:2> <http://www.w3.org/1999/02/22-rdf-syntax-ns#reifies> <<( <http://example.org/a> <http://example.org/label> "Grüße"@de )>> .
+<urn:tiramemsu:stmt:2> <urn:tiramemsu:tm:txAdded> "1"^^<http://www.w3.org/2001/XMLSchema#integer> .
+<urn:tiramemsu:stmt:3> <http://www.w3.org/1999/02/22-rdf-syntax-ns#reifies> <<( <http://example.org/a> <http://example.org/on> "true"^^<http://www.w3.org/2001/XMLSchema#boolean> )>> .
+<urn:tiramemsu:stmt:3> <urn:tiramemsu:tm:txAdded> "1"^^<http://www.w3.org/2001/XMLSchema#integer> .
+<urn:tiramemsu:stmt:4> <http://www.w3.org/1999/02/22-rdf-syntax-ns#reifies> <<( <urn:tiramemsu:stmt:1> <http://example.org/confidence> "0.9"^^<http://www.w3.org/2001/XMLSchema#decimal> )>> .
+<urn:tiramemsu:stmt:4> <urn:tiramemsu:tm:txAdded> "1"^^<http://www.w3.org/2001/XMLSchema#integer> .

@@ -1,6 +1,7 @@
 //! RDF files in and out: `tm import` (N-Triples, N-Quads, Turtle, TriG through
 //! `oxttl`, in chunked bulk-import transactions) and `tm export` (the live
-//! statements as N-Quads or N-Triples).
+//! statements as N-Quads or N-Triples, or every statement as a statement graph in
+//! RDF 1.2: see `sg`).
 
 use std::collections::HashMap;
 use std::io::{BufReader, Write};
@@ -49,6 +50,9 @@ impl RdfFormat {
 pub enum ExportFormat {
     Nquads,
     Ntriples,
+    /// Every statement as an RDF 1.2 statement graph (LeanRDF's format): see `sg`.
+    #[value(name = "sg-nt12")]
+    SgNt12,
 }
 
 /// What an import did.

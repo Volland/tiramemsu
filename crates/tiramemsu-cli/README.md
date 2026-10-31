@@ -32,6 +32,7 @@ tm program enforce memory.redb urn:tiramemsu:v:reporting     # refuse writes tha
 | `query <file> --sparql\|--cypher <text\|@file>` | Runs a query. `--format table\|json\|csv\|tsv\|ntriples`; views `--as-of <tx>`, `--as-of-instant <ms>`, `--history`, `--valid-at <ms>`; `--timeout <ms>`; `--explain` prints the plan (SPARQL). |
 | `import <file> <rdf>...` | Loads RDF files in bulk-import transactions of `--chunk` statements (100 000). Blank-node labels are scoped to their file. |
 | `export <file> [--format nquads\|ntriples] [-o out]` | Writes the live statements, and for N-Quads each named graph membership. |
+| `export <file> --format sg-nt12 [--as-of T \| --history] [--valid-at MS] [-o out]` | Writes every statement as RDF 1.2 reification with its id and clocks, asserting those live in the view: LeanRDF's statement-graph format, checkable with `leanrdf-sg decode`. See [`docs/statement-graph-export.md`](../../docs/statement-graph-export.md). |
 | `convert <src> <dst> --backend <b>` | Lossless conversion, replaying the whole history (`tiramemsu::convert`). |
 | `compact <file>` | Reclaims free space in a redb file. SQLite files have nothing to compact. |
 | `bench [--scale N] [--reps R] [--out results.json]` | Runs the reduced backend benchmark (SQLite and redb) and prints the report. The comparison with Oxigraph is in `bench/backends`. |

@@ -13,6 +13,7 @@ mod output;
 mod rdfio;
 #[cfg(any(feature = "n3", feature = "datalog"))]
 mod reasoning;
+mod sg;
 
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -96,12 +97,22 @@ enum Cmd {
         #[arg(long, default_value_t = 100_000)]
         chunk: usize,
     },
-    /// Write the live statements as N-Quads or N-Triples.
+    /// Write the live statements as N-Quads or N-Triples, or every statement as an
+    /// RDF 1.2 statement graph (`--format sg-nt12`).
     Export {
         file: PathBuf,
         /// Output format.
         #[arg(long, value_enum, default_value_t = rdfio::ExportFormat::Nquads)]
         format: rdfio::ExportFormat,
+        /// sg-nt12: assert what was live as of transaction T (default: now).
+        #[arg(long, value_name = "T", conflicts_with = "history")]
+        as_of: Option<u64>,
+        /// sg-nt12: assert every statement.
+        #[arg(long)]
+        history: bool,
+        /// sg-nt12: assert only statements valid at this instant (epoch ms).
+        #[arg(long, value_name = "MS", allow_hyphen_values = true)]
+        valid_at: Option<i64>,
         /// Output file (default: stdout).
         #[arg(short, long)]
         output: Option<PathBuf>,
@@ -349,20 +360,38 @@ fn run(cmd: Cmd) -> Result<()> {
         Cmd::Export {
             file,
             format,
+            as_of,
+            history,
+            valid_at,
             output,
         } => {
+            let sel = sg::SgView {
+                tx: match (as_of, history) {
+                    (Some(t), _) => sg::SgTx::AsOf(t),
+                    (None, true) => sg::SgTx::History,
+                    (None, false) => sg::SgTx::Now,
+                },
+                valid_at,
+            };
+            let sg_flags = as_of.is_some() || history || valid_at.is_some();
+            if format != rdfio::ExportFormat::SgNt12 && sg_flags {
+                return Err(Error::unsupported(
+                    "--as-of, --history and --valid-at need --format sg-nt12",
+                ));
+            }
             let db = open(&file)?;
+            let write = |w: &mut dyn Write| -> Result<()> {
+                match format {
+                    rdfio::ExportFormat::SgNt12 => sg::export_sg(&db, sel, w).map(|_| ()),
+                    f => rdfio::export(&db, f, w),
+                }?;
+                w.flush().map_err(io)
+            };
             match output {
-                Some(p) => {
-                    let mut w = std::io::BufWriter::new(std::fs::File::create(&p).map_err(io)?);
-                    rdfio::export(&db, format, &mut w)?;
-                    w.flush().map_err(io)
-                }
-                None => {
-                    let mut w = std::io::stdout().lock();
-                    rdfio::export(&db, format, &mut w)?;
-                    w.flush().map_err(io)
-                }
+                Some(p) => write(&mut std::io::BufWriter::new(
+                    std::fs::File::create(&p).map_err(io)?,
+                )),
+                None => write(&mut std::io::stdout().lock()),
             }
         }
         // @tg: implements:: [[openspec:tm-cli#Convert and compact]] {since: "2026-10-27"}
