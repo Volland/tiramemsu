@@ -451,6 +451,11 @@ The guide `docs/datalog.md` (language, time, constraints, materialization, goal 
 
 Its programs come from the tests `crates/tiramemsu/tests/datalog.rs`, `datalog_constraints.rs` and `datalog_materialization.rs`, and its numbers from `bench/datalog/README.md`, so a change to those, or to the status of incremental runs (decision DL22, not built), should be reflected there. `build-site.py` rebuilds the page.
 
+### ELPI Article
+
+`article/elpi/` holds a long read on adding ELPI as a third reasoning language ([[elpi]]), published as `site/articles/elpi-reasoning.html` by its `build-site.py`.
+
+The guide `docs/elpi.md` (builtins, terms, time, constraints, stored programs, materialization, goal calls, surfaces, errors, limits) is rendered to `site/elpi/index.html` by `article/elpi/build-guide.py`. Its examples come from `crates/tiramemsu/tests/elpi.rs` and `elpi_calls.rs`, so a change to the builtins or the prelude should be reflected there. The site's nav links the ELPI guide beside the Datalog guide on every page, the home page has an ELPI group and matrix rows (Rust, MCP and both engines only), and the articles index lists both under Reasoning.
 ## Crate Documentation and Publishing
 
 Each crate's `README.md` is its crates.io page and, through `#![doc = include_str!("../README.md")]`, its crate-level rustdoc, so every Rust block in it is a doctest.

@@ -9,6 +9,25 @@ OpenSpec changes in `openspec/changes/archive/`.
 
 ## [Unreleased]
 
+ELPI (λProlog) as a third reasoning language (`openspec/changes/archive/2026-10-31-add-elpi-*`, decisions E1–E13 in `lat.md/elpi.md`). No file format change: programs are ordinary statements. Needs lean-elpi 0.4, which is not yet on crates.io.
+
+### Added
+
+- **`tm-elpi`:** ELPI programs run by lean-elpi over a view through host builtins (`tm.triple`, `tm.valid`, `tm.added`, `tm.retracted`), typed terms (`(iri …)`, `(num N)`, `(str …)`, …), support stated by `tm.conclude` and checked against what the run read, and pointwise valid time. Its feature `native` links libleanelpi.
+- **`tm-elpi-store`:** programs as `elpi:source` statements with `accumulate <iri>.` includes and `ProgramCycle`; `elpi:enforced` with `tm.violation-delta` checks at commit under the constraint budget; materialization plans.
+- **Facade feature `elpi`** (off by default): `View::elpi`, `View::elpi_check`, `View::elpi_conclude`, `View::elpi_program_info`, `TxElpi`, `Db::materialize_elpi` (reconciled on every run).
+- **Goal calls:** `SERVICE <urn:tiramemsu:elpi:query>` in SPARQL and `CALL tiramemsu.elpi.query` in Cypher, through the same path as Datalog goals (`GoalLanguage`, `GoalProviders`, `QueryEngine::with_elpi_provider`).
+- **Surfaces:** bridge ops `elpi`, `elpiCheck`, `elpiConclude`, `elpiProgramInfo`, `storeElpiProgram`, `enforceElpi`, `materializeElpi`; MCP tools `elpi_query`, `elpi_check`, `store_elpi_program`, `enforce_elpi`, `materialize_elpi`; CLI `tm elpi`. All behind `elpi`.
+- **Errors:** `ElpiProgram`, `ElpiRun`, `ElpiOutOfFuel`, `ProgramCycle`.
+
+### Changed
+
+- N3 rule sets and Datalog programs refuse a node that holds ELPI text (`RuleLanguageConflict`).
+
+### Not done
+
+- ELPI in the Node, Python and wasm packages; an ELPI benchmark; an N3 oracle for ELPI; static linking of release binaries.
+
 ## [0.11.0] - 2026-10-31
 
 Datalog performance, a proven statement-graph export and a publishable N3 stack. No file format change.

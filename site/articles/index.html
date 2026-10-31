@@ -11,7 +11,7 @@
 <body>
 <header class="top"><div class="wrap">
   <a class="brand" href="../"><img src="../assets/logo.svg" alt="">Tiramemsu</a>
-  <nav class="menu"><a href="../#usecases">Use cases</a><a href="../#features">Features</a><a href="../#matrix">Matrix</a><a href="../#start">Quick start</a><a href="./" aria-current="page">Articles</a><a href="../datalog/">Datalog</a><a href="../paper/">Papers</a><a href="https://github.com/Volland/tiramemsu">GitHub</a></nav>
+  <nav class="menu"><a href="../#usecases">Use cases</a><a href="../#features">Features</a><a href="../#matrix">Matrix</a><a href="../#start">Quick start</a><a href="./" aria-current="page">Articles</a><a href="../datalog/">Datalog</a><a href="../elpi/">ELPI</a><a href="../paper/">Papers</a><a href="https://github.com/Volland/tiramemsu">GitHub</a></nav>
 </div></header>
 <article class="post">
 <h1>Articles</h1>
@@ -43,6 +43,8 @@
 <h2>Reasoning</h2>
 <p>Rules over a memory with two clocks. A design preview.</p>
 <ul class="list-articles">
+  <li class="card"><h3><a href="elpi-reasoning.html">λProlog in a bitemporal memory</a></h3><p>Adding ELPI as a third reasoning language: lean-elpi reading the store through callbacks, typed terms, support the program states, valid time by intersection, validators checked at commit, and three things the tests found.</p></li>
+  <li class="card"><h3><a href="../elpi/">ELPI in Tiramemsu: a guide</a></h3><p>Builtins, terms, time, constraints enforced at commit, stored programs with includes, materialization and goal calls from SPARQL and Cypher, with every surface, the errors and the limits.</p></li>
   <li class="card"><h3><a href="../n3/">Reasoning with N3 in Tiramemsu: a mini book</a></h3><p>Ten short chapters: N3 in fifteen minutes, your memory as N3, reasoning as of any transaction, valid time that never combines facts from different moments, rule sets with history, materialized conclusions that fall with their premises and rules, seven recipes, a reference, and both clocks exported as RDF 1.2.</p></li>
 </ul>
 <h2>Structure</h2>
