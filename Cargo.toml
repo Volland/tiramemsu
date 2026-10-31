@@ -3,7 +3,7 @@ resolver = "2"
 members = ["crates/*", "bindings/json", "bindings/node", "bindings/python", "bindings/wasm"]
 
 [workspace.package]
-version = "0.10.0"
+version = "0.11.0"
 edition = "2021"
 license = "MIT OR Apache-2.0"
 rust-version = "1.88"
@@ -20,22 +20,22 @@ unsafe_code = "forbid"
 all = { level = "warn", priority = -1 }
 
 [workspace.dependencies]
-tm-core = { path = "crates/tm-core", version = "0.10.0" }
-tm-store = { path = "crates/tm-store", version = "0.10.0" }
-tm-redb = { path = "crates/tm-redb", version = "0.10.0" }
-tm-native = { path = "crates/tm-native", version = "0.10.0" }
-tm-bench = { path = "crates/tm-bench", version = "0.10.0" }
-tm-rusqlite = { path = "crates/tm-rusqlite", version = "0.10.0" }
-tiramemsu = { path = "crates/tiramemsu", version = "0.10.0" }
-tm-ir = { path = "crates/tm-ir", version = "0.10.0" }
-tm-exec = { path = "crates/tm-exec", version = "0.10.0" }
-tm-sparql = { path = "crates/tm-sparql", version = "0.10.0" }
-tm-cypher = { path = "crates/tm-cypher", version = "0.10.0" }
-tiramemsu-json = { path = "bindings/json", version = "0.10.0" }
-tiramemsu-mcp = { path = "crates/tiramemsu-mcp", version = "0.10.0" }
-tm-wasm = { path = "crates/tm-wasm", version = "0.10.0" }
-tm-n3 = { path = "crates/tm-n3", version = "0.10.0" }
-tm-datalog = { path = "crates/tm-datalog", version = "0.10.0" }
+tm-core = { path = "crates/tm-core", version = "0.11.0" }
+tm-store = { path = "crates/tm-store", version = "0.11.0" }
+tm-redb = { path = "crates/tm-redb", version = "0.11.0" }
+tm-native = { path = "crates/tm-native", version = "0.11.0" }
+tm-bench = { path = "crates/tm-bench", version = "0.11.0" }
+tm-rusqlite = { path = "crates/tm-rusqlite", version = "0.11.0" }
+tiramemsu = { path = "crates/tiramemsu", version = "0.11.0" }
+tm-ir = { path = "crates/tm-ir", version = "0.11.0" }
+tm-exec = { path = "crates/tm-exec", version = "0.11.0" }
+tm-sparql = { path = "crates/tm-sparql", version = "0.11.0" }
+tm-cypher = { path = "crates/tm-cypher", version = "0.11.0" }
+tiramemsu-json = { path = "bindings/json", version = "0.11.0" }
+tiramemsu-mcp = { path = "crates/tiramemsu-mcp", version = "0.11.0" }
+tm-wasm = { path = "crates/tm-wasm", version = "0.11.0" }
+tm-n3 = { path = "crates/tm-n3", version = "0.11.0" }
+tm-datalog = { path = "crates/tm-datalog", version = "0.11.0" }
 # The N3 reasoner, from crates.io. `default-features = false` leaves out its
 # HTTP client (`ureq`, and with it `ring`, which broke the linux-aarch64 wheel).
 eyeron = { version = "0.8.25", default-features = false }

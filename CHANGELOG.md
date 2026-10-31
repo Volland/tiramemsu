@@ -9,6 +9,19 @@ OpenSpec changes in `openspec/changes/archive/`.
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-10-31
+
+Datalog performance, a proven statement-graph export and a publishable N3 stack. No file format change.
+
+### Added
+
+- **`tm export --format sg-nt12`** (OpenSpec change `add-sg-nt12-export`): every statement with its id and both clocks as RDF 1.2, in LeanRDF's proven statement-graph format (checked byte for byte by LeanRDF v0.3.1). Valid time is written as `tm:validFromMs` / `tm:validToMs` (`xsd:integer` epoch milliseconds), export-only; see `docs/statement-graph-export.md`.
+
+### Changed
+
+- **Datalog is faster** (OpenSpec change `tune-datalog-performance`, R1–R7): rank-ordered results, every-instant shortcuts, emit filtering, a row table, resolved accesses and cached plans. Closures are 2.5–4× faster (1.0–1.4× Soufflé's interpreter) and `datalog_reason` on the hub graph 11× faster; the benchmark prints evaluation and result time apart (`bench/datalog/README.md`).
+- **eyeron 0.8.25 from crates.io** (`publish-eyeron-dependency`), with `default-features = false`, instead of a git pin. `tm-n3`, the facade with `n3`, `tiramemsu-json`, `tiramemsu-mcp` and `tiramemsu-cli` can be published again, so all crates are on crates.io at 0.11.0 (the facade, the MCP server and the CLI were held at 0.8.1).
+
 ## [0.10.0] - 2026-10-28
 
 Datalog (`openspec/changes/add-datalog-engine/`, decisions DL1–DL26 in `lat.md/datalog.md`). No file format change: programs are ordinary statements.
