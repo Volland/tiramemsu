@@ -28,7 +28,7 @@ jobs:
         include:
           - { platform: linux-x64, os: ubuntu-latest }
           - { platform: linux-arm64, os: ubuntu-24.04-arm }
-          - { platform: darwin-arm64, os: macos-14 }
+          - { platform: darwin-arm64, os: macos-15 }
           - { platform: darwin-x64, os: macos-15-intel }
           - { platform: win32-x64, os: windows-latest }
     runs-on: ${{ matrix.os }}
