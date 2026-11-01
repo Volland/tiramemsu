@@ -33,7 +33,7 @@ The releases after 0.4.0 are proposed in `docs/feature-roadmap.md` (see [[projec
 
 Eleven OpenSpec proposals (2026-10-10) cover the releases after 0.4.0 in `docs/feature-roadmap.md`. Vector and hybrid recall are implemented and archived (`openspec/changes/archive/2026-10-11-*`); libSQL is deferred (2026-10-11); the rest are open.
 
-Six more (2026-10-27) add the redb backend and its native runner ([[backends]]). Four more (2026-10-28) add Datalog ([[datalog]]). Four more (2026-10-31) add ELPI on lean-elpi 0.4 ([[elpi#Prerequisite And Four Changes]]): all four are built and archived.
+Six more (2026-10-27) add the redb backend and its native runner ([[backends]]). Four more (2026-10-28) add Datalog ([[datalog]]). Four more (2026-10-31) add ELPI on lean-elpi 0.4 ([[elpi#Prerequisite And Four Changes]]): all four are built, archived and released in 0.12.0.
 
 | Release | Change | Delivers |
 |---|---|---|

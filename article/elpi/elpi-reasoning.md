@@ -72,4 +72,4 @@ lean-elpi is about 2.4 times slower than ELPI 1.18 by geometric mean on ELPI's o
 
 The native library carries the Lean runtime and exists for macOS and Linux only. So ELPI is off by default everywhere, ships first in the CLI and the MCP server, and is missing from the Node, Python and browser packages. Each surface has the same calls as Datalog: a Rust API, bridge ops, five MCP tools and `tm elpi`.
 
-Until lean-elpi 0.4 is on crates.io, the workspace builds against a checkout next to it. The guide (`docs/elpi.md`, on the site as the ELPI guide) has every call, term and error, and `lat.md/elpi.md` records the thirteen decisions, including the ones made by default rather than by interview.
+Tiramemsu 0.12.0 ships it, with the Rust binding `leanelpi` 0.4 from crates.io and `libleanelpi` from a lean-elpi release. The guide (`docs/elpi.md`, on the site as the ELPI guide) has every call, term and error, and `lat.md/elpi.md` records the thirteen decisions, including the ones made by default rather than by interview.

@@ -4,7 +4,7 @@ ELPI is Tiramemsu's third reasoning language, after N3 and Datalog. It is a dial
 
 ELPI is the opt-in facade feature `elpi` (crates `tm-elpi` and `tm-elpi-store`). It links the native library `libleanelpi`, which carries the Lean runtime and exists for macOS and Linux on arm64 and x86-64. Point `LEANELPI_DIST` at the directory that holds it. No build turns ELPI on by default, and the Node, Python and wasm packages leave it out. The CLI and the MCP server have the feature as well.
 
-**Status.** Built and tested. It needs lean-elpi 0.4, which adds host callbacks and structured answers to its C interface and is not on crates.io yet, so for now the workspace builds against a lean-elpi checkout next to the repository.
+**Status.** Released in 0.12.0. The Rust binding `leanelpi` 0.4 comes from crates.io; the native library comes from a [lean-elpi release](https://github.com/Volland/lean-elpi/releases). Unpack the archive for your platform into a directory and point `LEANELPI_DIST` at it, for example `LEANELPI_DIST=$PWD/libleanelpi cargo install tiramemsu-cli --features elpi`. An installed `tm` also needs that directory on its loader path (`DYLD_LIBRARY_PATH` on macOS, `LD_LIBRARY_PATH` on Linux).
 
 ## Five minutes
 

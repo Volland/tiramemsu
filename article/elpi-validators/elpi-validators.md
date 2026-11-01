@@ -4,7 +4,7 @@
 
 ---
 
-> **Preview.** ELPI support is built and tested but not released. It needs lean-elpi 0.4, whose host callbacks are not on crates.io yet, and it will ship in a later Tiramemsu release. The feature is called `elpi`, and it is off by default.
+> ELPI ships in Tiramemsu 0.12.0 as the feature `elpi`, off by default. It links the native `libleanelpi` from a lean-elpi release (macOS and Linux); the guide says how.
 
 An agent's memory is full of rules nobody wrote down: one CEO at a time, every project has an owner, a report needs a reviewer who is not its author. Tiramemsu can check rules like these in Datalog. Some questions, though, are not about what is true but about what would be true if something changed. Would the team still reach Erin if Bob left? Does this policy hold for any new member, whoever that is? Which of these ten policies does this project break, when the policies themselves are data?
 
@@ -153,6 +153,6 @@ All three store their programs the same way, read the same views and write concl
 
 ## Limits
 
-ELPI is in preview. lean-elpi is about 2.4 times slower than ELPI 1.18, and Tiramemsu has no ELPI benchmark yet. The native library exists for macOS and Linux only, so the Node, Python and browser packages leave ELPI out. The command line, the MCP server and Rust have it.
+ELPI is new. lean-elpi is about 2.4 times slower than ELPI 1.18, and Tiramemsu has no ELPI benchmark yet. The native library exists for macOS and Linux only, so the Node, Python and browser packages leave ELPI out. The command line, the MCP server and Rust have it.
 
 The guide has every call, term and error. The engineering story, from callbacks to the bugs the tests found, is the companion article *λProlog in a bitemporal memory*.

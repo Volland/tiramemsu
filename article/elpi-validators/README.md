@@ -1,6 +1,6 @@
 # Article: Validators that ask "what if"
 
-A hands-on tour (about 1,700 words, no images) of ELPI in Tiramemsu, for users rather than implementers: a question, a hypothetical answer with `=>`, policies passed as predicates, `pi` for any member, a validator enforced at commit, and materialized conclusions. It is marked **Preview** until ELPI ships in a release. It appears on the website as `site/articles/elpi-validators.html`. The engineering companion is `article/elpi/`.
+A hands-on tour (about 1,700 words, no images) of ELPI in Tiramemsu, for users rather than implementers: a question, a hypothetical answer with `=>`, policies passed as predicates, `pi` for any member, a validator enforced at commit, and materialized conclusions. It appears on the website as `site/articles/elpi-validators.html`. The engineering companion is `article/elpi/`.
 
 | File | What it is |
 |---|---|

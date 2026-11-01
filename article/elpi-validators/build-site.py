@@ -11,7 +11,7 @@ ROOT = os.path.normpath(os.path.join(HERE, "..", ".."))
 OUT = os.path.join(ROOT, "site", "articles", "elpi-validators.html")
 DATE = "31 October 2026"
 TITLE = 'Validators that ask “what if”'
-DESC = "A hands-on tour of ELPI in Tiramemsu: questions over memory, hypothetical answers with =>, policies as predicates, pi for any member, validators that refuse a bad write, and grounded conclusions. Preview: not yet released."
+DESC = "A hands-on tour of ELPI in Tiramemsu: questions over memory, hypothetical answers with =>, policies as predicates, pi for any member, validators that refuse a bad write, and grounded conclusions."
 
 body = subprocess.run(
     ["pandoc", "elpi-validators.md", "-f", "markdown-implicit_figures", "-t", "html5",
@@ -42,7 +42,6 @@ page = f'''<!doctype html>
 <article class="post">
 <h1>{TITLE}</h1>
 <p class="meta">Tiramemsu articles · {DATE}</p>
-<p class="meta"><strong>Preview:</strong> ELPI support is built and tested but not yet released; it needs lean-elpi 0.4 on crates.io and will ship in a later release (feature <code>elpi</code>, off by default).</p>
 
 {body}
 <p><a href="../elpi/">The ELPI guide →</a> · <a href="elpi-reasoning.html">Related: λProlog in a bitemporal memory →</a></p>

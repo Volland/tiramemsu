@@ -9,7 +9,9 @@ OpenSpec changes in `openspec/changes/archive/`.
 
 ## [Unreleased]
 
-ELPI (λProlog) as a third reasoning language (`openspec/changes/archive/2026-10-31-add-elpi-*`, decisions E1–E13 in `lat.md/elpi.md`). No file format change: programs are ordinary statements. Needs lean-elpi 0.4, which is not yet on crates.io.
+## [0.12.0] - 2026-11-01
+
+ELPI (λProlog) as a third reasoning language (`openspec/changes/archive/2026-10-31-add-elpi-*`, decisions E1–E13 in `lat.md/elpi.md`). No file format change: programs are ordinary statements. The feature `elpi` is off by default; it uses lean-elpi's `leanelpi` 0.4 from crates.io and links the native `libleanelpi` from a [lean-elpi release](https://github.com/Volland/lean-elpi/releases) (macOS and Linux), found through `LEANELPI_DIST`. `tm-elpi` and `tm-elpi-store` are published to crates.io.
 
 ### Added
 
@@ -26,7 +28,7 @@ ELPI (λProlog) as a third reasoning language (`openspec/changes/archive/2026-10
 
 ### Not done
 
-- ELPI in the Node, Python and wasm packages; an ELPI benchmark; an N3 oracle for ELPI; static linking of release binaries.
+- ELPI in the Node, Python and wasm packages; an ELPI benchmark; an N3 oracle for ELPI; static linking of release binaries; finding `libleanelpi` through `pkg-config` or a `download` feature; a CI job with `--features elpi`.
 
 ## [0.11.0] - 2026-10-31
 
@@ -310,7 +312,10 @@ First release.
 - Named graphs: `Tx::add_to_graph`, `remove_from_graph`, `clear_graph`, `View::graphs`, `View::graph_members`. SPARQL gains `GRAPH`, `FROM NAMED` and graph management updates.
 - JSON bridge (`tiramemsu-json`), Node.js bindings (`@tiramemsu/node`) and Python bindings (`tiramemsu`), with release workflows for PyPI wheels and npm.
 
-[Unreleased]: https://github.com/Volland/tiramemsu/compare/v0.9.0...HEAD
+[Unreleased]: https://github.com/Volland/tiramemsu/compare/v0.12.0...HEAD
+[0.12.0]: https://github.com/Volland/tiramemsu/compare/v0.11.0...v0.12.0
+[0.11.0]: https://github.com/Volland/tiramemsu/compare/v0.10.0...v0.11.0
+[0.10.0]: https://github.com/Volland/tiramemsu/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/Volland/tiramemsu/compare/v0.8.1...v0.9.0
 [0.8.1]: https://github.com/Volland/tiramemsu/compare/v0.8.0...v0.8.1
 [0.8.0]: https://github.com/Volland/tiramemsu/compare/v0.7.0...v0.8.0
