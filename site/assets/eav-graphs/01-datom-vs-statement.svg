@@ -1,0 +1,58 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1456 820" font-family="Helvetica Neue, Helvetica, Arial, sans-serif">
+  <title>A datom and a statement</title>
+  <rect width="1456" height="820" fill="#fffaf0"/>
+  <text x="60" y="70" font-size="36" font-weight="700" fill="#2a1a10">From datoms to graphs</text>
+  <text x="60" y="108" font-size="21" fill="#6b5443">The same fact in Datomic and in Tiramemsu. The statement adds an id of its own and a second clock.</text>
+
+  <!-- Datomic row -->
+  <text x="60" y="190" font-size="22" font-weight="700" fill="#6b5443">DATOMIC · a datom</text>
+  <g font-size="22" font-family="Menlo, Consolas, monospace" fill="#2a1a10">
+    <rect x="60" y="210" width="210" height="80" rx="8" fill="#f6e2bf" stroke="#3b2418" stroke-width="2.5"/>
+    <text x="165" y="258" text-anchor="middle">:ada</text>
+    <rect x="280" y="210" width="260" height="80" rx="8" fill="#f6e2bf" stroke="#3b2418" stroke-width="2.5"/>
+    <text x="410" y="258" text-anchor="middle">:person/memberOf</text>
+    <rect x="550" y="210" width="210" height="80" rx="8" fill="#f6e2bf" stroke="#3b2418" stroke-width="2.5"/>
+    <text x="655" y="258" text-anchor="middle">:search</text>
+    <rect x="770" y="210" width="170" height="80" rx="8" fill="#f3ece0" stroke="#3b2418" stroke-width="2.5"/>
+    <text x="855" y="258" text-anchor="middle">tx 4</text>
+    <rect x="950" y="210" width="150" height="80" rx="8" fill="#f3ece0" stroke="#3b2418" stroke-width="2.5"/>
+    <text x="1025" y="258" text-anchor="middle">true</text>
+  </g>
+  <g font-size="17" fill="#6b5443" text-anchor="middle">
+    <text x="165" y="320">e</text><text x="410" y="320">a</text><text x="655" y="320">v</text>
+    <text x="855" y="320">tx</text><text x="1025" y="320">added?</text>
+  </g>
+  <text x="1130" y="244" font-size="19" fill="#6b5443">identified by its contents;</text>
+  <text x="1130" y="270" font-size="19" fill="#6b5443">one clock</text>
+
+  <!-- Tiramemsu row -->
+  <text x="60" y="420" font-size="22" font-weight="700" fill="#b0304a">TIRAMEMSU · a statement</text>
+  <g font-size="22" font-family="Menlo, Consolas, monospace" fill="#2a1a10">
+    <rect x="60" y="440" width="160" height="80" rx="8" fill="#ffc7d2" stroke="#3b2418" stroke-width="3"/>
+    <text x="140" y="488" text-anchor="middle" font-weight="700">stmt:38</text>
+    <rect x="230" y="440" width="150" height="80" rx="8" fill="#f6e2bf" stroke="#3b2418" stroke-width="2.5"/>
+    <text x="305" y="488" text-anchor="middle">v:ada</text>
+    <rect x="390" y="440" width="200" height="80" rx="8" fill="#f6e2bf" stroke="#3b2418" stroke-width="2.5"/>
+    <text x="490" y="488" text-anchor="middle">v:memberOf</text>
+    <rect x="600" y="440" width="160" height="80" rx="8" fill="#f6e2bf" stroke="#3b2418" stroke-width="2.5"/>
+    <text x="680" y="488" text-anchor="middle">v:search</text>
+    <rect x="770" y="440" width="260" height="80" rx="8" fill="#f3ece0" stroke="#3b2418" stroke-width="2.5"/>
+    <text x="900" y="488" text-anchor="middle">t_add 4 · t_ret –</text>
+    <rect x="1040" y="440" width="356" height="80" rx="8" fill="#e3ecd6" stroke="#3b2418" stroke-width="2.5"/>
+    <text x="1218" y="488" text-anchor="middle">[2026-03-01, ∞)</text>
+  </g>
+  <g font-size="17" fill="#6b5443" text-anchor="middle">
+    <text x="160" y="550">eid</text><text x="305" y="550">s</text><text x="490" y="550">p</text><text x="680" y="550">o</text>
+    <text x="900" y="550">transaction time: when we believed it</text>
+    <text x="1218" y="550">valid time: when it was true</text>
+  </g>
+
+  <!-- layer hint -->
+  <path d="M100 640 L100 528" stroke="#b0304a" stroke-width="3" fill="none"/>
+  <path d="M92 540 L100 524 L108 540" fill="#b0304a"/>
+  <rect x="60" y="640" width="420" height="70" rx="8" fill="#fff" stroke="#b0304a" stroke-width="2.5"/>
+  <text x="80" y="684" font-size="21" font-family="Menlo, Consolas, monospace" fill="#2a1a10">stmt:38  v:allocation  60</text>
+  <text x="510" y="668" font-size="20" fill="#2a1a10">Because the fact has an id, other facts can be about it:</text>
+  <text x="510" y="696" font-size="20" fill="#2a1a10">edge properties, sources, confidence, graph membership.</text>
+  <text x="60" y="776" font-size="18" fill="#9c8a76">Datomic can annotate a transaction (a batch of datoms). A statement can be annotated one fact at a time.</text>
+</svg>

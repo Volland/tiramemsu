@@ -1,0 +1,61 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1456 860" font-family="Helvetica Neue, Helvetica, Arial, sans-serif">
+  <title>One store, every surface</title>
+  <defs>
+    <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="9" markerHeight="9" orient="auto"><path d="M0 0L10 5L0 10z" fill="#3b2418"/></marker>
+    <marker id="arR" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="9" markerHeight="9" orient="auto"><path d="M0 0L10 5L0 10z" fill="#b0304a"/></marker>
+  </defs>
+  <rect width="1456" height="860" fill="#fffaf0"/>
+  <text x="60" y="66" font-size="34" font-weight="700" fill="#2a1a10">One store, every surface</text>
+  <text x="60" y="102" font-size="20" fill="#6b5443">Every language reads the same statements in the same views. Derived facts go back in, with their support.</text>
+
+  <!-- center table -->
+  <rect x="478" y="300" width="500" height="260" rx="14" fill="#fff" stroke="#3b2418" stroke-width="3"/>
+  <rect x="478" y="300" width="500" height="54" rx="14" fill="#2a1a10"/>
+  <text x="728" y="336" font-size="22" font-weight="700" fill="#fffaf0" text-anchor="middle">statements</text>
+  <g font-size="17" font-family="Menlo, Consolas, monospace" fill="#2a1a10" xml:space="preserve">
+    <text x="500" y="388">eid  s     p         o       t   valid</text>
+    <text x="500" y="420">38   ada   memberOf  search  4   2026-03→</text>
+    <text x="500" y="450">39   38    allocation 60     4   always</text>
+    <text x="500" y="480">43   cleo  memberOf  storage 5   2026-05→</text>
+    <text x="500" y="510" fill="#b0304a">…    cleo  inOrg     eng     …   derived</text>
+    <text x="500" y="540" fill="#9c8a76">…    SQLite or redb, one file</text>
+  </g>
+
+  <!-- surfaces -->
+  <g font-size="21" font-weight="700" text-anchor="middle" fill="#2a1a10">
+    <rect x="80" y="160" width="300" height="120" rx="14" fill="#ffc7d2" stroke="#3b2418" stroke-width="3"/>
+    <text x="230" y="206">Datalog</text>
+    <rect x="80" y="580" width="300" height="120" rx="14" fill="#f6e2bf" stroke="#3b2418" stroke-width="3"/>
+    <text x="230" y="626">SPARQL 1.2</text>
+    <rect x="1076" y="160" width="300" height="120" rx="14" fill="#f6e2bf" stroke="#3b2418" stroke-width="3"/>
+    <text x="1226" y="206">openCypher</text>
+    <rect x="1076" y="580" width="300" height="120" rx="14" fill="#f3ece0" stroke="#3b2418" stroke-width="3"/>
+    <text x="1226" y="626">N3 · ELPI</text>
+    <rect x="578" y="150" width="300" height="100" rx="14" fill="#f3ece0" stroke="#3b2418" stroke-width="3"/>
+    <text x="728" y="192">views</text>
+  </g>
+  <g font-size="16" fill="#6b5443" text-anchor="middle">
+    <text x="230" y="234">rules, goals, DatalogMTL</text>
+    <text x="230" y="258">constraints at commit</text>
+    <text x="230" y="654">annotations {| |}, GRAPH,</text>
+    <text x="230" y="678">property paths, SERVICE dl:query</text>
+    <text x="1226" y="234">r.allocation on edges,</text>
+    <text x="1226" y="258">CALL tiramemsu.datalog.query</text>
+    <text x="1226" y="654">quoted formulas, proofs,</text>
+    <text x="1226" y="678">λProlog programs (preview)</text>
+    <text x="728" y="220">now · as_of · history · with</text>
+  </g>
+  <g stroke="#3b2418" stroke-width="3" fill="none">
+    <path d="M382 250 L474 320" marker-end="url(#ar)"/>
+    <path d="M382 612 L474 540" marker-end="url(#ar)"/>
+    <path d="M1074 250 L982 320" marker-end="url(#ar)"/>
+    <path d="M1074 612 L982 540" marker-end="url(#ar)"/>
+    <path d="M728 252 L728 296" marker-end="url(#ar)"/>
+  </g>
+  <!-- materialize loop -->
+  <path d="M78 230 L40 230 L40 778 L296 778" stroke="#b0304a" stroke-width="3" fill="none" stroke-dasharray="10 6" marker-end="url(#arR)"/>
+  <path d="M728 732 L728 566" stroke="#b0304a" stroke-width="3" fill="none" stroke-dasharray="10 6" marker-end="url(#arR)"/>
+  <rect x="300" y="736" width="856" height="84" rx="10" fill="#fff" stroke="#b0304a" stroke-width="2.5"/>
+  <text x="320" y="770" font-size="18" font-weight="700" fill="#b0304a">materialize_program</text>
+  <text x="320" y="800" font-size="17" fill="#2a1a10">conclusions stored with sys:derivedFrom; retract a premise and they fall</text>
+</svg>

@@ -1,0 +1,83 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1456 860" font-family="Helvetica Neue, Helvetica, Arial, sans-serif">
+  <title>An EAV table is already a graph</title>
+  <defs>
+    <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="9" markerHeight="9" orient="auto"><path d="M0 0L10 5L0 10z" fill="#3b2418"/></marker>
+  </defs>
+  <rect width="1456" height="860" fill="#fffaf0"/>
+  <text x="60" y="66" font-size="34" font-weight="700" fill="#2a1a10">An EAV table is already a graph</text>
+  <text x="60" y="102" font-size="20" fill="#6b5443">Literal values stay on the node. Values that are entities are edges.</text>
+
+  <!-- table -->
+  <rect x="60" y="140" width="560" height="660" rx="10" fill="#fff" stroke="#3b2418" stroke-width="2.5"/>
+  <rect x="60" y="140" width="560" height="50" rx="10" fill="#2a1a10"/>
+  <g font-size="19" font-weight="700" fill="#fffaf0" font-family="Menlo, Consolas, monospace">
+    <text x="84" y="173">entity</text><text x="230" y="173">attribute</text><text x="420" y="173">value</text>
+  </g>
+  <g font-size="19" font-family="Menlo, Consolas, monospace" fill="#2a1a10">
+    <text x="84" y="226">ada</text><text x="230" y="226">name</text><text x="420" y="226">"Ada"</text>
+    <text x="84" y="262">ada</text><text x="230" y="262">title</text><text x="420" y="262">"Senior Eng…"</text>
+    <text x="84" y="298">ada</text><text x="230" y="298">email</text><text x="420" y="298">"ada@…"</text>
+    <rect x="70" y="312" width="540" height="34" fill="#ffc7d2"/>
+    <text x="84" y="335">ada</text><text x="230" y="335">memberOf</text><text x="420" y="335">search</text>
+    <rect x="70" y="348" width="540" height="34" fill="#ffc7d2"/>
+    <text x="84" y="371">ada</text><text x="230" y="371">memberOf</text><text x="420" y="371">storage</text>
+    <text x="84" y="407">bob</text><text x="230" y="407">name</text><text x="420" y="407">"Bob"</text>
+    <rect x="70" y="420" width="540" height="34" fill="#ffc7d2"/>
+    <text x="84" y="443">bob</text><text x="230" y="443">memberOf</text><text x="420" y="443">platform</text>
+    <rect x="70" y="456" width="540" height="34" fill="#ffc7d2"/>
+    <text x="84" y="479">bob</text><text x="230" y="479">leads</text><text x="420" y="479">platform</text>
+    <text x="84" y="515">cleo</text><text x="230" y="515">name</text><text x="420" y="515">"Cleo"</text>
+    <rect x="70" y="528" width="540" height="34" fill="#ffc7d2"/>
+    <text x="84" y="551">cleo</text><text x="230" y="551">memberOf</text><text x="420" y="551">search</text>
+    <rect x="70" y="564" width="540" height="34" fill="#f6e2bf"/>
+    <text x="84" y="587">storage</text><text x="230" y="587">partOf</text><text x="420" y="587">platform</text>
+    <rect x="70" y="600" width="540" height="34" fill="#f6e2bf"/>
+    <text x="84" y="623">search</text><text x="230" y="623">partOf</text><text x="420" y="623">platform</text>
+    <rect x="70" y="636" width="540" height="34" fill="#f6e2bf"/>
+    <text x="84" y="659">platform</text><text x="230" y="659">partOf</text><text x="420" y="659">eng</text>
+    <text x="84" y="695" fill="#9c8a76">…</text>
+  </g>
+  <text x="84" y="752" font-size="17" fill="#6b5443">pink and gold rows: the value is another entity</text>
+  <text x="84" y="776" font-size="17" fill="#6b5443">(a ref attribute in Datomic)</text>
+
+  <path d="M640 470 L700 470" stroke="#3b2418" stroke-width="4" marker-end="url(#ar)"/>
+
+  <!-- graph -->
+  <g font-size="20" font-weight="700" fill="#2a1a10" text-anchor="middle">
+    <rect x="1120" y="150" width="200" height="66" rx="33" fill="#f6e2bf" stroke="#3b2418" stroke-width="3"/>
+    <text x="1220" y="190">eng</text>
+    <rect x="1120" y="330" width="200" height="66" rx="33" fill="#f6e2bf" stroke="#3b2418" stroke-width="3"/>
+    <text x="1220" y="370">platform</text>
+    <rect x="900" y="520" width="190" height="66" rx="33" fill="#f6e2bf" stroke="#3b2418" stroke-width="3"/>
+    <text x="995" y="560">storage</text>
+    <rect x="1220" y="520" width="190" height="66" rx="33" fill="#f6e2bf" stroke="#3b2418" stroke-width="3"/>
+    <text x="1315" y="560">search</text>
+    <rect x="740" y="700" width="200" height="66" rx="33" fill="#ffc7d2" stroke="#3b2418" stroke-width="3"/>
+    <text x="840" y="740">Ada</text>
+    <rect x="1220" y="700" width="190" height="66" rx="33" fill="#ffc7d2" stroke="#3b2418" stroke-width="3"/>
+    <text x="1315" y="740">Cleo</text>
+    <rect x="760" y="330" width="190" height="66" rx="33" fill="#ffc7d2" stroke="#3b2418" stroke-width="3"/>
+    <text x="855" y="370">Bob</text>
+  </g>
+  <g stroke="#3b2418" stroke-width="3" fill="none">
+    <path d="M1220 328 L1220 220" marker-end="url(#ar)"/>
+    <path d="M1010 518 L1150 400" marker-end="url(#ar)"/>
+    <path d="M1300 518 L1255 400" marker-end="url(#ar)"/>
+    <path d="M870 698 L975 590" marker-end="url(#ar)"/>
+    <path d="M940 735 C 1080 735 1180 640 1240 590" marker-end="url(#ar)"/>
+    <path d="M1315 698 L1315 590" marker-end="url(#ar)"/>
+    <path d="M952 352 L1116 352" marker-end="url(#ar)"/>
+    <path d="M952 376 L1116 376" marker-end="url(#ar)"/>
+  </g>
+  <g font-size="16" fill="#6b5443">
+    <text x="1232" y="280">partOf</text>
+    <text x="1030" y="450">partOf</text>
+    <text x="1290" y="460">partOf</text>
+    <text x="810" y="640">memberOf</text>
+    <text x="1010" y="770">memberOf</text>
+    <text x="1325" y="650">memberOf</text>
+    <text x="990" y="342">memberOf</text>
+    <text x="1010" y="398">leads</text>
+  </g>
+  <text x="740" y="800" font-size="16" fill="#9c8a76">name, title and email are fields on the nodes</text>
+</svg>
