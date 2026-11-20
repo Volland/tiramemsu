@@ -1,0 +1,107 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="3000" height="1000" viewBox="0 0 3000 1000">
+  <title>Tiramemsu banner</title>
+  <defs>
+    <linearGradient id="fade" x1="0" x2="1">
+      <stop offset="0" stop-color="#2a1a10" stop-opacity=".0"/>
+      <stop offset=".02" stop-color="#2a1a10" stop-opacity=".0"/>
+    </linearGradient>
+    <linearGradient id="panel" x1="0" x2="1">
+      <stop offset="0" stop-color="#fffaf0" stop-opacity=".97"/>
+      <stop offset=".78" stop-color="#fffaf0" stop-opacity=".93"/>
+      <stop offset="1" stop-color="#fffaf0" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+  <rect y="0" width="3000" height="90" fill="#5a3320"/><rect y="90" width="3000" height="160" fill="#fff4d8"/><rect y="250" width="3000" height="180" fill="#b07a3c"/><rect y="430" width="3000" height="170" fill="#fff4d8"/><rect y="600" width="3000" height="180" fill="#c9924f"/><rect y="780" width="3000" height="100" fill="#fff4d8"/><rect y="880" width="3000" height="120" fill="#b07a3c"/>
+  <path d="M0 262 q125 30 250 0 q125 30 250 0 q125 30 250 0 q125 30 250 0 q125 30 250 0 q125 30 250 0 q125 30 250 0 q125 30 250 0 q125 30 250 0 q125 30 250 0 q125 30 250 0 q125 30 250 0 v22 q-125 30 -250 0 q-125 30 -250 0 q-125 30 -250 0 q-125 30 -250 0 q-125 30 -250 0 q-125 30 -250 0 q-125 30 -250 0 q-125 30 -250 0 q-125 30 -250 0 q-125 30 -250 0 q-125 30 -250 0 q-125 30 -250 0z" fill="#7a4a24" opacity=".35"/><path d="M0 612 q125 30 250 0 q125 30 250 0 q125 30 250 0 q125 30 250 0 q125 30 250 0 q125 30 250 0 q125 30 250 0 q125 30 250 0 q125 30 250 0 q125 30 250 0 q125 30 250 0 q125 30 250 0 v22 q-125 30 -250 0 q-125 30 -250 0 q-125 30 -250 0 q-125 30 -250 0 q-125 30 -250 0 q-125 30 -250 0 q-125 30 -250 0 q-125 30 -250 0 q-125 30 -250 0 q-125 30 -250 0 q-125 30 -250 0 q-125 30 -250 0z" fill="#7a4a24" opacity=".35"/><path d="M0 892 q125 30 250 0 q125 30 250 0 q125 30 250 0 q125 30 250 0 q125 30 250 0 q125 30 250 0 q125 30 250 0 q125 30 250 0 q125 30 250 0 q125 30 250 0 q125 30 250 0 q125 30 250 0 v22 q-125 30 -250 0 q-125 30 -250 0 q-125 30 -250 0 q-125 30 -250 0 q-125 30 -250 0 q-125 30 -250 0 q-125 30 -250 0 q-125 30 -250 0 q-125 30 -250 0 q-125 30 -250 0 q-125 30 -250 0 q-125 30 -250 0z" fill="#7a4a24" opacity=".35"/>
+  <g fill="#3b2418" opacity=".6"><circle cx="1825" cy="44" r="5"/><circle cx="1580" cy="52" r="3"/><circle cx="1891" cy="53" r="3"/><circle cx="2502" cy="22" r="4"/><circle cx="241" cy="35" r="4"/><circle cx="529" cy="39" r="4"/><circle cx="1601" cy="71" r="3"/><circle cx="681" cy="65" r="4"/><circle cx="2250" cy="43" r="3"/><circle cx="1763" cy="78" r="4"/><circle cx="2893" cy="61" r="4"/><circle cx="2796" cy="56" r="3"/><circle cx="618" cy="18" r="3"/><circle cx="619" cy="37" r="5"/><circle cx="955" cy="9" r="4"/><circle cx="2413" cy="31" r="4"/><circle cx="1154" cy="8" r="3"/><circle cx="1716" cy="76" r="4"/><circle cx="2497" cy="80" r="4"/><circle cx="514" cy="73" r="5"/><circle cx="2682" cy="14" r="4"/><circle cx="2787" cy="79" r="4"/><circle cx="1630" cy="59" r="4"/><circle cx="424" cy="69" r="5"/><circle cx="1640" cy="15" r="3"/><circle cx="275" cy="34" r="4"/><circle cx="664" cy="22" r="4"/><circle cx="2460" cy="14" r="3"/><circle cx="0" cy="80" r="3"/><circle cx="2197" cy="20" r="4"/><circle cx="2513" cy="11" r="3"/><circle cx="851" cy="56" r="3"/><circle cx="2598" cy="40" r="4"/><circle cx="2466" cy="54" r="4"/><circle cx="503" cy="22" r="4"/><circle cx="1908" cy="69" r="4"/><circle cx="1277" cy="18" r="3"/><circle cx="418" cy="51" r="5"/><circle cx="1084" cy="69" r="5"/><circle cx="661" cy="74" r="3"/><circle cx="840" cy="75" r="4"/><circle cx="600" cy="77" r="3"/><circle cx="2163" cy="46" r="5"/><circle cx="372" cy="41" r="5"/><circle cx="1502" cy="29" r="4"/><circle cx="912" cy="76" r="5"/><circle cx="2059" cy="50" r="5"/><circle cx="913" cy="32" r="3"/><circle cx="1641" cy="37" r="3"/><circle cx="2120" cy="71" r="4"/><circle cx="2994" cy="11" r="3"/><circle cx="1144" cy="68" r="4"/><circle cx="793" cy="52" r="4"/><circle cx="2961" cy="52" r="4"/><circle cx="329" cy="36" r="3"/><circle cx="929" cy="68" r="3"/><circle cx="1383" cy="34" r="4"/><circle cx="2556" cy="8" r="4"/><circle cx="2674" cy="52" r="5"/><circle cx="347" cy="23" r="4"/><circle cx="2914" cy="33" r="4"/><circle cx="731" cy="63" r="5"/><circle cx="1361" cy="19" r="5"/><circle cx="1621" cy="67" r="4"/><circle cx="347" cy="28" r="3"/><circle cx="520" cy="11" r="3"/><circle cx="2419" cy="67" r="5"/><circle cx="598" cy="68" r="5"/><circle cx="1435" cy="27" r="5"/><circle cx="2245" cy="24" r="3"/><circle cx="58" cy="21" r="5"/><circle cx="570" cy="63" r="3"/><circle cx="864" cy="11" r="4"/><circle cx="871" cy="45" r="5"/><circle cx="985" cy="49" r="4"/><circle cx="2229" cy="61" r="3"/><circle cx="249" cy="53" r="4"/><circle cx="2713" cy="82" r="5"/><circle cx="1722" cy="72" r="3"/><circle cx="2178" cy="27" r="5"/><circle cx="2091" cy="10" r="4"/><circle cx="750" cy="8" r="3"/><circle cx="705" cy="26" r="4"/><circle cx="2535" cy="23" r="5"/><circle cx="252" cy="49" r="5"/><circle cx="2123" cy="75" r="5"/><circle cx="1976" cy="21" r="5"/><circle cx="232" cy="39" r="3"/><circle cx="1134" cy="13" r="3"/><circle cx="2079" cy="65" r="5"/><circle cx="114" cy="16" r="4"/><circle cx="1333" cy="72" r="5"/><circle cx="2097" cy="33" r="5"/><circle cx="1135" cy="65" r="5"/><circle cx="2184" cy="69" r="5"/><circle cx="1014" cy="74" r="4"/><circle cx="2291" cy="33" r="4"/><circle cx="561" cy="61" r="3"/><circle cx="1607" cy="64" r="4"/><circle cx="297" cy="38" r="4"/><circle cx="299" cy="35" r="5"/><circle cx="1240" cy="23" r="3"/><circle cx="2933" cy="54" r="3"/><circle cx="1036" cy="25" r="4"/><circle cx="899" cy="20" r="4"/><circle cx="1995" cy="28" r="5"/><circle cx="916" cy="28" r="5"/><circle cx="1767" cy="73" r="4"/><circle cx="1389" cy="61" r="3"/><circle cx="1460" cy="48" r="3"/><circle cx="2957" cy="54" r="3"/><circle cx="1384" cy="78" r="4"/><circle cx="1804" cy="10" r="4"/><circle cx="1357" cy="74" r="5"/><circle cx="1210" cy="73" r="3"/><circle cx="462" cy="37" r="3"/><circle cx="344" cy="41" r="4"/><circle cx="162" cy="31" r="4"/><circle cx="530" cy="62" r="5"/><circle cx="1059" cy="59" r="3"/><circle cx="2197" cy="73" r="5"/><circle cx="2025" cy="49" r="3"/><circle cx="1143" cy="15" r="5"/><circle cx="750" cy="62" r="3"/><circle cx="1101" cy="10" r="5"/><circle cx="362" cy="41" r="3"/><circle cx="2491" cy="36" r="3"/><circle cx="1083" cy="23" r="4"/><circle cx="47" cy="51" r="5"/><circle cx="1711" cy="42" r="5"/><circle cx="529" cy="13" r="5"/><circle cx="2906" cy="38" r="3"/><circle cx="661" cy="41" r="3"/><circle cx="741" cy="33" r="4"/><circle cx="2575" cy="47" r="5"/><circle cx="843" cy="45" r="4"/><circle cx="2048" cy="30" r="4"/><circle cx="1421" cy="10" r="4"/><circle cx="151" cy="9" r="3"/><circle cx="2071" cy="78" r="3"/><circle cx="2106" cy="68" r="3"/><circle cx="1831" cy="21" r="5"/><circle cx="2662" cy="63" r="5"/><circle cx="2027" cy="77" r="4"/><circle cx="2075" cy="47" r="5"/><circle cx="881" cy="37" r="4"/><circle cx="813" cy="25" r="4"/><circle cx="1423" cy="14" r="3"/><circle cx="58" cy="17" r="5"/><circle cx="1046" cy="63" r="3"/><circle cx="226" cy="18" r="5"/><circle cx="1560" cy="72" r="5"/><circle cx="1154" cy="39" r="5"/><circle cx="1200" cy="13" r="4"/><circle cx="759" cy="28" r="4"/><circle cx="1826" cy="8" r="4"/><circle cx="1491" cy="50" r="5"/><circle cx="1325" cy="39" r="3"/><circle cx="1267" cy="35" r="4"/><circle cx="749" cy="8" r="4"/><circle cx="1563" cy="18" r="4"/><circle cx="1142" cy="72" r="5"/><circle cx="823" cy="39" r="5"/><circle cx="20" cy="19" r="4"/><circle cx="367" cy="26" r="4"/><circle cx="2403" cy="13" r="4"/><circle cx="92" cy="46" r="4"/><circle cx="2579" cy="37" r="3"/><circle cx="2398" cy="75" r="3"/><circle cx="2693" cy="57" r="4"/><circle cx="2951" cy="71" r="3"/><circle cx="1163" cy="26" r="3"/><circle cx="2928" cy="73" r="5"/><circle cx="1758" cy="72" r="3"/><circle cx="2145" cy="72" r="5"/><circle cx="65" cy="82" r="5"/><circle cx="2797" cy="37" r="3"/><circle cx="127" cy="13" r="3"/><circle cx="2609" cy="54" r="3"/><circle cx="1542" cy="65" r="5"/><circle cx="207" cy="10" r="5"/><circle cx="2176" cy="39" r="4"/><circle cx="1080" cy="8" r="4"/><circle cx="287" cy="72" r="5"/><circle cx="376" cy="75" r="3"/><circle cx="1940" cy="40" r="3"/><circle cx="1087" cy="38" r="5"/><circle cx="840" cy="37" r="5"/><circle cx="2662" cy="66" r="4"/><circle cx="1566" cy="17" r="4"/><circle cx="2800" cy="44" r="3"/><circle cx="2527" cy="33" r="3"/><circle cx="2456" cy="26" r="4"/><circle cx="1040" cy="46" r="5"/><circle cx="2325" cy="25" r="3"/><circle cx="1975" cy="15" r="4"/><circle cx="1100" cy="20" r="5"/><circle cx="891" cy="70" r="4"/><circle cx="2903" cy="74" r="4"/><circle cx="1903" cy="67" r="4"/><circle cx="485" cy="78" r="3"/><circle cx="1276" cy="18" r="4"/><circle cx="71" cy="45" r="4"/><circle cx="313" cy="72" r="4"/><circle cx="1100" cy="57" r="3"/><circle cx="863" cy="17" r="5"/><circle cx="369" cy="26" r="5"/><circle cx="2146" cy="41" r="4"/><circle cx="543" cy="73" r="4"/><circle cx="461" cy="54" r="3"/><circle cx="2039" cy="70" r="4"/><circle cx="101" cy="28" r="3"/><circle cx="2013" cy="65" r="4"/><circle cx="1236" cy="26" r="4"/><circle cx="1408" cy="56" r="4"/><circle cx="495" cy="50" r="3"/><circle cx="1329" cy="51" r="4"/><circle cx="491" cy="33" r="5"/><circle cx="48" cy="45" r="4"/><circle cx="1524" cy="16" r="4"/><circle cx="1598" cy="17" r="4"/><circle cx="1753" cy="43" r="3"/><circle cx="1149" cy="21" r="3"/><circle cx="2711" cy="44" r="5"/><circle cx="609" cy="39" r="4"/><circle cx="1786" cy="73" r="4"/><circle cx="777" cy="55" r="4"/><circle cx="118" cy="59" r="5"/><circle cx="2249" cy="34" r="5"/><circle cx="330" cy="14" r="5"/><circle cx="1682" cy="65" r="5"/><circle cx="567" cy="44" r="4"/><circle cx="200" cy="78" r="3"/><circle cx="699" cy="68" r="4"/><circle cx="1407" cy="44" r="4"/><circle cx="1047" cy="41" r="4"/><circle cx="2686" cy="38" r="4"/><circle cx="1979" cy="79" r="5"/><circle cx="1615" cy="23" r="3"/><circle cx="2634" cy="28" r="3"/><circle cx="851" cy="72" r="4"/><circle cx="2254" cy="36" r="4"/><circle cx="1363" cy="65" r="4"/><circle cx="571" cy="78" r="3"/><circle cx="999" cy="19" r="3"/><circle cx="1400" cy="79" r="3"/><circle cx="1307" cy="38" r="4"/><circle cx="1058" cy="80" r="3"/><circle cx="82" cy="60" r="4"/><circle cx="1695" cy="75" r="3"/><circle cx="1543" cy="42" r="4"/><circle cx="254" cy="71" r="4"/><circle cx="2352" cy="54" r="3"/><circle cx="2812" cy="72" r="5"/><circle cx="2578" cy="35" r="3"/><circle cx="1110" cy="39" r="4"/><circle cx="1637" cy="65" r="4"/><circle cx="1278" cy="10" r="3"/><circle cx="132" cy="62" r="5"/><circle cx="1938" cy="70" r="3"/></g>
+  <g stroke="#3b2418" stroke-width="7" stroke-linecap="round" fill="none"><path d="M2505 200 L2732 143"/><path d="M2505 200 L2330 362"/><path d="M2505 200 L2534 347"/><path d="M2384 165 L2732 143"/><path d="M2384 165 L2330 362"/><path d="M2732 143 L2534 347"/><path d="M2330 362 L2534 347"/><path d="M2330 362 L2320 543"/><path d="M2652 316 L2320 543"/><path d="M2652 316 L2632 498"/><path d="M2534 347 L2320 543"/><path d="M2534 347 L2305 490"/><path d="M2320 543 L2632 498"/><path d="M2320 543 L2305 490"/><path d="M2320 543 L2328 675"/><path d="M2320 543 L2342 695"/><path d="M2632 498 L2305 490"/><path d="M2632 498 L2581 686"/><path d="M2632 498 L2328 675"/><path d="M2305 490 L2581 686"/><path d="M2305 490 L2328 675"/><path d="M2305 490 L2342 695"/><path d="M2581 686 L2328 675"/><path d="M2581 686 L2575 803"/><path d="M2581 686 L2365 860"/><path d="M2342 695 L2575 803"/><path d="M2342 695 L2365 860"/><path d="M2575 803 L2855 836"/><path d="M2575 803 L2435 950"/><path d="M2575 803 L2716 947"/><path d="M2575 803 L2322 946"/><path d="M2365 860 L2435 950"/><path d="M2365 860 L2322 946"/></g>
+  <g stroke="#3b2418" stroke-width="7"><circle cx="2505" cy="200" r="22" fill="#ff8fa3"/><circle cx="2385" cy="165" r="16" fill="#fff4d8"/><circle cx="2733" cy="143" r="16" fill="#fff4d8"/><circle cx="2330" cy="362" r="16" fill="#fff4d8"/><circle cx="2653" cy="316" r="22" fill="#ff8fa3"/><circle cx="2534" cy="347" r="16" fill="#fff4d8"/><circle cx="2320" cy="543" r="16" fill="#fff4d8"/><circle cx="2633" cy="498" r="16" fill="#fff4d8"/><circle cx="2306" cy="490" r="22" fill="#ff8fa3"/><circle cx="2582" cy="686" r="16" fill="#fff4d8"/><circle cx="2328" cy="675" r="16" fill="#fff4d8"/><circle cx="2343" cy="695" r="16" fill="#fff4d8"/><circle cx="2575" cy="803" r="22" fill="#ff8fa3"/><circle cx="2855" cy="836" r="16" fill="#fff4d8"/><circle cx="2366" cy="860" r="16" fill="#fff4d8"/><circle cx="2435" cy="950" r="16" fill="#fff4d8"/><circle cx="2717" cy="947" r="22" fill="#ff8fa3"/><circle cx="2323" cy="946" r="16" fill="#fff4d8"/></g>
+  <rect x="0" y="150" width="2380" height="700" fill="url(#panel)"/>
+  <svg x="440" y="200" width="330" height="330" viewBox="0 0 256 256">
+  
+  
+  <defs>
+    <clipPath id="sliceb"><path d="M36 128 L204 128 L204 226 Q204 232 198 232 L42 232 Q36 232 36 226 Z"/></clipPath>
+    <clipPath id="topb"><path d="M36 128 L204 128 L236 106 L68 106 Z"/></clipPath>
+    <clipPath id="sideb"><path d="M204 128 L236 106 L236 210 L204 232 Z"/></clipPath>
+    <mask id="biteb">
+      <rect width="256" height="256" fill="#fff"/>
+      <circle cx="190" cy="112" r="15" fill="#000"/>
+      <circle cx="212" cy="118" r="11" fill="#000"/>
+      <circle cx="176" cy="126" r="9" fill="#000"/>
+    </mask>
+  </defs>
+
+  <!-- the tiramisu; a bite is missing at the top right, under the brain's mouth -->
+  <g mask="url(#biteb)" stroke="#3b2418" stroke-width="4" stroke-linejoin="round">
+    <!-- front face: sponge, cream, sponge, cream, cocoa -->
+    <g clip-path="url(#sliceb)" stroke="none">
+      <rect x="36" y="128" width="168" height="104" fill="#c9924f"/>
+      <rect x="36" y="128" width="168" height="24" fill="#fff4d8"/>
+      <rect x="36" y="152" width="168" height="24" fill="#b07a3c"/>
+      <rect x="36" y="176" width="168" height="24" fill="#fff4d8"/>
+      <rect x="36" y="200" width="168" height="32" fill="#b07a3c"/>
+      <!-- coffee soaked into the sponge -->
+      <path d="M36 158 q20 8 40 0 t40 0 t40 0 t12 -2 v6 q-12 4 -28 0 t-40 0 t-40 0 t-24 2z" fill="#7a4a24" opacity=".55"/>
+      <path d="M36 208 q20 8 40 0 t40 0 t40 0 t12 -2 v6 q-12 4 -28 0 t-40 0 t-40 0 t-24 2z" fill="#7a4a24" opacity=".55"/>
+    </g>
+    <!-- right side face, darker -->
+    <g clip-path="url(#sideb)" stroke="none">
+      <rect x="204" y="106" width="32" height="126" fill="#a5793f"/>
+      <rect x="204" y="128" width="32" height="24" fill="#e8d7ae"/>
+      <rect x="204" y="176" width="32" height="24" fill="#e8d7ae"/>
+    </g>
+    <!-- top face, dusted with cocoa -->
+    <g clip-path="url(#topb)" stroke="none">
+      <rect x="36" y="106" width="200" height="22" fill="#5a3320"/>
+      <g fill="#3b2418" opacity=".7"><circle cx="70" cy="120" r="1.6"/><circle cx="92" cy="114" r="1.4"/><circle cx="112" cy="122" r="1.6"/><circle cx="134" cy="112" r="1.4"/><circle cx="150" cy="122" r="1.6"/><circle cx="118" cy="116" r="1.2"/></g>
+    </g>
+    <g fill="none">
+      <path d="M36 128 L68 106 H150"/>
+      <path d="M36 128 V226 Q36 232 42 232 H204 L236 210 V148"/>
+      <path d="M36 128 H168 M204 128 V232"/>
+    </g>
+  </g>
+
+  <!-- the layered graph: nodes sit on the layers, edges cross between them -->
+  <g stroke="#3b2418" stroke-width="3" stroke-linecap="round" fill="none">
+    <path d="M62 140 L104 164"/><path d="M104 164 L82 188"/><path d="M104 164 L152 142"/>
+    <path d="M152 142 L172 188"/><path d="M82 188 L130 216"/><path d="M172 188 L130 216"/>
+    <path d="M62 140 L152 142" stroke-dasharray="1 7"/>
+  </g>
+  <g stroke="#3b2418" stroke-width="3">
+    <circle cx="62" cy="140" r="7" fill="#fff4d8"/>
+    <circle cx="152" cy="142" r="7" fill="#fff4d8"/>
+    <circle cx="104" cy="164" r="8" fill="#ff8fa3"/>
+    <circle cx="82" cy="188" r="7" fill="#fff4d8"/>
+    <circle cx="172" cy="188" r="7" fill="#fff4d8"/>
+    <circle cx="130" cy="216" r="8" fill="#ff8fa3"/>
+  </g>
+
+  <!-- the brain, with a mouth open over the bite -->
+  <g stroke="#3b2418" stroke-width="4" stroke-linejoin="round" stroke-linecap="round">
+    <path d="M132 84 c-16 -4 -22 -22 -8 -32 c2 -14 20 -20 32 -12 c8 -10 28 -8 34 6 c14 2 20 18 12 28 c8 10 0 26 -14 26 c-6 8 -22 8 -30 0 c-14 4 -30 -6 -26 -16z" fill="#f7a9ba"/>
+    <g fill="none" stroke="#c76a83" stroke-width="3">
+      <path d="M158 44 c-4 12 4 18 -2 30"/>
+      <path d="M140 58 c8 -2 10 6 16 4"/>
+      <path d="M176 52 c-8 4 -6 14 2 16"/>
+      <path d="M138 78 c6 -4 12 0 14 6"/>
+      <path d="M168 84 c4 -6 12 -6 18 -2"/>
+    </g>
+    <!-- open mouth and eyes -->
+    <path d="M150 90 q14 14 32 0 q-2 12 -16 12 q-12 0 -16 -12z" fill="#7a2338" stroke-width="3"/>
+    <path d="M158 96 q8 5 16 0" fill="none" stroke="#ff8fa3" stroke-width="3"/>
+    <circle cx="150" cy="70" r="3.6" fill="#3b2418" stroke="none"/>
+    <circle cx="176" cy="70" r="3.6" fill="#3b2418" stroke="none"/>
+  </g>
+  <!-- crumbs -->
+  <g fill="#5a3320"><circle cx="196" cy="98" r="2.2"/><circle cx="208" cy="92" r="1.8"/><circle cx="188" cy="90" r="1.6"/></g>
+</svg>
+  <g font-family="Avenir Next, Helvetica Neue, Arial, sans-serif" fill="#2a1a10">
+    <text x="810" y="380" font-size="150" font-weight="800" letter-spacing="-3">Tiramemsu</text>
+    <text x="816" y="460" font-size="50" font-weight="700" fill="#e8607f" letter-spacing="4">YOUR AGENT'S BRAIN LOVES TIRAMEMSU</text>
+    <text x="816" y="550" font-size="46" fill="#6b5443">Layered, never-forget memory for agents.</text>
+    <text x="816" y="612" font-size="46" fill="#6b5443">Two clocks · provenance · SPARQL, Cypher, Datalog, N3, ELPI</text>
+    <text x="816" y="740" font-size="44" font-weight="700" fill="#3b2418">tiramemsu.com  ·  github.com/Volland/tiramemsu</text>
+  </g>
+</svg>
