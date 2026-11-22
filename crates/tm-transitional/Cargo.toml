@@ -1,0 +1,16 @@
+[package]
+name = "tm-transitional"
+description = "Transitional modeling (posits and assertions, resolved on read) on top of tiramemsu statements"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+publish = false
+
+[dependencies]
+tiramemsu = { workspace = true }
+
+[dev-dependencies]
+tempfile = "3"

@@ -37,6 +37,22 @@ An agent-memory temporal knowledge graph (Apache-2.0) whose edges carry both wor
 
 **Taken:** valid time as a first-class concern for agent memory ([[time-model#Valid Time]]).
 
+## Positorium
+
+An embedded Rust evidence database (MIT or Apache-2.0, beta 0.3.4) for facts that disagree, by Lars Rönnbäck. Posits are immutable and conflicting claims coexist, with resolution left to the query.
+
+Read on 2026-11-22: README, `Cargo.toml`, the roadmap, and the Model, Storage, Theory, Constraints and Decisions docs (first 170 lines of the last three). Its Traqula reference and code were not read.
+
+- **Model:** a posit is `(AppearanceSet, LiteralValue, Time)` with a separate identity. Re-adding the same proposition is idempotent. Collections and n-ary relations are reified as Things, because an appearance set holds one Thing per role.
+- **Time:** valid time carries its expressed precision, so `2024` is the interval `[2024-01-01, 2025-01-01)` and differs from the instant `2024-01-01T00:00`.
+- **Evidence:** who ascertained a posit, with signed certainty and time, is stored as separate assertion posits. Preferring one source or certainty is a named query policy (`in effect`, snapshots), and append order is never a tie-breaker.
+- **Constraints:** saved queries are checked on demand. Each check names the policy revision it used and the evidence behind its findings.
+- **Engine:** append-only log (CRC32C frames, manifest) replayed into in-memory bitmap indexes, with EXPLAIN, work budgets and published benchmarks. One writer, no authentication, and the log is not tamper-proof.
+- **Taken:** signed per-source opinions with withdrawal, as a recipe over existing layers ([[recipes#Signed Opinions On A Disputed Fact]]).
+- **Proposed:** precision-aware valid time, as a layer first (`docs/precision-aware-valid-time.md`).
+- **Candidates, not yet taken:** named resolution policies beside `asOf` and `validAt` ([[query#Temporal Syntax]]); constraint reports that list their evidence and unresolved cases ([[datalog]]).
+- **Not taken:** a single bespoke query language, and a single-writer in-memory index as the only storage. Tiramemsu keeps transaction time ([[time-model#Transaction Time]]), which Positorium does not describe in what was read.
+
 ## Neptune OneGraph
 
 Amazon's 1G model makes every statement first-class with an id, so RDF triples, LPG edges and LPG properties are all statements that can carry further statements.

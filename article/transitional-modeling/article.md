@@ -1,0 +1,198 @@
+# Who said what, when, and how sure: transitional modeling inside an agent-memory store
+
+An agent's memory is full of claims that disagree. One source says a customer lives in Berlin. Another says Munich. A third said Berlin last year and has since changed its mind. Most stores answer this by overwriting: the last write wins, and the evidence is gone.
+
+Lars Rönnbäck's paper on conflicting, unreliable and varying information gives a precise way to keep all of it. It is the theory behind what he calls transitional modeling, and it grows out of his earlier Anchor Modeling work. This article implements its core in tiramemsu, my agent-memory store, and checks it against the paper's own worked example. The code is a small crate, `tm-transitional`, and every result quoted below is produced by a test in it.
+
+I paraphrase the paper throughout. The reference is Rönnbäck, "Modeling Conflicting, Unreliable, and Varying Information", 4th revision, 16 December 2018, DOI [10.13140/RG.2.2.34381.49121/1](https://doi.org/10.13140/RG.2.2.34381.49121/1). Read it for the formal treatment. What follows is my reading of it and my implementation, and where the two might differ I say so.
+
+## The Archie story in one paragraph
+
+Archie has a beard. On Friday, Donna says he shaved it clean at 10:02. Charlie says it was fluffy and red at 10:00, with fair confidence, and that it was not shaved at 10:00, with full confidence. On Sunday, Donna takes back what she said about the shave, and says instead that it was fluffy and red at 10:02, but she is only a little sure. What does the store believe on Saturday? What does it believe on Sunday? And what did it believe on Saturday, looking back from Sunday? A store that resolves on write cannot answer the third question at all.
+
+## What goes wrong with plain (id, s, p, o) rows
+
+Tiramemsu stores every fact as a row with its own id, a subject, a predicate and an object. It also keeps two clocks on each row: when the database learned it, and the interval in which it held in the world. That already beats most stores. But there are three things a row does not say.
+
+- Who claims it. Provenance can be added as more rows about the row, but nothing in the core model insists on it.
+- How sure they are. A confidence can also be added as a row, but it is one number per fact, with no source and no way to take it back.
+- What the store should believe. When two rows disagree, something has to choose, and in a plain store that choice is made when the second row is written.
+
+Transitional modeling moves all three into the data, and moves the choice to read time.
+
+## Five ideas
+
+**A posit.** A posit is a claim with no opinion attached. It has three parts. The first is a set of things, each paired with the role it plays, with every role used at most once. The second is a value. The third is the appearance time: when the state described takes effect in the world. With one member in the set the posit is a property ("Archie, has beard: fluffy red, from 10:00"). With several members it is a relationship. A posit claims nothing by itself. Its identity comes from its content, so writing the same claim twice is one claim.
+
+**An assertion.** An assertion is a positor's opinion on a posit, at a time. The positor is whoever holds the opinion. The opinion is a number between minus one and one. The time is the assertion time: when the opinion was recorded. A different assertion by the same positor on the same posit is a change of mind. An opinion of zero is a retraction. Nothing is ever updated or deleted.
+
+**A reliability scale.** One means certain. Three quarters means probable, a half means may be, a quarter means possible, zero means no idea. Negative values mean the opposite. A negative opinion on "shaved clean" is not a probability complement. It is that positor opposing that claim. For this reason a negated value is never stored. "Not X" is X with a negative opinion, which keeps one representation for each claim.
+
+**Two time axes.** Appearance time says when something was true. Assertion time says when someone said so. Both are data on the rows, and a question can fix either one.
+
+**Information in effect.** Given a point on both axes, the store returns the assertions it considers current. The paper defines this in three steps, and I implement them literally. First, keep the assertions made at or before the assertion-time point whose posit appears at or before the appearance-time point. Second, drop retractions and the opinions they retract, and for each positor and set of things keep only the latest appearance time. Third, for each positor, set of things and value, keep the latest assertion. What is left is every positor's current opinion on every alternative, and the store does not choose between positors.
+
+## How this maps onto tiramemsu
+
+The model has layers, and tiramemsu was already built in layers.
+
+Layer 0 holds posits. Layer 1 holds assertions about posits. A further layer could hold statements about assertions, such as how far a positor is trusted, or which reasoner rule derived an assertion from which others. I stop at that one extra layer, and the code does not implement it. A model layer, where classes and types are themselves posits using reserved roles, is the paper's last piece. I describe it at the end and do not implement it.
+
+In tiramemsu every statement has an id that can be the subject of another statement. So a posit is a node with three statements, and an assertion is a node with four. No schema change was needed, and no storage format changed. The crate sits on the public `Db` API.
+
+There is one open design question here that I want to name. I am weighing a move to a Statement Graph model, and separately an append-only bitemporal five-column triple store. The code here runs on the current statement model, and the question of how it would sit on either of the others is not settled by this work. I list it with the other decisions at the end.
+
+I also implemented only the SQLite-backed host, which is what `Db::open` gives you. I did not try it on the redb backend.
+
+## The implementation
+
+### Posits
+
+A set of things is a list of pairs, sorted by role, with a repeated role refused.
+
+```rust
+let beard = Dset::new(&[("A", "has beard")])?;
+let posit = Posit { dset: beard, value: Value::str("fluffy red"), t_app: 600 };
+```
+
+The id of a posit is a hash over the set, the value and the appearance time, with each part length-prefixed so that neighbouring parts cannot blur into each other.
+
+```rust
+pub fn id(&self) -> String {
+    hash128(&[&self.dset.id(), &self.value.to_string(), &self.t_app.to_string()])
+}
+```
+
+The hash here is a 128-bit FNV-1a. It is stable and deterministic, and it is not cryptographic. For a store that wants to treat the id as proof of content, swap it for BLAKE3. I did not.
+
+Writing a posit that already exists writes nothing. That makes re-ingesting the same claim from a second source safe: it does not create a second posit, only, if someone asserts it, a second assertion.
+
+### Assertions and the write path
+
+A write is a list of steps, committed in one transaction.
+
+```rust
+pub enum Step {
+    Posit(Posit),
+    Assert { positor: String, posit: String, alpha: f64 },
+}
+```
+
+Steps are checked in order against what is already stored plus what earlier steps in the same write added. An opinion outside the interval from minus one to one is refused. An opinion on a posit that does not exist is refused. Then the boundary rule below is checked. If any step is refused, nothing is written.
+
+Each assertion becomes a node with its positor, its posit, its opinion and a sequence number. Its assertion time is not a column I manage. It is the instant of the transaction that wrote it, and I read it back through tiramemsu's virtual predicate for the time a statement was added. There is a consequence, and I come back to it under the decisions: the assertion time is the time the store learned it, so a test needs a controllable clock to reproduce a history. The test uses `ManualClock` to put Friday and Sunday on the writes.
+
+Nothing is retracted in the store. A retraction in the paper's sense is an assertion with opinion zero.
+
+### Retraction and correction
+
+A correction is a retraction of the old opinion and a new assertion on a different posit, and it must be atomic. Otherwise a reader could see the old opinion gone and the new one not there yet.
+
+```rust
+pub fn correct(&self, positor: &str, old: &str, new: Posit, alpha: f64) -> Result<Vec<Assertion>> {
+    let new_id = new.id();
+    self.write(vec![
+        Step::Assert { positor: positor.into(), posit: old.into(), alpha: 0.0 },
+        Step::Posit(new),
+        Step::Assert { positor: positor.into(), posit: new_id, alpha },
+    ])
+}
+```
+
+Both assertions get one transaction and so one instant. The test checks exactly that.
+
+### The boundary rule
+
+The paper bounds what one positor may hold on mutually exclusive alternatives. If a positor holds opinions a1 through an on the alternatives for the same thing at the same appearance time, then half the sum of one minus each opinion's sign, plus the sum of the opinions, must not exceed one. For a positive opinion the term is just the opinion. For a negative opinion it is one plus the opinion. So two positive opinions that add past one are a contradiction, and so are two strong denials of the only two alternatives.
+
+I read "alternatives" as posits with the same set of things and the same appearance time but different values. I apply the rule to each positor's current opinions, meaning the latest per posit with retractions dropped, checking after each assertion. That reading is mine. The paper's formal statement is more general than this, and I did not implement the general case.
+
+```rust
+let term = 0.5 * (1.0 - a.alpha / a.alpha.abs()) + a.alpha;
+*sums.entry((dset.as_str(), *t)).or_insert(0.0) += term;
+```
+
+### Resolve on read
+
+The three steps of information in effect, as code. The first filters by both clocks. The second drops retractions, drops the opinions they retract, and keeps the latest appearance time per positor and set of things. The third keeps the latest assertion per positor, set of things and value.
+
+```rust
+pub fn in_effect(&self, t_assert_at: i64, t_app_at: i64) -> Result<Vec<Assertion>> {
+    let l = self.load()?;
+    Ok(resolve(&l, t_assert_at, t_app_at))
+}
+```
+
+Two details are my decisions. A retraction removes only an earlier assertion by the same positor on the same posit, and I break ties by write order, since two rows in one transaction share an instant. I also drop retracted opinions before choosing the latest appearance time, not after, so a retraction can never leave a positor with nothing when another opinion of theirs was available.
+
+This is a Rust function over rows loaded with two SPARQL queries. It is not the SQL view with window functions and an index that I first planned. The result is correct, and I have not measured anything, so I make no claim about cost at scale.
+
+## The Archie test
+
+The test encodes the paper's example and asserts exact results. The things are Archie (A), Charlie (C) and Donna (D). The appearance times are 10:00 to 10:03 and the assertion times are Friday, Saturday and Sunday.
+
+The four posits, all on Archie's beard:
+
+- p1 is fluffy red from 10:00.
+- p2 is shaved clean from 10:02.
+- p3 is shaved clean from 10:00.
+- p4 is fluffy red from 10:02.
+
+The assertions, in the order written:
+
+- a1: Donna holds p2 at 1, on Friday.
+- a2: Charlie holds p1 at 0.75, on Friday.
+- a3: Charlie holds p3 at -1, on Friday.
+- a4: Donna holds p2 at 0, on Sunday. A retraction.
+- a5: Donna holds p4 at 0.25, on Sunday.
+
+The expected sets in effect, and what the test finds:
+
+- At Saturday, 10:01: a2 and a3. Posit p2 appears at 10:02, so Donna's a1 is not yet visible.
+- At Saturday, 10:03: a1, a2 and a3. Donna's shave has appeared, and her retraction has not yet been written.
+- At Sunday, 10:03: a2, a3 and a5. Donna took back the shave, so a1 and a4 are gone, and her new opinion a5 is in.
+
+All three come out exactly as the paper's example gives them. I did not adjust the test.
+
+Look at Charlie on Saturday. Both his opinions stay, because both are on the same appearance time, 10:00. He holds fluffy red at 0.75 and rejects shaved outright. They are different values, so neither replaces the other, and the store does not merge them into one belief. Combining them is a choice for the reader, which is the point of resolving on read.
+
+### The boundary rule, in the test
+
+Add a6, Donna holding p2 at -0.75 on Sunday, next to her a5. The sum comes to 0.25 for a5 plus 0.25 for a6, which is 0.5. That is within bounds, so the write is accepted, and the set in effect at Sunday 10:03 gains a6.
+
+Now take the Archie story and instead let Donna hold p2 at 0.9 next to a5. That sums to 1.15, so the write is rejected and the store holds the same number of assertions as before. Both cases are in the test.
+
+One observation: the order of the paper's assertions matters. Donna's retraction a4 has to be written before a5. If a5 were written first, she would briefly hold 1 on p2 and 0.25 on p4, a sum of 1.25, and the write would be refused. That follows from checking against current opinions, and it matches the idea that a change of mind is a sequence of writes.
+
+### Reassertion and restatement
+
+The paper separates two kinds of repetition. The task I was given did not give expected results for this part. The results below are derived from the algorithm, and I wrote the test to assert them. Treat them as my reading and not the paper's table.
+
+A reassertion is the same positor, the same posit, and the same opinion, again, later. Charlie says a2 again on Sunday. Both rows are stored. At Sunday 10:03 the later one is in effect and the earlier one is not. Looking back at Saturday 10:01 still shows the original, which is what a bitemporal store should do.
+
+A restatement is the same positor and opinion on the same value at a different appearance time. Charlie gives 0.75 to fluffy red at 10:02, which is p4, written on Friday's clock. Both rows are stored. At 10:01 it has not appeared, so nothing changes. At 10:03 the latest appearance time per positor and set of things wins, so Charlie is now only the restatement, and his earlier opinions at 10:00 drop out of the view at that appearance time.
+
+## Reasoners
+
+A reasoner should not write facts. It should write assertions, with itself as the positor, and it should say what it derived them from. That one extra layer is enough: a statement on each derived assertion naming its sources and the rule.
+
+Two things follow from the design above, and neither is implemented. Retraction propagates by data: if a source assertion is retracted, a derived assertion that depends on it can be found and retracted in turn. And different consumers can apply different resolution policies over the same assertions, one trusting a positor and another ignoring it, because nothing was resolved at write time.
+
+## What the paper does not solve
+
+- How to combine opinions across positors. Information in effect hands back every positor's current opinion. Turning those into one number needs a calculus, such as a trust-weighted combination, and the paper does not pick one. I did not either.
+- Constraints over bodies that are not decisive. The boundary rule covers the alternatives for one thing at one time. It says nothing about relationships between different posits.
+- Imprecise ranges of time, such as "some time in 2024".
+- Cost at scale. Resolving on read means doing the three steps for every question, and the way out is to materialize slices. I did not build that, and I have no benchmark.
+
+## What I did not do
+
+The SQL view with window functions and an index on positor, set of things, appearance time and assertion time. The statements about assertions for trust and lineage. The model layer. A cryptographic hash. A run on the redb backend. Any measurement of speed.
+
+## Where this goes next
+
+The model layer would make classes, typings and limits into posits that use reserved roles, so the schema is history too and can be queried at any point on either axis. Identification is the other direction: when two things might be the same, a vector similarity can be one more positor, with a stated opinion, instead of a silent merge. Both follow from the same idea: nothing is decided when it is written.
+
+## Code
+
+The crate is [`crates/tm-transitional`](https://github.com/Volland/tiramemsu/tree/main/crates/tm-transitional): `src/lib.rs` for the model and `tests/archie.rs` for the conformance tests. Run `cargo test -p tm-transitional`.

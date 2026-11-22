@@ -850,6 +850,10 @@ After two supersedes, `sys:supersedes+` from the current root returns both earli
 
 Two authors' facts with the same subject and predicate, different objects and overlapping valid time are reported once; a later episode that overlaps neither is not.
 
+### Signed Opinions On A Disputed Fact
+
+Two sources hold opposite signed certainties on one fact. At a cut before a withdrawal both appear, and after it only the source that did not withdraw remains.
+
 ### Metagraph Containers Nesting And Fold
 
 Nested graphs through `within*` and `GRAPH ?g` (also in Cypher, under a cycle and `asOf`), fold by `INSERT … WHERE`, an edge holding a subgraph through a supersede and a retraction, and n-ary role statements.
@@ -1601,3 +1605,23 @@ Under `USE HISTORY`, `tiramemsu.retraction(r).`sys:reason`` is the reason given 
 ### Dialects Agree On Statement Metadata
 
 Valid time written by SPARQL is read by Cypher and the reverse, and the statement and transaction IRIs from SPARQL equal `elementId(r)` and `elementId(tiramemsu.transaction(r))`.
+
+## Transitional Modeling
+
+Tests of `crates/tm-transitional`: posits and assertions after Rönnbäck's paper, stored as tiramemsu statements and resolved on read. See [[architecture#Transitional Layer]].
+
+### Archie Information In Effect
+
+The paper's Archie story gives exactly `{a2, a3}` at (Saturday, 10:01), `{a1, a2, a3}` at (Saturday, 10:03) and `{a2, a3, a5}` at (Sunday, 10:03). A retraction removes a1 and an older assertion still shows in the earlier view.
+
+### Boundary Rule
+
+Donna may hold `0.25` on one alternative and `-0.75` on the other (the sum evaluates to 0.5). A further opinion that makes the sum 1.15 is rejected and nothing is written.
+
+### Reassertion And Restatement
+
+A reassertion (same positor, posit and alpha, later) and a restatement (same value at a later appearance time) are both stored. The latest assertion per value, and the latest appearance time per positor and dset, is in effect.
+
+### Correction Is Atomic
+
+A correction retracts the old opinion and asserts a new posit in one transaction, with one instant for both rows. The old posit leaves the information in effect and the new one enters it.

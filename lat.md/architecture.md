@@ -429,6 +429,16 @@ The pages are plain HTML with one stylesheet (`site/style.css`), light and dark 
 - **Articles index:** `articles/index.html` groups the articles by topic (Start here, Recall, Agents and use cases, Structure, Engines and performance, Research), not by release.
 - **Quick start:** the home page shows the same story in Python, Node.js and Rust, as CSS-only tabs (radio inputs, no script). The Rust tab and the README snippet are trimmed from `crates/tiramemsu/examples/quickstart.rs`, which `cargo clippy --all-targets` compiles. The Python and Node.js tabs were run against the built packages, so a change to either binding's API means re-running them and updating the tabs.
 
+## Transitional Layer
+
+`crates/tm-transitional` stores posits and assertions as ordinary tiramemsu statements and resolves them on read. It is a separate crate over the public `Db` API and changes no storage format.
+
+A posit is a content-addressed node with `dset`, `value` and `appearsAt`. An assertion is a node with `positor`, `posit`, `alpha` and a sequence number. Assertion time is the transaction instant, read back through the virtual predicate `tm:addedAt` ([[query#Views and Scans#Virtual Predicates]]). Nothing is retracted: a change of opinion is a later assertion, and `alpha = 0` retracts.
+
+`Transitional::in_effect(t_assert, t_app)` loads the rows and applies the paper's three steps in Rust. Writes validate the boundary rule in order and commit atomically. Not implemented: a SQL window-function view, an index for it, trust weights, and the model layer. Tests: [[tests#Transitional Modeling]]. Prior art: [[prior-art#Positorium]].
+
+The article on it is `article/transitional-modeling/article.md`, published as `site/articles/transitional-modeling.html` by that folder's `build-site.py`. Its results are the tests in `crates/tm-transitional/tests/archie.rs`, so a change to the model should be reflected there.
+
 ## Long-Read Article
 
 `article/` holds a Substack long read about tiramemsu with its illustrations, separate from the site. It quotes the status table, the recipes and the benchmarks, so a change to those should be reflected there.

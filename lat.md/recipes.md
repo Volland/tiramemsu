@@ -124,6 +124,30 @@ mine.transact(TxOptions::default(), |tx| tx.import_bundle(&bundle).map(|_| ()))?
 
 History and the event log are unchanged; only the ids the dry run allocated are burned and listed in `preview.burned`. A preview reserves nothing, so a write in between can make the application fail with the schema error, atomically. The MCP server offers it as the read tool `preview_bundle`. Tests are in `memory_conflict_review.rs`.
 
+## Signed Opinions On A Disputed Fact
+
+Each source's stance on a fact is its own statement, with a signed certainty and a valid-from for when the opinion was held. A later zero withdraws it. A query at a cut shows who stood behind the fact and who opposed it.
+
+The pattern comes from Positorium's assertions ([[prior-art#Positorium]]). The statement stays bare. An opinion node holds `v:about` (the fact's eid), `v:by` (the source) and one `v:certainty` statement per change of mind, in `[-1, 1]`. Negative is opposition by that source, not a probability complement.
+
+```sparql
+# opinions in effect at a cut, with withdrawals (0) dropped
+SELECT ?by ?c WHERE {
+  ?op v:about <fact> . ?op v:by ?by . ?op v:certainty ?c ~ ?r .
+  ?r tm:validFrom ?from . FILTER(?from <= "2019-10-01T00:00:00Z"^^xsd:dateTime)
+  OPTIONAL { ?op v:certainty ?c2 ~ ?r2 . ?r2 tm:validFrom ?from2 .
+             FILTER(?from2 <= "2019-10-01T00:00:00Z"^^xsd:dateTime && ?from2 > ?from) }
+  FILTER(!BOUND(?from2)) FILTER(?c != 0) }
+```
+
+The `OPTIONAL` plus `!BOUND` keeps only the latest opinion per source. It stands in for `FILTER NOT EXISTS`, because a `FILTER` inside `NOT EXISTS` does not see variables bound outside it (see [[recipes#Signed Opinions On A Disputed Fact#Known Gap]]). This differs from `confidence` in [[recipes#Reviewing Conflicting Memories]]: that layer is one unsigned number per statement, with no source and no withdrawal. Nothing is scored or chosen here either. Tests are in `recipes.rs`.
+
+### Known Gap
+
+A `FILTER` inside `NOT EXISTS` that mentions an outer variable never excludes a row, so the recipe uses `OPTIONAL` and `!BOUND`.
+
+For example, `NOT EXISTS { ?op v:certainty ?c2 . FILTER(?c2 > ?c) }` keeps every row. SPARQL 1.1 §18.6 substitutes the outer solution into the filter. Found on 2026-11-22 while writing this recipe; not yet fixed or tracked.
+
 ## When We Learned It
 
 `tm:addedAt` and `tm:retractedAt` give the wall-clock instant a statement was recorded and retracted. Compared with valid time, they measure how late memory learned a fact.

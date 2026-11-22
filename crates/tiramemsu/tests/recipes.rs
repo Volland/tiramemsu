@@ -221,6 +221,84 @@ fn contradictions_between_authors_with_overlapping_valid_time() {
     );
 }
 
+// @tg: verifies:: [[tests#Recipes#Signed Opinions On A Disputed Fact]] {since: "2026-11-22", level: unit}
+#[test]
+fn signed_opinions_on_a_disputed_fact() {
+    let t = T::new();
+    let from = |d: &str| Valid {
+        from: Some(ms(d)),
+        to: None,
+    };
+    let mut fact = None;
+    t.tx(|tx| {
+        fact = Some(
+            tx.assert(v("jen"), v("girlfriendOf"), v("bob"), Valid::ALWAYS)?
+                .eid(),
+        );
+        Ok(())
+    });
+    let fact = fact.unwrap();
+    // one opinion node per (source, fact); its certainty is a statement whose
+    // valid-from is when that opinion was held
+    let opine = |tx: &mut Tx<'_>, op: &str, by: &str| -> Result<()> {
+        tx.assert(v(op), v("about"), fact, Valid::ALWAYS)?;
+        tx.assert(v(op), v("by"), v(by), Valid::ALWAYS)?;
+        Ok(())
+    };
+    t.tx(|tx| {
+        opine(tx, "opJen", "jen")?;
+        opine(tx, "opBob", "bob")?;
+        tx.assert(
+            v("opJen"),
+            v("certainty"),
+            Value::Double(0.8),
+            from("2019-04-05T00:00:00Z"),
+        )?;
+        tx.assert(
+            v("opBob"),
+            v("certainty"),
+            Value::Double(-1.0),
+            from("2019-04-05T00:00:00Z"),
+        )?;
+        Ok(())
+    });
+    // Jen later withdraws: a new certainty of 0 with a later valid-from
+    t.tx(|tx| {
+        tx.assert(
+            v("opJen"),
+            v("certainty"),
+            Value::Double(0.0),
+            from("2019-09-21T00:00:00Z"),
+        )?;
+        Ok(())
+    });
+    let at = |cut: &str| {
+        t.sel(&format!(
+            "SELECT ?by ?c WHERE {{ \
+               ?op v:about {f} . ?op v:by ?by . ?op v:certainty ?c ~ ?r . \
+               ?r tm:validFrom ?from . FILTER(?from <= \"{cut}\"^^xsd:dateTime) \
+               OPTIONAL {{ ?op v:certainty ?c2 ~ ?r2 . ?r2 tm:validFrom ?from2 . \
+                 FILTER(?from2 <= \"{cut}\"^^xsd:dateTime && ?from2 > ?from) }} \
+               FILTER(!BOUND(?from2)) \
+               FILTER(?c != 0) }} ORDER BY ?by",
+            f = stmt_iri(fact)
+        ))
+    };
+    // in July both opinions are in effect: a dispute
+    assert_eq!(
+        at("2019-07-01T00:00:00Z").rows,
+        vec![
+            vec![Some(v("bob")), Some(Value::Double(-1.0))],
+            vec![Some(v("jen")), Some(Value::Double(0.8))],
+        ]
+    );
+    // in October Jen's withdrawal has dropped her opinion, and Bob's stands
+    assert_eq!(
+        at("2019-10-01T00:00:00Z").rows,
+        vec![vec![Some(v("bob")), Some(Value::Double(-1.0))]]
+    );
+}
+
 // @tg: verifies:: [[tests#Recipes#Metagraph Containers Nesting And Fold]] {since: "2026-10-01", level: unit}
 #[test]
 fn metagraph_containers_nesting_and_fold() {
