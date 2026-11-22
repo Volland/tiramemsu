@@ -468,6 +468,13 @@ Its programs come from the tests `crates/tiramemsu/tests/datalog.rs`, `datalog_c
 `article/elpi/` holds a long read on adding ELPI as a third reasoning language ([[elpi]]), published as `site/articles/elpi-reasoning.html` by its `build-site.py`.
 
 The guide `docs/elpi.md` (builtins, terms, time, constraints, stored programs, materialization, goal calls, surfaces, errors, limits) is rendered to `site/elpi/index.html` by `article/elpi/build-guide.py`. `article/elpi-validators/` holds the hands-on companion, *Validators that ask "what if"* (`site/articles/elpi-validators.html`): `=>`, policies as predicates, `pi`, a commit guard and materialization, each program a test named `article_*` in `crates/tiramemsu/tests/elpi.rs`. ELPI shipped in 0.12.0, so the pages and their cards no longer carry a preview banner or tag. Its examples come from `crates/tiramemsu/tests/elpi.rs` and `elpi_calls.rs`, so a change to the builtins or the prelude should be reflected there. The site's nav links the ELPI guide beside the Datalog guide on every page, the home page has an ELPI group and matrix rows (Rust, MCP and both engines only), and the articles index lists both under Reasoning.
+
+### Sanctions Audit Article
+
+`article/sanctions-audit/` holds a Substack long read on a regulated domain, *What did the system know, and when?*: sanctions screening with both clocks and ELPI rules stored beside the facts ([[elpi]], [[time-model]]).
+
+It covers the decision record, a look-back, a commit guard, `=>` exposure, `pi` rule properties, a false positive traced to an agent's transaction, and a policy change replayed against both rule versions. Every claim is a test in [[crates/tiramemsu/tests/elpi_sanctions.rs]], one per section, including [[crates/tiramemsu/tests/elpi_sanctions.rs#citation_by_statement_follows_supersede]], which pins the limit it states about citing a rule by its statement. `build-preview.sh` makes the paste-ready `preview.html`; there is no site page yet, and the article carries the ELPI "Preview" banner until ELPI ships.
+
 ### EAV Graphs Article
 
 `article/eav-graphs/` holds *From datoms to graphs*, a long read for Datomic users on Substack and the site: a Datomic-style EAV setup queried in Datalog ([[datalog]]), then what statement ids and valid time add ([[data-model]], [[time-model]]).

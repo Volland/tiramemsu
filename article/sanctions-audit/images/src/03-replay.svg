@@ -1,0 +1,53 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1456 860" font-family="Helvetica Neue, Helvetica, Arial, sans-serif">
+  <title>Rule versions times knowledge: replaying the Corvid decision</title>
+  <rect width="1456" height="860" fill="#fffaf0"/>
+  <text x="60" y="66" font-size="34" font-weight="700" fill="#2a1a10">Did the facts change, or the rule?</text>
+  <text x="60" y="102" font-size="20" fill="#6b5443">pay1100 to Corvid Marine (50% owned by Vale), screened on 20 April. Rule v2 replaced v1 on 4 May.</text>
+
+  <g font-size="22" font-weight="700" fill="#2a1a10" text-anchor="middle">
+    <text x="640" y="176">facts as known on 20 April</text>
+    <text x="1090" y="176">facts as known today</text>
+  </g>
+  <g font-size="22" font-weight="700" fill="#2a1a10">
+    <text x="60" y="300">rule v1</text>
+    <text x="60" y="560">rule v2</text>
+  </g>
+  <g font-size="18" fill="#6b5443">
+    <text x="60" y="330">more than 50%</text>
+    <text x="60" y="590">50% or more</text>
+  </g>
+
+  <g stroke="#3b2418" stroke-width="3">
+    <rect x="420" y="200" width="440" height="220" rx="10" fill="#e4f0dc"/>
+    <rect x="870" y="200" width="440" height="220" rx="10" fill="#e4f0dc"/>
+    <rect x="420" y="460" width="440" height="220" rx="10" fill="#ffc7d2"/>
+    <rect x="870" y="460" width="440" height="220" rx="10" fill="#ffc7d2"/>
+  </g>
+  <rect x="412" y="192" width="456" height="236" rx="14" fill="none" stroke="#2a1a10" stroke-width="5" stroke-dasharray="14 8"/>
+
+  <g font-size="30" font-weight="700">
+    <text x="446" y="262" fill="#2f6b2a">clear</text>
+    <text x="896" y="262" fill="#2f6b2a">clear</text>
+    <text x="446" y="522" fill="#b0304a">blocked</text>
+    <text x="896" y="522" fill="#b0304a">blocked</text>
+  </g>
+  <g font-size="18" fill="#2a1a10">
+    <text x="446" y="300">the decision as it was taken</text>
+    <text x="446" y="328">as_of(tx of pay1100), stored program</text>
+    <text x="896" y="300">old rule, today's knowledge</text>
+    <text x="896" y="328">now view, v1 text from history</text>
+    <text x="446" y="560">new rule, that day's knowledge</text>
+    <text x="446" y="588">as-of view, v2 text</text>
+    <text x="896" y="560">today's answer</text>
+    <text x="896" y="588">now view, stored program</text>
+  </g>
+  <g font-size="16" font-family="Menlo, Consolas, monospace" fill="#6b5443">
+    <text x="446" y="384">controlling P :- P &gt; 50.</text>
+    <text x="896" y="384">controlling P :- P &gt; 50.</text>
+    <text x="446" y="644">controlling P :- P &gt;= 50.</text>
+    <text x="896" y="644">controlling P :- P &gt;= 50.</text>
+  </g>
+
+  <text x="60" y="760" font-size="21" fill="#2a1a10">The answer follows the row, not the column: the rule changed the outcome, the facts did not.</text>
+  <text x="60" y="794" font-size="21" fill="#2a1a10">All four cells are one call each, because rules and facts are versioned in the same store.</text>
+</svg>

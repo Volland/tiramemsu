@@ -1,0 +1,60 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1456 860" font-family="Helvetica Neue, Helvetica, Arial, sans-serif">
+  <title>Why Halcyon is blocked: the evidence a screening run cites</title>
+  <defs>
+    <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="9" markerHeight="9" orient="auto"><path d="M0 0L10 5L0 10z" fill="#3b2418"/></marker>
+    <marker id="arG" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="9" markerHeight="9" orient="auto"><path d="M0 0L10 5L0 10z" fill="#9c8a76"/></marker>
+  </defs>
+  <rect width="1456" height="860" fill="#fffaf0"/>
+  <text x="60" y="66" font-size="34" font-weight="700" fill="#2a1a10">Why Halcyon is blocked</text>
+  <text x="60" y="102" font-size="20" fill="#6b5443">The rule walks up the ownership chain and returns every statement it used. Each one has an id, an author and both clocks.</text>
+
+  <!-- nodes -->
+  <g font-size="21" font-weight="700" fill="#2a1a10">
+    <rect x="80" y="330" width="230" height="84" rx="42" fill="#ffc7d2" stroke="#3b2418" stroke-width="3"/>
+    <text x="195" y="380" text-anchor="middle">Marten Vale</text>
+    <rect x="80" y="150" width="230" height="74" rx="10" fill="#f3ece0" stroke="#3b2418" stroke-width="2.5"/>
+    <text x="195" y="195" text-anchor="middle">EU list</text>
+    <rect x="560" y="330" width="290" height="84" rx="42" fill="#f6e2bf" stroke="#3b2418" stroke-width="3"/>
+    <text x="705" y="380" text-anchor="middle">Brightwater Holdings</text>
+    <rect x="1080" y="330" width="290" height="84" rx="42" fill="#f6e2bf" stroke="#3b2418" stroke-width="3"/>
+    <text x="1225" y="380" text-anchor="middle">Halcyon Shipping</text>
+    <rect x="1080" y="150" width="290" height="74" rx="10" fill="#fffaf0" stroke="#3b2418" stroke-width="2.5"/>
+    <text x="1225" y="195" text-anchor="middle">pay1042</text>
+    <rect x="560" y="600" width="290" height="84" rx="42" fill="#fffaf0" stroke="#9c8a76" stroke-width="3" stroke-dasharray="9 6"/>
+    <text x="705" y="650" text-anchor="middle" fill="#6b5443">Corvid Marine</text>
+  </g>
+
+  <!-- edges -->
+  <path d="M195 330 L195 228" stroke="#3b2418" stroke-width="3" marker-end="url(#ar)"/>
+  <text x="210" y="272" font-size="18" font-weight="700" fill="#b0304a">e21 · designatedBy</text>
+  <text x="210" y="296" font-size="16" fill="#6b5443">valid from 1 Mar · recorded 5 Mar</text>
+
+  <path d="M312 372 L556 372" stroke="#3b2418" stroke-width="3" marker-end="url(#ar)"/>
+  <text x="330" y="356" font-size="18" font-weight="700" fill="#2a1a10">e3 · owns</text>
+  <rect x="352" y="398" width="150" height="40" rx="6" fill="#fff" stroke="#3b2418" stroke-width="2"/>
+  <text x="366" y="424" font-size="17" fill="#2a1a10">e4 · share 55</text>
+  <line x1="427" y1="374" x2="427" y2="398" stroke="#3b2418" stroke-width="2"/>
+
+  <path d="M852 372 L1076 372" stroke="#3b2418" stroke-width="3" marker-end="url(#ar)"/>
+  <text x="870" y="356" font-size="18" font-weight="700" fill="#2a1a10">e5 · owns</text>
+  <rect x="888" y="398" width="150" height="40" rx="6" fill="#fff" stroke="#3b2418" stroke-width="2"/>
+  <text x="902" y="424" font-size="17" fill="#2a1a10">e6 · share 60</text>
+  <line x1="963" y1="374" x2="963" y2="398" stroke="#3b2418" stroke-width="2"/>
+
+  <path d="M1225 226 L1225 326" stroke="#3b2418" stroke-width="3" marker-end="url(#ar)"/>
+  <text x="1240" y="272" font-size="18" font-weight="700" fill="#2a1a10">paidTo</text>
+  <text x="1240" y="296" font-size="16" fill="#6b5443">valid at 3 Mar 10:00</text>
+
+  <path d="M240 414 Q 330 640 556 642" stroke="#9c8a76" stroke-width="3" fill="none" stroke-dasharray="9 6" marker-end="url(#arG)"/>
+  <text x="110" y="520" font-size="18" font-weight="700" fill="#6b5443">e7 · owns</text>
+  <rect x="300" y="580" width="150" height="40" rx="6" fill="#fff" stroke="#9c8a76" stroke-width="2"/>
+  <text x="314" y="606" font-size="17" fill="#6b5443">e8 · share 50</text>
+  <text x="880" y="636" font-size="17" fill="#6b5443">exactly 50%: not control under rule v1</text>
+  <text x="880" y="662" font-size="17" fill="#6b5443">(more than 50%), control under v2 (50% or more)</text>
+
+  <!-- evidence list -->
+  <rect x="60" y="730" width="1336" height="90" rx="10" fill="#2a1a10"/>
+  <text x="90" y="770" font-size="22" font-family="Menlo, Consolas, monospace" fill="#fffaf0">blocked (iri "…halcyon") Es</text>
+  <text x="90" y="804" font-size="22" font-family="Menlo, Consolas, monospace" fill="#ffc7d2">Es = [eid 5, eid 6, eid 3, eid 4, eid 21]</text>
+  <text x="760" y="788" font-size="19" fill="#f6e2bf">nearest owner first, the designation last</text>
+</svg>

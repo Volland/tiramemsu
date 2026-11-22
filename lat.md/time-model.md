@@ -178,6 +178,8 @@ Tx --> Caller : e10
 @enduml
 ```
 
+A statement whose object is a member of C is itself in C, transaction metadata included, so a transaction that cites a statement cites the new root after a supersede; only history keeps the original link ([[crates/tiramemsu/tests/elpi_sanctions.rs#citation_by_statement_follows_supersede]]). To cite a version that cannot drift, cite the transaction and read the view as of it.
+
 The replay is bounded by `max_cascade`. Retained annotations move to the new root; layers on dropped memberships remain only in history. Lineage references may keep allocated historical targets. Existing cyclic histories remain readable and replayable, while ordinary writes reject forward references.
 
 ### Cardinality One
